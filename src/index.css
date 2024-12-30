@@ -109,9 +109,3 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #555; /* On hover */
 }
-
-*,
-body {
-  box-sizing: border-box;
-  font-family: "Inter", serif;
-}

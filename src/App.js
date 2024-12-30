@@ -41,7 +41,7 @@ import InviteHistory from "./pages/InviteHistory";
 const items = [
   {
     title: "Home",
-    url: "/dashboard",
+    url: "/",
     icon: Home,
   },
   {
@@ -136,7 +136,6 @@ function App() {
         <SidebarTrigger />
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/rooms" element={<Rooms />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/streams" element={<Streaming />} />
