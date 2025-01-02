@@ -9,13 +9,17 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     const storedUser = localStorage.getItem("user");
 
     if (storedUser && storedUser !== "undefined") {
       setUser(JSON.parse(storedUser));
     }
+
+    setLoading(false);
   }, []);
 
   // Login Function (API Call)
@@ -54,6 +58,7 @@ export function AuthProvider({ children }) {
     login,
     register,
     logout,
+    loading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

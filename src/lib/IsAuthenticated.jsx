@@ -3,14 +3,14 @@ import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 const IsAuthenticated = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !loading) {
       navigate("/login");
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, navigate, loading]);
 
   return isAuthenticated ? children : "loading...";
 };
