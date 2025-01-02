@@ -1,7 +1,7 @@
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "../components/ui/dialog";
 import { Separator } from "../components/ui/separator";
 import {
@@ -12,9 +12,82 @@ import {
   TableHead,
   TableBody,
 } from "../components/ui/table";
+import { Check, ChevronDown } from "lucide-react";
+
+const Plans = {
+  monthly: [
+    {
+      name: "Basic",
+      price: "Free forever",
+      target: "For individuals",
+      features: ["Access to core features", "Limited support", "Single user"],
+      cta: "Free",
+    },
+    {
+      name: "Lite",
+      price: "10000",
+      target: "For individuals",
+      features: ["All Basic features", "Priority support", "Up to 3 users"],
+      cta: "Upgrade",
+    },
+    {
+      name: "Pro",
+      price: "20000",
+      target: "For individuals",
+      features: ["All Lite features", "Advanced analytics", "Up to 10 users"],
+      cta: "Contact Sales",
+    },
+    {
+      name: "Enterprise",
+      price: "Custom Pricing",
+      target: "For teams and businesses",
+      features: [
+        "All Pro features",
+        "Dedicated account manager",
+        "Unlimited users",
+      ],
+      cta: "Contact Sales",
+    },
+  ],
+  yearly: [
+    {
+      name: "Basic",
+      price: "50000",
+      target: "For individuals",
+      features: ["Access to core features", "Limited support", "Single user"],
+      cta: "Free",
+    },
+    {
+      name: "Lite",
+      price: "100000",
+      target: "For individuals",
+      features: ["All Basic features", "Priority support", "Up to 3 users"],
+      cta: "Upgrade",
+    },
+    {
+      name: "Pro",
+      price: "200000",
+      target: "For individuals",
+      features: ["All Lite features", "Advanced analytics", "Up to 10 users"],
+      cta: "Contact Sales",
+    },
+    {
+      name: "Enterprise",
+      price: "Custom Pricing",
+      target: "For teams and businesses",
+      features: [
+        "All Pro features",
+        "Dedicated account manager",
+        "Unlimited users",
+      ],
+      cta: "Contact Sales",
+    },
+  ],
+};
 
 const Payments = () => {
   const payments = [];
+  const [plans, setPlans] = useState(Plans.monthly);
   return (
     <section className="page container">
       <Dialog>
@@ -45,10 +118,14 @@ const Payments = () => {
             <TableHeader>
               <TableRow>
                 <TableHead className="">#</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Room Name</TableHead>
-                <TableHead>Guest</TableHead>
-                <TableHead>Date Sent</TableHead>
+                <TableHead>Expiry Date</TableHead>
+                <TableHead>Issued to</TableHead>
+                <TableHead>Payment Method</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Payment Date</TableHead>
+                <TableHead>Payment Date</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead>Amount</TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -73,8 +150,8 @@ const Payments = () => {
             </div>
           )}
         </Card>
-        <DialogContent className="sm:max-w-md">
-          <PaymentsDialog />
+        <DialogContent className="max-w-[95%] py-14">
+          <PaymentsDialog plans={plans} />
         </DialogContent>
       </Dialog>
     </section>
@@ -83,6 +160,45 @@ const Payments = () => {
 
 export default Payments;
 
-const PaymentsDialog = () => {
-  return <div></div>;
+const PaymentsDialog = ({ plans }) => {
+  return (
+    <div className="flex justify-evenly gap-x-6">
+      {plans.map((plan) => (
+        <PlanCard
+          name={plan.name}
+          cta={plan.cta}
+          target={plan.target}
+          price={plan.price}
+          features={plan.features}
+        />
+      ))}
+    </div>
+  );
 };
+
+const PlanCard = ({ name, target, cta, price, features }) => (
+  <Card className="flex-1 max-w-[290px] h-[400px] rounded-2xl px-[30px] py-[20px] bg-muted">
+    <h3 className="font-medium text-2xl mb-1">{name}</h3>
+    <p className="mb-8">{target}</p>
+    <p className="text-center font-bold text-2xl mb-2">
+      {isNaN(price) ? price : "₦" + price}
+    </p>
+    <div className="flex justify-center mb-6">
+      <Button size="lg" className="font-normal">{cta}</Button>
+    </div>
+    <div className="mb-10">
+      {features.map((feature) => (
+        <div className="flex gap-x-2 items-center gap-y-1">
+          <Check className="h-4 w-4" />
+          <p key={feature}>{feature}</p>
+        </div>
+      ))}
+    </div>
+    <div className="flex justify-center">
+      <Button className="border-none bg-transparent shadow-none text-black font-normal">
+        <ChevronDown />
+        View More
+      </Button>
+    </div>
+  </Card>
+);

@@ -36,6 +36,9 @@ import Addon from "./pages/Addon";
 import Referee from "./pages/Referee";
 import Settings from "./pages/Settings";
 import InviteHistory from "./pages/InviteHistory";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import IsAuthenticated from "./lib/IsAuthenticated";
 
 // Menu items.
 const items = [
@@ -131,22 +134,33 @@ function App() {
   return (
     <Router>
       <Navbar />
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarTrigger />
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/rooms" element={<Rooms />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/streams" element={<Streaming />} />
-          <Route path="/recordings" element={<Recordings />} />
-          <Route path="/payments" element={<Payments />} />
-          <Route path="/addons" element={<Addon />} />
-          <Route path="/referees" element={<Referee />} />
-          <Route path="/history" element={<InviteHistory />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </SidebarProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="*"
+          element={
+            <IsAuthenticated>
+              <SidebarProvider>
+                <AppSidebar />
+                <SidebarTrigger />
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/rooms" element={<Rooms />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/streams" element={<Streaming />} />
+                  <Route path="/recordings" element={<Recordings />} />
+                  <Route path="/payments" element={<Payments />} />
+                  <Route path="/addons" element={<Addon />} />
+                  <Route path="/referees" element={<Referee />} />
+                  <Route path="/history" element={<InviteHistory />} />
+                  <Route path="/settings" element={<Settings />} />
+                </Routes>
+              </SidebarProvider>
+            </IsAuthenticated>
+          }
+        />
+      </Routes>
     </Router>
   );
 }

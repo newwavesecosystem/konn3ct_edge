@@ -20,36 +20,28 @@ const Navbar = () => {
         <img src={logo} alt="Konne3ct logo" className="mb-3" />
       </a>
       <NavigationMenuList className="flex">
-        <NavigationMenuItem>
-          <a href="/" legacyBehavior passHref>
-            <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-              Solutions
-            </NavigationMenuLink>
-          </a>
+        <NavigationMenuItem href="/">
+          <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+            Solutions
+          </NavigationMenuLink>
         </NavigationMenuItem>
         <NavigationMenuItem>
-          <a href="/" legacyBehavior passHref>
-            <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-              Plans & Pricing
-            </NavigationMenuLink>
-          </a>
+          <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+            Plans & Pricing
+          </NavigationMenuLink>
         </NavigationMenuItem>
       </NavigationMenuList>
       <div className="ml-auto">
         <NavigationMenuList>
           <NavigationMenuItem>
-            <a href="/" legacyBehavior passHref>
-              <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                Schedule
-              </NavigationMenuLink>
-            </a>
+            <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+              Schedule
+            </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
-            <a href="/" legacyBehavior passHref>
-              <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                Join
-              </NavigationMenuLink>
-            </a>
+            <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+              Join
+            </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuTrigger>Host</NavigationMenuTrigger>
@@ -58,7 +50,7 @@ const Navbar = () => {
                 <a className="text-xs text-[#2D8CFF] cursor-pointer">
                   Create new meeting
                 </a>
-                <Separator/>
+                <Separator />
                 <a className="text-xs text-[#2D8CFF] cursor-pointer">
                   Start streaming
                 </a>
