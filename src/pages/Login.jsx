@@ -47,7 +47,7 @@ export function LoginForm() {
   async function onSubmit(values) {
     try {
       const res = await login(values);
-
+      console.log(res);
       alert(res.message);
       if (res.success) {
         navigate("/");

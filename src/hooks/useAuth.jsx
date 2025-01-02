@@ -21,11 +21,11 @@ export function AuthProvider({ children }) {
   // Login Function (API Call)
   const login = async (credentials) => {
     try {
-      const data = await apiLogin(credentials);
-      setUser(data.user);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("token", data.token); // Store token for future requests
-      return data;
+      const res = await apiLogin(credentials);
+      setUser(res.data);
+      localStorage.setItem("user", JSON.stringify(res.data));
+      localStorage.setItem("token", res.token); // Store token for future requests
+      return res;
     } catch (error) {
       throw error;
     }
