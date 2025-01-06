@@ -184,7 +184,9 @@ const PlanCard = ({ name, target, cta, price, features }) => (
       {isNaN(price) ? price : "₦" + price}
     </p>
     <div className="flex justify-center mb-6">
-      <Button size="lg" className="font-normal">{cta}</Button>
+      <Button size="lg" className="font-normal">
+        {cta}
+      </Button>
     </div>
     <div className="mb-10">
       {features.map((feature) => (
