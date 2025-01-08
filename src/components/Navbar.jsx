@@ -4,7 +4,6 @@ import {
   NavigationMenu,
   NavigationMenuContent,
   NavigationMenuItem,
-  NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
@@ -13,38 +12,38 @@ import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import avatar from "../assets/avatar.png";
 import { Separator } from "./ui/separator";
 import useAuth from "../hooks/useAuth";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { getUser } from "../api/userApi";
 
 const Navbar = () => {
   const { isAuthenticated } = useAuth();
+  const userQuery = useQuery({
+    queryKey: ["profile"],
+    queryFn: getUser,
+    enabled: isAuthenticated,
+  });
   return (
     <NavigationMenu className="px-5 py-7 flex fixed w-full top-0 shadow-md bg-white z-[100]">
-      <a href="/">
+      <Link to="/">
         <img src={logo} alt="Konne3ct logo" className="mb-3" />
-      </a>
+      </Link>
       <NavigationMenuList className="flex">
-        <NavigationMenuItem href="/">
-          <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-            Solutions
-          </NavigationMenuLink>
+        <NavigationMenuItem to="/">
+          <Link className={navigationMenuTriggerStyle()}>Solutions</Link>
         </NavigationMenuItem>
         <NavigationMenuItem>
-          <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-            Plans & Pricing
-          </NavigationMenuLink>
+          <Link className={navigationMenuTriggerStyle()}>Plans & Pricing</Link>
         </NavigationMenuItem>
       </NavigationMenuList>
       {isAuthenticated ? (
         <div className="ml-auto">
           <NavigationMenuList>
             <NavigationMenuItem>
-              <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                Schedule
-              </NavigationMenuLink>
+              <Link className={navigationMenuTriggerStyle()}>Schedule</Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <NavigationMenuLink className={navigationMenuTriggerStyle()}>
-                Join
-              </NavigationMenuLink>
+              <Link className={navigationMenuTriggerStyle()}>Join</Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuTrigger>Host</NavigationMenuTrigger>
@@ -61,7 +60,9 @@ const Navbar = () => {
               </NavigationMenuContent>
             </NavigationMenuItem>
             <Avatar className="rounded-lg">
-              <AvatarImage src={avatar} />
+              {userQuery.isSuccess && (
+                <AvatarImage src={userQuery.data.user.profile_photo_url} />
+              )}
               <AvatarFallback>CN</AvatarFallback>
             </Avatar>
           </NavigationMenuList>
@@ -70,20 +71,14 @@ const Navbar = () => {
         <div className="ml-auto">
           <NavigationMenuList>
             <NavigationMenuItem>
-              <NavigationMenuLink
-                href="/login"
-                className={navigationMenuTriggerStyle()}
-              >
+              <Link to="/login" className={navigationMenuTriggerStyle()}>
                 Login
-              </NavigationMenuLink>
+              </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <NavigationMenuLink
-                href="/register"
-                className={navigationMenuTriggerStyle()}
-              >
+              <Link to="/register" className={navigationMenuTriggerStyle()}>
                 Register
-              </NavigationMenuLink>
+              </Link>
             </NavigationMenuItem>
           </NavigationMenuList>
         </div>

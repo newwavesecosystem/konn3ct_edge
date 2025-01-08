@@ -22,6 +22,9 @@ import { ProfileForm } from "./ProfileForm";
 import { PasswordForm } from "./PasswordForm";
 import { Separator } from "../../components/ui/separator";
 import { Computer, Copy } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getUser } from "../../api/userApi";
+import { capitalize } from "../../lib/utils";
 
 const Profile = () => {
   return (
@@ -65,45 +68,50 @@ const Profile = () => {
 export default Profile;
 
 const ProfileInformation = () => {
-  return (
-    <div className="grid grid-cols-3 gap-6">
-      <Card>
-        <div>
-          <CardTitle className="text-xl">Photo</CardTitle>
-          <Avatar className="rounded-lg my-5 w-[90px] h-[90px]">
-            <AvatarImage src={avatar} />
-            <AvatarFallback>AD</AvatarFallback>
-          </Avatar>
-        </div>
-        <Button variant="outline" className="mb-5">
-          Select a new photo
-        </Button>
-        <ProfileForm />
-      </Card>
-      <div className="flex flex-col gap-10 col-span-2">
-        <Card className="flex items-center">
+  const userQuery = useQuery({ queryKey: ["profile"], queryFn: getUser });
+
+  if (userQuery.isSuccess)
+    return (
+      <div className="grid grid-cols-3 gap-6">
+        <Card>
           <div>
-            <CardHeader>
-              <CardTitle>Active plan</CardTitle>
-              <p>Basic Plan</p>
-            </CardHeader>
+            <CardTitle className="text-xl">Photo</CardTitle>
+            <Avatar className="rounded-lg my-5 w-[90px] h-[90px]">
+              <AvatarImage src={userQuery.data.user.profile_photo_url} />
+              <AvatarFallback>AD</AvatarFallback>
+            </Avatar>
           </div>
-          <Button className="ml-auto">Active</Button>
-        </Card>
-        <Card className="flex items-center">
-          <div>
-            <CardHeader>
-              <CardTitle>Referral Code</CardTitle>
-              <p>302103</p>
-            </CardHeader>
-          </div>
-          <Button variant="outline" className="ml-auto">
-            Copy <Copy />
+          <Button variant="outline" className="mb-5">
+            Select a new photo
           </Button>
+          <ProfileForm />
         </Card>
+        <div className="flex flex-col gap-10 col-span-2">
+          <Card className="flex items-center">
+            <div>
+              <CardHeader>
+                <CardTitle>Active plan</CardTitle>
+                <p>{capitalize(userQuery.data.user_plan.name)}</p>
+              </CardHeader>
+            </div>
+            <Button className="ml-auto">
+              {capitalize(userQuery.data.user_plan.status)}
+            </Button>
+          </Card>
+          <Card className="flex items-center">
+            <div>
+              <CardHeader>
+                <CardTitle>Referral Code</CardTitle>
+                <p>{userQuery.data.user.referral_code}</p>
+              </CardHeader>
+            </div>
+            <Button variant="outline" className="ml-auto">
+              Copy <Copy />
+            </Button>
+          </Card>
+        </div>
       </div>
-    </div>
-  );
+    );
 };
 
 const UpdatePassword = () => {

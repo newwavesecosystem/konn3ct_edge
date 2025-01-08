@@ -1,4 +1,9 @@
-import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Link,
+  Outlet,
+} from "react-router-dom";
 import {
   CreditCard,
   Disc,
@@ -14,7 +19,6 @@ import {
   Zap,
 } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
-
 import {
   Sidebar,
   SidebarContent,
@@ -40,68 +44,19 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import IsAuthenticated from "./lib/IsAuthenticated";
 
-// Menu items.
 const items = [
-  {
-    title: "Home",
-    url: "/",
-    icon: Home,
-  },
-  {
-    title: "Profile",
-    url: "/profile",
-    icon: User,
-  },
-  {
-    title: "Meeting Room(s)",
-    url: "/rooms",
-    icon: Video,
-  },
-  {
-    title: "Streaming",
-    url: "/streams",
-    icon: Radio,
-  },
-  {
-    title: "Recordings",
-    url: "/recordings",
-    icon: Disc,
-  },
-  {
-    title: "Plans & Payments",
-    url: "/payments",
-    icon: CreditCard,
-  },
-  {
-    title: "Addons",
-    url: "/addons",
-    icon: Layers,
-  },
-  {
-    title: "Referee(s)",
-    url: "/referees",
-    icon: Zap,
-  },
-  {
-    title: "Invite history",
-    url: "/history",
-    icon: FolderClock,
-  },
-  {
-    title: "Team",
-    url: "/team",
-    icon: Users,
-  },
-  {
-    title: "More",
-    url: "/others",
-    icon: Menu,
-  },
-  {
-    title: "Settings",
-    url: "/settings",
-    icon: SettingsIcon,
-  },
+  { title: "Home", url: "/", icon: Home },
+  { title: "Profile", url: "/profile", icon: User },
+  { title: "Meeting Room(s)", url: "/rooms", icon: Video },
+  { title: "Streaming", url: "/streams", icon: Radio },
+  { title: "Recordings", url: "/recordings", icon: Disc },
+  { title: "Plans & Payments", url: "/payments", icon: CreditCard },
+  { title: "Addons", url: "/addons", icon: Layers },
+  { title: "Referee(s)", url: "/referees", icon: Zap },
+  { title: "Invite history", url: "/history", icon: FolderClock },
+  { title: "Team", url: "/team", icon: Users },
+  { title: "More", url: "/others", icon: Menu },
+  { title: "Settings", url: "/settings", icon: SettingsIcon },
 ];
 
 export function AppSidebar() {
@@ -115,10 +70,10 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title} url={item.url}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <Link to={item.url}>
                       <item.icon className="!w-6 !h-6" />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -130,39 +85,44 @@ export function AppSidebar() {
   );
 }
 
+const router = createBrowserRouter([
+  {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    path: "/register",
+    element: <Register />,
+  },
+  {
+    path: "/",
+    element: (
+      <IsAuthenticated>
+        <SidebarProvider>
+          <Navbar />
+          <AppSidebar />
+          <SidebarTrigger />
+          <Outlet />
+        </SidebarProvider>
+      </IsAuthenticated>
+    ),
+    children: [
+      { index: true, element: <Dashboard /> },
+      { path: "rooms", element: <Rooms /> },
+      { path: "profile", element: <Profile /> },
+      { path: "streams", element: <Streaming /> },
+      { path: "recordings", element: <Recordings /> },
+      { path: "payments", element: <Payments /> },
+      { path: "addons", element: <Addon /> },
+      { path: "referees", element: <Referee /> },
+      { path: "history", element: <InviteHistory /> },
+      { path: "settings", element: <Settings /> },
+    ],
+  },
+]);
+
 function App() {
-  return (
-    <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="*"
-          element={
-            <IsAuthenticated>
-              <SidebarProvider>
-                <AppSidebar />
-                <SidebarTrigger />
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/rooms" element={<Rooms />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/streams" element={<Streaming />} />
-                  <Route path="/recordings" element={<Recordings />} />
-                  <Route path="/payments" element={<Payments />} />
-                  <Route path="/addons" element={<Addon />} />
-                  <Route path="/referees" element={<Referee />} />
-                  <Route path="/history" element={<InviteHistory />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </SidebarProvider>
-            </IsAuthenticated>
-          }
-        />
-      </Routes>
-    </Router>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;
