@@ -15,7 +15,6 @@ export function AuthProvider({ children }) {
     if (storedUser && storedUser !== "undefined") {
       setUser(JSON.parse(storedUser));
     }
-
     setLoading(false);
   }, []);
 

@@ -70,6 +70,10 @@ export default Profile;
 const ProfileInformation = () => {
   const userQuery = useQuery({ queryKey: ["profile"], queryFn: getUser });
 
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text);
+  };
+
   if (userQuery.isSuccess)
     return (
       <div className="grid grid-cols-3 gap-6">
@@ -105,7 +109,11 @@ const ProfileInformation = () => {
                 <p>{userQuery.data.user.referral_code}</p>
               </CardHeader>
             </div>
-            <Button variant="outline" className="ml-auto">
+            <Button
+              variant="outline"
+              className="ml-auto"
+              onClick={() => handleCopy(userQuery.data.user.referral_code)}
+            >
               Copy <Copy />
             </Button>
           </Card>

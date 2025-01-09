@@ -40,8 +40,8 @@ import Addon from "./pages/Addon";
 import Referee from "./pages/Referee";
 import Settings from "./pages/Settings";
 import InviteHistory from "./pages/InviteHistory";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
 import IsAuthenticated from "./lib/IsAuthenticated";
 
 const items = [
@@ -88,18 +88,28 @@ export function AppSidebar() {
 const router = createBrowserRouter([
   {
     path: "/login",
-    element: <Login />,
+    element: (
+      <>
+        <Navbar />
+        <Login />
+      </>
+    ),
   },
   {
     path: "/register",
-    element: <Register />,
+    element: (
+      <>
+        <Navbar />
+        <Register />
+      </>
+    ),
   },
   {
     path: "/",
     element: (
       <IsAuthenticated>
+        <Navbar />
         <SidebarProvider>
-          <Navbar />
           <AppSidebar />
           <SidebarTrigger />
           <Outlet />

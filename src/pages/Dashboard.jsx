@@ -21,7 +21,7 @@ import { Copy } from "lucide-react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { getUser } from "../api/userApi";
 import { capitalize } from "../lib/utils";
-import { getRooms } from "../api/roomsApi";
+import { getMeetings, getRooms } from "../api/roomsApi";
 import { Link } from "react-router-dom";
 
 const Dashboard = () => {
@@ -29,6 +29,7 @@ const Dashboard = () => {
     queries: [
       { queryKey: ["profile"], queryFn: getUser, cacheTime: 1000 * 60 * 30 },
       { queryKey: ["rooms"], queryFn: getRooms },
+      { queryKey: ["meetings"], queryFn: getMeetings },
     ],
   });
 
@@ -161,9 +162,11 @@ const Dashboard = () => {
             </div>
             <div className="flex justify-center items-center flex-col">
               <div className="bg-[#F2F2F2] w-full rounded p-2 text-[#424242] font-semibold my-10">
-                {userQuery[1].data.rooms.length === 0
+                {userQuery[2].data.data.length === 0
                   ? "No upcoming Meetings"
-                  : userQuery[1].data.rooms[0].name}
+                  : userQuery[2].data.data.map(() => (
+                      <p>{userQuery[2].data.data.name}</p>
+                    ))}
               </div>
               <Button variant="outline">Test Audio and Video</Button>
             </div>

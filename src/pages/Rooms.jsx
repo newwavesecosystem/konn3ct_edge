@@ -16,7 +16,12 @@ import roomsIcon from "../assets/icons/roomsIcon.svg";
 import { Separator } from "../components/ui/separator";
 import { Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createMeeting, getRooms } from "../api/roomsApi";
+import {
+  createMeeting,
+  deleteRoom,
+  getRooms,
+  startMeeting,
+} from "../api/roomsApi";
 import { Dialog, DialogContent, DialogTrigger } from "../components/ui/dialog";
 import {
   Form,
@@ -36,6 +41,15 @@ const Rooms = () => {
   const roomQuery = useQuery({
     queryKey: ["rooms"],
     queryFn: getRooms,
+  });
+
+  const queryClient = useQueryClient();
+
+  const deleteMeetingMutation = useMutation({
+    mutationFn: deleteRoom,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["rooms"]);
+    },
   });
 
   const [openDialog, setOpenDialog] = useState(false);
@@ -85,20 +99,50 @@ const Rooms = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {roomQuery.data.rooms.map(({ name, url, id }) => (
-                <TableRow key={id}>
-                  <TableCell className="">{name}</TableCell>
-                  <TableCell className="">{url}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-x-2">
-                      <Button variant="outline">Copy Link</Button>
-                      <Button variant="destructive">Delete</Button>
-                      <Button variant="outline">Manage</Button>
-                      <Button>Start Meeting</Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {roomQuery.data.rooms.map(({ name, url, id }) => {
+                let meeting_url = "";
+
+                const handleStartMeeting = async (id) => {
+                  const res = await startMeeting(id);
+                  meeting_url = res.data.url;
+                  window.open(meeting_url, "_blank");
+                };
+
+                const handleCopy = () => {
+                  if (meeting_url) {
+                    navigator.clipboard.writeText(meeting_url);
+                  }
+                };
+
+                const handleDelete = (id) => {
+                  deleteMeetingMutation.mutate(id);
+                };
+
+                return (
+                  <TableRow key={id}>
+                    <TableCell className="">{name}</TableCell>
+                    <TableCell className="">{url}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-x-2">
+                        <Button variant="outline" onClick={handleCopy}>
+                          Copy Link
+                        </Button>
+
+                        <Button variant="outline">Manage</Button>
+                        <Button onClick={() => handleStartMeeting(id)}>
+                          Start Meeting
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleDelete(id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           {roomQuery.data.rooms.length === 0 && (
