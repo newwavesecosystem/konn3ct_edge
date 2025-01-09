@@ -15,7 +15,7 @@ const referees = [];
 
 const Referee = () => {
   return (
-    <section className="page container">
+    <section className="page container mx-auto">
       <Card className="w-full min-h-full relative">
         <div className="p-4 pt-10 flex items-center gap-20">
           <h3 className="font-medium text-xl">Referee List</h3>

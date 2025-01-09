@@ -11,11 +11,11 @@ const SideDetail = () => {
   ];
 
   return (
-    <div className="flex-1">
+    <div className="flex-1 flex flex-col gap-y-6 font-medium">
       {meetingFeatures.map((message, id) => (
         <div key={id} className="flex gap-x-2 items-center">
-          <CircleCheck />
-          <p>{message}</p>
+          <CircleCheck className="h-[20px] w-[20px]" />
+          <p className="text-[#0A2540]">{message}</p>
         </div>
       ))}
     </div>

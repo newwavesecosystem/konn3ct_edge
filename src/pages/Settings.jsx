@@ -10,7 +10,7 @@ import {
 
 const Settings = () => {
   return (
-    <section className="container page">
+    <section className="container mx-auto page">
       <Card className="h-full">
         <div className="p-4 pt-10 flex items-center gap-20">
           <h3 className="font-medium text-xl">Settings</h3>

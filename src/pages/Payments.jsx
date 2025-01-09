@@ -89,7 +89,7 @@ const Payments = () => {
   const payments = [];
   const [plans, setPlans] = useState(Plans.monthly);
   return (
-    <section className="page container">
+    <section className="page container mx-auto">
       <Dialog>
         <div className="flex items-end gap-x-5 mb-10">
           <Card className="w-[260px] h-[200px] bg-primary">

@@ -90,7 +90,7 @@ const streams = [
 ];
 const Streaming = () => {
   return (
-    <section className="page container">
+    <section className="page container mx-auto">
       <Card className="w-full min-h-full">
         <div className="p-4 pt-10 flex items-center gap-20">
           <Button>

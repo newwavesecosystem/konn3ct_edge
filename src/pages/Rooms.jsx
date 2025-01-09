@@ -55,10 +55,10 @@ const Rooms = () => {
   const [openDialog, setOpenDialog] = useState(false);
 
   if (roomQuery.isLoading)
-    return <div className="container page">Loading...</div>;
+    return <div className="container mx-auto page">Loading...</div>;
 
   return (
-    <section className="page container">
+    <section className="page container mx-auto">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <Card className="w-full min-h-full">
           <div className="p-4 pt-10 flex items-center justify-between gap-x-4">

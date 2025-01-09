@@ -23,22 +23,34 @@ import { getUser } from "../api/userApi";
 import { capitalize } from "../lib/utils";
 import { getMeetings, getRooms } from "../api/roomsApi";
 import { Link } from "react-router-dom";
+import useAuth from "../hooks/useAuth";
 
 const Dashboard = () => {
+  const { isAuthenticated } = useAuth();
+
   const userQuery = useQueries({
     queries: [
-      { queryKey: ["profile"], queryFn: getUser, cacheTime: 1000 * 60 * 30 },
-      { queryKey: ["rooms"], queryFn: getRooms },
-      { queryKey: ["meetings"], queryFn: getMeetings },
+      {
+        enabled: isAuthenticated,
+        queryKey: ["profile"],
+        queryFn: getUser,
+        cacheTime: 1000 * 60 * 30,
+      },
+      { enabled: isAuthenticated, queryKey: ["rooms"], queryFn: getRooms },
+      {
+        enabled: isAuthenticated,
+        queryKey: ["meetings"],
+        queryFn: getMeetings,
+      },
     ],
   });
 
   if (userQuery.every((query) => query.isLoading))
-    return <div className="container page">Loading...</div>;
+    return <div className="container mx-auto page">Loading...</div>;
 
   if (userQuery.every((query) => query.isSuccess))
     return (
-      <div className="container page grid grid-cols-3 justify-evenly gap-5">
+      <div className="container mx-auto page grid grid-cols-3 justify-evenly gap-5">
         <div className="flex flex-col gap-10 col-span-2">
           {/* Main detail Card */}
           <Card className="flex flex-col">
