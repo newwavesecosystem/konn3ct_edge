@@ -41,10 +41,10 @@ const Navbar = () => {
         <div className="ml-auto">
           <NavigationMenuList>
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()}>Schedule</Link>
+              <Link className={navigationMenuTriggerStyle()} to="/rooms">Schedule</Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()}>Join</Link>
+              <Link className={navigationMenuTriggerStyle()} to="/join">Join</Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuTrigger>Host</NavigationMenuTrigger>
