@@ -46,3 +46,18 @@ export const deleteRoom = async (id) => {
     throw error;
   }
 };
+
+export const joinRoom = async (data) => {
+  const { roomName, ...body } = data;
+  try {
+    if (Number.isFinite(Number(roomName))) {
+      const res = await api.post("/join-room", { id: roomName, ...body });
+      return res.data;
+    } else {
+      const res = await api.post("/kv4/join-room", { room: roomName, ...body });
+      return res.data;
+    }
+  } catch (error) {
+    throw error;
+  }
+};

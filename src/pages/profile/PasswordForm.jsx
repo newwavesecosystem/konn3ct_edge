@@ -19,9 +19,14 @@ const formSchema = z
     currentPassword: z.string().min(6, {
       message: "Current password must be at least 6 characters.",
     }),
-    newPassword: z.string().min(6, {
-      message: "New password must be at least 6 characters.",
-    }),
+    newPassword: z
+      .string()
+      .min(6, {
+        message: "New password must be at least 6 characters.",
+      })
+      .refine((value) => value.trim().length > 0, {
+        message: "New password is required and cannot be empty or whitespace.",
+      }),
     confirmPassword: z.string().min(6, {
       message: "Confirm password must be at least 6 characters.",
     }),
@@ -105,7 +110,9 @@ export function PasswordForm() {
           )}
         />
 
-        <Button type="submit" size="lg">Save</Button>
+        <Button type="submit" size="lg">
+          Save
+        </Button>
       </form>
     </Form>
   );

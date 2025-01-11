@@ -13,6 +13,10 @@ import { Input } from "../components/ui/input";
 import { Card } from "../components/ui/card";
 import logo from "src/assets/konn3ct_logo.png";
 import { Button } from "../components/ui/button";
+import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { joinRoom } from "../api/roomsApi";
+import { useNavigate } from "react-router-dom";
 
 const JoinRoom = () => {
   return (
@@ -33,10 +37,46 @@ const JoinRoom = () => {
 export default JoinRoom;
 
 const JoinForm = () => {
-  const formSchema = {};
+  const navigate = useNavigate();
+
+  const joinMutation = useMutation({
+    mutationFn: joinRoom,
+    onSuccess: (res) => {
+      if (res.success) {
+        let meeting_url = "";
+        if (res.sessionToken) {
+          meeting_url = `https://k4.konn3ct.ng/?sessionToken=${res.sessionToken}`;
+        } else {
+          meeting_url = `https://k4.konn3ct.ng/?sessionToken=${res.data}`;
+        }
+        window.open(meeting_url, "_blank");
+        navigate("/");
+      }
+      alert(res.message);
+    },
+    onError: () => {
+      alert("An error occured");
+    },
+  });
+
+  const formSchema = z.object({
+    email: z.string().email({ message: "Invalid email address." }),
+    roomName: z
+      .string()
+      .min(2, { message: "Room name must be at least 2 characters long." })
+      .refine((value) => value.trim().length > 0, {
+        message: "Room name cannot be empty or whitespace.",
+      }),
+    name: z
+      .string()
+      .min(2, { message: "Username must be at least 2 characters long." })
+      .refine((value) => value.trim().length > 0, {
+        message: "Username cannot be empty or whitespace.",
+      }),
+  });
 
   const form = useForm({
-    // resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       roomName: "",
       name: "",
@@ -45,7 +85,7 @@ const JoinForm = () => {
   });
 
   const onSubmit = (data) => {
-    console.log(data);
+    joinMutation.mutate(data);
   };
 
   return (
@@ -64,7 +104,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="text"
-                    placeholder="Enter meeting room name or link"
+                    placeholder="Enter meeting room name or ID"
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -97,7 +137,7 @@ const JoinForm = () => {
               <FormItem>
                 <FormControl>
                   <Input
-                    type="text"
+                    type="email"
                     placeholder="Enter your email address"
                     className="rounded-full px-4"
                     {...field}
@@ -110,7 +150,7 @@ const JoinForm = () => {
           <Button
             type="submit"
             className="w-full bg-[#012E89] shadow-md !my-10"
-            // disabled={loginMutation.isPending}
+            disabled={joinMutation.isPending}
           >
             Konne3ct
           </Button>

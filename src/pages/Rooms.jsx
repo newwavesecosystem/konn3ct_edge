@@ -175,12 +175,15 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
   });
 
   const formSchema = z.object({
-    name: z.string().min(5, {
-      message: "Meeting name must be at least 5 characters.",
-    }),
-    url: z.string().min(5, {
-      message: "Meeting url must be at least 5 characters.",
-    }),
+    name: z
+      .string()
+      .min(5, {
+        message: "Meeting name must be at least 5 characters long.",
+      })
+      .refine((value) => value.trim().length > 0, {
+        message: "Meeting name is required and cannot be empty or whitespace.",
+      }),
+    url: z.string().optional(),
   });
 
   const form = useForm({
@@ -222,7 +225,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
             <FormItem>
               <FormLabel>Meeting url</FormLabel>
               <FormControl>
-                <Input {...field} />
+                <Input {...field} placeholder="Optional" />
               </FormControl>
               <FormMessage />
             </FormItem>

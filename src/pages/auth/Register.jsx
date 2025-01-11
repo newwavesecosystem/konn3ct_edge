@@ -59,8 +59,18 @@ const formSchema = z.object({
       message:
         "Password must contain at least one special character (@$!%*?&).",
     }),
-  firstname: z.string().min(2, { message: "First name is required." }),
-  lastname: z.string().min(2, { message: "Last name is required." }),
+  firstname: z
+    .string()
+    .min(2, { message: "First name is required." })
+    .refine((value) => value.trim().length > 0, {
+      message: "First name is required and cannot be empty or whitespace.",
+    }),
+  lastname: z
+    .string()
+    .min(2, { message: "Last name is required." })
+    .refine((value) => value.trim().length > 0, {
+      message: "Last name is required and cannot be empty or whitespace.",
+    }),
   phone: z
     .string()
     .min(10, { message: "Phone number must be at least 10 digits." }),
