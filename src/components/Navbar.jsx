@@ -15,6 +15,7 @@ import useAuth from "../hooks/useAuth";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getUser } from "../api/userApi";
+import { Button } from "./ui/button";
 
 const Navbar = () => {
   const { isAuthenticated } = useAuth();
@@ -24,7 +25,7 @@ const Navbar = () => {
     enabled: isAuthenticated,
   });
   return (
-    <NavigationMenu className="px-5 py-7 flex fixed w-full top-0 shadow-md bg-white z-[100]">
+    <NavigationMenu className="px-5 py-3 flex fixed w-full top-0 shadow-md bg-white z-[100]">
       <Link to="/">
         <img src={logo} alt="Konne3ct logo" className="mb-3" />
       </Link>
@@ -71,13 +72,26 @@ const Navbar = () => {
         <div className="ml-auto">
           <NavigationMenuList>
             <NavigationMenuItem>
+              <Link to="/join" className={navigationMenuTriggerStyle()}>
+                Join a Meeting Room
+              </Link>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
               <Link to="/login" className={navigationMenuTriggerStyle()}>
-                Login
+                Sign in
               </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <Link to="/register" className={navigationMenuTriggerStyle()}>
-                Register
+                <Button
+                  variant="lg"
+                  className={
+                    navigationMenuTriggerStyle() +
+                    " bg-[#012E89] text-white rounded-full"
+                  }
+                >
+                  Sign up, It's Free
+                </Button>
               </Link>
             </NavigationMenuItem>
           </NavigationMenuList>

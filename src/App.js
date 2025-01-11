@@ -43,6 +43,7 @@ import InviteHistory from "./pages/InviteHistory";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import IsAuthenticated from "./lib/IsAuthenticated";
+import JoinRoom from "./pages/JoinRoom";
 
 const items = [
   { title: "Home", url: "/", icon: Home },
@@ -101,6 +102,15 @@ const router = createBrowserRouter([
       <>
         <Navbar />
         <Register />
+      </>
+    ),
+  },
+  {
+    path: "/join",
+    element: (
+      <>
+        <Navbar />
+        <JoinRoom />
       </>
     ),
   },

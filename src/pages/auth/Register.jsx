@@ -28,7 +28,7 @@ import { useMutation } from "@tanstack/react-query";
 
 export default function Register() {
   return (
-    <div className="page container mx-auto flex justify-center !pt-28">
+    <div className="page container mx-auto flex justify-center">
       <SideDetail />
       <Card className="max-w-[560px] flex-1 ">
         <RegisterForm />
@@ -79,11 +79,12 @@ export function RegisterForm() {
     },
   });
 
+  const { register } = useAuth();
+
   const registerMutation = useMutation({
     mutationFn: register,
   });
 
-  const { register } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
 

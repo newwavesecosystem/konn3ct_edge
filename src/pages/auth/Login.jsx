@@ -32,7 +32,7 @@ export default function Login() {
   }, []);
 
   return (
-    <div className="page container mx-auto flex justify-center !pt-28">
+    <div className="page container mx-auto flex justify-center">
       <SideDetail />
       <Card className="max-w-[560px] flex-1 ">
         <LoginForm />

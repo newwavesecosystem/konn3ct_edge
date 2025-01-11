@@ -66,7 +66,7 @@ const Dashboard = () => {
                 </CardTitle>
                 <CardDescription className="text-black font-medium">
                   Your current plan: Konn3ct{" "}
-                  {capitalize(userQuery[0].data.user_plan.name)}
+                  {capitalize(userQuery[0]?.data?.user_plan?.name)}
                 </CardDescription>
               </CardHeader>
             </div>
