@@ -5,6 +5,7 @@ import App from "./App";
 import { AuthProvider } from "./hooks/useAuth";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { Toaster } from "./components/ui/toaster";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 const queryClient = new QueryClient();
@@ -13,6 +14,7 @@ root.render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <App />
+        <Toaster />
       </AuthProvider>
       <ReactQueryDevtools />
     </QueryClientProvider>

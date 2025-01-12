@@ -7,7 +7,7 @@ import {
   TableCell,
 } from "../components/ui/table";
 import { Button } from "../components/ui/button";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import StatCard from "../components/StatCard";
 import { Card } from "../components/ui/card";
 import activeIcon from "../assets/icons/active.svg";
@@ -22,7 +22,13 @@ import {
   getRooms,
   startMeeting,
 } from "../api/roomsApi";
-import { Dialog, DialogContent, DialogTrigger } from "../components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+  DialogDescription,
+  DialogTitle,
+} from "../components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -33,9 +39,9 @@ import {
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { useForm } from "react-hook-form";
-import { DialogDescription, DialogTitle } from "@radix-ui/react-dialog";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useToast } from "../hooks/use-toast";
 
 const Rooms = () => {
   const roomQuery = useQuery({
@@ -53,6 +59,37 @@ const Rooms = () => {
   });
 
   const [openDialog, setOpenDialog] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [meetingUrls, setMeetingUrls] = useState({});
+  const [roomIdToDelete, setRoomIdToDelete] = useState(null);
+
+  useEffect(() => {
+    if (!openDeleteDialog) setRoomIdToDelete(null);
+  }, [openDeleteDialog]);
+
+  const handleDeleteClick = (id) => {
+    setRoomIdToDelete(id); // Set the ID of the room to delete
+    setOpenDeleteDialog(true); // Open the dialog
+  };
+
+  const handleCopy = (id) => {
+    const meeting_url = meetingUrls[id];
+    if (meeting_url) {
+      navigator.clipboard.writeText(meeting_url);
+      toast({ description: "Copied to clipboard" });
+    }
+  };
+
+  const { toast } = useToast();
+
+  const startMeetingMutation = useMutation({
+    mutationFn: startMeeting,
+    onSuccess: (res, id) => {
+      toast({ description: "Meeting started successfully" });
+      setMeetingUrls((prev) => ({ ...prev, [id]: res.data.url }));
+      window.open(res.data.url, "_blank");
+    },
+  });
 
   if (roomQuery.isLoading)
     return <div className="container mx-auto page">Loading...</div>;
@@ -60,7 +97,7 @@ const Rooms = () => {
   return (
     <section className="page container mx-auto">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <Card className="w-full min-h-full">
+        <Card className="w-full min-h-full relative">
           <div className="p-4 pt-10 flex items-center justify-between gap-x-4">
             <DialogTrigger asChild>
               <Button>
@@ -100,41 +137,30 @@ const Rooms = () => {
             </TableHeader>
             <TableBody>
               {roomQuery.data.rooms.map(({ name, url, id }) => {
-                let meeting_url = "";
-
-                const handleStartMeeting = async (id) => {
-                  const res = await startMeeting(id);
-                  meeting_url = res.data.url;
-                  window.open(meeting_url, "_blank");
-                };
-
-                const handleCopy = () => {
-                  if (meeting_url) {
-                    navigator.clipboard.writeText(meeting_url);
-                  }
-                };
-
-                const handleDelete = (id) => {
-                  deleteMeetingMutation.mutate(id);
-                };
-
                 return (
                   <TableRow key={id}>
                     <TableCell className="">{name}</TableCell>
                     <TableCell className="">{url}</TableCell>
                     <TableCell>
                       <div className="flex gap-x-2">
-                        <Button variant="outline" onClick={handleCopy}>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleCopy(id)}
+                        >
                           Copy Link
                         </Button>
 
                         <Button variant="outline">Manage</Button>
-                        <Button onClick={() => handleStartMeeting(id)}>
+                        <Button
+                          disabled={startMeetingMutation.isPending}
+                          onClick={() => startMeetingMutation.mutate(id)}
+                        >
                           Start Meeting
                         </Button>
                         <Button
+                          disabled={deleteMeetingMutation.isPending}
                           variant="destructive"
-                          onClick={() => handleDelete(id)}
+                          onClick={() => handleDeleteClick(id)}
                         >
                           Delete
                         </Button>
@@ -146,16 +172,44 @@ const Rooms = () => {
             </TableBody>
           </Table>
           {roomQuery.data.rooms.length === 0 && (
-            <p>No data available for this table</p>
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+              <p>No data available for this table</p>
+            </div>
           )}
         </Card>
-
         <DialogContent className="w-1/2">
           <DialogTitle>Create a new Meeting</DialogTitle>
           <DialogDescription>
             You will create a new meeting, accessible on the dashboard.
           </DialogDescription>
           <CreateMeetingDialog setOpenDialog={setOpenDialog} />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+        <DialogContent className="w-1/2">
+          <DialogTitle>Confirm Deletion</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete the room named "Room Name"? This
+            action cannot be undone, and all data associated with this room will
+            be permanently deleted.
+          </DialogDescription>
+          <div className="flex gap-x-4">
+            <Button
+              variant="outline"
+              onClick={() => setOpenDeleteDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                deleteMeetingMutation.mutate(roomIdToDelete); // Pass the stored room ID to the mutation
+                setOpenDeleteDialog(false); // Close the dialog
+              }}
+            >
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </section>
@@ -166,11 +220,13 @@ export default Rooms;
 
 const CreateMeetingDialog = ({ setOpenDialog }) => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const createMeetingMutation = useMutation({
     mutationFn: createMeeting,
     onSuccess: () => {
       queryClient.invalidateQueries(["rooms"]);
+      toast({ description: "Meeting created successfully" });
     },
   });
 

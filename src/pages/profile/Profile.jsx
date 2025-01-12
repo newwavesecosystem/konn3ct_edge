@@ -25,6 +25,7 @@ import { Computer, Copy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getUser } from "../../api/userApi";
 import { capitalize } from "../../lib/utils";
+import { useToast } from "../../hooks/use-toast";
 
 const Profile = () => {
   return (
@@ -69,9 +70,13 @@ export default Profile;
 
 const ProfileInformation = () => {
   const userQuery = useQuery({ queryKey: ["profile"], queryFn: getUser });
+  const { toast } = useToast();
 
   const handleCopy = (text) => {
-    navigator.clipboard.writeText(text);
+    if (text) {
+      navigator.clipboard.writeText(text);
+      toast({ description: "Copied to clipboard" });
+    }
   };
 
   if (userQuery.isSuccess)

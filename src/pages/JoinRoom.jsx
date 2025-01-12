@@ -17,6 +17,7 @@ import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { joinRoom } from "../api/roomsApi";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../hooks/use-toast";
 
 const JoinRoom = () => {
   return (
@@ -38,6 +39,7 @@ export default JoinRoom;
 
 const JoinForm = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const joinMutation = useMutation({
     mutationFn: joinRoom,
@@ -52,10 +54,10 @@ const JoinForm = () => {
         window.open(meeting_url, "_blank");
         navigate("/");
       }
-      alert(res.message);
+      toast({ description: res.message });
     },
     onError: () => {
-      alert("An error occured");
+      toast({ description: "An error occured" });
     },
   });
 

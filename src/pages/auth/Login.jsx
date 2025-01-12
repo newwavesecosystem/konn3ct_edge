@@ -23,6 +23,7 @@ import sso from "../../assets/icons/sso.svg";
 import apple from "../../assets/icons/apple.svg";
 import { Separator } from "../../components/ui/separator";
 import { useMutation } from "@tanstack/react-query";
+import { useToast } from "../../hooks/use-toast";
 
 export default function Login() {
   const { logout } = useAuth();
@@ -62,23 +63,36 @@ export function LoginForm() {
     },
   });
 
+  const { toast } = useToast();
   const navigate = useNavigate();
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
-  const loginMutation = useMutation({ mutationFn: login });
+
+  const loginMutation = useMutation({
+    mutationFn: login,
+    onSuccess: (res) => {
+      if (res.success) {
+        toast({ title: "Login Successful", description: res.message });
+        navigate("/");
+      } else {
+        toast({
+          title: "Login Unsuccessful",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Login Unsuccessful",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   async function onSubmit(values) {
-    loginMutation.mutate(values, {
-      onSuccess: (res) => {
-        alert(res.message);
-        if (res.success) {
-          navigate("/");
-        }
-      },
-      onError: (err) => {
-        alert("An error occurred during login.");
-      },
-    });
+    loginMutation.mutate(values);
   }
 
   return (
@@ -153,22 +167,18 @@ export function LoginForm() {
                       className="rounded-full px-4"
                       {...field}
                     />
-                    <div className="flex justify-center mt-5">
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="text-[#012E89] text-[14px] font-bold"
-                      >
-                        {showPassword ? (
-                          <p>Hide password</p>
-                        ) : (
-                          <p>Show password</p>
-                        )}
-                      </button>
-                    </div>
                   </div>
                 </FormControl>
                 <FormMessage />
+                <div className="flex justify-center mt-5">
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[#012E89] text-[14px] font-bold"
+                  >
+                    {showPassword ? <p>Hide password</p> : <p>Show password</p>}
+                  </button>
+                </div>
               </FormItem>
             )}
           />

@@ -12,7 +12,6 @@ import {
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import useAuth from "../../hooks/useAuth";
-import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { Card } from "../../components/ui/card";
@@ -23,8 +22,9 @@ import google from "../../assets/icons/google.svg";
 import sso from "../../assets/icons/sso.svg";
 import apple from "../../assets/icons/apple.svg";
 import { Separator } from "../../components/ui/separator";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
+import { useToast } from "../../hooks/use-toast";
 
 export default function Register() {
   return (
@@ -91,23 +91,37 @@ export function RegisterForm() {
 
   const { register } = useAuth();
 
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
   const registerMutation = useMutation({
     mutationFn: register,
+    onSuccess: (res) => {
+      if (res.success) {
+        toast({ title: "Sign-up Successful", description: res.message });
+        navigate("/");
+      } else {
+        toast({
+          title: "Sign-up Unsuccessful",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Sign-up Unsuccessful",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
-  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
 
   // Handle form submission
   async function onSubmit(values) {
-    registerMutation.mutate(values, {
-      onSuccess: () => {
-        alert("You've successfully signed up to Konn3ct");
-      },
-      onError: () => {
-        alert("There was an error signing up");
-      },
-    });
+    registerMutation.mutate(values);
   }
 
   return (

@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
-import React, { useEffect } from "react";
+import React from "react";
 import StatCard from "../components/StatCard";
 import activeIcon from "../assets/icons/active.svg";
 import inactiveIcon from "../assets/icons/inactive.svg";
@@ -18,7 +18,7 @@ import calendar from "../assets/icons/calendar.svg";
 import join from "../assets/icons/add-square.svg";
 import video from "../assets/icons/video-01.svg";
 import { Copy } from "lucide-react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { getUser } from "../api/userApi";
 import { capitalize } from "../lib/utils";
 import { getMeetings, getRooms } from "../api/roomsApi";
@@ -131,7 +131,7 @@ const Dashboard = () => {
               <div className="flex flex-col items-center gap-y-4">
                 <Link to="/rooms">
                   <Button className="w-[71px] h-[71px]">
-                    <img src={calendar} />
+                    <img src={calendar} alt="schedule" />
                   </Button>
                 </Link>
                 Schedule
@@ -139,7 +139,7 @@ const Dashboard = () => {
               <div className="flex flex-col items-center gap-y-4">
                 <Link to="/rooms">
                   <Button className="w-[71px] h-[71px]">
-                    <img src={join} />
+                    <img src={join} alt="join" />
                   </Button>
                 </Link>
                 Join
@@ -147,7 +147,7 @@ const Dashboard = () => {
               <div className="flex flex-col items-center gap-y-4">
                 <Link to="/rooms">
                   <Button className="w-[71px] h-[71px] bg-[#012E89]">
-                    <img src={video} />
+                    <img src={video} alt="host" />
                   </Button>
                 </Link>
                 Host

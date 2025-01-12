@@ -9,7 +9,6 @@ import {
   navigationMenuTriggerStyle,
 } from "../components/ui/navigation-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
-import avatar from "../assets/avatar.png";
 import { Separator } from "./ui/separator";
 import useAuth from "../hooks/useAuth";
 import { Link } from "react-router-dom";
@@ -41,22 +40,32 @@ const Navbar = () => {
         <div className="ml-auto">
           <NavigationMenuList>
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()} to="/rooms">Schedule</Link>
+              <Link className={navigationMenuTriggerStyle()} to="/rooms">
+                Schedule
+              </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()} to="/join">Join</Link>
+              <Link className={navigationMenuTriggerStyle()} to="/join">
+                Join
+              </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuTrigger>Host</NavigationMenuTrigger>
               <NavigationMenuContent className="!w-[200px] rounded bg-[#FFF] shadow p-4 ">
                 <div className="flex flex-col gap-y-5">
-                  <a className="text-xs text-[#2D8CFF] cursor-pointer">
+                  <Link
+                    to="/rooms"
+                    className="text-xs text-[#2D8CFF] cursor-pointer"
+                  >
                     Create new meeting
-                  </a>
+                  </Link>
                   <Separator />
-                  <a className="text-xs text-[#2D8CFF] cursor-pointer">
+                  <Link
+                    to="/streams"
+                    className="text-xs text-[#2D8CFF] cursor-pointer"
+                  >
                     Start streaming
-                  </a>
+                  </Link>
                 </div>
               </NavigationMenuContent>
             </NavigationMenuItem>
