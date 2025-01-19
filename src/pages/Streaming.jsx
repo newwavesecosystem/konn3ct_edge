@@ -56,7 +56,7 @@ const Streaming = () => {
       <Card className="w-full min-h-full relative pb-16">
         <div className="p-4 pt-10 flex items-center gap-20">
           <Button>
-            <Plus /> Sream
+            <Plus /> Stream
           </Button>
           <StatCard value={1} name="Total Streams" icon={roomsIcon} />
           <Separator orientation="vertical" className="h-[50px]" />

@@ -14,7 +14,7 @@ import roomsIcon from "../assets/icons/roomsIcon.svg";
 import { Separator } from "../components/ui/separator";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteRecording, getRecordings } from "../api/recordingApi";
-import { bytetoMB, formatDate } from "../lib/utils";
+import { byteToMB, formatDate } from "../lib/utils";
 import { useToast } from "../hooks/use-toast";
 
 const Recordings = () => {
@@ -81,7 +81,7 @@ const Recordings = () => {
                         {((endTime - startTime) / (1000 * 60)).toFixed(2)}{" "}
                         Minutes
                       </p>
-                      <p>{bytetoMB(size)} MB</p>
+                      <p>{byteToMB(size)} MB</p>
                     </div>
                   </TableCell>
                   <TableCell>{formatDate(Number(startTime))}</TableCell>

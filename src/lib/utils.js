@@ -25,6 +25,6 @@ export const formatDate = (dateString) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
 
-export const bytetoMB = (byte) => {
+export const byteToMB = (byte) => {
   return (byte / (1024 * 1024)).toFixed(2);
 };
