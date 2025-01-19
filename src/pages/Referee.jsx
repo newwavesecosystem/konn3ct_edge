@@ -6,14 +6,33 @@ import {
   TableRow,
   TableCell,
 } from "../components/ui/table";
-import React from "react";
+import React, { useState } from "react";
 import { Card } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import { Input } from "../components/ui/input";
-
-const referees = [];
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationPrevious,
+  PaginationLink,
+  PaginationNext,
+} from "../components/ui/pagination";
+import { useQuery } from "@tanstack/react-query";
+import { getReferee } from "../api/refereeApi";
 
 const Referee = () => {
+  const [page, setPage] = useState(1);
+
+  const refereeQuery = useQuery({
+    queryKey: ["referee", { page }],
+    queryFn: () => getReferee(page),
+    placeholderData: (prev) => prev,
+  });
+
+  if (refereeQuery.isLoading)
+    return <div className="container mx-auto page">Loading...</div>;
+
   return (
     <section className="page container mx-auto">
       <Card className="w-full min-h-full relative">
@@ -42,7 +61,7 @@ const Referee = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {referees.map(({ name, email, plan, date }, id) => (
+            {refereeQuery.data.data.map(({ name, email, plan, date }, id) => (
               <TableRow key={name + date}>
                 <TableCell>{id + 1}</TableCell>
                 <TableCell>{name}</TableCell>
@@ -53,11 +72,39 @@ const Referee = () => {
             ))}
           </TableBody>
         </Table>
-        {referees.length === 0 && (
+        {refereeQuery.data.data.length === 0 && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
             <p>No data available for this table</p>
           </div>
         )}
+        <Pagination className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                disabled={refereeQuery.data.prev_page_url === null}
+                onClick={() => setPage((prev) => prev - 1)}
+              />
+            </PaginationItem>
+            {Array.from(
+              { length: refereeQuery.data?.last_page ?? 1 },
+              (_, i) => 1 + i
+            ).map((index) => (
+              <PaginationItem key={index}>
+                <PaginationLink
+                  disabled={index === refereeQuery.data.current_page}
+                >
+                  {index}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                disabled={refereeQuery.data.next_page_url == null}
+                onClick={() => setPage((prev) => prev + 1)}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </Card>
     </section>
   );

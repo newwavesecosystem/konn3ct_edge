@@ -1,7 +1,5 @@
 import axios from "axios";
-
-const BASE_URL = "https://dev.konn3ct.ng/api/app";
-
+const BASE_URL = process.env.REACT_APP_BASE_URL;
 // Login Request
 export const login = async (credentials) => {
   try {

@@ -10,6 +10,7 @@ import {
   FolderClock,
   Home,
   Layers,
+  LogOut,
   Menu,
   Radio,
   Settings as SettingsIcon,
@@ -58,6 +59,7 @@ const items = [
   { title: "Team", url: "/team", icon: Users },
   { title: "More", url: "/others", icon: Menu },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
+  { title: "Logout", url: "/login", icon: LogOut },
 ];
 
 export function AppSidebar() {

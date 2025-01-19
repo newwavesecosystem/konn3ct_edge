@@ -137,7 +137,7 @@ const Dashboard = () => {
                 Schedule
               </div>
               <div className="flex flex-col items-center gap-y-4">
-                <Link to="/rooms">
+                <Link to="/join">
                   <Button className="w-[71px] h-[71px]">
                     <img src={join} alt="join" />
                   </Button>

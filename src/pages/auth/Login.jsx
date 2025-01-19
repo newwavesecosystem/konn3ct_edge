@@ -24,6 +24,8 @@ import apple from "../../assets/icons/apple.svg";
 import { Separator } from "../../components/ui/separator";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
+import { GoogleLogin, useGoogleLogin } from "@react-oauth/google";
+import { jwtDecode } from "jwt-decode";
 
 export default function Login() {
   const { logout } = useAuth();
@@ -95,6 +97,11 @@ export function LoginForm() {
     loginMutation.mutate(values);
   }
 
+  const handleGoogleLogin = useGoogleLogin({
+    // onSuccess: (tokenResponse) => console.log(tokenResponse),
+    onError: (error) => console.log(error),
+  });
+
   return (
     <div className="px-20">
       <div className="flex justify-center">
@@ -104,20 +111,23 @@ export function LoginForm() {
       <p className="text-xl font-medium text-center mb-10">Continue with: </p>
 
       <div className="flex justify-evenly">
-        <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={facebook} alt="Facebook" />{" "}
+        <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
+          <img className="grayscale h-8" src={facebook} alt="Facebook" />{" "}
           <p className="text-[10px] font-medium">Facebook</p>
         </div>
-        <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={google} alt="google" />{" "}
+        <div
+          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+          onClick={() => handleGoogleLogin()}
+        >
+          <img className="h-8" src={google} alt="google" />
           <p className="text-[10px] font-medium">Google</p>
         </div>
-        <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={apple} alt="apple" />{" "}
+        <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
+          <img className="grayscale h-8" src={apple} alt="apple" />{" "}
           <p className="text-[10px] font-medium">Apple</p>
         </div>
-        <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={sso} alt="sso" />{" "}
+        <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
+          <img className="grayscale h-8" src={sso} alt="sso" />{" "}
           <p className="text-[10px] font-medium">SSO</p>
         </div>
       </div>
