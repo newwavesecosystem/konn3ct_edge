@@ -10,7 +10,7 @@ import React, { useState } from "react";
 import { Card } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import { Button } from "../components/ui/button";
-import { getInvites, resendInvite } from "../api/invitesApi";
+import { getInvites, resendInvite, sendInvite } from "../api/invitesApi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Pagination,
@@ -20,13 +20,48 @@ import {
   PaginationLink,
   PaginationNext,
 } from "../components/ui/pagination";
-import { capitalize } from "../lib/utils";
+import { capitalize, cn, formatDate } from "../lib/utils";
 import { useToast } from "../hooks/use-toast";
+import { CalendarIcon, Check, ChevronsUpDown, Send } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../components/ui/popover";
+import { Textarea } from "../components/ui/textarea";
+import { Calendar } from "../components/ui/calendar";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../components/ui/command";
 
 const InviteHistory = () => {
   const [page, setPage] = useState(1);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [openDialog, setOpenDialog] = useState(false);
 
   const inviteQuery = useQuery({
     queryKey: ["invite", { page }],
@@ -48,7 +83,10 @@ const InviteHistory = () => {
   return (
     <section className="page container mx-auto">
       <Card className="w-full min-h-full relative pb-16">
-        <div className="p-4 pt-10 flex items-center gap-20">
+        <div className="p-4 pt-10 flex items-center gap-5">
+          <Button onClick={() => setOpenDialog(true)}>
+            <Send /> Send Invite
+          </Button>
           <h3 className="font-medium text-xl">Invite History</h3>
         </div>
         <Separator />
@@ -75,7 +113,7 @@ const InviteHistory = () => {
                       <p key={email + id}>{email}</p>
                     ))}
                   </TableCell>
-                  <TableCell>{date}</TableCell>
+                  <TableCell>{formatDate(date, false)}</TableCell>
                   <TableCell>
                     <Button
                       variant="outline"
@@ -109,6 +147,7 @@ const InviteHistory = () => {
               <PaginationItem key={index}>
                 <PaginationLink
                   disabled={index === inviteQuery.data.current_page}
+                  onClick={() => setPage(index)}
                 >
                   {index}
                 </PaginationLink>
@@ -126,8 +165,297 @@ const InviteHistory = () => {
           </PaginationContent>
         </Pagination>
       </Card>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+        <DialogContent className="top-[80%] h-[100%] pb-[19%] overflow-scroll">
+          <DialogTitle>Create a new stream</DialogTitle>
+          <DialogDescription>
+            Start streaming your meeting on various platforms
+          </DialogDescription>
+          <MeetingForm setOpenDialog={setOpenDialog} />
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };
 
 export default InviteHistory;
+
+const MeetingForm = ({ setOpenDialog }) => {
+  const [timezoneOpen, setTimezoneOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const sendInviteMutation = useMutation({
+    mutationFn: sendInvite,
+    onSuccess: (res) => {
+      queryClient.invalidateQueries(["invite"]);
+      toast({ description: res.message });
+    },
+  });
+
+  const formSchema = z.object({
+    room_id: z.string().nonempty({ message: "Room ID is required." }),
+    hostname: z.string().nonempty({ message: "Hostname is required." }),
+    title: z.string().nonempty({ message: "Title is required." }),
+    date: z.date({ required_error: "Date is required." }).nullable(),
+    time: z.string().nonempty({ message: "Time is required." }),
+    timezone: z.string().nonempty({ message: "Timezone is required." }),
+    additional: z.string().optional(),
+    guest: z
+      .string()
+      .nonempty({ message: "Guest emails are required." })
+      .refine(
+        (value) => value.split(",").every((email) => email.includes("@")),
+        {
+          message: "All guest emails must be valid.",
+        }
+      ),
+  });
+
+  const timezones = Intl.supportedValuesOf("timeZone").map((tz) => {
+    const date = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "short",
+    });
+    const parts = formatter.formatToParts(date);
+    const timezoneOffset =
+      parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+
+    // Example: "Africa/Lagos (UTC+01:00)"
+    return {
+      label: `${tz} ${timezoneOffset}`,
+      value: `${tz} ${timezoneOffset}`,
+    };
+  });
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      room_id: "",
+      hostname: "",
+      title: "",
+      date: null,
+      time: "",
+      timezone: "",
+      additional: "",
+      guest: "",
+    },
+  });
+
+  const onSubmit = (data) => {
+    sendInviteMutation.mutate(data);
+    setOpenDialog(false);
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <div className="space-y-4">
+          <FormField
+            control={form.control}
+            name="room_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Room ID</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter room ID" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="hostname"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Hostname</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter hostname" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Title</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter meeting title" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="date"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Date</FormLabel>
+                <FormControl>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value
+                          ? field.value.toLocaleDateString()
+                          : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={(date) => field.onChange(date)}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="time"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Time</FormLabel>
+                <FormControl>
+                  <Input type="time" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="block mt-5">Timezone</FormLabel>
+                <FormControl>
+                  <Popover open={timezoneOpen} onOpenChange={setTimezoneOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={timezoneOpen}
+                        className="w-[300px] justify-between"
+                      >
+                        {field.value
+                          ? timezones.find((tz) => tz.value === field.value)
+                              ?.label
+                          : "Select a timezone..."}
+                        <ChevronsUpDown className="ml-2 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-[600px] p-0"
+                      side="left"
+                      align="start"
+                    >
+                      <Command>
+                        <CommandInput
+                          placeholder="Search timezone..."
+                          className="h-9"
+                        />
+                        <CommandList>
+                          <CommandEmpty>No timezone found.</CommandEmpty>
+                          <CommandGroup>
+                            {timezones.map((tz) => {
+                              return (
+                                <CommandItem
+                                  key={tz.value}
+                                  value={tz.value}
+                                  onSelect={(currentValue) => {
+                                    field.onChange(
+                                      currentValue === field.value
+                                        ? ""
+                                        : currentValue
+                                    );
+                                    setTimezoneOpen(false);
+                                  }}
+                                >
+                                  {tz.label}
+                                  <Check
+                                    className={cn(
+                                      "ml-auto",
+                                      field.value === tz.value
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="additional"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Additional Information</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Enter additional information"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="guest"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Guest Emails</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Enter guest emails separated by commas"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="flex justify-center">
+            <Button size="lg" type="submit">
+              Submit
+            </Button>
+          </div>
+        </div>
+      </form>
+    </Form>
+  );
+};

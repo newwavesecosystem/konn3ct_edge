@@ -9,7 +9,7 @@ export const capitalize = (str) => {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 };
 
-export const formatDate = (dateString) => {
+export const formatDate = (dateString, time = true) => {
   // Create a Date object from the input string
   const date = new Date(dateString);
 
@@ -22,7 +22,9 @@ export const formatDate = (dateString) => {
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
   // Return the formatted string
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return (
+    `${year}-${month}-${day}` + (time ? ` ${hours}:${minutes}:${seconds}` : "")
+  );
 };
 
 export const byteToMB = (byte) => {

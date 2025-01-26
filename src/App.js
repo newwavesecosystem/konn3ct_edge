@@ -56,8 +56,8 @@ const items = [
   { title: "Addons", url: "/addons", icon: Layers },
   { title: "Referee(s)", url: "/referees", icon: Zap },
   { title: "Invite history", url: "/history", icon: FolderClock },
-  { title: "Team", url: "/team", icon: Users },
-  { title: "More", url: "/others", icon: Menu },
+  // { title: "Team", url: "/team", icon: Users },
+  // { title: "More", url: "/others", icon: Menu },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
 ];

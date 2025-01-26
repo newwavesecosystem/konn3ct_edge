@@ -17,3 +17,12 @@ export const stopStreaming = async (id) => {
     throw error;
   }
 };
+
+export const startStream = async (data) => {
+  try {
+    const res = await api.post("/start-streaming", data);
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};

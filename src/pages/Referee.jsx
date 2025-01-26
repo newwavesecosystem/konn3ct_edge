@@ -92,6 +92,7 @@ const Referee = () => {
               <PaginationItem key={index}>
                 <PaginationLink
                   disabled={index === refereeQuery.data.current_page}
+                  onClick={() => setPage(index)}
                 >
                   {index}
                 </PaginationLink>

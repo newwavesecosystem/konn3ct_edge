@@ -7,16 +7,16 @@ import {
   TableCell,
 } from "../components/ui/table";
 import { Button } from "../components/ui/button";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import StatCard from "../components/StatCard";
 import { Card } from "../components/ui/card";
 import activeIcon from "../assets/icons/active.svg";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
 import { Separator } from "../components/ui/separator";
-import { Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getStreams, stopStreaming } from "../api/streamApi";
+import { getStreams, startStream, stopStreaming } from "../api/streamApi";
 import {
   Pagination,
   PaginationContent,
@@ -25,11 +25,42 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "../components/ui/pagination";
-import { formatDate } from "../lib/utils";
+import { cn, formatDate } from "../lib/utils";
 import { useToast } from "../hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../components/ui/dialog";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+  Form,
+} from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../components/ui/popover";
+import { z } from "zod";
 
 const Streaming = () => {
   const [page, setPage] = useState(1);
+  const [openDialog, setOpenDialog] = useState(false);
 
   const streamQuery = useQuery({
     queryKey: ["streams", { page }],
@@ -55,7 +86,7 @@ const Streaming = () => {
     <section className="page container mx-auto">
       <Card className="w-full min-h-full relative pb-16">
         <div className="p-4 pt-10 flex items-center gap-20">
-          <Button>
+          <Button onClick={() => setOpenDialog(true)}>
             <Plus /> Stream
           </Button>
           <StatCard value={1} name="Total Streams" icon={roomsIcon} />
@@ -77,10 +108,10 @@ const Streaming = () => {
           </TableHeader>
           <TableBody>
             {streamQuery.data.data.map(
-              ({ room, id, type, status, created_at, ended_at }, index) => (
+              ({ room, id, type, status, created_at, ended_at }) => (
                 <TableRow key={id + created_at}>
                   <TableCell>{id}</TableCell>
-                  <TableCell>{room.name}</TableCell>
+                  <TableCell>{room?.name ?? "Temporary room"}</TableCell>
                   <TableCell>{type}</TableCell>
                   <TableCell className="text-center">
                     <Badge variant={status === 1 ? "" : "destructive"}>
@@ -127,9 +158,10 @@ const Streaming = () => {
               { length: streamQuery.data.last_page },
               (_, i) => 1 + i
             ).map((index) => (
-              <PaginationItem key={index}>
+              <PaginationItem key={`page-${index}`}>
                 <PaginationLink
                   disabled={index === streamQuery.data.current_page}
+                  onClick={() => setPage(index)}
                 >
                   {index}
                 </PaginationLink>
@@ -144,8 +176,165 @@ const Streaming = () => {
           </PaginationContent>
         </Pagination>
       </Card>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+        <DialogContent className="w-1/2">
+          <DialogTitle>Create a new stream</DialogTitle>
+          <DialogDescription>
+            Start streaming your meeting on various platforms
+          </DialogDescription>
+          <StreamForm setOpenDialog={setOpenDialog} />
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };
 
 export default Streaming;
+
+const StreamForm = ({ setOpenDialog }) => {
+  const [openPopover, setOpenPopover] = useState(false);
+  const { toast } = useToast();
+
+  const types = [
+    { value: "Youtube", label: "Youtube" },
+    { value: "Facebook", label: "Facebook" },
+  ];
+
+  const startStreamMutation = useMutation({
+    mutationFn: startStream,
+    onSuccess: (res) => {
+      toast({ description: res.message });
+    },
+  });
+
+  const formSchema = z.object({
+    room_id: z.string().nonempty({ message: "Room ID is required." }),
+    type: z.enum(["Youtube", "Facebook"], {
+      message: "Type must be Youtube or Facebook.",
+    }),
+    key: z.string().default("123"),
+  });
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      room_id: "",
+      type: "Youtube",
+      key: "123",
+    },
+  });
+
+  const onSubmit = (data) => {
+    startStreamMutation.mutate(data);
+    setOpenDialog(false);
+  };
+
+  return (
+    <div className="p-10">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="room_id"
+            render={({ field }) => (
+              <FormItem>
+                <label htmlFor="room_id" className="block font-medium">
+                  Room ID
+                </label>
+                <FormControl>
+                  <Input id="room_id" placeholder="Enter Room ID" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="type"
+            render={({ field }) => (
+              <FormItem>
+                <label htmlFor="type" className="block font-medium">
+                  Type
+                </label>
+                <FormControl>
+                  <Popover
+                    open={openPopover}
+                    onOpenChange={setOpenPopover}
+                    className=""
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openPopover}
+                        className="w-full justify-between"
+                      >
+                        {field.value
+                          ? types.find((type) => type.value === field.value)
+                              ?.label
+                          : "Select type..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="!w-[300px]">
+                      <Command>
+                        <CommandInput placeholder="Search type..." />
+                        <CommandList>
+                          <CommandEmpty>No type found.</CommandEmpty>
+                          <CommandGroup>
+                            {types.map((type) => (
+                              <CommandItem
+                                key={type.value}
+                                value={type.value}
+                                onSelect={() => {
+                                  field.onChange(type.value);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    field.value === type.value
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                {type.label}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="key"
+            render={({ field }) => (
+              <FormItem>
+                <label htmlFor="key" className="block font-medium">
+                  Key
+                </label>
+                <FormControl>
+                  <Input id="key" placeholder="Enter Key" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="flex justify-center">
+            <Button type="submit" size="lg" className="">
+              Submit
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
+  );
+};

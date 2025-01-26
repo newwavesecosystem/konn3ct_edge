@@ -17,3 +17,12 @@ export const resendInvite = async (id) => {
     throw error;
   }
 };
+
+export const sendInvite = async (data) => {
+  try {
+    const res = await api.post(`/invite`, data);
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
