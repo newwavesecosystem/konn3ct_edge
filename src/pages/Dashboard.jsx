@@ -24,6 +24,7 @@ import { capitalize } from "../lib/utils";
 import { getMeetings, getRooms } from "../api/roomsApi";
 import { Link } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
+import { Skeleton } from "../components/ui/skeleton";
 
 const Dashboard = () => {
   const { isAuthenticated } = useAuth();
@@ -46,7 +47,11 @@ const Dashboard = () => {
   });
 
   if (userQuery.every((query) => query.isLoading))
-    return <div className="container mx-auto page">Loading...</div>;
+    return (
+      <div className="page container mx-auto">
+        <Skeleton className="w-full min-h-full relative" />
+      </div>
+    );
 
   if (userQuery.every((query) => query.isSuccess))
     return (
@@ -130,25 +135,25 @@ const Dashboard = () => {
             <div className="flex justify-evenly w-full mb-6">
               <div className="flex flex-col items-center gap-y-4">
                 <Link to="/rooms">
-                  <Button className="w-[71px] h-[71px]">
+                  <div className="w-[65px] h-[65px] bg-[#227451] flex justify-center items-center rounded-xl">
                     <img src={calendar} alt="schedule" />
-                  </Button>
+                  </div>
                 </Link>
                 Schedule
               </div>
               <div className="flex flex-col items-center gap-y-4">
                 <Link to="/join">
-                  <Button className="w-[71px] h-[71px]">
+                  <div className="w-[65px] h-[65px] bg-[#227451] flex justify-center items-center rounded-xl">
                     <img src={join} alt="join" />
-                  </Button>
+                  </div>
                 </Link>
                 Join
               </div>
               <div className="flex flex-col items-center gap-y-4">
                 <Link to="/rooms">
-                  <Button className="w-[71px] h-[71px] bg-[#012E89]">
+                  <div className="w-[65px] h-[65px] bg-[#012E89] flex justify-center items-center rounded-xl">
                     <img src={video} alt="host" />
-                  </Button>
+                  </div>
                 </Link>
                 Host
               </div>

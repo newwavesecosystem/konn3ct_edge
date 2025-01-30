@@ -96,18 +96,18 @@ body {
 
 /* Custom Scrollbar for WebKit browsers */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px; /* Horizontal scrollbar */
+  width: 5px;
+  height: 5px; /* Horizontal scrollbar */
 }
 
 ::-webkit-scrollbar-track {
   background: #f1f1f1; /* Track color */
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #888; /* Scrollbar color */
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {

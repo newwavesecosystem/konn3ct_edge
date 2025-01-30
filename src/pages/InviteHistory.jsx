@@ -56,6 +56,7 @@ import {
   CommandItem,
   CommandList,
 } from "../components/ui/command";
+import { Skeleton } from "../components/ui/skeleton";
 
 const InviteHistory = () => {
   const [page, setPage] = useState(1);
@@ -78,7 +79,11 @@ const InviteHistory = () => {
   });
 
   if (inviteQuery.isLoading)
-    return <div className="container mx-auto page">Loading...</div>;
+    return (
+      <div className="page container mx-auto">
+        <Skeleton className="w-full min-h-full relative" />
+      </div>
+    );
 
   return (
     <section className="page container mx-auto">

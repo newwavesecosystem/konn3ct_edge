@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteRecording, getRecordings } from "../api/recordingApi";
 import { byteToMB, formatDate } from "../lib/utils";
 import { useToast } from "../hooks/use-toast";
+import { Skeleton } from "../components/ui/skeleton";
 
 const Recordings = () => {
   const recordingQuery = useQuery({
@@ -39,7 +40,11 @@ const Recordings = () => {
   };
 
   if (recordingQuery.isLoading)
-    return <div className="container mx-auto page">Loading...</div>;
+    return (
+      <div className="page container mx-auto">
+        <Skeleton className="w-full min-h-full relative" />
+      </div>
+    );
 
   return (
     <section className="page container mx-auto">

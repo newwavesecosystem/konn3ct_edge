@@ -42,6 +42,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "../hooks/use-toast";
+import { Skeleton } from "../components/ui/skeleton";
 
 const Rooms = () => {
   const roomQuery = useQuery({
@@ -92,7 +93,11 @@ const Rooms = () => {
   });
 
   if (roomQuery.isLoading)
-    return <div className="container mx-auto page">Loading...</div>;
+    return (
+      <div className="page container mx-auto">
+        <Skeleton className="w-full min-h-full relative" />
+      </div>
+    );
 
   return (
     <section className="page container mx-auto">

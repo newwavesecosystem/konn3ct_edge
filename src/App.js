@@ -4,21 +4,7 @@ import {
   Link,
   Outlet,
 } from "react-router-dom";
-import {
-  CreditCard,
-  Disc,
-  FolderClock,
-  Home,
-  Layers,
-  LogOut,
-  Menu,
-  Radio,
-  Settings as SettingsIcon,
-  User,
-  Users,
-  Video,
-  Zap,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import {
   Sidebar,
@@ -45,26 +31,34 @@ import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import IsAuthenticated from "./lib/IsAuthenticated";
 import JoinRoom from "./pages/JoinRoom";
+import HomeIcon from "./assets/components/HomeIcon";
+import CardIcon from "./assets/components/CardIcon";
+import UserIcon from "./assets/components/UserIcon";
+import RecordIcon from "./assets/components/RecordIcon";
+import VideoIcon from "./assets/components/VideoIcon";
+import StreamIcon from "./assets/components/StreamIcon";
+import AddonIcon from "./assets/components/AddonIcon";
+import RefereeIcon from "./assets/components/RefereeIcon";
+import HistoryIcon from "./assets/components/HistoryIcon";
+import SettingsIcon from "./assets/components/SettingsIcon";
 
 const items = [
-  { title: "Home", url: "/", icon: Home },
-  { title: "Profile", url: "/profile", icon: User },
-  { title: "Meeting Room(s)", url: "/rooms", icon: Video },
-  { title: "Streaming", url: "/streams", icon: Radio },
-  { title: "Recordings", url: "/recordings", icon: Disc },
-  { title: "Plans & Payments", url: "/payments", icon: CreditCard },
-  { title: "Addons", url: "/addons", icon: Layers },
-  { title: "Referee(s)", url: "/referees", icon: Zap },
-  { title: "Invite history", url: "/history", icon: FolderClock },
-  // { title: "Team", url: "/team", icon: Users },
-  // { title: "More", url: "/others", icon: Menu },
+  { title: "Home", url: "/", icon: HomeIcon },
+  { title: "Profile", url: "/profile", icon: UserIcon },
+  { title: "Meeting Room(s)", url: "/rooms", icon: VideoIcon },
+  { title: "Streaming", url: "/streams", icon: StreamIcon },
+  { title: "Recordings", url: "/recordings", icon: RecordIcon },
+  { title: "Plans & Payments", url: "/payments", icon: CardIcon },
+  { title: "Addons", url: "/addons", icon: AddonIcon },
+  { title: "Referee(s)", url: "/referees", icon: RefereeIcon },
+  { title: "Invite history", url: "/history", icon: HistoryIcon },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
 ];
 
 export function AppSidebar() {
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>PERSONAL</SidebarGroupLabel>

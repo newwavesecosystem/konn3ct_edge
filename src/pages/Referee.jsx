@@ -20,6 +20,7 @@ import {
 } from "../components/ui/pagination";
 import { useQuery } from "@tanstack/react-query";
 import { getReferee } from "../api/refereeApi";
+import { Skeleton } from "../components/ui/skeleton";
 
 const Referee = () => {
   const [page, setPage] = useState(1);
@@ -31,7 +32,11 @@ const Referee = () => {
   });
 
   if (refereeQuery.isLoading)
-    return <div className="container mx-auto page">Loading...</div>;
+    return (
+      <div className="page container mx-auto">
+        <Skeleton className="w-full min-h-full relative" />
+      </div>
+    );
 
   return (
     <section className="page container mx-auto">
