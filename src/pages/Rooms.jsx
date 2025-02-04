@@ -280,7 +280,7 @@ const Rooms = () => {
       </Dialog>
       {/* //schedule */}
       <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
-        <DialogContent className="top-[50%] w-[90%] h-[90%]  overflow-y-scroll">
+        <DialogContent className="top-[50%] w-[50%] h-[90%]  overflow-y-scroll">
           <DialogTitle>Schedule a new meeting</DialogTitle>
           <DialogDescription>
             Send an invite for a scheduled meeting

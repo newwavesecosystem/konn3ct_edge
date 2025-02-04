@@ -221,7 +221,7 @@ const Dashboard = () => {
           </Card>
         </div>
         <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
-          <DialogContent className="top-[50%] w-[90%] h-[90%]  overflow-y-scroll">
+          <DialogContent className="top-[50%] w-[50%] h-[90%]  overflow-y-scroll">
             <DialogTitle>Send an new Invite</DialogTitle>
             <DialogDescription>
               Send an invite for a scheduled meeting
