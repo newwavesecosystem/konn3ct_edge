@@ -22,10 +22,11 @@ import { ProfileForm } from "./ProfileForm";
 import { PasswordForm } from "./PasswordForm";
 import { Separator } from "../../components/ui/separator";
 import { Computer, Copy } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { getUser } from "../../api/userApi";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { getSessions, getUser, logoutSession } from "../../api/userApi";
 import { capitalize } from "../../lib/utils";
 import { useToast } from "../../hooks/use-toast";
+import { Skeleton } from "../../components/ui/skeleton";
 
 const Profile = () => {
   return (
@@ -39,10 +40,10 @@ const Profile = () => {
           <TabsTrigger value="password" className="text-lg">
             Update Password
           </TabsTrigger>
-          <Separator orientation="vertical" />
+          {/* <Separator orientation="vertical" />
           <TabsTrigger value="two_auth" className="text-lg">
             Two Factor Authentication
-          </TabsTrigger>
+          </TabsTrigger> */}
           <Separator orientation="vertical" />
           <TabsTrigger value="sessions" className="text-lg">
             Browser Sessions
@@ -55,9 +56,9 @@ const Profile = () => {
         <TabsContent value="password">
           <UpdatePassword />
         </TabsContent>
-        <TabsContent value="two_auth">
+        {/* <TabsContent value="two_auth">
           <TwoFactorAuth />
-        </TabsContent>
+        </TabsContent> */}
         <TabsContent value="sessions">
           <BrowserSessions />
         </TabsContent>
@@ -79,7 +80,7 @@ const ProfileInformation = () => {
     }
   };
 
-  if (userQuery.isSuccess)
+  if (userQuery.isSuccess) {
     return (
       <div className="grid grid-cols-3 gap-6">
         <Card>
@@ -90,9 +91,6 @@ const ProfileInformation = () => {
               <AvatarFallback>AD</AvatarFallback>
             </Avatar>
           </div>
-          <Button variant="outline" className="mb-5">
-            Select a new photo
-          </Button>
           <ProfileForm />
         </Card>
         <div className="flex flex-col gap-10 col-span-2">
@@ -125,6 +123,7 @@ const ProfileInformation = () => {
         </div>
       </div>
     );
+  }
 };
 
 const UpdatePassword = () => {
@@ -159,6 +158,29 @@ const TwoFactorAuth = () => {
 };
 
 const BrowserSessions = () => {
+  const sessionQuery = useQuery({
+    queryKey: ["sessions"],
+    queryFn: getSessions,
+  });
+
+  const { toast } = useToast();
+
+  const sessionLogoutMutation = useMutation({
+    mutationFn: logoutSession,
+    onSuccess: (res) => {
+      toast({ description: res.message });
+    },
+  });
+
+  if (sessionQuery.isLoading)
+    return (
+      <Card className="min-h-full">
+        <Skeleton className="w-full min-h-full relative" />
+      </Card>
+    );
+  const sessionName = sessionQuery.data.currentToken.name.split("||");
+  const currentUserAgent = navigator.userAgent;
+  const thisUser = sessionName[0] == currentUserAgent;
   return (
     <Card className="min-h-full flex items-center justify-center">
       <div className="w-[600px]">
@@ -170,13 +192,24 @@ const BrowserSessions = () => {
         <div className="flex my-10 gap-x-5 items-center font-medium">
           <Computer className="w-10 h-10" />
           <div>
-            <p>Windows-Chrome</p>
+            <p>{sessionName[0]}</p>
             <p>
-              155.94.217.92, <span className="text-accent">This device</span>
+              {sessionName[1]}
+              {"."}
+              <span className="text-accent">
+                {thisUser ? "This device" : "Other devices"}
+              </span>
             </p>
           </div>
         </div>
-        <Button size="lg">Logout Other Browser Sessions</Button>
+        <Button
+          size="lg"
+          onClick={() => {
+            sessionLogoutMutation.mutate();
+          }}
+        >
+          Logout Other Browser Sessions
+        </Button>
       </div>
     </Card>
   );

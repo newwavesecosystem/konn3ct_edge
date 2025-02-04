@@ -12,6 +12,7 @@ import StatCard from "../components/StatCard";
 import { Card } from "../components/ui/card";
 import activeIcon from "../assets/icons/active.svg";
 import inactiveIcon from "../assets/icons/inactive.svg";
+import scheduledIcon from "../assets/icons/scheduled.svg";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
 import { Separator } from "../components/ui/separator";
 import { Plus } from "lucide-react";
@@ -43,6 +44,23 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "../hooks/use-toast";
 import { Skeleton } from "../components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { MeetingForm } from "./InviteHistory";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "../components/ui/sheet";
+import UserIcon from "../assets/components/UserIcon";
+import calendar from "../assets/icons/calendar-03.svg";
+import clock from "../assets/icons/clock-05.svg";
 
 const Rooms = () => {
   const roomQuery = useQuery({
@@ -61,8 +79,10 @@ const Rooms = () => {
 
   const [openDialog, setOpenDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
   const [meetingUrls, setMeetingUrls] = useState({});
   const [roomIdToDelete, setRoomIdToDelete] = useState(null);
+  const [openScheduledSide, setOpenScheduleSide] = useState(false);
 
   useEffect(() => {
     if (!openDeleteDialog) setRoomIdToDelete(null);
@@ -73,8 +93,8 @@ const Rooms = () => {
     setOpenDeleteDialog(true); // Open the dialog
   };
 
-  const handleCopy = (id) => {
-    const meeting_url = meetingUrls[id];
+  const handleCopy = (url) => {
+    const meeting_url = `https://k4.konn3ct.ng/join/${url}`;
     if (meeting_url) {
       navigator.clipboard.writeText(meeting_url);
       toast({ description: "Copied to clipboard" });
@@ -103,12 +123,23 @@ const Rooms = () => {
     <section className="page container mx-auto">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <Card className="w-full min-h-full relative">
-          <div className="p-4 pt-10 flex items-center justify-between gap-x-4">
+          <div className="py-5 flex gap-x-4">
             <DialogTrigger asChild>
               <Button>
                 <Plus /> Create Room
               </Button>
             </DialogTrigger>
+            <Button
+              className="bg-[#E7F0FF] border border-[#2D8CFF] text-[#2D8CFF]"
+              onClick={() => {
+                setOpenScheduleDialog(true);
+              }}
+            >
+              <Plus /> Schedule
+            </Button>
+          </div>
+          <Separator />
+          <div className="p-4 pt-10 flex items-center justify-between gap-x-4">
             <StatCard
               value={roomQuery.data.total_rooms}
               name="Total room"
@@ -120,6 +151,13 @@ const Rooms = () => {
               name="Active room"
               icon={activeIcon}
             />
+            <Separator orientation="vertical" className="h-[50px]" />
+            <div
+              className="cursor-pointer"
+              onClick={() => setOpenScheduleSide(true)}
+            >
+              <StatCard value={0} name="Scheduled Room" icon={scheduledIcon} />
+            </div>
             <Separator orientation="vertical" className="h-[50px]" />
             <StatCard
               value={roomQuery.data.total_rooms - roomQuery.data.active_rooms}
@@ -150,12 +188,34 @@ const Rooms = () => {
                       <div className="flex gap-x-2">
                         <Button
                           variant="outline"
-                          onClick={() => handleCopy(id)}
+                          onClick={() => handleCopy(url)}
                         >
                           Copy Link
                         </Button>
 
-                        <Button variant="outline">Manage</Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
+                            Manage
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem>Access Code</DropdownMenuItem>
+                            <DropdownMenuItem>User Limit</DropdownMenuItem>
+                            <DropdownMenuItem>
+                              Meeting Room Banner Upload
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              Modify Pre-Registration
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              Pre-Registered Users
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              Disable Pre-Registration
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>Transfer Room</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                         <Button
                           disabled={startMeetingMutation.isPending}
                           onClick={() => startMeetingMutation.mutate(id)}
@@ -190,13 +250,14 @@ const Rooms = () => {
           <CreateMeetingDialog setOpenDialog={setOpenDialog} />
         </DialogContent>
       </Dialog>
+      {/* //delete prompt */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <DialogContent className="w-1/2">
           <DialogTitle>Confirm Deletion</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete the room named "Room Name"? This
-            action cannot be undone, and all data associated with this room will
-            be permanently deleted.
+            Are you sure you want to delete the room. This action cannot be
+            undone, and all data associated with this room will be permanently
+            deleted.
           </DialogDescription>
           <div className="flex gap-x-4">
             <Button
@@ -217,6 +278,38 @@ const Rooms = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* //schedule */}
+      <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
+        <DialogContent className="top-[50%] w-[90%] h-[90%]  overflow-y-scroll">
+          <DialogTitle>Schedule a new meeting</DialogTitle>
+          <DialogDescription>
+            Send an invite for a scheduled meeting
+          </DialogDescription>
+          <MeetingForm setOpenDialog={setOpenScheduleDialog} />
+        </DialogContent>
+      </Dialog>
+      {/*  */}
+      {/* //scheduled rooms */}
+      <Sheet open={openScheduledSide} onOpenChange={setOpenScheduleSide}>
+        <SheetContent side="right">
+          <SheetHeader>
+            <SheetTitle>Scheduled Meetings</SheetTitle>
+            <SheetDescription>Your upcoming meetings.</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-5 pb-12 flex flex-col gap-y-2 overflow-y-scroll h-[90vh] pr-3">
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+            <ScheduleMeetingCard />
+          </div>
+        </SheetContent>
+      </Sheet>
     </section>
   );
 };
@@ -299,3 +392,23 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     </Form>
   );
 };
+
+const ScheduleMeetingCard = () => (
+  <Card>
+    <div className="flex justify-between text-[#707070]">
+      <div className="flex gap-x-1">
+        <img src={clock} alt="" />
+        <p>8:30am</p>
+      </div>
+      <div className="flex gap-x-1">
+        <img src={calendar} alt="" />
+        <p>Tue Nov 2025</p>
+      </div>
+    </div>
+    <h3 className="my-4 font-medium">Enhancing Agency and Collaboration</h3>
+    <div className="flex gap-x-1 items-center text-[#707070]">
+      <UserIcon />
+      50
+    </div>
+  </Card>
+);

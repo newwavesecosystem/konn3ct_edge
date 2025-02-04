@@ -11,59 +11,38 @@ import React from "react";
 import { Card } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import { Badge } from "../components/ui/badge";
-
-const addons = [
-  {
-    id: 1,
-    service: "Whatsapp Invite",
-    description: "A medium where you can invite your attendees using Whatsapp",
-    status: "Not yet activated",
-    price: 3000,
-    action: "Make Payment Now",
-  },
-  {
-    id: 2,
-    service: "Streaming Service",
-    description: "To stream meetings to Facebook, Youtube",
-    status: "Expires in 4 days",
-    price: 20000,
-    action: "Make Payment Now",
-  },
-  {
-    id: 3,
-    service: "Custom Branding",
-    description: "Add your company’s branding to meeting interfaces",
-    status: "Active",
-    price: 10000,
-    action: "Renew Subscription",
-  },
-  {
-    id: 4,
-    service: "Cloud Recording",
-    description: "Store and access recorded meetings in the cloud",
-    status: "Not yet activated",
-    price: 15000,
-    action: "Make Payment Now",
-  },
-  {
-    id: 5,
-    service: "Email Notifications",
-    description: "Automate email reminders for scheduled meetings",
-    status: "Active",
-    price: 5000,
-    action: "Renew Subscription",
-  },
-  {
-    id: 6,
-    service: "Meeting Analytics",
-    description: "Get detailed insights and reports on meeting performance",
-    status: "Expires in 10 days",
-    price: 12000,
-    action: "Make Payment Now",
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import { getAddons } from "../api/addonsApi";
+import { Skeleton } from "../components/ui/skeleton";
+import { PaystackButton } from "react-paystack";
+import { getUser } from "../api/userApi";
+import { useToast } from "../hooks/use-toast";
 
 const Addon = () => {
+  const { data, error, isSuccess, isError } = useQuery({
+    queryFn: getAddons,
+    queryKey: ["addons"],
+  });
+  const { data: userData, isSuccess: userIsSuccess } = useQuery({
+    queryKey: ["profile"],
+    queryFn: getUser,
+  });
+  const { toast } = useToast();
+
+  const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
+
+  if (!isSuccess || !userIsSuccess) {
+    return (
+      <div className="page container mx-auto">
+        <Skeleton className="w-full min-h-full relative" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <div>Error: {error.message}</div>;
+  }
+
   return (
     <section className="page container mx-auto">
       <Card className="w-full min-h-full">
@@ -83,25 +62,50 @@ const Addon = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {addons.map(({ service, description, status, price }, id) => (
-              <TableRow key={service}>
-                <TableCell>{id + 1}</TableCell>
-                <TableCell>{service}</TableCell>
-                <TableCell className="text-left">{description}</TableCell>
-                <TableCell className="text-center">
-                  <Badge variant={status === "Active" ? "" : "destructive"}>
-                    {status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{price}</TableCell>
-                <TableCell>
-                  <Button>Make Payment Now</Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {data.data.map(({ name, description, price, status, id }) => {
+              const { email, lastName, phone } = userData.user;
+              const componentProps = {
+                email,
+                amount: price * 100,
+                metadata: {
+                  name: lastName,
+                  phone,
+                },
+                publicKey,
+                text: "Pay Now",
+                onSuccess: () =>
+                  toast({ description: "Addon purchase successful" }),
+                onClose: () => toast({ description: "Payment Cancelled" }),
+              };
+              return (
+                <TableRow key={name}>
+                  <TableCell>{id}</TableCell>
+                  <TableCell>{name}</TableCell>
+                  <TableCell className="text-left">{description}</TableCell>
+                  <TableCell className="text-center">
+                    <Badge
+                      variant={
+                        data.current_status["addon" + id] === "active"
+                          ? ""
+                          : "destructive"
+                      }
+                    >
+                      {data.current_status["addon" + id] ?? "..."}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{price}</TableCell>
+                  <TableCell>
+                    <PaystackButton
+                      className="bg-primary text-primary-foreground shadow px-3 rounded-full py-1 text-xs whitespace-nowrap"
+                      {...componentProps}
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
-        {addons.length === 0 && <p>No data available for this table</p>}
+        {data.data.length === 0 && <p>No data available for this table</p>}
       </Card>
     </section>
   );

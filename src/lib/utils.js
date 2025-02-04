@@ -30,3 +30,13 @@ export const formatDate = (dateString, time = true) => {
 export const byteToMB = (byte) => {
   return (byte / (1024 * 1024)).toFixed(2);
 };
+
+export const extractYouTubeID = (url) => {
+  console.log(url);
+  const regex = /[?&]v=([a-zA-Z0-9_-]+)/;
+  const match = url.match(regex);
+
+  const res = match ? match[1] : null;
+  console.log(res);
+  return res;
+};

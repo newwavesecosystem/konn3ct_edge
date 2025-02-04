@@ -7,7 +7,7 @@ import {
   TableCell,
 } from "../components/ui/table";
 import { Button } from "../components/ui/button";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import StatCard from "../components/StatCard";
 import { Card } from "../components/ui/card";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
@@ -17,12 +17,36 @@ import { deleteRecording, getRecordings } from "../api/recordingApi";
 import { byteToMB, formatDate } from "../lib/utils";
 import { useToast } from "../hooks/use-toast";
 import { Skeleton } from "../components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 const Recordings = () => {
   const recordingQuery = useQuery({
     queryKey: ["recordings"],
     queryFn: getRecordings,
   });
+
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [recordIdToDelete, setRecordIdToDelete] = useState(null);
+
+  useEffect(() => {
+    if (!openDeleteDialog) setRecordIdToDelete(null);
+  }, [openDeleteDialog]);
+
+  const handleDeleteClick = (id) => {
+    setRecordIdToDelete(id); // Set the ID of the room to delete
+    setOpenDeleteDialog(true); // Open the dialog
+  };
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -45,6 +69,11 @@ const Recordings = () => {
         <Skeleton className="w-full min-h-full relative" />
       </div>
     );
+
+  const download = (id, param) => {
+    const url = `https://dev.konn3ct.ng/recording/${id}/${param}`;
+    window.open(url, "_blank");
+  };
 
   return (
     <section className="page container mx-auto">
@@ -99,10 +128,34 @@ const Recordings = () => {
                       >
                         Play video
                       </Button>
-                      <Button variant="outline">Download</Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
+                          Download
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() => download(recordID, "video")}
+                          >
+                            Video
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() => download(recordID, "screenshare")}
+                          >
+                            Screenshare
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={() => download(recordID, "chats")}
+                          >
+                            chats
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button
                         variant="destructive"
-                        onClick={() => deleteRecordingMutation.mutate(recordID)}
+                        onClick={() => handleDeleteClick(recordID)}
                       >
                         Delete
                       </Button>
@@ -119,6 +172,33 @@ const Recordings = () => {
           </div>
         )}
       </Card>
+      <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+        <DialogContent className="w-1/2">
+          <DialogTitle>Confirm Deletion</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this recording. This action cannot
+            be undone, and all data associated with this recording will be
+            permanently deleted.
+          </DialogDescription>
+          <div className="flex gap-x-4">
+            <Button
+              variant="outline"
+              onClick={() => setOpenDeleteDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                deleteRecordingMutation.mutate(recordIdToDelete); // Pass the stored room ID to the mutation
+                setOpenDeleteDialog(false); // Close the dialog
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };

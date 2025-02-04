@@ -1,8 +1,14 @@
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import React, { useState } from "react";
-import { Dialog, DialogContent, DialogTrigger } from "../components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
 import { Separator } from "../components/ui/separator";
 import {
   Table,
@@ -13,84 +19,75 @@ import {
   TableBody,
 } from "../components/ui/table";
 import { Check, ChevronDown } from "lucide-react";
+import { getPlans } from "../api/plansApi";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { TabsContent } from "@radix-ui/react-tabs";
+import { capitalize } from "../lib/utils";
+import { getUser } from "../api/userApi";
+import { useToast } from "../hooks/use-toast";
+import { PaystackButton } from "react-paystack";
 
-const Plans = {
-  monthly: [
-    {
-      name: "Basic",
-      price: "Free forever",
-      target: "For individuals",
-      features: ["Access to core features", "Limited support", "Single user"],
-      cta: "Free",
-    },
-    {
-      name: "Lite",
-      price: "10000",
-      target: "For individuals",
-      features: ["All Basic features", "Priority support", "Up to 3 users"],
-      cta: "Upgrade",
-    },
-    {
-      name: "Pro",
-      price: "20000",
-      target: "For individuals",
-      features: ["All Lite features", "Advanced analytics", "Up to 10 users"],
-      cta: "Contact Sales",
-    },
-    {
-      name: "Enterprise",
-      price: "Custom Pricing",
-      target: "For teams and businesses",
-      features: [
-        "All Pro features",
-        "Dedicated account manager",
-        "Unlimited users",
-      ],
-      cta: "Contact Sales",
-    },
-  ],
-  yearly: [
-    {
-      name: "Basic",
-      price: "50000",
-      target: "For individuals",
-      features: ["Access to core features", "Limited support", "Single user"],
-      cta: "Free",
-    },
-    {
-      name: "Lite",
-      price: "100000",
-      target: "For individuals",
-      features: ["All Basic features", "Priority support", "Up to 3 users"],
-      cta: "Upgrade",
-    },
-    {
-      name: "Pro",
-      price: "200000",
-      target: "For individuals",
-      features: ["All Lite features", "Advanced analytics", "Up to 10 users"],
-      cta: "Contact Sales",
-    },
-    {
-      name: "Enterprise",
-      price: "Custom Pricing",
-      target: "For teams and businesses",
-      features: [
-        "All Pro features",
-        "Dedicated account manager",
-        "Unlimited users",
-      ],
-      cta: "Contact Sales",
-    },
-  ],
+// Mock payments data
+const payments = [];
+
+// Transform the fetched data into the required structure
+const transformPlans = (data) => {
+  const monthlyPlans = data.plan.map((plan) => ({
+    name: plan.name,
+    price: plan.monthly_cost.split("/")[0], // Extract the price part
+    target: "For individuals",
+    features: [
+      `Recording: ${plan.recording ? "Yes" : "No"}`,
+      `Duration: ${plan.duration} minutes`,
+      `Participants: ${plan.participant}`,
+      `Rooms: ${plan.rooms}`,
+      `Customize Link: ${plan.customize_link ? "Yes" : "No"}`,
+      `Breakout Rooms: ${plan.breakout_rooms ? "Yes" : "No"}`,
+      `Access Code: ${plan.access_code ? "Yes" : "No"}`,
+      `Dial-in: ${plan.dialin ? "Yes" : "No"}`,
+    ],
+    cta: plan.name === "basic" ? "Free" : "Upgrade",
+  }));
+
+  const yearlyPlans = data.plan.map((plan) => ({
+    name: plan.name,
+    price: plan.yearly_cost.split("/")[0], // Extract the price part
+    target: "For individuals",
+    features: [
+      `Recording: ${plan.recording ? "Yes" : "No"}`,
+      `Duration: ${plan.duration} minutes`,
+      `Participants: ${plan.participant}`,
+      `Rooms: ${plan.rooms}`,
+      `Customize Link: ${plan.customize_link ? "Yes" : "No"}`,
+      `Breakout Rooms: ${plan.breakout_rooms ? "Yes" : "No"}`,
+      `Access Code: ${plan.access_code ? "Yes" : "No"}`,
+      `Dial-in: ${plan.dialin ? "Yes" : "No"}`,
+    ],
+    cta: plan.name === "basic" ? "Free" : "Upgrade",
+  }));
+
+  return { monthly: monthlyPlans, yearly: yearlyPlans };
 };
 
 const Payments = () => {
-  const payments = [];
-  const [plans, setPlans] = useState(Plans.monthly);
+  // Use React Query to fetch and manage plans data
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["plans"],
+    queryFn: getPlans,
+    select: (data) => transformPlans(data.data), // Transform the data after fetching
+  });
+  const [openDialog, setOpenDialog] = useState(false);
+
+  if (isLoading) {
+    return <div>Loading plans...</div>;
+  }
+
+  if (isError) {
+    return <div>Error: {error.message}</div>;
+  }
   return (
     <section className="page container mx-auto">
-      <Dialog>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <div className="flex items-end gap-x-5 mb-10">
           <Card className="w-[260px] h-[200px] bg-primary">
             <Badge className="bg-white hover:bg-white text-primary">
@@ -111,7 +108,7 @@ const Payments = () => {
         </div>
         <Card className="mb-20">
           <div className="p-4 pt-10 flex items-center gap-20">
-            <h3 className="font-medium text-xl">Invite History</h3>
+            <h3 className="font-medium text-xl">Payment List</h3>
           </div>
           <Separator />
           <Table>
@@ -150,8 +147,9 @@ const Payments = () => {
             </div>
           )}
         </Card>
-        <DialogContent className="max-w-[95%] py-14">
-          <PaymentsDialog plans={plans} />
+        <DialogContent className="max-w-[95%] py-6">
+          <DialogTitle>Plans and Payments</DialogTitle>
+          <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
         </DialogContent>
       </Dialog>
     </section>
@@ -160,47 +158,147 @@ const Payments = () => {
 
 export default Payments;
 
-const PaymentsDialog = ({ plans }) => {
-  return (
-    <div className="flex justify-evenly gap-x-6">
-      {plans.map((plan) => (
-        <PlanCard
-          name={plan.name}
-          cta={plan.cta}
-          target={plan.target}
-          price={plan.price}
-          features={plan.features}
-        />
-      ))}
-    </div>
-  );
+const PaymentsDialog = ({ plans, setOpenDialog }) => {
+  const { data, isSuccess } = useQuery({
+    queryKey: ["profile"],
+    queryFn: getUser,
+  });
+  const { toast } = useToast();
+
+  const { email, lastName, phone } = data.user;
+  const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
+
+  const componentProps = {
+    email,
+    metadata: {
+      name: lastName,
+      phone,
+    },
+    publicKey,
+    text: "Pay Now",
+    onSuccess: () => toast({ description: "Purchase successful" }),
+    onClose: () => toast({ description: "Payment Cancelled" }),
+  };
+
+  if (isSuccess)
+    return (
+      <div className="">
+        <Tabs defaultValue="monthly" className="flex flex-col">
+          <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
+            <TabsTrigger className="rounded-full" value="monthly">
+              Monthly
+            </TabsTrigger>
+            <TabsTrigger className="rounded-full" value="yearly">
+              Yearly
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
+            {plans.monthly.map((plan, index) => (
+              <PlanCard
+                key={index}
+                name={plan.name}
+                cta={plan.cta}
+                target={plan.target}
+                price={plan.price}
+                features={plan.features}
+                setOpenDialog={setOpenDialog}
+                paystackProps={{
+                  text: plan.cta,
+                  amount: plan.price * 100,
+                  ...componentProps,
+                }}
+              />
+            ))}
+            <PlanCard
+              name="Enterprise"
+              cta="Contact Sales"
+              target="For Enterprise"
+              price="Custom"
+              features={["Custom Features"]}
+              setOpenDialog={setOpenDialog}
+            />
+          </TabsContent>
+          <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
+            {plans.yearly.map((plan, index) => (
+              <PlanCard
+                key={index}
+                name={plan.name}
+                cta={plan.cta}
+                target={plan.target}
+                price={plan.price}
+                features={plan.features}
+                setOpenDialog={setOpenDialog}
+                paystackProps={{
+                  text: plan.cta,
+                  amount: plan.price * 100,
+                  ...componentProps,
+                }}
+              />
+            ))}
+            <PlanCard
+              name="Enterprise"
+              cta="Contact Sales"
+              target="For Enterprise"
+              price="Custom"
+              features={["Custom Features"]}
+              setOpenDialog={setOpenDialog}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
 };
 
-const PlanCard = ({ name, target, cta, price, features }) => (
-  <Card className="flex-1 max-w-[290px] h-[400px] rounded-2xl px-[30px] py-[20px] bg-muted">
-    <h3 className="font-medium text-2xl mb-1">{name}</h3>
-    <p className="mb-8">{target}</p>
-    <p className="text-center font-bold text-2xl mb-2">
-      {isNaN(price) ? price : "₦" + price}
-    </p>
-    <div className="flex justify-center mb-6">
-      <Button size="lg" className="font-normal">
-        {cta}
-      </Button>
-    </div>
-    <div className="mb-10">
-      {features.map((feature) => (
-        <div className="flex gap-x-2 items-center gap-y-1">
-          <Check className="h-4 w-4" />
-          <p key={feature}>{feature}</p>
-        </div>
-      ))}
-    </div>
-    <div className="flex justify-center">
-      <Button className="border-none bg-transparent shadow-none text-black font-normal">
-        <ChevronDown />
-        View More
-      </Button>
-    </div>
-  </Card>
-);
+const PlanCard = ({
+  name,
+  target,
+  price,
+  features,
+  paystackProps,
+  setOpenDialog,
+  cta,
+}) => {
+  return (
+    <Card className="flex-1 max-w-[350px] rounded-2xl px-[30px] py-[20px] bg-muted">
+      <h3 className="font-medium text-2xl mb-1">{capitalize(name)}</h3>
+      <p className="mb-4">{target}</p>
+      <p className="text-center font-bold text-2xl mb-2">
+        {isNaN(price) ? price : "₦" + price}
+      </p>
+      <div className="flex justify-center mb-6">
+        {paystackProps ? (
+          <div
+            onClick={() => {
+              setOpenDialog(false);
+            }}
+          >
+            <PaystackButton
+              className="bg-primary text-primary-foreground shadow px-4 rounded-full py-1"
+              {...paystackProps}
+            />
+          </div>
+        ) : (
+          <Button
+            onClick={() => (window.location.href = "mailto:info@konn3ct.com")}
+          >
+            {cta}
+          </Button>
+        )}
+      </div>
+      <div className="mb-6">
+        {features.map((feature, index) => (
+          <div key={index} className="flex gap-x-2 items-center gap-y-1">
+            <Check className="h-4 w-4" />
+            <p>{feature}</p>
+          </div>
+        ))}
+      </div>
+      {/* <div className="flex justify-center">
+        <Button className="border-none bg-transparent shadow-none text-black font-normal">
+          <ChevronDown />
+          View More
+        </Button>
+      </div> */}
+    </Card>
+  );
+};

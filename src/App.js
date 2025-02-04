@@ -52,7 +52,7 @@ const items = [
   { title: "Addons", url: "/addons", icon: AddonIcon },
   { title: "Referee(s)", url: "/referees", icon: RefereeIcon },
   { title: "Invite history", url: "/history", icon: HistoryIcon },
-  { title: "Settings", url: "/settings", icon: SettingsIcon },
+  // { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
 ];
 

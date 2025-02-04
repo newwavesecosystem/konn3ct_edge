@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
-import React from "react";
+import React, { useState } from "react";
 import StatCard from "../components/StatCard";
 import activeIcon from "../assets/icons/active.svg";
 import inactiveIcon from "../assets/icons/inactive.svg";
@@ -20,14 +20,21 @@ import video from "../assets/icons/video-01.svg";
 import { Copy } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { getUser } from "../api/userApi";
-import { capitalize } from "../lib/utils";
+import { capitalize, extractYouTubeID } from "../lib/utils";
 import { getMeetings, getRooms } from "../api/roomsApi";
 import { Link } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import { Skeleton } from "../components/ui/skeleton";
+import { useToast } from "../hooks/use-toast";
+import { Dialog, DialogContent } from "../components/ui/dialog";
+import { MeetingForm } from "./InviteHistory";
+import { DialogTitle, DialogDescription } from "../components/ui/dialog";
 
 const Dashboard = () => {
   const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
+
+  const [openSchedule, setOpenSchedule] = useState(false);
 
   const userQuery = useQueries({
     queries: [
@@ -53,6 +60,13 @@ const Dashboard = () => {
       </div>
     );
 
+  const handleCopy = (text) => {
+    if (text) {
+      navigator.clipboard.writeText(text);
+      toast({ description: "Copied to clipboard" });
+    }
+  };
+
   if (userQuery.every((query) => query.isSuccess))
     return (
       <div className="container mx-auto page grid grid-cols-3 justify-evenly gap-5">
@@ -76,7 +90,9 @@ const Dashboard = () => {
               </CardHeader>
             </div>
             <CardContent className="self-center mt-10">
-              <Button>Manage Plan</Button>
+              <Link to="/payments">
+                <Button>Manage Plan</Button>
+              </Link>
             </CardContent>
           </Card>
 
@@ -123,7 +139,10 @@ const Dashboard = () => {
               <iframe
                 width="100%"
                 height="100%"
-                src="https://www.youtube.com/embed/fa8k8IQ1_X0?si=zqFaZVdkmKPZN_eX"
+                src={
+                  `https://www.youtube.com/embed/` +
+                  extractYouTubeID(userQuery[1].data.video_link)
+                }
                 title="YouTube video player"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; web-share"
                 referrerPolicy="strict-origin-when-cross-origin"
@@ -134,11 +153,14 @@ const Dashboard = () => {
           <Card className="flex flex-col items-center">
             <div className="flex justify-evenly w-full mb-6">
               <div className="flex flex-col items-center gap-y-4">
-                <Link to="/rooms">
+                <div
+                  onClick={() => setOpenSchedule(true)}
+                  className="cursor-pointer"
+                >
                   <div className="w-[65px] h-[65px] bg-[#227451] flex justify-center items-center rounded-xl">
                     <img src={calendar} alt="schedule" />
                   </div>
-                </Link>
+                </div>
                 Schedule
               </div>
               <div className="flex flex-col items-center gap-y-4">
@@ -161,8 +183,15 @@ const Dashboard = () => {
 
             <p className="font-semibold mb-1">Personal Meeting ID</p>
             <div className="flex gap-x-2 items-center">
-              <p className="text-base text-[#707070]">123 456 7890</p>
-              <Copy className="h-5 w-5 cursor-pointer" />
+              <p className="text-base text-[#707070]">
+                {userQuery[1].data.personal_room.id}
+              </p>
+              <Copy
+                className="h-5 w-5 cursor-pointer"
+                onClick={() => {
+                  handleCopy(userQuery[1].data.personal_room.id);
+                }}
+              />
             </div>
           </Card>
           <Card>
@@ -181,14 +210,25 @@ const Dashboard = () => {
               <div className="bg-[#F2F2F2] w-full rounded p-2 text-[#424242] font-semibold my-10">
                 {userQuery[2].data.data.length === 0
                   ? "No upcoming Meetings"
-                  : userQuery[2].data.data.map(() => (
-                      <p>{userQuery[2].data.data.name}</p>
+                  : userQuery[2].data.data.map((meeting) => (
+                      <>
+                        <p key={meeting.title}>{meeting.title}</p>
+                      </>
                     ))}
               </div>
               <Button variant="outline">Test Audio and Video</Button>
             </div>
           </Card>
         </div>
+        <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
+          <DialogContent className="top-[50%] w-[90%] h-[90%]  overflow-y-scroll">
+            <DialogTitle>Send an new Invite</DialogTitle>
+            <DialogDescription>
+              Send an invite for a scheduled meeting
+            </DialogDescription>
+            <MeetingForm setOpenDialog={setOpenSchedule} />
+          </DialogContent>
+        </Dialog>
       </div>
     );
 };

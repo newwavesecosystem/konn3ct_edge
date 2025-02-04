@@ -171,10 +171,10 @@ const InviteHistory = () => {
         </Pagination>
       </Card>
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="top-[80%] h-[100%] pb-[19%] overflow-scroll">
-          <DialogTitle>Create a new stream</DialogTitle>
+        <DialogContent className="top-[50%] w-[90%] h-[90%]  overflow-y-scroll">
+          <DialogTitle>Send an new Invite</DialogTitle>
           <DialogDescription>
-            Start streaming your meeting on various platforms
+            Send an invite for a scheduled meeting
           </DialogDescription>
           <MeetingForm setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -185,7 +185,7 @@ const InviteHistory = () => {
 
 export default InviteHistory;
 
-const MeetingForm = ({ setOpenDialog }) => {
+export const MeetingForm = ({ setOpenDialog }) => {
   const [timezoneOpen, setTimezoneOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -205,7 +205,7 @@ const MeetingForm = ({ setOpenDialog }) => {
     date: z.date({ required_error: "Date is required." }).nullable(),
     time: z.string().nonempty({ message: "Time is required." }),
     timezone: z.string().nonempty({ message: "Timezone is required." }),
-    additional: z.string().optional(),
+    additional: z.string().nonempty({message:"Additional message is required"}),
     guest: z
       .string()
       .nonempty({ message: "Guest emails are required." })

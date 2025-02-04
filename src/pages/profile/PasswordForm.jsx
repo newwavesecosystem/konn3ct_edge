@@ -12,6 +12,10 @@ import {
   FormMessage,
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
+import { useMutation } from "@tanstack/react-query";
+import { updatePassword } from "../../api/userApi";
+import { useToast } from "../../hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 // Define the schema
 const formSchema = z
@@ -45,9 +49,27 @@ export function PasswordForm() {
       confirmPassword: "",
     },
   });
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const passwordMutation = useMutation({
+    mutationFn: updatePassword,
+    onSuccess: (res) => {
+      toast({ description: res.message });
+      if (res.success) {
+        navigate("/login");
+      }
+    },
+  });
 
   const onSubmit = (data) => {
-    console.log("Form Submitted", data);
+    const payload = {
+      current_password: data.currentPassword,
+      new_password: data.newPassword,
+    };
+
+    passwordMutation.mutate(payload);
+    form.reset();
   };
 
   return (

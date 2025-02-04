@@ -113,3 +113,7 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #555; /* On hover */
 }
+
+.checkout__outer-container {
+  z-index: 300;
+}

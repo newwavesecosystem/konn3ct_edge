@@ -35,6 +35,11 @@ const Navbar = () => {
         <NavigationMenuItem>
           <Link className={navigationMenuTriggerStyle()}>Plans & Pricing</Link>
         </NavigationMenuItem>
+        <NavigationMenuItem>
+          <Link className={navigationMenuTriggerStyle()} to="/">
+            Dashboard
+          </Link>
+        </NavigationMenuItem>
       </NavigationMenuList>
       {isAuthenticated ? (
         <div className="ml-auto">
