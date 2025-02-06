@@ -57,6 +57,7 @@ import {
   CommandList,
 } from "../components/ui/command";
 import { Skeleton } from "../components/ui/skeleton";
+import { getRooms } from "../api/roomsApi";
 
 const InviteHistory = () => {
   const [page, setPage] = useState(1);
@@ -190,6 +191,11 @@ export const MeetingForm = ({ setOpenDialog }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const roomQuery = useQuery({
+    queryKey: ["rooms"],
+    queryFn: getRooms,
+  });
+
   const sendInviteMutation = useMutation({
     mutationFn: sendInvite,
     onSuccess: (res) => {
@@ -205,7 +211,9 @@ export const MeetingForm = ({ setOpenDialog }) => {
     date: z.date({ required_error: "Date is required." }).nullable(),
     time: z.string().nonempty({ message: "Time is required." }),
     timezone: z.string().nonempty({ message: "Timezone is required." }),
-    additional: z.string().nonempty({message:"Additional message is required"}),
+    additional: z
+      .string()
+      .nonempty({ message: "Additional message is required" }),
     guest: z
       .string()
       .nonempty({ message: "Guest emails are required." })
@@ -248,10 +256,16 @@ export const MeetingForm = ({ setOpenDialog }) => {
     },
   });
 
+  const [roomOpen, setRoomOpen] = useState(false);
+
   const onSubmit = (data) => {
     sendInviteMutation.mutate(data);
     setOpenDialog(false);
   };
+
+  if (!roomQuery.isSuccess) return <></>;
+
+  const rooms = roomQuery.data.rooms || [];
 
   return (
     <Form {...form}>
@@ -260,15 +274,70 @@ export const MeetingForm = ({ setOpenDialog }) => {
           <FormField
             control={form.control}
             name="room_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Room ID</FormLabel>
-                <FormControl>
-                  <Input placeholder="Enter room ID" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              return (
+                <FormItem>
+                  <FormLabel className="block mt-5">Room ID</FormLabel>
+                  <FormControl>
+                    <Popover open={roomOpen} onOpenChange={setRoomOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={roomOpen}
+                          className="w-[300px] justify-between"
+                        >
+                          {field.value
+                            ? rooms.find(
+                                (room) => room.id === Number(field.value)
+                              )?.id
+                            : "Select a room..."}
+                          <ChevronsUpDown className="ml-2 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0">
+                        <Command>
+                          <CommandInput
+                            placeholder="Search room ID..."
+                            className="h-9"
+                          />
+                          <CommandList>
+                            <CommandEmpty>No room found.</CommandEmpty>
+                            <CommandGroup>
+                              {rooms.map((room) => (
+                                <CommandItem
+                                  key={room.id}
+                                  value={room.id}
+                                  onSelect={(currentValue) => {
+                                    field.onChange(
+                                      currentValue === field.value
+                                        ? ""
+                                        : currentValue
+                                    );
+                                    setRoomOpen(false);
+                                  }}
+                                >
+                                  {room.id}
+                                  <Check
+                                    className={cn(
+                                      "ml-auto",
+                                      field.value === room.id
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
 
           <FormField
@@ -284,7 +353,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="title"
@@ -298,7 +366,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="date"
@@ -334,7 +401,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="time"
@@ -348,7 +414,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="timezone"
@@ -420,7 +485,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="additional"
@@ -437,7 +501,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
-
           <FormField
             control={form.control}
             name="guest"

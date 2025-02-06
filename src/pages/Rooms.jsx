@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createMeeting,
   deleteRoom,
+  getMeetings,
   getRooms,
   startMeeting,
 } from "../api/roomsApi";
@@ -61,11 +62,17 @@ import {
 import UserIcon from "../assets/components/UserIcon";
 import calendar from "../assets/icons/calendar-03.svg";
 import clock from "../assets/icons/clock-05.svg";
+import { capitalize } from "../lib/utils";
 
 const Rooms = () => {
   const roomQuery = useQuery({
     queryKey: ["rooms"],
     queryFn: getRooms,
+  });
+
+  const meetingQuery = useQuery({
+    queryKey: ["meetings"],
+    queryFn: getMeetings,
   });
 
   const queryClient = useQueryClient();
@@ -112,7 +119,7 @@ const Rooms = () => {
     },
   });
 
-  if (roomQuery.isLoading)
+  if (roomQuery.isLoading || meetingQuery.isLoading)
     return (
       <div className="page container mx-auto">
         <Skeleton className="w-full min-h-full relative" />
@@ -298,15 +305,16 @@ const Rooms = () => {
           </SheetHeader>
 
           <div className="mt-5 pb-12 flex flex-col gap-y-2 overflow-y-scroll h-[90vh] pr-3">
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
-            <ScheduleMeetingCard />
+            {meetingQuery.data.data.map(({ date, time, roomname, guest }) => {
+              return (
+                <ScheduleMeetingCard
+                  date={date}
+                  time={time}
+                  roomname={roomname}
+                  guest={guest}
+                />
+              );
+            })}
           </div>
         </SheetContent>
       </Sheet>
@@ -393,22 +401,33 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
   );
 };
 
-const ScheduleMeetingCard = () => (
-  <Card>
-    <div className="flex justify-between text-[#707070]">
-      <div className="flex gap-x-1">
-        <img src={clock} alt="" />
-        <p>8:30am</p>
+const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+
+    return date.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      year: "numeric",
+    });
+  };
+  return (
+    <Card>
+      <div className="flex justify-between text-[#707070]">
+        <div className="flex gap-x-1">
+          <img src={clock} alt="" />
+          <p>{time}</p>
+        </div>
+        <div className="flex gap-x-1">
+          <img src={calendar} alt="" />
+          <p>{formatDate(date)}</p>
+        </div>
       </div>
-      <div className="flex gap-x-1">
-        <img src={calendar} alt="" />
-        <p>Tue Nov 2025</p>
+      <h3 className="my-4 font-medium text-lg">{capitalize(roomname)}</h3>
+      <div className="flex gap-x-1 items-center text-[#707070]">
+        <UserIcon />
+        {guest.split(",").length}
       </div>
-    </div>
-    <h3 className="my-4 font-medium">Enhancing Agency and Collaboration</h3>
-    <div className="flex gap-x-1 items-center text-[#707070]">
-      <UserIcon />
-      50
-    </div>
-  </Card>
-);
+    </Card>
+  );
+};

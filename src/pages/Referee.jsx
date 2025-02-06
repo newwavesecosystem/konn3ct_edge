@@ -21,6 +21,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { getReferee } from "../api/refereeApi";
 import { Skeleton } from "../components/ui/skeleton";
+import { capitalize, formatDate } from "../lib/utils";
 
 const Referee = () => {
   const [page, setPage] = useState(1);
@@ -66,15 +67,19 @@ const Referee = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {refereeQuery.data.data.map(({ name, email, plan, date }, id) => (
-              <TableRow key={name + date}>
-                <TableCell>{id + 1}</TableCell>
-                <TableCell>{name}</TableCell>
-                <TableCell className="">{email}</TableCell>
-                <TableCell>{plan}</TableCell>
-                <TableCell>{date}</TableCell>
-              </TableRow>
-            ))}
+            {refereeQuery.data.data.map(
+              ({ lastname, firstname, email, plan, created_at }, id) => (
+                <TableRow key={email + lastname}>
+                  <TableCell>{id + 1}</TableCell>
+                  <TableCell>
+                    {lastname} {firstname}
+                  </TableCell>
+                  <TableCell className="">{email}</TableCell>
+                  <TableCell>{capitalize(plan.name)}</TableCell>
+                  <TableCell>{formatDate(created_at)}</TableCell>
+                </TableRow>
+              )
+            )}
           </TableBody>
         </Table>
         {refereeQuery.data.data.length === 0 && (
