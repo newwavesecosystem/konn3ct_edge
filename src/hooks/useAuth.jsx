@@ -18,7 +18,9 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // Login Function (API Call)
+  // --------------------------
+  // ✅ Normal Login Function
+  // --------------------------
   const login = async (credentials) => {
     try {
       const res = await apiLogin(credentials);
@@ -31,7 +33,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Register Function
+  // --------------------------
+  // ✅ Register Function
+  // --------------------------
   const register = async (userData) => {
     try {
       const data = await apiRegister(userData);
@@ -41,7 +45,53 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout
+  // --------------------------
+  // ✅ Facebook Login Function
+  // --------------------------
+  const loginWithFacebook = async () => {
+    return new Promise((resolve, reject) => {
+      if (!window.FB) {
+        return reject(new Error("Facebook SDK not loaded"));
+      }
+
+      window.FB.login(
+        (response) => {
+          if (response.authResponse) {
+            // Fetch user profile from Facebook
+            window.FB.api("/me", { fields: "id,name,email,picture" }, async (fbUser) => {
+              try {
+                // Here you’d typically call your backend
+                // Example: send fbUser + accessToken to your API for validation
+                const userData = {
+                  name: fbUser.name,
+                  email: fbUser.email,
+                  facebookId: fbUser.id,
+                  picture: fbUser.picture?.data?.url,
+                  token: response.authResponse.accessToken,
+                };
+
+                // Save in state + localStorage
+                setUser(userData);
+                localStorage.setItem("user", JSON.stringify(userData));
+                localStorage.setItem("token", userData.token);
+
+                resolve(userData);
+              } catch (err) {
+                reject(err);
+              }
+            });
+          } else {
+            reject(new Error("Facebook login failed"));
+          }
+        },
+        { scope: "public_profile,email" }
+      );
+    });
+  };
+
+  // --------------------------
+  // ✅ Logout Function
+  // --------------------------
   const logout = () => {
     setUser(null);
     localStorage.removeItem("user");
@@ -53,6 +103,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     login,
     register,
+    loginWithFacebook, // 👉 Now available everywhere
     logout,
     loading,
   };

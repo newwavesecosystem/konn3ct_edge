@@ -25,17 +25,22 @@ import { Separator } from "../../components/ui/separator";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
+import { GoogleLogin, useGoogleLogin } from "@react-oauth/google";
+import useFacebookSDK from "../../hooks/useFacebookSDK";
+import { jwtDecode } from "jwt-decode";
 
 export default function Register() {
+  useFacebookSDK();
+
   return (
     <div className="page container mx-auto flex justify-center">
       <SideDetail />
       <Card className="max-w-[560px] flex-1 ">
         <RegisterForm />
         <p className="text-[#0A2540] text-center text-sm">
-          By signing up you understand and agree to the Newwaves ecosystem Terms
-          of Use. For more information about Privacy Data visit the Newwaves
-          Privacy Data Sheets.
+          By signing up you understand and agree to the Konn3ct
+          Terms of Use. For more information about Privacy Data
+          visit the <a href="https://konn3ct.com/docs/DATAPRIVACY.pdf" className="text-blue-500">Konn3ct Privacy Data Sheets.</a>
         </p>
       </Card>
     </div>
@@ -124,21 +129,58 @@ export function RegisterForm() {
     registerMutation.mutate(values);
   }
 
+  const handleGoogleLogin = useGoogleLogin({
+    // onSuccess: (tokenResponse) => console.log(tokenResponse),
+    onError: (error) => console.log(error),
+  });
+
+  // ✅ Facebook login
+  const handleFacebookLogin = () => {
+    if (!window.FB) {
+      console.error("FB SDK not loaded");
+      return;
+    }
+
+    window.FB.login(
+      (response) => {
+        if (response.authResponse) {
+          const { accessToken } = response.authResponse;
+
+          // send token to backend via your existing registerMutation
+          registerMutation.mutate({
+            provider: "facebook",
+            token: accessToken,
+          });
+        } else {
+          console.log("Facebook login cancelled/failed", response);
+        }
+      },
+      { scope: "email,public_profile" }
+    );
+  };
+
   return (
     <div className="px-20">
       <div className="flex justify-center">
         <img src={logo} alt="konn3ct" />
       </div>
-      <h3 className="text-xl font-bold mb-10 text-center">Sign in</h3>
+      <h3 className="text-xl font-bold mb-10 text-center">Sign Up</h3>
       <p className="text-xl font-medium text-center mb-10">Continue with: </p>
 
       <div className="flex justify-evenly">
-        <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={facebook} alt="Facebook" />{" "}
+        {/* ✅ Facebook */}
+        <div
+          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+          onClick={() => handleFacebookLogin()}
+        >
+          <img className="h-8" src={facebook} alt="Facebook" />
           <p className="text-[10px] font-medium">Facebook</p>
         </div>
-        <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={google} alt="google" />{" "}
+        <div
+          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+          onClick={() => handleGoogleLogin()}
+        >
+          <img className="h-8" src={google} alt="google" />
           <p className="text-[10px] font-medium">Google</p>
         </div>
         <div className="flex flex-col justify-center items-center gap-y-1">

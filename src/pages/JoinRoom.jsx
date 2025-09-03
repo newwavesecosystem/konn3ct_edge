@@ -154,7 +154,7 @@ const JoinForm = () => {
             className="w-full bg-[#012E89] shadow-md !my-10"
             disabled={joinMutation.isPending}
           >
-            Konne3ct
+            Konn3ct
           </Button>
         </form>
       </Form>

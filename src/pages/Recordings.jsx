@@ -29,7 +29,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
-
 const Recordings = () => {
   const recordingQuery = useQuery({
     queryKey: ["recordings"],
@@ -59,8 +58,9 @@ const Recordings = () => {
     },
   });
 
-  const handlePlay = (url) => {
-    window.open(url, "_blank");
+  const handlePlay = (id) => {
+    const playbackBaseUrl = process.env.REACT_APP_PLAYBACK_URL;
+    window.open(`${playbackBaseUrl}`, "_blank");
   };
 
   if (recordingQuery.isLoading)
