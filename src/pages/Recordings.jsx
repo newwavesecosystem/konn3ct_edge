@@ -60,7 +60,7 @@ const Recordings = () => {
 
   const handlePlay = (id) => {
     const playbackBaseUrl = process.env.REACT_APP_PLAYBACK_URL;
-    window.open(`${playbackBaseUrl}`, "_blank");
+    window.open(`${playbackBaseUrl}/${id}`, "_blank");
   };
 
   if (recordingQuery.isLoading)
