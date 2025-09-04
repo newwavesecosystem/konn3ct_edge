@@ -1,4 +1,3 @@
-// src/hooks/useFacebookSDK.js
 import { useEffect } from "react";
 
 export default function useFacebookSDK() {
