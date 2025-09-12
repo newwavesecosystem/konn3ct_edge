@@ -123,7 +123,7 @@ const Recordings = () => {
                     <div className="flex gap-x-2">
                       <Button
                         onClick={() => {
-                          handlePlay(playback.format.url);
+                          handlePlay(recordID);
                         }}
                       >
                         Play video

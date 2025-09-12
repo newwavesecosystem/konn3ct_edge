@@ -31,6 +31,7 @@ import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import IsAuthenticated from "./lib/IsAuthenticated";
 import JoinRoom from "./pages/JoinRoom";
+import Donations from "./pages/Donations";
 import HomeIcon from "./assets/components/HomeIcon";
 import CardIcon from "./assets/components/CardIcon";
 import UserIcon from "./assets/components/UserIcon";
@@ -40,6 +41,7 @@ import StreamIcon from "./assets/components/StreamIcon";
 import AddonIcon from "./assets/components/AddonIcon";
 import RefereeIcon from "./assets/components/RefereeIcon";
 import HistoryIcon from "./assets/components/HistoryIcon";
+import DonationIcon from "./assets/components/DonationIcon";
 import SettingsIcon from "./assets/components/SettingsIcon";
 
 const items = [
@@ -51,6 +53,7 @@ const items = [
   { title: "Plans & Payments", url: "/payments", icon: CardIcon },
   { title: "Addons", url: "/addons", icon: AddonIcon },
   { title: "Referee(s)", url: "/referees", icon: RefereeIcon },
+  { title: "Donations", url: "/donations", icon: DonationIcon },
   { title: "Invite history", url: "/history", icon: HistoryIcon },
   // { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
@@ -131,6 +134,7 @@ const router = createBrowserRouter([
       { path: "payments", element: <Payments /> },
       { path: "addons", element: <Addon /> },
       { path: "referees", element: <Referee /> },
+      { path: "donations", element: <Donations /> },
       { path: "history", element: <InviteHistory /> },
       { path: "settings", element: <Settings /> },
     ],

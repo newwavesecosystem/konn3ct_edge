@@ -24,13 +24,12 @@ import apple from "../../assets/icons/apple.svg";
 import { Separator } from "../../components/ui/separator";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
-import { GoogleLogin, useGoogleLogin } from "@react-oauth/google";
+import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
-import { jwtDecode } from "jwt-decode";
+import AppleLogin from "react-apple-login"; // 👈 add this
 
 export default function Login() {
   useFacebookSDK();
-
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -45,7 +44,13 @@ export default function Login() {
         <p className="text-[#0A2540] text-center text-sm">
           By signing up you understand and agree to the Konn3ct
           Terms of Use. For more information about Privacy Data
-          visit the <a href="https://konn3ct.com/docs/DATAPRIVACY.pdf" className="text-blue-500">Konn3ct Privacy Data Sheets.</a>
+          visit the{" "}
+          <a
+            href="https://konn3ct.com/docs/DATAPRIVACY.pdf"
+            className="text-blue-500"
+          >
+            Konn3ct Privacy Data Sheets.
+          </a>
         </p>
       </Card>
     </div>
@@ -101,7 +106,6 @@ export function LoginForm() {
   }
 
   const handleGoogleLogin = useGoogleLogin({
-    // onSuccess: (tokenResponse) => console.log(tokenResponse),
     onError: (error) => console.log(error),
   });
 
@@ -115,7 +119,7 @@ export function LoginForm() {
     window.FB.login(
       (response) => {
         if (response.authResponse) {
-          const { accessToken, userID } = response.authResponse;
+          const { accessToken } = response.authResponse;
 
           // Get basic profile info
           window.FB.api(
@@ -124,7 +128,7 @@ export function LoginForm() {
             (profile) => {
               console.log("Facebook profile:", profile);
 
-              // Send token & profile to backend for validation / login
+              // Send token & profile to backend
               loginMutation.mutate({
                 provider: "facebook",
                 token: accessToken,
@@ -143,6 +147,28 @@ export function LoginForm() {
     );
   };
 
+  // ✅ Apple login handler
+  const handleAppleResponse = (res) => {
+    console.log("Apple login response:", res);
+
+    if (res?.authorization?.code) {
+      loginMutation.mutate({
+        provider: "apple",
+        token: res.authorization.code,
+        email: res.user?.email,
+        name:
+          res.user?.name?.firstName && res.user?.name?.lastName
+            ? `${res.user.name.firstName} ${res.user.name.lastName}`
+            : undefined,
+      });
+    } else {
+      toast({
+        title: "Apple login failed",
+        description: "Could not complete Apple login",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="px-20">
@@ -161,19 +187,38 @@ export function LoginForm() {
           <img className="h-8" src={facebook} alt="Facebook" />
           <p className="text-[10px] font-medium">Facebook</p>
         </div>
+
+        {/* ✅ Google */}
         <div
           className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
           onClick={() => handleGoogleLogin()}
         >
-          <img className="h-8" src={google} alt="google" />
+          <img className="h-8" src={google} alt="Google" />
           <p className="text-[10px] font-medium">Google</p>
         </div>
+
+        {/* ✅ Apple (custom SVG icon) */}
+        <AppleLogin
+          clientId="com.konn3ct.signin2apple" // <-- replace with your Service ID
+          redirectURI="https://dashboard.konn3ct.ng/oauth/apple" // <-- must match Apple dev config
+          responseType="code"
+          responseMode="query"
+          usePopup={true}
+          render={(renderProps) => (
+            <div
+              onClick={renderProps.onClick}
+              className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+            >
+              <img className="h-8" src={apple} alt="Apple" />
+              <p className="text-[10px] font-medium">Apple</p>
+            </div>
+          )}
+          callback={handleAppleResponse}
+        />
+
+        {/* ✅ SSO (still placeholder) */}
         <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
-          <img className="grayscale h-8" src={apple} alt="apple" />{" "}
-          <p className="text-[10px] font-medium">Apple</p>
-        </div>
-        <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
-          <img className="grayscale h-8" src={sso} alt="sso" />{" "}
+          <img className="grayscale h-8" src={sso} alt="SSO" />
           <p className="text-[10px] font-medium">SSO</p>
         </div>
       </div>
@@ -232,7 +277,7 @@ export function LoginForm() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="text-[#012E89] text-[14px] font-bold"
                   >
-                    {showPassword ? <p>Hide password</p> : <p>Show password</p>}
+                    {showPassword ? "Hide password" : "Show password"}
                   </button>
                 </div>
               </FormItem>
@@ -248,6 +293,7 @@ export function LoginForm() {
           </Button>
         </form>
       </Form>
+
       <div className="flex justify-center my-8 gap-x-1">
         <p>Don't have an account?</p>
         <Link to="/register" className="text-[#012E89]">

@@ -19,15 +19,15 @@ import SideDetail from "./SideDetail";
 import logo from "../../assets/konn3ct_logo.png";
 import facebook from "../../assets/icons/facebook.svg";
 import google from "../../assets/icons/google.svg";
-import sso from "../../assets/icons/sso.svg";
 import apple from "../../assets/icons/apple.svg";
+import sso from "../../assets/icons/sso.svg";
 import { Separator } from "../../components/ui/separator";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
-import { GoogleLogin, useGoogleLogin } from "@react-oauth/google";
+import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
-import { jwtDecode } from "jwt-decode";
+import AppleLogin from "react-apple-login";
 
 export default function Register() {
   useFacebookSDK();
@@ -40,7 +40,13 @@ export default function Register() {
         <p className="text-[#0A2540] text-center text-sm">
           By signing up you understand and agree to the Konn3ct
           Terms of Use. For more information about Privacy Data
-          visit the <a href="https://konn3ct.com/docs/DATAPRIVACY.pdf" className="text-blue-500">Konn3ct Privacy Data Sheets.</a>
+          visit the{" "}
+          <a
+            href="https://konn3ct.com/docs/DATAPRIVACY.pdf"
+            className="text-blue-500"
+          >
+            Konn3ct Privacy Data Sheets.
+          </a>
         </p>
       </Card>
     </div>
@@ -130,7 +136,6 @@ export function RegisterForm() {
   }
 
   const handleGoogleLogin = useGoogleLogin({
-    // onSuccess: (tokenResponse) => console.log(tokenResponse),
     onError: (error) => console.log(error),
   });
 
@@ -176,6 +181,8 @@ export function RegisterForm() {
           <img className="h-8" src={facebook} alt="Facebook" />
           <p className="text-[10px] font-medium">Facebook</p>
         </div>
+
+        {/* ✅ Google */}
         <div
           className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
           onClick={() => handleGoogleLogin()}
@@ -183,12 +190,39 @@ export function RegisterForm() {
           <img className="h-8" src={google} alt="google" />
           <p className="text-[10px] font-medium">Google</p>
         </div>
+
+        {/* ✅ Apple */}
         <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={apple} alt="apple" />{" "}
-          <p className="text-[10px] font-medium">Apple</p>
+          <AppleLogin
+            clientId="com.konn3ct.signin2apple" // <-- Replace with your Service ID
+            redirectURI="https://dashboard.konn3ct.ng/oauth/apple"
+            responseType="code"
+            responseMode="query"
+            usePopup={true}
+            render={(renderProps) => (
+              <div
+                onClick={renderProps.onClick}
+                className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+              >
+                <img className="h-8" src={apple} alt="Apple" />
+                <p className="text-[10px] font-medium">Apple</p>
+              </div>
+            )}
+            callback={(res) => {
+              console.log("Apple response:", res);
+
+              // 🔥 send to backend via registerMutation
+              // registerMutation.mutate({
+              //   provider: "apple",
+              //   token: res.authorization?.code,
+              // });
+            }}
+          />
         </div>
+
+        {/* ✅ SSO */}
         <div className="flex flex-col justify-center items-center gap-y-1">
-          <img className="h-8" src={sso} alt="sso" />{" "}
+          <img className="h-8" src={sso} alt="sso" />
           <p className="text-[10px] font-medium">SSO</p>
         </div>
       </div>
@@ -323,6 +357,7 @@ export function RegisterForm() {
           </Button>
         </form>
       </Form>
+
       <div className="flex justify-center my-8 gap-x-1">
         <p>Already have an account?</p>
         <Link to="/login" className="text-[#012E89]">
