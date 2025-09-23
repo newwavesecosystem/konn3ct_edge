@@ -44,7 +44,7 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
             Verification Status
           </h2>
           <p className="text-sm text-gray-500">
-            Account verification progress
+          Account verification progress
           </p>
         </div>
         <button
@@ -105,7 +105,7 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
         ))}
       </div>
 
-      {overallStatus === 0 && (
+      {/* {overallStatus === 0 && (
         <div className="flex justify-center mt-6">
           <button
             onClick={onFinish}
@@ -114,7 +114,7 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
             Finish Verification
           </button>
         </div>
-      )}
+      )} */}
     </Card>
   );
 }
