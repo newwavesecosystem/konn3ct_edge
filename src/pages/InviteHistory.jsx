@@ -205,7 +205,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
   });
 
   const formSchema = z.object({
-    room_id: z.string().nonempty({ message: "Room ID is required." }),
+    room_id: z.string().nonempty({ message: "Room is required." }),
     hostname: z.string().nonempty({ message: "Hostname is required." }),
     title: z.string().nonempty({ message: "Title is required." }),
     date: z.date({ required_error: "Date is required." }).nullable(),
@@ -235,7 +235,6 @@ export const MeetingForm = ({ setOpenDialog }) => {
     const timezoneOffset =
       parts.find((part) => part.type === "timeZoneName")?.value ?? "";
 
-    // Example: "Africa/Lagos (UTC+01:00)"
     return {
       label: `${tz} ${timezoneOffset}`,
       value: `${tz} ${timezoneOffset}`,
@@ -271,13 +270,14 @@ export const MeetingForm = ({ setOpenDialog }) => {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-4">
+          {/* ✅ Fixed Room Field */}
           <FormField
             control={form.control}
             name="room_id"
             render={({ field }) => {
               return (
                 <FormItem>
-                  <FormLabel className="block mt-5">Room ID</FormLabel>
+                  <FormLabel className="block mt-5">Room Name</FormLabel>
                   <FormControl>
                     <Popover open={roomOpen} onOpenChange={setRoomOpen}>
                       <PopoverTrigger asChild>
@@ -290,7 +290,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                           {field.value
                             ? rooms.find(
                                 (room) => room.id === Number(field.value)
-                              )?.id
+                              )?.name
                             : "Select a room..."}
                           <ChevronsUpDown className="ml-2 opacity-50" />
                         </Button>
@@ -298,7 +298,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                       <PopoverContent className="w-[300px] p-0">
                         <Command>
                           <CommandInput
-                            placeholder="Search room ID..."
+                            placeholder="Search room..."
                             className="h-9"
                           />
                           <CommandList>
@@ -307,7 +307,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                               {rooms.map((room) => (
                                 <CommandItem
                                   key={room.id}
-                                  value={room.id}
+                                  value={String(room.id)}
                                   onSelect={(currentValue) => {
                                     field.onChange(
                                       currentValue === field.value
@@ -317,11 +317,11 @@ export const MeetingForm = ({ setOpenDialog }) => {
                                     setRoomOpen(false);
                                   }}
                                 >
-                                  {room.id}
+                                  {room.name}
                                   <Check
                                     className={cn(
                                       "ml-auto",
-                                      field.value === room.id
+                                      field.value === String(room.id)
                                         ? "opacity-100"
                                         : "opacity-0"
                                     )}

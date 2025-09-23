@@ -96,9 +96,11 @@ const Rooms = () => {
   }, [openDeleteDialog]);
 
   const handleDeleteClick = (id) => {
-    setRoomIdToDelete(id); // Set the ID of the room to delete
-    setOpenDeleteDialog(true); // Open the dialog
+    setRoomIdToDelete(id);
+    setOpenDeleteDialog(true);
   };
+
+  const { toast } = useToast();
 
   const handleCopy = (url) => {
     const meeting_url = `https://k4.konn3ct.ng/join/${url}`;
@@ -107,8 +109,6 @@ const Rooms = () => {
       toast({ description: "Copied to clipboard" });
     }
   };
-
-  const { toast } = useToast();
 
   const startMeetingMutation = useMutation({
     mutationFn: startMeeting,
@@ -176,7 +176,7 @@ const Rooms = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="">NAME</TableHead>
+                <TableHead>NAME</TableHead>
                 <TableHead>ROOM URL</TableHead>
                 <TableHead>
                   <div className="flex justify-between">
@@ -186,61 +186,56 @@ const Rooms = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {roomQuery.data.rooms.map(({ name, url, id }) => {
-                return (
-                  <TableRow key={id}>
-                    <TableCell className="">{name}</TableCell>
-                    <TableCell className="">{url}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-x-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => handleCopy(url)}
-                        >
-                          Copy Link
-                        </Button>
+              {roomQuery.data.rooms.map(({ name, url, id }) => (
+                <TableRow key={id}>
+                  <TableCell>{name}</TableCell>
+                  <TableCell>{url}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-x-2">
+                      <Button variant="outline" onClick={() => handleCopy(url)}>
+                        Copy Link
+                      </Button>
 
-                        <DropdownMenu>
-                          <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
-                            Manage
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem>Access Code</DropdownMenuItem>
-                            <DropdownMenuItem>User Limit</DropdownMenuItem>
-                            <DropdownMenuItem>
-                              Meeting Room Banner Upload
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              Modify Pre-Registration
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              Pre-Registered Users
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              Disable Pre-Registration
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>Transfer Room</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
+                          Manage
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem>Access Code</DropdownMenuItem>
+                          <DropdownMenuItem>User Limit</DropdownMenuItem>
+                          <DropdownMenuItem>
+                            Meeting Room Banner Upload
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            Modify Pre-Registration
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            Pre-Registered Users
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            Disable Pre-Registration
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>Transfer Room</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
 
-                        <Button
-                          disabled={startMeetingMutation.isPending}
-                          onClick={() => startMeetingMutation.mutate(id)}
-                        >
-                          Start Meeting
-                        </Button>
-                        <Button
-                          disabled={deleteMeetingMutation.isPending}
-                          variant="destructive"
-                          onClick={() => handleDeleteClick(id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                      <Button
+                        disabled={startMeetingMutation.isPending}
+                        onClick={() => startMeetingMutation.mutate(id)}
+                      >
+                        Start Meeting
+                      </Button>
+                      <Button
+                        disabled={deleteMeetingMutation.isPending}
+                        variant="destructive"
+                        onClick={() => handleDeleteClick(id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
           {roomQuery.data.rooms.length === 0 && (
@@ -257,7 +252,7 @@ const Rooms = () => {
           <CreateMeetingDialog setOpenDialog={setOpenDialog} />
         </DialogContent>
       </Dialog>
-      {/* //delete prompt */}
+      {/* delete prompt */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <DialogContent className="w-1/2">
           <DialogTitle>Confirm Deletion</DialogTitle>
@@ -276,8 +271,8 @@ const Rooms = () => {
             <Button
               variant="destructive"
               onClick={() => {
-                deleteMeetingMutation.mutate(roomIdToDelete); // Pass the stored room ID to the mutation
-                setOpenDeleteDialog(false); // Close the dialog
+                deleteMeetingMutation.mutate(roomIdToDelete);
+                setOpenDeleteDialog(false);
               }}
             >
               Delete
@@ -285,9 +280,9 @@ const Rooms = () => {
           </div>
         </DialogContent>
       </Dialog>
-      {/* //schedule */}
+      {/* schedule */}
       <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
-        <DialogContent className="top-[50%] w-[50%] h-[90%]  overflow-y-scroll">
+        <DialogContent className="top-[50%] w-[50%] h-[90%] overflow-y-scroll">
           <DialogTitle>Schedule a new meeting</DialogTitle>
           <DialogDescription>
             Send an invite for a scheduled meeting
@@ -295,8 +290,7 @@ const Rooms = () => {
           <MeetingForm setOpenDialog={setOpenScheduleDialog} />
         </DialogContent>
       </Dialog>
-      {/*  */}
-      {/* //scheduled rooms */}
+      {/* scheduled rooms */}
       <Sheet open={openScheduledSide} onOpenChange={setOpenScheduleSide}>
         <SheetContent side="right">
           <SheetHeader>
@@ -305,16 +299,15 @@ const Rooms = () => {
           </SheetHeader>
 
           <div className="mt-5 pb-12 flex flex-col gap-y-2 overflow-y-scroll h-[90vh] pr-3">
-            {meetingQuery.data.data.map(({ date, time, roomname, guest }) => {
-              return (
-                <ScheduleMeetingCard
-                  date={date}
-                  time={time}
-                  roomname={roomname}
-                  guest={guest}
-                />
-              );
-            })}
+            {meetingQuery.data.data.map(({ date, time, roomname, guest }) => (
+              <ScheduleMeetingCard
+                key={roomname + date}
+                date={date}
+                time={time}
+                roomname={roomname}
+                guest={guest}
+              />
+            ))}
           </div>
         </SheetContent>
       </Sheet>
@@ -333,6 +326,23 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     onSuccess: () => {
       queryClient.invalidateQueries(["rooms"]);
       toast({ description: "Meeting created successfully" });
+      setOpenDialog(false);
+    },
+    onError: (error) => {
+      if (error.response?.data?.message?.includes("maximum room")) {
+        toast({
+          variant: "destructive",
+          title: "Plan Limit Reached",
+          description:
+            "You’ve reached the maximum number of rooms for your current plan. Please upgrade to create more meetings.",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Something went wrong while creating the meeting.",
+        });
+      }
     },
   });
 
@@ -358,14 +368,13 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
 
   const onSubmit = (data) => {
     createMeetingMutation.mutate(data);
-    setOpenDialog(false);
   };
 
   return (
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="flex flex-col gap-y-5 "
+        className="flex flex-col gap-y-5"
       >
         <FormField
           control={form.control}
@@ -385,7 +394,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           name="url"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Meeting url</FormLabel>
+              <FormLabel>Meeting URL</FormLabel>
               <FormControl>
                 <Input {...field} placeholder="Optional" />
               </FormControl>
@@ -393,8 +402,12 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
             </FormItem>
           )}
         />
-        <Button type="submit" className="self-center">
-          Create Meeting
+        <Button
+          type="submit"
+          className="self-center"
+          disabled={createMeetingMutation.isPending}
+        >
+          {createMeetingMutation.isPending ? "Creating..." : "Create Meeting"}
         </Button>
       </form>
     </Form>
@@ -403,9 +416,8 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
 
 const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-
-    return date.toLocaleDateString("en-US", {
+    const dateObj = new Date(dateString);
+    return dateObj.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       year: "numeric",

@@ -29,6 +29,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
+import { Copy } from "lucide-react"; // for the copy icon
+
 const Recordings = () => {
   const recordingQuery = useQuery({
     queryKey: ["recordings"],
@@ -43,8 +45,8 @@ const Recordings = () => {
   }, [openDeleteDialog]);
 
   const handleDeleteClick = (id) => {
-    setRecordIdToDelete(id); // Set the ID of the room to delete
-    setOpenDeleteDialog(true); // Open the dialog
+    setRecordIdToDelete(id);
+    setOpenDeleteDialog(true);
   };
 
   const queryClient = useQueryClient();
@@ -61,6 +63,14 @@ const Recordings = () => {
   const handlePlay = (id) => {
     const playbackBaseUrl = process.env.REACT_APP_PLAYBACK_URL;
     window.open(`${playbackBaseUrl}/${id}`, "_blank");
+  };
+
+  const handleCopyLink = (id) => {
+    const playbackBaseUrl = process.env.REACT_APP_PLAYBACK_URL;
+    const link = `${playbackBaseUrl}/${id}`;
+    navigator.clipboard.writeText(link).then(() => {
+      toast({ description: "Recording link copied to clipboard" });
+    });
   };
 
   if (recordingQuery.isLoading)
@@ -104,7 +114,6 @@ const Recordings = () => {
                 startTime,
                 endTime,
                 size,
-                playback,
               }) => (
                 <TableRow key={name + startTime}>
                   <TableCell className="">{name}</TableCell>
@@ -121,13 +130,19 @@ const Recordings = () => {
                   <TableCell>{formatDate(Number(startTime))}</TableCell>
                   <TableCell>
                     <div className="flex gap-x-2">
-                      <Button
-                        onClick={() => {
-                          handlePlay(recordID);
-                        }}
-                      >
+                      <Button onClick={() => handlePlay(recordID)}>
                         Play video
                       </Button>
+
+                      {/* Copy Link Button */}
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleCopyLink(recordID)}
+                        className="flex items-center gap-x-1"
+                      >
+                        <Copy className="w-4 h-4" /> Copy Link
+                      </Button>
+
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
                           Download
@@ -149,10 +164,11 @@ const Recordings = () => {
                             className="cursor-pointer"
                             onClick={() => download(recordID, "chats")}
                           >
-                            chats
+                            Chats
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+
                       <Button
                         variant="destructive"
                         onClick={() => handleDeleteClick(recordID)}
@@ -190,8 +206,8 @@ const Recordings = () => {
             <Button
               variant="destructive"
               onClick={() => {
-                deleteRecordingMutation.mutate(recordIdToDelete); // Pass the stored room ID to the mutation
-                setOpenDeleteDialog(false); // Close the dialog
+                deleteRecordingMutation.mutate(recordIdToDelete);
+                setOpenDeleteDialog(false);
               }}
             >
               Delete
