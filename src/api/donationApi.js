@@ -31,7 +31,7 @@ export const fetchKyc = async () => {
 
 export const fetchDonations = async () => {
   const res = await api.get("/donation/in"); 
-  return res.data;
+  return res.data.data || [];
 };
 
 export const fetchDonationStats = async () => {

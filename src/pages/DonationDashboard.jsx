@@ -15,6 +15,7 @@ export default function DonationDashboard({ setStep }) {
           fetchDonationStats(),
           fetchDonations(),
         ]);
+        console.log(donationsRes?.data);
         setStats(statsRes?.data || {});
         setDonations(donationsRes?.data || []);
       } catch (err) {
@@ -27,9 +28,10 @@ export default function DonationDashboard({ setStep }) {
   }, []);
 
   return (
-    <div className="w-full max-w-5xl space-y-6 mx-auto mt-10 px-4">
+
+    <div className="w-full max-w-5xl space-y-6 mx-auto mt-10 px-3">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex mt-20 justify-between items-center">
         <div>
           <h2 className="text-xl font-bold">Donations Dashboard</h2>
           <p className="text-gray-500 text-sm">Individual Account • Verified</p>
@@ -46,17 +48,17 @@ export default function DonationDashboard({ setStep }) {
         <Card className="p-4">
           <h4 className="text-gray-500 text-sm">Total Donations</h4>
           <p className="text-xl font-bold">
-            ₦{stats?.total_amount || 0}
+            ₦{stats?.donation_sum || 0}
           </p>
           <p className="text-sm text-gray-500">
-            {stats?.total_count || 0} donations received
+            {stats?.donation_count || 0} donations received
           </p>
         </Card>
 
         <Card className="p-4">
           <h4 className="text-gray-500 text-sm">Settlements</h4>
           <p className="text-xl font-bold">
-            ₦{stats?.settlements || 0}
+            ₦{stats?.settlement_sum || 0}
           </p>
           <p className="text-sm text-gray-500">
             {stats?.settlement_count || 0} settlements completed
@@ -66,7 +68,7 @@ export default function DonationDashboard({ setStep }) {
         <Card className="p-4">
           <h4 className="text-gray-500 text-sm">Pending</h4>
           <p className="text-xl font-bold">
-            ₦{stats?.pending || 0}
+            ₦{stats?.pending_sum || 0}
           </p>
           <p className="text-sm text-gray-500">
             {stats?.pending_count || 0} transaction(s) pending
@@ -104,32 +106,30 @@ export default function DonationDashboard({ setStep }) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="text-center p-6 text-gray-400">
-                    Loading...
-                  </td>
+                  <td colSpan="9" className="text-center p-6 text-gray-400">Loading...</td>
                 </tr>
               ) : donations.length > 0 ? (
                 donations.map((d, i) => (
-                  <tr key={d.id}>
+                  <tr key={d.id} className="border-b">
                     <td className="p-3">{i + 1}</td>
                     <td className="p-3">{d.reference}</td>
-                    <td className="p-3">{d.name}</td>
-                    <td className="p-3">{d.type}</td>
-                    <td className="p-3">{d.donor}</td>
-                    <td className="p-3">{d.purpose}</td>
-                    <td className="p-3">₦{d.amount}</td>
-                    <td className="p-3">{new Date(d.date).toLocaleDateString()}</td>
-                    <td className="p-3">{d.status}</td>
+                    <td className="p-3">{d.payee_name}</td>
+                    <td className="p-3">Donation</td>
+                    <td className="p-3">{d.description}</td>
+                    <td className="p-3">{d.provider}</td>
+                    <td className="p-3">₦{Number(d.amount).toLocaleString()} {d.currency}</td>
+                    <td className="p-3">{new Date(d.paid_at || d.created_at).toLocaleString()}</td>
+                    <td className="p-3">{d.status === 1 ? "Successful" : d.status === 0 ? "Pending" : "Failed"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="text-center p-6 text-gray-400">
-                    No transactions yet
-                  </td>
+                  <td colSpan="9" className="text-center p-6 text-gray-400">No transactions yet</td>
                 </tr>
               )}
             </tbody>
+
+
           </table>
         </div>
       </div>

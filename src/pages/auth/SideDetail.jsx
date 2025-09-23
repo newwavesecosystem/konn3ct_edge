@@ -3,10 +3,10 @@ import React from "react";
 
 const SideDetail = () => {
   const meetingFeatures = [
-    "Meeting length up to 40 min",
+    "Meeting length up to 60 min",
     "No wait time in between meetings",
     "Up to 100 attendees",
-    "Unlimited 1:1 and team messaging",
+    "Unlimited chat and team messaging",
     "Unlimited whiteboard",
   ];
 
