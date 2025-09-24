@@ -43,6 +43,7 @@ import RefereeIcon from "./assets/components/RefereeIcon";
 import HistoryIcon from "./assets/components/HistoryIcon";
 import DonationIcon from "./assets/components/DonationIcon";
 import SettingsIcon from "./assets/components/SettingsIcon";
+import { ForgotPassword } from "./pages/auth/ForgotPassword";
 
 const items = [
   { title: "Home", url: "/", icon: HomeIcon },
@@ -101,6 +102,15 @@ const router = createBrowserRouter([
       <>
         <Navbar />
         <Register />
+      </>
+    ),
+  },
+  {
+    path: "/forgot-password",
+    element: (
+      <>
+        <Navbar />
+        <ForgotPassword />
       </>
     ),
   },

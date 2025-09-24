@@ -26,7 +26,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
 import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
-import AppleLogin from "react-apple-login"; // 👈 add this
+import AppleLogin from "react-apple-login";
 
 export default function Login() {
   useFacebookSDK();
@@ -294,12 +294,16 @@ export function LoginForm() {
         </form>
       </Form>
 
-      <div className="flex justify-center my-8 gap-x-1">
+      <div className="flex justify-center my-4 gap-x-2 ">
         <p>Don't have an account?</p>
         <Link to="/register" className="text-[#012E89]">
           Sign up
         </Link>
+
       </div>
+      <Link to="/forgot-password" className="text-[#012E89] flex justify-center mb-8">
+        Forgot password?
+      </Link>
     </div>
   );
 }
