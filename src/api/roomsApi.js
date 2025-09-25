@@ -12,7 +12,6 @@ export const getRooms = async () => {
 export const createMeeting = async (data) => {
   try {
     const res = await api.post("/createroom", data);
-
     return res.data;
   } catch (error) {
     throw error;
@@ -31,7 +30,6 @@ export const getMeetings = async () => {
 export const startMeeting = async (id) => {
   try {
     const res = await api.get(`start-a-room/${id}`);
-
     return res;
   } catch (error) {
     throw error;
@@ -57,6 +55,48 @@ export const joinRoom = async (data) => {
       const res = await api.post("/kv4/join-room", { room: roomName, ...body });
       return res.data;
     }
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const manageAccessCode = async (data) => {
+  try {
+    const res = await api.post("/accesscode", data);
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const limitUser = async (data) => {
+  try {
+    const res = await api.post("/limituser", data);
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const bannerUpload = async (data) => {
+  try {
+    const formData = new FormData();
+    formData.append("id", data.id);
+    formData.append("banner", data.banner);
+
+    const res = await api.post("/bannerupload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const transferRoom = async (data) => {
+  try {
+    const res = await api.post("/transfer-room", data);
+    return res.data;
   } catch (error) {
     throw error;
   }

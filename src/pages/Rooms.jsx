@@ -23,6 +23,10 @@ import {
   getMeetings,
   getRooms,
   startMeeting,
+  manageAccessCode,
+  limitUser,
+  bannerUpload,
+  transferRoom,
 } from "../api/roomsApi";
 import {
   Dialog,
@@ -59,9 +63,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../components/ui/sheet";
-import UserIcon from "../assets/components/UserIcon";
-import calendar from "../assets/icons/calendar-03.svg";
-import clock from "../assets/icons/clock-05.svg";
 import { capitalize } from "../lib/utils";
 
 const Rooms = () => {
@@ -76,14 +77,9 @@ const Rooms = () => {
   });
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const deleteMeetingMutation = useMutation({
-    mutationFn: deleteRoom,
-    onSuccess: () => {
-      queryClient.invalidateQueries(["rooms"]);
-    },
-  });
-
+  // ---------------- State for dialogs ----------------
   const [openDialog, setOpenDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
@@ -91,16 +87,25 @@ const Rooms = () => {
   const [roomIdToDelete, setRoomIdToDelete] = useState(null);
   const [openScheduledSide, setOpenScheduleSide] = useState(false);
 
+  // Manage dialogs
+  const [openAccessDialog, setOpenAccessDialog] = useState(false);
+  const [openLimitDialog, setOpenLimitDialog] = useState(false);
+  const [openBannerDialog, setOpenBannerDialog] = useState(false);
+  const [openTransferDialog, setOpenTransferDialog] = useState(false);
+
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
+
   useEffect(() => {
     if (!openDeleteDialog) setRoomIdToDelete(null);
-  }, [openDeleteDialog]);
+    if (!openAccessDialog && !openLimitDialog && !openBannerDialog && !openTransferDialog) {
+      setSelectedRoomId(null);
+    }
+  }, [openDeleteDialog, openAccessDialog, openLimitDialog, openBannerDialog, openTransferDialog]);
 
   const handleDeleteClick = (id) => {
     setRoomIdToDelete(id);
     setOpenDeleteDialog(true);
   };
-
-  const { toast } = useToast();
 
   const handleCopy = (url) => {
     const meeting_url = `https://k4.konn3ct.ng/join/${url}`;
@@ -110,12 +115,52 @@ const Rooms = () => {
     }
   };
 
+  // ---------------- Mutations ----------------
+  const deleteMeetingMutation = useMutation({
+    mutationFn: deleteRoom,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["rooms"]);
+    },
+  });
+
   const startMeetingMutation = useMutation({
     mutationFn: startMeeting,
     onSuccess: (res, id) => {
       toast({ description: "Meeting started successfully" });
       setMeetingUrls((prev) => ({ ...prev, [id]: res.data.url }));
       window.open(res.data.url, "_blank");
+    },
+  });
+
+  const manageAccessCodeMutation = useMutation({
+    mutationFn: manageAccessCode,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["rooms"]);
+      toast({ description: "Access code updated successfully" });
+    },
+  });
+
+  const limitUserMutation = useMutation({
+    mutationFn: limitUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["rooms"]);
+      toast({ description: "User limit updated successfully" });
+    },
+  });
+
+  const bannerUploadMutation = useMutation({
+    mutationFn: bannerUpload,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["rooms"]);
+      toast({ description: "Banner uploaded successfully" });
+    },
+  });
+
+  const transferRoomMutation = useMutation({
+    mutationFn: transferRoom,
+    onSuccess: () => {
+      queryClient.invalidateQueries(["rooms"]);
+      toast({ description: "Room transferred successfully" });
     },
   });
 
@@ -201,21 +246,38 @@ const Rooms = () => {
                           Manage
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
-                          <DropdownMenuItem>Access Code</DropdownMenuItem>
-                          <DropdownMenuItem>User Limit</DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedRoomId(id);
+                              setOpenAccessDialog(true);
+                            }}
+                          >
+                            Access Code
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedRoomId(id);
+                              setOpenLimitDialog(true);
+                            }}
+                          >
+                            User Limit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedRoomId(id);
+                              setOpenBannerDialog(true);
+                            }}
+                          >
                             Meeting Room Banner Upload
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            Modify Pre-Registration
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedRoomId(id);
+                              setOpenTransferDialog(true);
+                            }}
+                          >
+                            Transfer Room
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            Pre-Registered Users
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            Disable Pre-Registration
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>Transfer Room</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
 
@@ -252,6 +314,33 @@ const Rooms = () => {
           <CreateMeetingDialog setOpenDialog={setOpenDialog} />
         </DialogContent>
       </Dialog>
+
+      {/* Manage Forms */}
+      <AccessCodeDialog
+        open={openAccessDialog}
+        setOpen={setOpenAccessDialog}
+        roomId={selectedRoomId}
+        mutation={manageAccessCodeMutation}
+      />
+      <LimitUserDialog
+        open={openLimitDialog}
+        setOpen={setOpenLimitDialog}
+        roomId={selectedRoomId}
+        mutation={limitUserMutation}
+      />
+      <BannerUploadDialog
+        open={openBannerDialog}
+        setOpen={setOpenBannerDialog}
+        roomId={selectedRoomId}
+        mutation={bannerUploadMutation}
+      />
+      <TransferRoomDialog
+        open={openTransferDialog}
+        setOpen={setOpenTransferDialog}
+        roomId={selectedRoomId}
+        mutation={transferRoomMutation}
+      />
+
       {/* delete prompt */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <DialogContent className="w-1/2">
@@ -280,6 +369,7 @@ const Rooms = () => {
           </div>
         </DialogContent>
       </Dialog>
+
       {/* schedule */}
       <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
         <DialogContent className="top-[50%] w-[50%] h-[90%] overflow-y-scroll">
@@ -290,6 +380,7 @@ const Rooms = () => {
           <MeetingForm setOpenDialog={setOpenScheduleDialog} />
         </DialogContent>
       </Dialog>
+
       {/* scheduled rooms */}
       <Sheet open={openScheduledSide} onOpenChange={setOpenScheduleSide}>
         <SheetContent side="right">
@@ -316,6 +407,208 @@ const Rooms = () => {
 };
 
 export default Rooms;
+
+/* ---------------- Manage Dialogs ---------------- */
+
+const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
+  const formSchema = z.object({
+    type: z.enum(["auto", "manual", "remove"]),
+    accesscode: z.string().optional(),
+  });
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: { type: "auto", accesscode: "" },
+  });
+
+  const onSubmit = (data) => {
+    mutation.mutate({ id: roomId, ...data });
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="w-1/3">
+        <DialogTitle>Manage Access Code</DialogTitle>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex flex-col gap-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Type (auto / manual / remove)</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="auto / manual / remove" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="accesscode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Access Code (if manual)</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit">Save</Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
+  const formSchema = z.object({
+    users: z.string().min(1, "Required"),
+  });
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: { users: "" },
+  });
+
+  const onSubmit = (data) => {
+    mutation.mutate({ id: roomId, ...data });
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="w-1/3">
+        <DialogTitle>Limit Users</DialogTitle>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex flex-col gap-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="users"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>User Limit</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="number" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit">Save</Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
+  const formSchema = z.object({
+    banner: z.any(),
+  });
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: { banner: null },
+  });
+
+  const onSubmit = (data) => {
+    mutation.mutate({ id: roomId, banner: data.banner[0] });
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="w-1/3">
+        <DialogTitle>Upload Room Banner</DialogTitle>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex flex-col gap-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="banner"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select Banner</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => field.onChange(e.target.files)}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit">Upload</Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
+  const formSchema = z.object({
+    email: z.string().email(),
+  });
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+    defaultValues: { email: "" },
+  });
+
+  const onSubmit = (data) => {
+    mutation.mutate({ id: roomId, ...data });
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="w-1/3">
+        <DialogTitle>Transfer Room</DialogTitle>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex flex-col gap-y-4"
+          >
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>New Owner Email</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit">Transfer</Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+/* ---------------- Existing Create Meeting + Schedule ---------------- */
 
 const CreateMeetingDialog = ({ setOpenDialog }) => {
   const queryClient = useQueryClient();
@@ -418,28 +711,17 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
   const formatDate = (dateString) => {
     const dateObj = new Date(dateString);
     return dateObj.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
       year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
+
   return (
-    <Card>
-      <div className="flex justify-between text-[#707070]">
-        <div className="flex gap-x-1">
-          <img src={clock} alt="" />
-          <p>{time}</p>
-        </div>
-        <div className="flex gap-x-1">
-          <img src={calendar} alt="" />
-          <p>{formatDate(date)}</p>
-        </div>
-      </div>
-      <h3 className="my-4 font-medium text-lg">{capitalize(roomname)}</h3>
-      <div className="flex gap-x-1 items-center text-[#707070]">
-        <UserIcon />
-        {guest.split(",").length}
-      </div>
+    <Card className="p-4 flex flex-col gap-y-2">
+      <p className="font-bold">{roomname}</p>
+      <p>{formatDate(date)} at {time}</p>
+      <p>Guests: {guest}</p>
     </Card>
   );
 };
