@@ -47,12 +47,12 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
           Account verification progress
           </p>
         </div>
-        <button
+        {/* <button
           className="px-4 py-1 border rounded-md"
           onClick={onBack}
         >
           ← Back
-        </button>
+        </button> */}
       </div>
 
       {/* Progress Bar */}

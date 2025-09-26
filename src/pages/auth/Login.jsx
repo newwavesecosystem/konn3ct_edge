@@ -37,11 +37,11 @@ export default function Login() {
   }, []);
 
   return (
-    <div className="page container mx-auto flex justify-center">
-      <SideDetail />
-      <Card className="max-w-[560px] flex-1 ">
+    <div className="page container mx-auto flex flex-col sm:flex-row justify-center px-4 sm:px-0">
+      <SideDetail className="hidden sm:block" />
+      <Card className="w-full max-w-md sm:max-w-[560px] flex-1">
         <LoginForm />
-        <p className="text-[#0A2540] text-center text-sm">
+        <p className="text-[#0A2540] text-center text-xs sm:text-sm px-2">
           By signing up you understand and agree to the Konn3ct
           Terms of Use. For more information about Privacy Data
           visit the{" "}
@@ -171,14 +171,16 @@ export function LoginForm() {
   };
 
   return (
-    <div className="px-20">
-      <div className="flex justify-center">
-        <img src={logo} alt="konn3ct" />
+    <div className="px-4 sm:px-20">
+      <div className="flex justify-center mb-6">
+        <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
-      <h3 className="text-xl font-bold mb-10 text-center">Sign in</h3>
-      <p className="text-xl font-medium text-center mb-10">Continue with: </p>
+      <h3 className="text-lg sm:text-xl font-bold mb-6 text-center">Sign in</h3>
+      <p className="text-base sm:text-xl font-medium text-center mb-8">
+        Continue with:
+      </p>
 
-      <div className="flex justify-evenly">
+      <div className="flex flex-wrap justify-center sm:justify-evenly gap-6 sm:gap-0">
         {/* ✅ Facebook */}
         <div
           className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
@@ -197,10 +199,10 @@ export function LoginForm() {
           <p className="text-[10px] font-medium">Google</p>
         </div>
 
-        {/* ✅ Apple (custom SVG icon) */}
+        {/* ✅ Apple */}
         <AppleLogin
-          clientId="com.konn3ct.signin2apple" // <-- replace with your Service ID
-          redirectURI="https://dashboard.konn3ct.ng/oauth/apple" // <-- must match Apple dev config
+          clientId="com.konn3ct.signin2apple"
+          redirectURI="https://dashboard.konn3ct.ng/oauth/apple"
           responseType="code"
           responseMode="query"
           usePopup={true}
@@ -216,16 +218,16 @@ export function LoginForm() {
           callback={handleAppleResponse}
         />
 
-        {/* ✅ SSO (still placeholder) */}
+        {/* ✅ SSO */}
         <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
           <img className="grayscale h-8" src={sso} alt="SSO" />
           <p className="text-[10px] font-medium">SSO</p>
         </div>
       </div>
 
-      <div className="flex my-10 justify-center items-center">
+      <div className="flex my-8 justify-center items-center">
         <Separator className="flex-1 bg-black h-[1px]" />
-        <p className="mx-2 font-medium">OR</p>
+        <p className="mx-2 text-sm sm:text-base font-medium">OR</p>
         <Separator className="flex-1 bg-black h-[1px]" />
       </div>
 
@@ -243,7 +245,7 @@ export function LoginForm() {
                   <Input
                     type="email"
                     placeholder="you@example.com"
-                    className="rounded-full px-4"
+                    className="rounded-full px-4 w-full"
                     {...field}
                   />
                 </FormControl>
@@ -265,17 +267,17 @@ export function LoginForm() {
                     <Input
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      className="rounded-full px-4"
+                      className="rounded-full px-4 w-full"
                       {...field}
                     />
                   </div>
                 </FormControl>
                 <FormMessage />
-                <div className="flex justify-center mt-5">
+                <div className="flex justify-center mt-4">
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-[#012E89] text-[14px] font-bold"
+                    className="text-[#012E89] text-sm sm:text-[14px] font-bold"
                   >
                     {showPassword ? "Hide password" : "Show password"}
                   </button>
@@ -294,14 +296,16 @@ export function LoginForm() {
         </form>
       </Form>
 
-      <div className="flex justify-center my-4 gap-x-2 ">
+      <div className="flex justify-center my-4 gap-x-2 text-sm sm:text-base">
         <p>Don't have an account?</p>
         <Link to="/register" className="text-[#012E89]">
           Sign up
         </Link>
-
       </div>
-      <Link to="/forgot-password" className="text-[#012E89] flex justify-center mb-8">
+      <Link
+        to="/forgot-password"
+        className="text-[#012E89] flex justify-center mb-8 text-sm sm:text-base"
+      >
         Forgot password?
       </Link>
     </div>

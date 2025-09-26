@@ -51,7 +51,7 @@ const Dashboard = () => {
 
   if (userQuery.every((query) => query.isLoading))
     return (
-      <div className="page container mx-auto">
+      <div className="page container mx-auto px-4 sm:px-0">
         <Skeleton className="w-full min-h-full relative" />
       </div>
     );
@@ -67,39 +67,40 @@ const Dashboard = () => {
 
   if (userQuery.every((query) => query.isSuccess))
     return (
-      <div className="container mx-auto page grid grid-cols-3 justify-evenly gap-5">
-        <div className="flex flex-col gap-10 col-span-2">
+      <div className="container mx-auto page grid grid-cols-1 lg:grid-cols-3 gap-5 px-4 sm:px-0">
+        {/* Left Side */}
+        <div className="flex flex-col gap-10 lg:col-span-2">
           {/* Main detail Card */}
           <Card className="flex flex-col">
-            <div className="flex items-center">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
               <Avatar className="rounded-lg h-[78px] w-[78px]">
                 <AvatarImage
                   src={userQuery[0]?.data?.user?.profile_photo_url}
                 />
                 <AvatarFallback>AJ</AvatarFallback>
               </Avatar>
-              <CardHeader>
-                <CardTitle className="text-2xl">
+              <CardHeader className="p-0 sm:p-6">
+                <CardTitle className="text-2xl text-center sm:text-left">
                   {userQuery[0]?.data?.user?.lastname}{" "}
                   {userQuery[0]?.data?.user?.firstname}
                 </CardTitle>
-                <CardDescription className="text-black font-medium">
+                <CardDescription className="text-black font-medium text-center sm:text-left">
                   Your current plan: Konn3ct{" "}
                   {capitalize(userQuery[0]?.data?.user_plan?.name || "")}
                 </CardDescription>
               </CardHeader>
             </div>
-            <CardContent className="self-center mt-10">
+            <CardContent className="self-center mt-6 sm:mt-10">
               <Link to="/payments">
-                <Button>Manage Plan</Button>
+                <Button className="w-full sm:w-auto">Manage Plan</Button>
               </Link>
             </CardContent>
           </Card>
 
           {/* Rooms Card */}
           <Card>
-            <div className="flex gap-4 items-center justify-evenly">
-              <div className="flex flex-col gap-y-10">
+            <div className="flex flex-col sm:flex-row gap-8 sm:gap-4 items-center justify-evenly">
+              <div className="flex flex-col gap-y-6 sm:gap-y-10">
                 <StatCard
                   value={userQuery[1]?.data?.total_rooms ?? 0}
                   name="Total room"
@@ -111,8 +112,11 @@ const Dashboard = () => {
                   icon={activeIcon}
                 />
               </div>
-              <Separator orientation="vertical" className="h-[200px]" />
-              <div className="flex flex-col gap-y-10">
+              <Separator
+                orientation="vertical"
+                className="hidden sm:block h-[200px]"
+              />
+              <div className="flex flex-col gap-y-6 sm:gap-y-10">
                 <StatCard
                   value={
                     (userQuery[1]?.data?.total_rooms ?? 0) -
@@ -131,12 +135,13 @@ const Dashboard = () => {
           </Card>
         </div>
 
+        {/* Right Side */}
         <div className="flex flex-col gap-10">
-          <div className="max-w-[355px]">
-            <h2 className="font-semibold text-[#707070] mb-3">
+          <div className="max-w-full lg:max-w-[355px]">
+            <h2 className="font-semibold text-[#707070] mb-3 text-center lg:text-left">
               Let's get you started
             </h2>
-            <div className="h-[188px] outline rounded-xl">
+            <div className="h-[200px] sm:h-[188px] outline rounded-xl">
               <iframe
                 width="100%"
                 height="100%"
@@ -155,8 +160,9 @@ const Dashboard = () => {
             </div>
           </div>
 
+          {/* Quick Actions */}
           <Card className="flex flex-col items-center">
-            <div className="flex justify-evenly w-full mb-6">
+            <div className="flex justify-evenly w-full mb-6 flex-wrap gap-6 sm:gap-0">
               <div className="flex flex-col items-center gap-y-4">
                 <div
                   onClick={() => setOpenSchedule(true)}
@@ -188,7 +194,7 @@ const Dashboard = () => {
 
             <p className="font-semibold mb-1">Personal Meeting ID</p>
             <div className="flex gap-x-2 items-center">
-              <p className="text-base text-[#707070]">
+              <p className="text-base text-[#707070] truncate max-w-[200px]">
                 {userQuery[1]?.data?.personal_room?.id ?? "No ID available"}
               </p>
               <Copy
@@ -200,8 +206,9 @@ const Dashboard = () => {
             </div>
           </Card>
 
+          {/* Meetings */}
           <Card>
-            <div className="flex flex-row items-end justify-between space-y-0">
+            <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between space-y-2 sm:space-y-0">
               <div className="text-2xl font-semibold">Meetings</div>
               <div>
                 <Link
@@ -213,20 +220,23 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="flex justify-center items-center flex-col">
-              <div className="bg-[#F2F2F2] w-full rounded p-2 text-[#424242] font-semibold my-10">
+              <div className="bg-[#F2F2F2] w-full rounded p-2 text-[#424242] font-semibold my-6 sm:my-10">
                 {userQuery[2]?.data?.data?.length === 0
                   ? "No upcoming Meetings"
                   : userQuery[2]?.data?.data?.map((meeting) => (
                       <p key={meeting.title}>{meeting.title}</p>
                     ))}
               </div>
-              <Button variant="outline">Test Audio and Video</Button>
+              <Button variant="outline" className="w-full sm:w-auto">
+                Test Audio and Video
+              </Button>
             </div>
           </Card>
         </div>
 
+        {/* Dialog */}
         <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
-          <DialogContent className="top-[50%] w-[50%] h-[90%] overflow-y-scroll">
+          <DialogContent className="top-[50%] w-[90%] lg:w-[50%] h-[90%] overflow-y-scroll">
             <DialogTitle>Send a new Invite</DialogTitle>
             <DialogDescription>
               Send an invite for a scheduled meeting

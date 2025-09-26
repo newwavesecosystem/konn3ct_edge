@@ -138,7 +138,7 @@ const Recordings = () => {
                       <Button
                         variant="secondary"
                         onClick={() => handleCopyLink(recordID)}
-                        className="flex items-center gap-x-1"
+                        className="flex items-center gap-x-1 text-white"
                       >
                         <Copy className="w-4 h-4" /> Copy Link
                       </Button>
