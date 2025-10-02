@@ -162,8 +162,8 @@ export function RegisterForm() {
         </div>
 
         <AppleLogin
-          clientId="com.konn3ct.signin2apple"
-          redirectURI="https://dashboard.konn3ct.ng/oauth/apple"
+          clientId={process.env.REACT_APP_APPLE_CLIENT_ID}
+          redirectURI={process.env.REACT_APP_APPLE_REDIRECT_URI}
           responseType="code"
           responseMode="query"
           usePopup={true}
