@@ -158,26 +158,6 @@ export function LoginForm() {
                   id: userInfoResponse.sub,
                   avatar: userInfoResponse.data.picture,
               });
-              //
-              // var cred ={
-              //     provider: "google",
-              //     accessstoken: tokenResponse.access_token,
-              //     email: userInfoResponse.data.email,
-              //     name: userInfoResponse.data.given_name,
-              //     avatar: userInfoResponse.data.picture,
-              // }
-              // const ls=await loginSocial(cred);
-              //
-              // if(ls.success){
-              //     toast({ title: "Login Successful", description: ls.message });
-              //     navigate("/");
-              // }else{
-              //     toast({
-              //         title: "Login Unsuccessful",
-              //         description: ls.message,
-              //         variant: "destructive",
-              //     });
-              // }
 
           } catch (error) {
               console.error('Error fetching user info or sending to backend:', error);
@@ -297,7 +277,11 @@ export function LoginForm() {
         />
 
         {/* ✅ SSO */}
-        <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
+        <div onClick={()=>toast({
+            title: "SSO Login Failed",
+            description: "Your device is not registered for this access. Please contact your system administrator.",
+            variant: "destructive",
+        })} className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
           <img className="grayscale h-8" src={sso} alt="SSO" />
           <p className="text-[10px] font-medium">SSO</p>
         </div>

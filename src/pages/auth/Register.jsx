@@ -28,6 +28,7 @@ import { useToast } from "../../hooks/use-toast";
 import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
 import AppleLogin from "react-apple-login";
+import axios from "axios";
 
 export default function Register() {
   useFacebookSDK();
@@ -87,7 +88,7 @@ export function RegisterForm() {
     },
   });
 
-  const { register } = useAuth();
+  const { register, login_social } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
@@ -107,31 +108,111 @@ export function RegisterForm() {
     },
   });
 
-  async function onSubmit(values) {
+
+    const socialLoginMutation = useMutation({
+        mutationFn: login_social,
+        onSuccess: (res) => {
+            if (res.success) {
+                toast({ title: "Login Successful", description: res.message });
+                navigate("/");
+            } else {
+                toast({
+                    title: "Login Unsuccessful",
+                    description: res.message,
+                    variant: "destructive",
+                });
+            }
+        },
+        onError: (error) => {
+            toast({
+                title: "Login Unsuccessful",
+                description: error.message,
+                variant: "destructive",
+            });
+        },
+    });
+
+
+    async function onSubmit(values) {
     registerMutation.mutate(values);
   }
 
-  const handleGoogleLogin = useGoogleLogin({
-    onError: (error) => console.log(error),
-  });
 
-  const handleFacebookLogin = () => {
-    if (!window.FB) {
-      console.error("FB SDK not loaded");
-      return;
-    }
-    window.FB.login(
-      (response) => {
-        if (response.authResponse) {
-          const { accessToken } = response.authResponse;
-          registerMutation.mutate({ provider: "facebook", token: accessToken });
-        } else {
-          console.log("Facebook login cancelled/failed", response);
+    const handleGoogleLogin = useGoogleLogin({
+        onSuccess: async (tokenResponse) => {
+            // tokenResponse contains the access_token and other details
+            console.log('Google Login Success:', tokenResponse);
+
+            // 2. Fetch User Info (Optional, but recommended for user details)
+            // The useGoogleLogin hook (in the default implicit flow) returns an access_token.
+            // We use this token to securely fetch the user's public profile data from Google.
+            try {
+                const userInfoResponse = await axios.get(
+                    'https://www.googleapis.com/oauth2/v3/userinfo',
+                    {
+                        headers: {
+                            Authorization: `Bearer ${tokenResponse.access_token}`,
+                        },
+                    }
+                );
+
+                console.log('User Info:', userInfoResponse.data);
+
+                // Send token & profile to backend
+                socialLoginMutation.mutate({
+                    provider: "google",
+                    accessstoken: tokenResponse.access_token,
+                    email: userInfoResponse.data.email,
+                    name: userInfoResponse.data.name,
+                    id: userInfoResponse.sub,
+                    avatar: userInfoResponse.data.picture,
+                });
+
+            } catch (error) {
+                console.error('Error fetching user info or sending to backend:', error);
+                // Handle server communication errors
+            }
+        },
+        onError: (error) => console.log(error),
+    });
+
+    // ✅ Facebook login
+    const handleFacebookLogin = () => {
+        if (!window.FB) {
+            console.error("FB SDK not loaded");
+            return;
         }
-      },
-      { scope: "email,public_profile" }
-    );
-  };
+
+        window.FB.login(
+            (response) => {
+                if (response.authResponse) {
+                    const { accessToken } = response.authResponse;
+
+                    // Get basic profile info
+                    window.FB.api(
+                        "/me",
+                        { fields: "id,name,email,picture" },
+                        (profile) => {
+                            console.log("Facebook profile:", profile);
+
+                            // Send token & profile to backend
+                            socialLoginMutation.mutate({
+                                provider: "facebook",
+                                accessstoken: accessToken,
+                                email: profile.email,
+                                name: profile.name,
+                                facebookId: profile.id,
+                                avatar: profile.picture?.data?.url,
+                            });
+                        }
+                    );
+                } else {
+                    console.log("Facebook login cancelled/failed", response);
+                }
+            },
+            { scope: "email,public_profile" }
+        );
+    };
 
   return (
     <div className="px-4 sm:px-20">
@@ -181,10 +262,6 @@ export function RegisterForm() {
           }}
         />
 
-        <div className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
-          <img className="h-8" src={sso} alt="SSO" />
-          <p className="text-[10px] font-medium">SSO</p>
-        </div>
       </div>
 
       {/* Divider */}
