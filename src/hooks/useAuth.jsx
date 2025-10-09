@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from "react";
-import { login as apiLogin, register as apiRegister } from "../api/authService";
+import {login as apiLogin, loginSocial, register as apiRegister} from "../api/authService";
 
 // Create Auth Context
 const AuthContext = createContext(null);
@@ -24,6 +24,18 @@ export function AuthProvider({ children }) {
   const login = async (credentials) => {
     try {
       const res = await apiLogin(credentials);
+      setUser(res.data);
+      localStorage.setItem("user", JSON.stringify(res.data));
+      localStorage.setItem("token", res.token); // Store token for future requests
+      return res;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const login_social = async (credentials) => {
+    try {
+      const res = await loginSocial(credentials);
       setUser(res.data);
       localStorage.setItem("user", JSON.stringify(res.data));
       localStorage.setItem("token", res.token); // Store token for future requests
@@ -102,6 +114,7 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated: !!user,
     login,
+    login_social,
     register,
     loginWithFacebook, // 👉 Now available everywhere
     logout,

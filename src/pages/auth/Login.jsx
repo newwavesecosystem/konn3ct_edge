@@ -27,6 +27,7 @@ import { useToast } from "../../hooks/use-toast";
 import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
 import AppleLogin from "react-apple-login";
+import axios from "axios";
 
 export default function Login() {
   useFacebookSDK();
@@ -75,11 +76,34 @@ export function LoginForm() {
 
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, login_social } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
   const loginMutation = useMutation({
     mutationFn: login,
+    onSuccess: (res) => {
+      if (res.success) {
+        toast({ title: "Login Successful", description: res.message });
+        navigate("/");
+      } else {
+        toast({
+          title: "Login Unsuccessful",
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Login Unsuccessful",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const socialLoginMutation = useMutation({
+    mutationFn: login_social,
     onSuccess: (res) => {
       if (res.success) {
         toast({ title: "Login Successful", description: res.message });
@@ -106,6 +130,60 @@ export function LoginForm() {
   }
 
   const handleGoogleLogin = useGoogleLogin({
+      onSuccess: async (tokenResponse) => {
+          // tokenResponse contains the access_token and other details
+          console.log('Google Login Success:', tokenResponse);
+
+          // 2. Fetch User Info (Optional, but recommended for user details)
+          // The useGoogleLogin hook (in the default implicit flow) returns an access_token.
+          // We use this token to securely fetch the user's public profile data from Google.
+          try {
+              const userInfoResponse = await axios.get(
+                  'https://www.googleapis.com/oauth2/v3/userinfo',
+                  {
+                      headers: {
+                          Authorization: `Bearer ${tokenResponse.access_token}`,
+                      },
+                  }
+              );
+
+              console.log('User Info:', userInfoResponse.data);
+
+              // Send token & profile to backend
+              socialLoginMutation.mutate({
+                  provider: "google",
+                  accessstoken: tokenResponse.access_token,
+                  email: userInfoResponse.data.email,
+                  name: userInfoResponse.data.name,
+                  id: userInfoResponse.sub,
+                  avatar: userInfoResponse.data.picture,
+              });
+              //
+              // var cred ={
+              //     provider: "google",
+              //     accessstoken: tokenResponse.access_token,
+              //     email: userInfoResponse.data.email,
+              //     name: userInfoResponse.data.given_name,
+              //     avatar: userInfoResponse.data.picture,
+              // }
+              // const ls=await loginSocial(cred);
+              //
+              // if(ls.success){
+              //     toast({ title: "Login Successful", description: ls.message });
+              //     navigate("/");
+              // }else{
+              //     toast({
+              //         title: "Login Unsuccessful",
+              //         description: ls.message,
+              //         variant: "destructive",
+              //     });
+              // }
+
+          } catch (error) {
+              console.error('Error fetching user info or sending to backend:', error);
+              // Handle server communication errors
+          }
+      },
     onError: (error) => console.log(error),
   });
 
@@ -129,14 +207,14 @@ export function LoginForm() {
               console.log("Facebook profile:", profile);
 
               // Send token & profile to backend
-              loginMutation.mutate({
-                provider: "facebook",
-                token: accessToken,
-                email: profile.email,
-                name: profile.name,
-                facebookId: profile.id,
-                avatar: profile.picture?.data?.url,
-              });
+                socialLoginMutation.mutate({
+                    provider: "facebook",
+                    accessstoken: accessToken,
+                    email: profile.email,
+                    name: profile.name,
+                    facebookId: profile.id,
+                    avatar: profile.picture?.data?.url,
+                  });
             }
           );
         } else {
@@ -152,14 +230,14 @@ export function LoginForm() {
     console.log("Apple login response:", res);
 
     if (res?.authorization?.code) {
-      loginMutation.mutate({
+        socialLoginMutation.mutate({
         provider: "apple",
-        token: res.authorization.code,
+        accessstoken: res.authorization.code,
         email: res.user?.email,
         name:
           res.user?.name?.firstName && res.user?.name?.lastName
             ? `${res.user.name.firstName} ${res.user.name.lastName}`
-            : undefined,
+            : "N/A",
       });
     } else {
       toast({

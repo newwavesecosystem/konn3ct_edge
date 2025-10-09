@@ -10,6 +10,15 @@ export const login = async (credentials) => {
   }
 };
 
+export const loginSocial = async (credentials) => {
+  try {
+    const response = await axios.post(`${BASE_URL}/login-social`, credentials);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || "Login failed. Please try again.";
+  }
+};
+
 // Register Request
 export const register = async (userData) => {
   try {
