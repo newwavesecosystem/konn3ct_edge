@@ -108,7 +108,7 @@ const Rooms = () => {
   };
 
   const handleCopy = (url) => {
-    const meeting_url = `https://k4.konn3ct.ng/join/${url}`;
+    const meeting_url = `${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`;
     if (meeting_url) {
       navigator.clipboard.writeText(meeting_url);
       toast({ description: "Copied to clipboard" });
@@ -234,7 +234,7 @@ const Rooms = () => {
               {roomQuery.data.rooms.map(({ name, url, id }) => (
                 <TableRow key={id}>
                   <TableCell>{name}</TableCell>
-                  <TableCell>{url}</TableCell>
+                  <TableCell>{`${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`}</TableCell>
                   <TableCell>
                     <div className="flex gap-x-2">
                       <Button variant="outline" onClick={() => handleCopy(url)}>
