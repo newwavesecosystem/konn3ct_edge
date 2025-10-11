@@ -1,0 +1,108 @@
+import React from "react";
+import { Wifi, Mic, Video, MessageCircle } from "lucide-react";
+
+const users = [
+  { name: "Odejimni Samuel", initials: "OD", time: "Oct 2, 05:35:47 PM", online: "00:06:43", talk: "00:00:04", webcam: "00:06:17", messages: 3, reaction: "😅", raise: 4 },
+  { name: "Akanji Joseph", initials: "AJ", time: "Oct 2, 05:50:00 PM", online: "00:06:43", talk: "00:00:04", webcam: "00:06:17", messages: 3, reaction: "😅", raise: 2 },
+  { name: "Debbie Williams", initials: "DW", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
+  { name: "Name Name", initials: "NN", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
+  { name: "Name Name", initials: "NN", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
+  { name: "Name Name", initials: "NN", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
+];
+
+const stats = [
+  { title: "Active User", value: 3, color: "bg-blue-100 text-blue-700" },
+  { title: "Activity Score", value: 2, color: "bg-pink-100 text-pink-700" },
+  { title: "Timeline", value: 0, color: "bg-cyan-100 text-cyan-700" },
+  { title: "Polls", value: 1, color: "bg-yellow-100 text-yellow-700" },
+  { title: "Donation", value: 0, color: "bg-purple-100 text-purple-700" },
+];
+
+export default function AttendanceUpgrade() {
+  return (
+    <div className="min-h-screen  flex flex-col items-center py-6 px-2">
+      <div className="max-w-6xl w-full bg-white rounded-2xl shadow p-4">
+        <h2 className="text-sm font-semibold mb-4">Odejimni Samuel Room</h2>
+
+        {/* Stats Row */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {stats.map((s, i) => (
+            <div
+              key={i}
+              className={`flex-1 min-w-[120px] rounded-lg ${s.color} flex flex-col items-center justify-center p-2`}
+            >
+              <p className="text-lg font-semibold">{s.value}</p>
+              <p className="text-xs font-medium">{s.title}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Overview Section */}
+        <h3 className="text-sm font-semibold mb-2">Overview</h3>
+
+        {/* Header Row */}
+        <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b pb-1 mb-2">
+          <p>User</p>
+          <p>Online</p>
+          <p>Talk</p>
+          <p>Webcam</p>
+          <p>Msgs</p>
+          <p>React</p>
+          <p>Raise</p>
+        </div>
+
+        {/* User Rows */}
+        <div className="space-y-2">
+          {users.map((u, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-7 items-center bg-white rounded-lg shadow-sm hover:shadow-md transition p-2"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-medium text-gray-700">
+                  {u.initials}
+                </div>
+                <div className="leading-tight">
+                  <p className="font-medium text-xs">{u.name}</p>
+                  <p className="text-[10px] text-gray-500">{u.time}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-700">
+                <Wifi size={12} /> {u.online}
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-700">
+                <Mic size={12} /> {u.talk}
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-700">
+                <Video size={12} /> {u.webcam}
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-700">
+                <MessageCircle size={12} /> {u.messages}
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-700">
+                <span>{u.reaction}</span>
+                <span>{u.reaction === "😅" ? 1 : 0}</span>
+              </div>
+
+              <div className="flex items-center gap-1 text-xs text-gray-700">
+                <span>🔥</span> {u.raise}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        <div className="flex justify-center items-center mt-4 text-xs text-gray-600 font-medium">
+          <button className="px-2 py-1 border rounded-l-md hover:bg-gray-100">‹</button>
+          <span className="px-3">1/5</span>
+          <button className="px-2 py-1 border rounded-r-md hover:bg-gray-100">›</button>
+        </div>
+      </div>
+    </div>
+  );
+}
