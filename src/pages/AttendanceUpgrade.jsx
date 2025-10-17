@@ -20,7 +20,7 @@ const stats = [
 
 export default function AttendanceUpgrade() {
   return (
-    <div className="min-h-screen  flex flex-col items-center py-6 px-2">
+    <div className="min-h-screen flex flex-col items-center py-6 px-2">
       <div className="max-w-6xl w-full bg-white rounded-2xl shadow p-4">
         <h2 className="text-sm font-semibold mb-4">Odejimni Samuel Room</h2>
 

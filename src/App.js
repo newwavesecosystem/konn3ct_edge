@@ -33,6 +33,9 @@ import IsAuthenticated from "./lib/IsAuthenticated";
 import JoinRoom from "./pages/JoinRoom";
 import Donations from "./pages/Donations";
 import Attendance from "./pages/Attendance";
+import ViewAttendance from "./pages/ViewAttendance";
+import Events from "./pages/Events";
+import EventIcon from "./assets/components/EventIcon";
 import HomeIcon from "./assets/components/HomeIcon";
 import CardIcon from "./assets/components/CardIcon";
 import UserIcon from "./assets/components/UserIcon";
@@ -58,6 +61,7 @@ const items = [
   { title: "Referee(s)", url: "/referees", icon: RefereeIcon },
   { title: "Donations", url: "/donations", icon: DonationIcon },
   { title: "Attendance", url: "/attendance", icon: AttendanceIcon },
+  { title: "Events", url: "/events", icon: EventIcon },
   { title: "Invite history", url: "/history", icon: HistoryIcon },
   // { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
@@ -149,6 +153,8 @@ const router = createBrowserRouter([
       { path: "referees", element: <Referee /> },
       { path: "donations", element: <Donations /> },
       { path: "attendance", element: <Attendance /> },
+      { path: "attendance-details/:meetingId/:attendanceId", element: <ViewAttendance /> },
+      { path: "events", element: <Events /> },
       { path: "history", element: <InviteHistory /> },
       { path: "settings", element: <Settings /> },
     ],

@@ -1,53 +1,49 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { getAttendanceDetails } from "../api/attendanceApi";
+import { ArrowLeft } from "lucide-react"; // 👈 Added for back button icon
 
 const ViewAttendance = () => {
-  const attendanceData = [
-    {
-      id: 1,
-      name: "Odejimi Samuel",
-      email: "Odejimisam@email.com",
-      status: "Joined",
-      date: "2025-07-26 | 2:29:30",
-    },
-    {
-      id: 2,
-      name: "Odejimi Samuel",
-      email: "Odejimisam@email.com",
-      status: "Joined",
-      date: "2025-07-26 | 2:29:30",
-    },
-    {
-      id: 3,
-      name: "Odejimi Samuel",
-      email: "Odejimisam@email.com",
-      status: "Joined",
-      date: "2025-07-26 | 2:29:30",
-    },
-    {
-      id: 4,
-      name: "Odejimi Samuel",
-      email: "Odejimisam@email.com",
-      status: "Joined",
-      date: "2025-07-26 | 2:29:30",
-    },
-    {
-      id: 5,
-      name: "Odejimi Samuel",
-      email: "Odejimisam@email.com",
-      status: "Joined",
-      date: "2025-07-26 | 2:29:30",
-    },
-    {
-      id: 6,
-      name: "Odejimi Samuel",
-      email: "Odejimisam@email.com",
-      status: "Joined",
-      date: "2025-07-26 | 2:29:30",
-    },
-  ];
+  const { meetingId, attendanceId } = useParams();
+  const navigate = useNavigate();
+
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        setLoading(true);
+        const records = await getAttendanceDetails(meetingId, attendanceId);
+        setAttendanceData(records);
+      } catch (err) {
+        console.error("Failed to load attendance details:", err);
+        setError("Unable to load participant details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDetails();
+  }, [meetingId, attendanceId]);
+
+  if (loading)
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p className="text-gray-600 text-sm">Loading participant data...</p>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p className="text-red-500 text-sm">{error}</p>
+      </div>
+    );
 
   return (
-    <div className="min-h-screen  flex items-start justify-center pt-16">
+    <div className="min-h-screen flex items-center justify-center px-4 py-20 m-auto">
       <div className="w-full max-w-6xl bg-white rounded-2xl shadow-sm border p-8">
         {/* Top Controls */}
         <div className="flex justify-between items-center mb-6">
@@ -73,12 +69,23 @@ const ViewAttendance = () => {
           />
         </div>
 
-        {/* Title */}
-        <h2 className="text-base font-semibold text-gray-800 mb-4">
-          Meeting Attendance
-        </h2>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-800">
+            Meeting Attendance
+          </h2>
 
-        {/* Simplified Table */}
+          {/* ✨ Redesigned Back Button */}
+          <button
+            onClick={() => navigate("/attendance")}
+            className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-100 px-3 py-1.5 rounded-full text-sm font-medium transition-all"
+          >
+            <ArrowLeft size={16} />
+            Back to Attendance
+          </button>
+        </div>
+
+        {/* Table */}
         <div className="space-y-3">
           {/* Table Headers */}
           <div className="grid grid-cols-5 text-sm text-gray-500 font-medium">
@@ -90,28 +97,46 @@ const ViewAttendance = () => {
           </div>
 
           {/* Table Rows */}
-          {attendanceData.map((row) => (
-            <div
-              key={row.id}
-              className="grid grid-cols-5 items-center bg-gray-50 hover:bg-gray-100 transition rounded-xl px-4 py-3 text-sm text-gray-700"
-            >
-              <span>{row.id}</span>
-              <span>{row.name}</span>
-              <span>{row.email}</span>
-              <span>
-                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
-                  {row.status}
-                </span>
-              </span>
-              <span>{row.date}</span>
+          {attendanceData.length === 0 ? (
+            <div className="text-center text-gray-500 text-sm py-10">
+              No participants found for this meeting.
             </div>
-          ))}
+          ) : (
+            attendanceData.map((row, index) => (
+              <div
+                key={row.id || index}
+                className="grid grid-cols-5 items-center bg-gray-50 hover:bg-gray-100 transition rounded-xl px-4 py-3 text-sm text-gray-700"
+              >
+                <span>{index + 1}</span>
+                <span>{row.name || row.attendee_name || "N/A"}</span>
+                <span>{row.email || row.attendee_email || "N/A"}</span>
+                <span>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      row.status === "Joined" || row.status === "Present"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {row.status || "Unknown"}
+                  </span>
+                </span>
+                <span>
+                  {row.created_at
+                    ? new Date(row.created_at).toLocaleString()
+                    : row.date
+                    ? row.date + (row.time ? ` | ${row.time}` : "")
+                    : "N/A"}
+                </span>
+              </div>
+            ))
+          )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination Placeholder */}
         <div className="flex justify-center items-center gap-2 mt-6">
           <button className="text-gray-400 hover:text-gray-600 text-lg">‹</button>
-          <span className="text-gray-600 text-sm">1/5</span>
+          <span className="text-gray-600 text-sm">1/1</span>
           <button className="text-gray-400 hover:text-gray-600 text-lg">›</button>
         </div>
       </div>

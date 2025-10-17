@@ -3,7 +3,6 @@ import AttendanceList from "./AttendanceList";
 import { View } from "lucide-react";
 import ViewAttendance from "./ViewAttendance";
 import AttendanceUpgrade from "./AttendanceUpgrade";
-import SessionDashboard from "./SessionDashboard";
 
 const Attendance = () => {
   return (
@@ -11,7 +10,6 @@ const Attendance = () => {
       <AttendanceList />
       {/* <ViewAttendance /> */}
       {/* <AttendanceUpgrade /> */}
-      {/* <SessionDashboard /> */}
     </div>
   );
 };
