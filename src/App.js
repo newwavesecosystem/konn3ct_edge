@@ -154,7 +154,7 @@ const router = createBrowserRouter([
       { path: "donations", element: <Donations /> },
       { path: "attendance", element: <Attendance /> },
       { path: "attendance-details/:meetingId/:attendanceId", element: <ViewAttendance /> },
-      { path: "events", element: <Events /> },
+      { path: "events/*", element: <Events /> }, 
       { path: "history", element: <InviteHistory /> },
       { path: "settings", element: <Settings /> },
     ],

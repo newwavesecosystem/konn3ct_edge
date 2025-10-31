@@ -1,18 +1,27 @@
 import React from "react";
-import EventList from "./EventList"; 
+import { Routes, Route, useNavigate } from "react-router-dom";
+import EventList from "./EventList";
 import CreateEvents from "./CreateEvents";
+import EventParticipants from "./EventParticipants";
 
 const Events = () => {
+  const navigate = useNavigate();
+
   return (
-    <div className="min-h-screen pt-24 px-6 pb-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-[14px] border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 mt-8 ">
-            {/* <EventList /> */}
-            <CreateEvents />
-          </div>
-        </div>
-      </div>
+    <div className="flex justify-center items-start w-full p-8">
+      <Routes>
+        {/* Default route: event list */}
+        <Route path="/" element={<EventList />} />
+
+        {/* Create event form */}
+        <Route
+          path="create"
+          element={<CreateEvents onClose={() => navigate("/events")} />}
+        />
+
+        {/* Future participants route */}
+        <Route path="participants/:id" element={<EventParticipants />} />
+      </Routes>
     </div>
   );
 };
