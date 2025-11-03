@@ -1,5 +1,6 @@
 import { api } from ".";
 const API = api;
+const BASEAPI = process.env.REACT_APP_BASEAPI_URL;
 
 export const getPreRegList = async () => {
   try {
@@ -25,10 +26,10 @@ export const getPreRegSummary = async () => {
 
 export const getPreRegParticipants = async (eventId) => {
   try {
-    const res = await API.get(`/pre-reg-participants/${eventId}`);
+    const res = await BASEAPI.get(`/pre-reg-participants/${ref}`);
     return res.data;
   } catch (error) {
-    console.error(`Error fetching participants for event ${eventId}:`, error);
+    console.error(`Error fetching participants for event ${reference}:`, error);
     throw error;
   }
 };

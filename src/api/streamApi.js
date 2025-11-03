@@ -26,3 +26,12 @@ export const startStream = async (data) => {
     throw error;
   }
 };
+
+export const getRooms = async () => {
+  try {
+    const res = await api.get("/myrooms");
+    return res.data.data;
+  } catch (error) {
+    throw error;
+  }
+};

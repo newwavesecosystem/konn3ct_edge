@@ -174,8 +174,6 @@ const CreateEvents = () => {
                   <option value="">
                     {roomLoading ? "Loading rooms..." : "Select Room"}
                   </option>
-
-                  {/* Guard mapping - only map when rooms is an array */}
                   {Array.isArray(rooms) &&
                     rooms.map((room) => (
                       <option key={room.id} value={room.id}>

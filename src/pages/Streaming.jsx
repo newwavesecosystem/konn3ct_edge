@@ -16,7 +16,7 @@ import { Separator } from "../components/ui/separator";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getStreams, startStream, stopStreaming } from "../api/streamApi";
+import { getStreams, startStream, stopStreaming, getRooms} from "../api/streamApi";
 import {
   Pagination,
   PaginationContent,
@@ -199,11 +199,47 @@ export default Streaming;
 const StreamForm = ({ setOpenDialog }) => {
   const [openPopover, setOpenPopover] = useState(false);
   const { toast } = useToast();
+  const [rooms, setRooms] = useState([]);
+  const [roomLoading, setRoomLoading] = useState(true);
 
   const types = [
     { value: "Youtube", label: "Youtube" },
     { value: "Facebook", label: "Facebook" },
   ];
+
+  // ✅ Fetch rooms on mount (same logic as CreateEvents)
+  useEffect(() => {
+    let cancelled = false;
+    const loadRooms = async () => {
+      try {
+        const res = await getRooms(); // your API helper
+        let list = res;
+
+        if (!Array.isArray(list)) {
+          if (list && typeof list === "object") {
+            if (Array.isArray(list.data)) list = list.data;
+            else if (Array.isArray(list.rooms)) list = list.rooms;
+            else {
+              const values = Object.values(list).filter((v) => Array.isArray(v));
+              list = values.length > 0 ? values[0] : [];
+            }
+          } else list = [];
+        }
+
+        if (!cancelled) setRooms(list);
+      } catch (err) {
+        console.error("Failed to load rooms:", err);
+        setRooms([]);
+      } finally {
+        if (!cancelled) setRoomLoading(false);
+      }
+    };
+
+    loadRooms();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const startStreamMutation = useMutation({
     mutationFn: startStream,
@@ -213,9 +249,9 @@ const StreamForm = ({ setOpenDialog }) => {
   });
 
   const formSchema = z.object({
-    room_id: z.string().nonempty({ message: "Room ID is required." }),
+    room_id: z.string().nonempty({ message: "Room is required." }),
     type: z.enum(["Youtube", "Facebook"], {
-      message: "Type must be Youtube or Facebook.",
+      message: "Select a valid type.",
     }),
     key: z.string().default("123"),
   });
@@ -238,22 +274,37 @@ const StreamForm = ({ setOpenDialog }) => {
     <div className="p-10">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+          {/* ✅ Room Selector - same logic as CreateEvents */}
           <FormField
             control={form.control}
             name="room_id"
             render={({ field }) => (
               <FormItem>
-                <label htmlFor="room_id" className="block font-medium">
-                  Room ID
-                </label>
+                <label className="block text-gray-700 text-sm mb-1">Select Room</label>
                 <FormControl>
-                  <Input id="room_id" placeholder="Enter Room ID" {...field} />
+                  <select
+                    {...field}
+                    disabled={roomLoading}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                  >
+                    <option value="">
+                      {roomLoading ? "Loading rooms..." : "Select Room"}
+                    </option>
+                    {Array.isArray(rooms) &&
+                      rooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.room_name || room.name || room.label || `Room ${room.id}`}
+                        </option>
+                      ))}
+                  </select>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
 
+          {/* Keep the rest of your form untouched */}
           <FormField
             control={form.control}
             name="type"
@@ -263,11 +314,7 @@ const StreamForm = ({ setOpenDialog }) => {
                   Type
                 </label>
                 <FormControl>
-                  <Popover
-                    open={openPopover}
-                    onOpenChange={setOpenPopover}
-                    className=""
-                  >
+                  <Popover open={openPopover} onOpenChange={setOpenPopover}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -276,8 +323,7 @@ const StreamForm = ({ setOpenDialog }) => {
                         className="w-full justify-between"
                       >
                         {field.value
-                          ? types.find((type) => type.value === field.value)
-                              ?.label
+                          ? types.find((t) => t.value === field.value)?.label
                           : "Select type..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -292,9 +338,7 @@ const StreamForm = ({ setOpenDialog }) => {
                               <CommandItem
                                 key={type.value}
                                 value={type.value}
-                                onSelect={() => {
-                                  field.onChange(type.value);
-                                }}
+                                onSelect={() => field.onChange(type.value)}
                               >
                                 <Check
                                   className={cn(
@@ -333,8 +377,9 @@ const StreamForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
+
           <div className="flex justify-center">
-            <Button type="submit" size="lg" className="">
+            <Button type="submit" size="lg">
               Submit
             </Button>
           </div>

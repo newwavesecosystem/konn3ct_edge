@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { getPreRegParticipants } from "../api/eventsApi";
 
 const EventParticipants = () => {
-  const { id: eventId } = useParams();
+  const { id: reference } = useParams();
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -11,7 +11,7 @@ const EventParticipants = () => {
     const fetchParticipants = async () => {
       try {
         setLoading(true);
-        const res = await getPreRegParticipants(eventId);
+        const res = await getPreRegParticipants(reference);
         // API returns array directly or inside .data — support both
         setParticipants(res?.data || res || []);
       } catch (err) {
@@ -21,8 +21,8 @@ const EventParticipants = () => {
       }
     };
 
-    if (eventId) fetchParticipants();
-  }, [eventId]);
+    if (reference) fetchParticipants();
+  }, [reference]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-5xl mx-auto mt-10">
