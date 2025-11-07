@@ -1,6 +1,5 @@
 import { api } from ".";
 const API = api;
-const BASEAPI = process.env.REACT_APP_BASEAPI_URL;
 
 export const getPreRegList = async () => {
   try {
@@ -24,15 +23,18 @@ export const getPreRegSummary = async () => {
   }
 };
 
-export const getPreRegParticipants = async (eventId) => {
+// ✅ Fetch participants by event reference, not ID
+export const getPreRegParticipants = async (reference) => {
   try {
-    const res = await BASEAPI.get(`/pre-reg-participants/${ref}`);
-    return res.data;
+    const res = await api.get(`/pre-reg-participants/${reference}`);
+    // some APIs return { data: [...] }, others return the array directly
+    return res.data?.data || res.data || [];
   } catch (error) {
-    console.error(`Error fetching participants for event ${reference}:`, error);
+    console.error("Failed to fetch participants:", error);
     throw error;
   }
 };
+
 
 export const createPreRegEvent = async (formData) => {
   try {

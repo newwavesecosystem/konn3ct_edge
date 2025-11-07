@@ -34,6 +34,7 @@ import JoinRoom from "./pages/JoinRoom";
 import Donations from "./pages/Donations";
 import Attendance from "./pages/Attendance";
 import ViewAttendance from "./pages/ViewAttendance";
+import EventParticipants from "./pages/EventParticipants";
 import Events from "./pages/Events";
 import EventIcon from "./assets/components/EventIcon";
 import HomeIcon from "./assets/components/HomeIcon";
@@ -154,6 +155,7 @@ const router = createBrowserRouter([
       { path: "donations", element: <Donations /> },
       { path: "attendance", element: <Attendance /> },
       { path: "attendance-details/:meetingId/:attendanceId", element: <ViewAttendance /> },
+      { path: "events/participants/:reference", element: <EventParticipants /> },
       { path: "events/*", element: <Events /> }, 
       { path: "history", element: <InviteHistory /> },
       { path: "settings", element: <Settings /> },

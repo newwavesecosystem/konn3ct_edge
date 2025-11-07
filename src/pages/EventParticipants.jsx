@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { getPreRegParticipants } from "../api/eventsApi";
 
 const EventParticipants = () => {
-  const { id: reference } = useParams();
+  const { reference } = useParams(); // <-- changed from id
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
         setLoading(true);
         const res = await getPreRegParticipants(reference);
-        // API returns array directly or inside .data — support both
         setParticipants(res?.data || res || []);
       } catch (err) {
         console.error("Error fetching participants:", err);
@@ -25,7 +25,7 @@ const EventParticipants = () => {
   }, [reference]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-5xl mx-auto mt-10">
+    <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-5xl mx-auto mt-16">
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
         <div className="flex flex-wrap gap-2">
@@ -57,10 +57,18 @@ const EventParticipants = () => {
         />
       </div>
 
-      {/* Header */}
-      <h2 className="text-md font-semibold text-gray-800 mb-3">
-        Pre-Registered Users
-      </h2>
+      {/* Header + Back Button */}
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-md font-semibold text-gray-800">
+          Pre-Registered Users
+        </h2>
+        <button
+          onClick={() => navigate("/events")}
+          className="bg-[#227451] hover:bg-green-700 text-white text-xs px-4 py-2 rounded-full transition-all"
+        >
+          ← Back
+        </button>
+      </div>
 
       {/* Table */}
       <div className="overflow-x-auto">

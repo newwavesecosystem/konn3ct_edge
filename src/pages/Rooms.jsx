@@ -97,10 +97,21 @@ const Rooms = () => {
 
   useEffect(() => {
     if (!openDeleteDialog) setRoomIdToDelete(null);
-    if (!openAccessDialog && !openLimitDialog && !openBannerDialog && !openTransferDialog) {
+    if (
+      !openAccessDialog &&
+      !openLimitDialog &&
+      !openBannerDialog &&
+      !openTransferDialog
+    ) {
       setSelectedRoomId(null);
     }
-  }, [openDeleteDialog, openAccessDialog, openLimitDialog, openBannerDialog, openTransferDialog]);
+  }, [
+    openDeleteDialog,
+    openAccessDialog,
+    openLimitDialog,
+    openBannerDialog,
+    openTransferDialog,
+  ]);
 
   const handleDeleteClick = (id) => {
     setRoomIdToDelete(id);
@@ -231,7 +242,7 @@ const Rooms = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {roomQuery.data.rooms.map(({ name, url, id }) => (
+              {roomQuery.data.rooms.map(({ name, url, id, accesscode }) => (
                 <TableRow key={id}>
                   <TableCell>{name}</TableCell>
                   <TableCell>{`${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`}</TableCell>
@@ -240,7 +251,19 @@ const Rooms = () => {
                       <Button variant="outline" onClick={() => handleCopy(url)}>
                         Copy Link
                       </Button>
-
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (accesscode) {
+                            navigator.clipboard.writeText(accesscode);
+                            toast({ description: "Access code copied to clipboard" });
+                          } else {
+                            toast({ description: "No access code available for this room" });
+                          }
+                        }}
+                      >
+                        Copy Access Code
+                      </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
                           Manage
@@ -341,20 +364,15 @@ const Rooms = () => {
         mutation={transferRoomMutation}
       />
 
-      {/* delete prompt */}
+      {/* Delete Prompt */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <DialogContent className="w-1/2">
           <DialogTitle>Confirm Deletion</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete the room. This action cannot be
-            undone, and all data associated with this room will be permanently
-            deleted.
+            Are you sure you want to delete the room? This action cannot be undone.
           </DialogDescription>
           <div className="flex gap-x-4">
-            <Button
-              variant="outline"
-              onClick={() => setOpenDeleteDialog(false)}
-            >
+            <Button variant="outline" onClick={() => setOpenDeleteDialog(false)}>
               Cancel
             </Button>
             <Button
@@ -370,7 +388,7 @@ const Rooms = () => {
         </DialogContent>
       </Dialog>
 
-      {/* schedule */}
+      {/* Schedule */}
       <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
         <DialogContent className="top-[50%] w-[50%] h-[90%] overflow-y-scroll">
           <DialogTitle>Schedule a new meeting</DialogTitle>
@@ -381,14 +399,13 @@ const Rooms = () => {
         </DialogContent>
       </Dialog>
 
-      {/* scheduled rooms */}
+      {/* Scheduled Rooms */}
       <Sheet open={openScheduledSide} onOpenChange={setOpenScheduleSide}>
         <SheetContent side="right">
           <SheetHeader>
             <SheetTitle>Scheduled Meetings</SheetTitle>
             <SheetDescription>Your upcoming meetings.</SheetDescription>
           </SheetHeader>
-
           <div className="mt-5 pb-12 flex flex-col gap-y-2 overflow-y-scroll h-[90vh] pr-3">
             {meetingQuery.data.data.map(({ date, time, roomname, guest }) => (
               <ScheduleMeetingCard
@@ -422,7 +439,7 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
   });
 
   const onSubmit = (data) => {
-    mutation.mutate({ id: roomId, ...data });
+    mutation.mutate({ id: String(roomId), ...data }); // ✅ cast id to string
     setOpen(false);
   };
 
@@ -480,7 +497,7 @@ const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
   });
 
   const onSubmit = (data) => {
-    mutation.mutate({ id: roomId, ...data });
+    mutation.mutate({ id: String(roomId), ...data }); // ✅ cast id to string
     setOpen(false);
   };
 
@@ -525,7 +542,7 @@ const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
   });
 
   const onSubmit = (data) => {
-    mutation.mutate({ id: roomId, banner: data.banner[0] });
+    mutation.mutate({ id: String(roomId), banner: data.banner[0] }); // ✅ cast id to string
     setOpen(false);
   };
 
@@ -574,10 +591,9 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
   });
 
   const onSubmit = (data) => {
-    mutation.mutate({ id: roomId, ...data });
+    mutation.mutate({ id: String(roomId), ...data }); // ✅ cast id to string
     setOpen(false);
   };
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="w-1/3">
@@ -720,8 +736,11 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
   return (
     <Card className="p-4 flex flex-col gap-y-2">
       <p className="font-bold">{roomname}</p>
-      <p>{formatDate(date)} at {time}</p>
+      <p>
+        {formatDate(date)} at {time}
+      </p>
       <p>Guests: {guest}</p>
     </Card>
   );
 };
+

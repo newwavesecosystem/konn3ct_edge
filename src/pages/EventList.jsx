@@ -135,7 +135,7 @@ const EventList = () => {
                     <td className="px-4 py-3">{ev.timezone || "-"}</td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => navigate(`/events/participants/${ev.id}`)}
+                        onClick={() => navigate(`/events/participants/${ev.reference}`)}
                         className="bg-[#227451] text-white text-xs font-medium px-4 py-1.5 rounded-full hover:bg-emerald-800 transition"
                       >
                         Participants
