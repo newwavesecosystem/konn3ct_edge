@@ -251,19 +251,19 @@ const Rooms = () => {
                       <Button variant="outline" onClick={() => handleCopy(url)}>
                         Copy Link
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (accesscode) {
-                            navigator.clipboard.writeText(accesscode);
-                            toast({ description: "Access code copied to clipboard" });
-                          } else {
-                            toast({ description: "No access code available for this room" });
-                          }
-                        }}
-                      >
-                        Copy Access Code
-                      </Button>
+                      {/*<Button*/}
+                      {/*  variant="outline"*/}
+                      {/*  onClick={() => {*/}
+                      {/*    if (accesscode) {*/}
+                      {/*      navigator.clipboard.writeText(accesscode);*/}
+                      {/*      toast({ description: "Access code copied to clipboard" });*/}
+                      {/*    } else {*/}
+                      {/*      toast({ description: "No access code available for this room" });*/}
+                      {/*    }*/}
+                      {/*  }}*/}
+                      {/*>*/}
+                      {/*  Copy Access Code*/}
+                      {/*</Button>*/}
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
                           Manage

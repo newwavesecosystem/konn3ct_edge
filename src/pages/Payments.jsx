@@ -36,6 +36,7 @@ const transformPlans = (data) => {
     name: plan.name,
     price: plan.monthly_cost.split("/")[0],
     target: "For individuals",
+    category: "monthly",
     features: [
       `Recording: ${plan.recording ? "Yes" : "No"}`,
       `Duration: ${plan.duration} minutes`,
@@ -53,6 +54,7 @@ const transformPlans = (data) => {
     name: plan.name,
     price: plan.yearly_cost.split("/")[0],
     target: "For individuals",
+    category: "yearly",
     features: [
       `Recording: ${plan.recording ? "Yes" : "No"}`,
       `Duration: ${plan.duration} minutes`,
@@ -117,12 +119,9 @@ const Payments = () => {
 
           {/* BUTTONS SECTION */}
           <div className="flex flex-col gap-y-3">
-            {/* Only show Renew Subscription if not Basic */}
-            {currentPlan.toLowerCase() !== "basic" && (
-              <Button className="text-[#373131] bg-muted">
-                Renew Subscription
-              </Button>
-            )}
+            <Button className="text-[#373131] bg-muted">
+              Renew Subsciptions
+            </Button>
             <DialogTrigger asChild>
               <Button variant="outline">Change Plan</Button>
             </DialogTrigger>
@@ -205,78 +204,73 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
     onClose: () => toast({ description: "Payment Cancelled" }),
   };
 
-  if (!isSuccess) return null;
-
-  return (
-    <div>
-      <Tabs defaultValue="monthly" className="flex flex-col">
-        <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
-          <TabsTrigger className="rounded-full" value="monthly">
-            Monthly
-          </TabsTrigger>
-          <TabsTrigger className="rounded-full" value="yearly">
-            Yearly
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Monthly Plans */}
-        <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
-          {plans.monthly.map((plan, index) => (
+  if (isSuccess)
+    return (
+      <div className="">
+        <Tabs defaultValue="monthly" className="flex flex-col">
+          <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
+            <TabsTrigger className="rounded-full" value="monthly">
+              Monthly
+            </TabsTrigger>
+            <TabsTrigger className="rounded-full" value="yearly">
+              Yearly
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
+            {plans.monthly.map((plan, index) => (
+              <PlanCard
+                key={index}
+                name={plan.name}
+                cta={plan.cta}
+                target={plan.target}
+                price={plan.price}
+                features={plan.features}
+                setOpenDialog={setOpenDialog}
+                paystackProps={{
+                  text: plan.cta,
+                  amount: plan.price * 100,
+                  ...componentProps,
+                }}
+              />
+            ))}
             <PlanCard
-              key={index}
-              name={plan.name}
-              cta={plan.cta}
-              target={plan.target}
-              price={plan.price}
-              features={plan.features}
+              name="Enterprise"
+              cta="Contact Sales"
+              target="For Enterprise"
+              price="Custom"
+              features={["Custom Features"]}
               setOpenDialog={setOpenDialog}
-              paystackProps={{
-                text: plan.cta,
-                amount: plan.price * 100,
-                ...componentProps,
-              }}
             />
-          ))}
-          <PlanCard
-            name="Enterprise"
-            cta="Contact Sales"
-            target="For Enterprise"
-            price="Custom"
-            features={["Custom Features"]}
-            setOpenDialog={setOpenDialog}
-          />
-        </TabsContent>
-
-        {/* Yearly Plans */}
-        <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
-          {plans.yearly.map((plan, index) => (
+          </TabsContent>
+          <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
+            {plans.yearly.map((plan, index) => (
+              <PlanCard
+                key={index}
+                name={plan.name}
+                cta={plan.cta}
+                target={plan.target}
+                price={plan.price}
+                features={plan.features}
+                setOpenDialog={setOpenDialog}
+                paystackProps={{
+                  text: plan.cta,
+                  amount: plan.price * 100,
+                  ...componentProps,
+                }}
+              />
+            ))}
             <PlanCard
-              key={index}
-              name={plan.name}
-              cta={plan.cta}
-              target={plan.target}
-              price={plan.price}
-              features={plan.features}
+              name="Enterprise"
+              cta="Contact Sales"
+              target="For Enterprise"
+              price="Custom"
+              features={["Custom Features"]}
               setOpenDialog={setOpenDialog}
-              paystackProps={{
-                text: plan.cta,
-                amount: plan.price * 100,
-                ...componentProps,
-              }}
             />
-          ))}
-          <PlanCard
-            name="Enterprise"
-            cta="Contact Sales"
-            target="For Enterprise"
-            price="Custom"
-            features={["Custom Features"]}
-            setOpenDialog={setOpenDialog}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
 };
 
 // ======================================
