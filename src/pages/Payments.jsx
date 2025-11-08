@@ -18,7 +18,7 @@ import {
   TableHead,
   TableBody,
 } from "../components/ui/table";
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { getPlans } from "../api/plansApi";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { TabsContent } from "@radix-ui/react-tabs";
@@ -30,11 +30,11 @@ import { PaystackButton } from "react-paystack";
 // Mock payments data
 const payments = [];
 
-// Transform the fetched data into the required structure
+// Transform the fetched plans
 const transformPlans = (data) => {
   const monthlyPlans = data.plan.map((plan) => ({
     name: plan.name,
-    price: plan.monthly_cost.split("/")[0], // Extract the price part
+    price: plan.monthly_cost.split("/")[0],
     target: "For individuals",
     features: [
       `Recording: ${plan.recording ? "Yes" : "No"}`,
@@ -51,7 +51,7 @@ const transformPlans = (data) => {
 
   const yearlyPlans = data.plan.map((plan) => ({
     name: plan.name,
-    price: plan.yearly_cost.split("/")[0], // Extract the price part
+    price: plan.yearly_cost.split("/")[0],
     target: "For individuals",
     features: [
       `Recording: ${plan.recording ? "Yes" : "No"}`,
@@ -70,42 +70,66 @@ const transformPlans = (data) => {
 };
 
 const Payments = () => {
-  // Use React Query to fetch and manage plans data
+  const [openDialog, setOpenDialog] = useState(false);
+
+  // Fetch subscription plans
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["plans"],
     queryFn: getPlans,
-    select: (data) => transformPlans(data.data), // Transform the data after fetching
+    select: (data) => transformPlans(data.data),
   });
-  const [openDialog, setOpenDialog] = useState(false);
 
-  if (isLoading) {
+  // Fetch user data (for current plan)
+  const {
+    data: userData,
+    isLoading: userLoading,
+    isError: userError,
+  } = useQuery({
+    queryKey: ["profile-dashboard"],
+    queryFn: getUser,
+  });
+
+  // ✅ Extract current plan safely
+  const currentPlan =
+    userData?.data?.user_plan?.name?.toUpperCase() || "BASIC";
+
+  if (isLoading || userLoading) {
     return <div>Loading plans...</div>;
   }
 
-  if (isError) {
-    return <div>Error: {error.message}</div>;
+  if (isError || userError) {
+    return <div>Error fetching data.</div>;
   }
+
   return (
     <section className="page container mx-auto">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <div className="flex items-end gap-x-5 mb-10">
+          {/* CURRENT PLAN CARD */}
           <Card className="w-[260px] h-[200px] bg-primary">
             <Badge className="bg-white hover:bg-white text-primary">
               Current Plan
             </Badge>
             <div className="w-full h-[calc(100%-40px)] flex justify-center items-center">
-              <p className="text-4xl font-medium text-white">BASIC</p>
+              <p className="text-4xl font-medium text-white">{currentPlan}</p>
             </div>
           </Card>
+
+          {/* BUTTONS SECTION */}
           <div className="flex flex-col gap-y-3">
-            <Button className="text-[#373131] bg-muted">
-              Renew Subsciptions
-            </Button>
+            {/* Only show Renew Subscription if not Basic */}
+            {currentPlan.toLowerCase() !== "basic" && (
+              <Button className="text-[#373131] bg-muted">
+                Renew Subscription
+              </Button>
+            )}
             <DialogTrigger asChild>
               <Button variant="outline">Change Plan</Button>
             </DialogTrigger>
           </div>
         </div>
+
+        {/* PAYMENT LIST */}
         <Card className="mb-20">
           <div className="p-4 pt-10 flex items-center gap-20">
             <h3 className="font-medium text-xl">Payment List</h3>
@@ -114,12 +138,11 @@ const Payments = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="">#</TableHead>
+                <TableHead>#</TableHead>
                 <TableHead>Expiry Date</TableHead>
                 <TableHead>Issued to</TableHead>
                 <TableHead>Payment Method</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Payment Date</TableHead>
                 <TableHead>Payment Date</TableHead>
                 <TableHead>Plan</TableHead>
                 <TableHead>Amount</TableHead>
@@ -131,7 +154,7 @@ const Payments = () => {
                 <TableRow key={name + date}>
                   <TableCell>{id + 1}</TableCell>
                   <TableCell>{type}</TableCell>
-                  <TableCell className="">{name}</TableCell>
+                  <TableCell>{name}</TableCell>
                   <TableCell>{guest}</TableCell>
                   <TableCell>{date}</TableCell>
                   <TableCell>
@@ -147,6 +170,8 @@ const Payments = () => {
             </div>
           )}
         </Card>
+
+        {/* PLANS MODAL */}
         <DialogContent className="max-w-[95%] py-6">
           <DialogTitle>Plans and Payments</DialogTitle>
           <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
@@ -158,6 +183,9 @@ const Payments = () => {
 
 export default Payments;
 
+// ======================================
+// PAYMENTS DIALOG (PLANS + PAYSTACK)
+// ======================================
 const PaymentsDialog = ({ plans, setOpenDialog }) => {
   const { data, isSuccess } = useQuery({
     queryKey: ["profile"],
@@ -165,90 +193,95 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   });
   const { toast } = useToast();
 
-  const { email, lastName, phone } = data.user;
+  const { email, lastname, phone } = data?.data?.user || {};
   const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
 
   const componentProps = {
     email,
-    metadata: {
-      name: lastName,
-      phone,
-    },
+    metadata: { name: lastname, phone },
     publicKey,
     text: "Pay Now",
     onSuccess: () => toast({ description: "Purchase successful" }),
     onClose: () => toast({ description: "Payment Cancelled" }),
   };
 
-  if (isSuccess)
-    return (
-      <div className="">
-        <Tabs defaultValue="monthly" className="flex flex-col">
-          <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
-            <TabsTrigger className="rounded-full" value="monthly">
-              Monthly
-            </TabsTrigger>
-            <TabsTrigger className="rounded-full" value="yearly">
-              Yearly
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
-            {plans.monthly.map((plan, index) => (
-              <PlanCard
-                key={index}
-                name={plan.name}
-                cta={plan.cta}
-                target={plan.target}
-                price={plan.price}
-                features={plan.features}
-                setOpenDialog={setOpenDialog}
-                paystackProps={{
-                  text: plan.cta,
-                  amount: plan.price * 100,
-                  ...componentProps,
-                }}
-              />
-            ))}
+  if (!isSuccess) return null;
+
+  return (
+    <div>
+      <Tabs defaultValue="monthly" className="flex flex-col">
+        <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
+          <TabsTrigger className="rounded-full" value="monthly">
+            Monthly
+          </TabsTrigger>
+          <TabsTrigger className="rounded-full" value="yearly">
+            Yearly
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Monthly Plans */}
+        <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
+          {plans.monthly.map((plan, index) => (
             <PlanCard
-              name="Enterprise"
-              cta="Contact Sales"
-              target="For Enterprise"
-              price="Custom"
-              features={["Custom Features"]}
+              key={index}
+              name={plan.name}
+              cta={plan.cta}
+              target={plan.target}
+              price={plan.price}
+              features={plan.features}
               setOpenDialog={setOpenDialog}
+              paystackProps={{
+                text: plan.cta,
+                amount: plan.price * 100,
+                ...componentProps,
+              }}
             />
-          </TabsContent>
-          <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
-            {plans.yearly.map((plan, index) => (
-              <PlanCard
-                key={index}
-                name={plan.name}
-                cta={plan.cta}
-                target={plan.target}
-                price={plan.price}
-                features={plan.features}
-                setOpenDialog={setOpenDialog}
-                paystackProps={{
-                  text: plan.cta,
-                  amount: plan.price * 100,
-                  ...componentProps,
-                }}
-              />
-            ))}
+          ))}
+          <PlanCard
+            name="Enterprise"
+            cta="Contact Sales"
+            target="For Enterprise"
+            price="Custom"
+            features={["Custom Features"]}
+            setOpenDialog={setOpenDialog}
+          />
+        </TabsContent>
+
+        {/* Yearly Plans */}
+        <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
+          {plans.yearly.map((plan, index) => (
             <PlanCard
-              name="Enterprise"
-              cta="Contact Sales"
-              target="For Enterprise"
-              price="Custom"
-              features={["Custom Features"]}
+              key={index}
+              name={plan.name}
+              cta={plan.cta}
+              target={plan.target}
+              price={plan.price}
+              features={plan.features}
               setOpenDialog={setOpenDialog}
+              paystackProps={{
+                text: plan.cta,
+                amount: plan.price * 100,
+                ...componentProps,
+              }}
             />
-          </TabsContent>
-        </Tabs>
-      </div>
-    );
+          ))}
+          <PlanCard
+            name="Enterprise"
+            cta="Contact Sales"
+            target="For Enterprise"
+            price="Custom"
+            features={["Custom Features"]}
+            setOpenDialog={setOpenDialog}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 };
 
+// ======================================
+// PLAN CARD COMPONENT
+// ======================================
 const PlanCard = ({
   name,
   target,
@@ -267,11 +300,7 @@ const PlanCard = ({
       </p>
       <div className="flex justify-center mb-6">
         {paystackProps ? (
-          <div
-            onClick={() => {
-              setOpenDialog(false);
-            }}
-          >
+          <div onClick={() => setOpenDialog(false)}>
             <PaystackButton
               className="bg-primary text-primary-foreground shadow px-4 rounded-full py-1"
               {...paystackProps}
@@ -293,12 +322,6 @@ const PlanCard = ({
           </div>
         ))}
       </div>
-      {/* <div className="flex justify-center">
-        <Button className="border-none bg-transparent shadow-none text-black font-normal">
-          <ChevronDown />
-          View More
-        </Button>
-      </div> */}
     </Card>
   );
 };
