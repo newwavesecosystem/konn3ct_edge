@@ -28,9 +28,20 @@ export const getPreRegParticipants = async (reference) => {
   try {
     const res = await api.get(`/pre-reg-participants/${reference}`);
     // some APIs return { data: [...] }, others return the array directly
-    return res.data?.data || res.data || [];
+    return res.data?.data;
   } catch (error) {
     console.error("Failed to fetch participants:", error);
+    throw error;
+  }
+};
+
+export const sendReminder = async (reference) => {
+  try {
+    const res = await api.post(`/sendPreregReminder/${reference}`,{});
+    // some APIs return { data: [...] }, others return the array directly
+    return res.data;
+  } catch (error) {
+    console.error("Failed to send Reminder:", error);
     throw error;
   }
 };
@@ -68,4 +79,5 @@ export default {
   getPreRegParticipants,
   createPreRegEvent,
   getRooms,
+  sendReminder
 };

@@ -1,28 +1,42 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getPreRegParticipants } from "../api/eventsApi";
+import {getPreRegParticipants, sendReminder} from "../api/eventsApi";
+import { useToast } from "../hooks/use-toast";
 
 const EventParticipants = () => {
   const { reference } = useParams(); // <-- changed from id
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
         setLoading(true);
         const res = await getPreRegParticipants(reference);
-        setParticipants(res?.data || res || []);
+        setParticipants(res?.users || []);
       } catch (err) {
         console.error("Error fetching participants:", err);
       } finally {
         setLoading(false);
       }
     };
-
     if (reference) fetchParticipants();
   }, [reference]);
+
+  const sendReminderNow = async () => {
+    try {
+      setLoading(true);
+      const res = await sendReminder(reference);
+      toast({ description: res.message });
+    } catch (err) {
+      console.error("Error sending reminder:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-5xl mx-auto mt-16">
@@ -43,7 +57,7 @@ const EventParticipants = () => {
           </button>
         </div>
 
-        <button className="bg-[#227451] hover:bg-green-700 text-white text-sm px-5 py-2 rounded-full transition-all">
+        <button onClick={sendReminderNow} className="bg-[#227451] hover:bg-green-700 text-white text-sm px-5 py-2 rounded-full transition-all">
           Send Reminder Now
         </button>
       </div>
@@ -60,7 +74,7 @@ const EventParticipants = () => {
       {/* Header + Back Button */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-md font-semibold text-gray-800">
-          Pre-Registered Users
+          Pre-Registered Users ({participants.length})
         </h2>
         <button
           onClick={() => navigate("/events")}
@@ -101,7 +115,7 @@ const EventParticipants = () => {
                   <td className="px-4 py-3">{p.name || "-"}</td>
                   <td className="px-4 py-3">{p.email || "-"}</td>
                   <td className="px-4 py-3">{p.phone || "-"}</td>
-                  <td className="px-4 py-3">{p.dateTime || "-"}</td>
+                  <td className="px-4 py-3">{new Date(p.created_at).toLocaleString() || "-"}</td>
                 </tr>
               ))
             ) : (
