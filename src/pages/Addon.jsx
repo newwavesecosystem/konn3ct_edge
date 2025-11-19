@@ -70,6 +70,28 @@ const Addon = () => {
                 metadata: {
                   name: lastName,
                   phone,
+                  custom_fields: [
+                    {
+                      display_name: 'paymenttype',
+                      variable_name: 'paymenttype',
+                      value: 'addons'
+                    },
+                    {
+                      display_name: 'addonid',
+                      variable_name: 'addonid',
+                      value: id
+                    },
+                    {
+                      display_name: 'addonname',
+                      variable_name: 'addonname',
+                      value: name
+                    },
+                    {
+                      display_name: 'addonprice',
+                      variable_name: 'addonprice',
+                      value: price
+                    },
+                  ]
                 },
                 publicKey,
                 text: "Pay Now",

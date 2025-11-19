@@ -171,7 +171,7 @@ export function ProfileForm() {
             )}
           />
 
-          <Button type="submit">Submit</Button>
+          <Button type="submit">Update Profile</Button>
         </form>
       </Form>
     );

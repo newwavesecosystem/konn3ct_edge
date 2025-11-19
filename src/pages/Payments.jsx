@@ -100,7 +100,7 @@ const Payments = () => {
   }
 
   if (isError || userError) {
-    return <div>Error fetching data.</div>;
+    return <div>Error: {error.message}</div>;
   }
 
   return (
@@ -120,7 +120,7 @@ const Payments = () => {
           {/* BUTTONS SECTION */}
           <div className="flex flex-col gap-y-3">
             <Button className="text-[#373131] bg-muted">
-              Renew Subsciptions
+              Renew Subscriptions
             </Button>
             <DialogTrigger asChild>
               <Button variant="outline">Change Plan</Button>
@@ -192,12 +192,15 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   });
   const { toast } = useToast();
 
-  const { email, lastname, phone } = data?.data?.user || {};
+  const { email, lastName, phone } = data.user;
   const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
 
   const componentProps = {
     email,
-    metadata: { name: lastname, phone },
+    metadata: {
+      name: lastName,
+      phone,
+    },
     publicKey,
     text: "Pay Now",
     onSuccess: () => toast({ description: "Purchase successful" }),
@@ -230,6 +233,30 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
                   text: plan.cta,
                   amount: plan.price * 100,
                   ...componentProps,
+                  metadata:{
+                    custom_fields: [
+                    {
+                      display_name: 'paymenttype',
+                      variable_name: 'paymenttype',
+                      value: 'subscription'
+                    },
+                    {
+                      display_name: 'plantype',
+                      variable_name: 'plantype',
+                      value: plan.category
+                    },
+                    {
+                      display_name: 'planname',
+                      variable_name: 'planname',
+                      value: plan.name
+                    },
+                    {
+                      display_name: 'planprice',
+                      variable_name: 'planprice',
+                      value: plan.price
+                    }
+                  ]
+                  }
                 }}
               />
             ))}

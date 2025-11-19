@@ -632,10 +632,27 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
 
   const createMeetingMutation = useMutation({
     mutationFn: createMeeting,
-    onSuccess: () => {
-      queryClient.invalidateQueries(["rooms"]);
-      toast({ description: "Meeting created successfully" });
+    onSuccess: (res) => {
       setOpenDialog(false);
+      if(res.succces) {
+        queryClient.invalidateQueries(["rooms"]);
+        toast({description: "Meeting created successfully"});
+      }else {
+        if (res.message?.includes("Maximum room")) {
+          toast({
+            variant: "destructive",
+            title: "Plan Limit Reached",
+            description:
+                "You’ve reached the maximum number of rooms for your current plan. Please upgrade to create more meetings or visit Addons to buy more room bundles",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: res?.message,
+          });
+        }
+      }
     },
     onError: (error) => {
       if (error.response?.data?.message?.includes("maximum room")) {
