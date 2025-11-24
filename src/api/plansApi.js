@@ -12,7 +12,7 @@ export const getPlans = async () => {
 export const getList = async () => {
   try {
     const res = await api.get("/payments");
-    return res.data;
+    return res.data.data;
   } catch (error) {
     throw error;
   }

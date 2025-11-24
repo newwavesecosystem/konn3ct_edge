@@ -19,16 +19,14 @@ import {
   TableBody,
 } from "../components/ui/table";
 import { Check } from "lucide-react";
-import { getPlans } from "../api/plansApi";
+import {getList, getPlans} from "../api/plansApi";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { TabsContent } from "@radix-ui/react-tabs";
 import { capitalize } from "../lib/utils";
 import { getUser } from "../api/userApi";
 import { useToast } from "../hooks/use-toast";
 import { PaystackButton } from "react-paystack";
-
-// Mock payments data
-const payments = [];
+import { format, compareAsc, formatDistance, formatRelative, subDays } from 'date-fns'
 
 // Transform the fetched plans
 const transformPlans = (data) => {
@@ -91,6 +89,14 @@ const Payments = () => {
     queryFn: getUser,
   });
 
+  // Fetch user payment (for current plan)
+  const {
+    data: paymentData,
+  } = useQuery({
+    queryKey: ["payments"],
+    queryFn: getList,
+  });
+
   // ✅ Extract current plan safely
   const currentPlan =
     userData?.data?.user_plan?.name?.toUpperCase() || "BASIC";
@@ -138,32 +144,34 @@ const Payments = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>#</TableHead>
-                <TableHead>Expiry Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Plan</TableHead>
                 <TableHead>Issued to</TableHead>
                 <TableHead>Payment Method</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Reference</TableHead>
                 <TableHead>Payment Date</TableHead>
-                <TableHead>Plan</TableHead>
+                {/*<TableHead>Expiry Date</TableHead>*/}
                 <TableHead>Amount</TableHead>
-                <TableHead>Action</TableHead>
+                {/*<TableHead>Action</TableHead>*/}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {payments.map(({ type, name, guest, date }, id) => (
+              {paymentData.payments.data.map(({ type, name, gateway, date, plan_details, currency, amount, reference }, id) => (
                 <TableRow key={name + date}>
                   <TableCell>{id + 1}</TableCell>
                   <TableCell>{type}</TableCell>
-                  <TableCell>{name}</TableCell>
-                  <TableCell>{guest}</TableCell>
+                  <TableCell>{plan_details?.name.toString().toUpperCase()}</TableCell>
+                  <TableCell>{userData?.user?.lastname} {userData?.user?.firstname}</TableCell>
+                  <TableCell>{gateway}</TableCell>
+                  <TableCell>{reference}</TableCell>
                   <TableCell>{date}</TableCell>
-                  <TableCell>
-                    <Button variant="destructive">Delete</Button>
-                  </TableCell>
+                  {/*<TableCell>{date}</TableCell>*/}
+                  <TableCell>{currency} {new Intl.NumberFormat().format(amount.toString())}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {payments.length === 0 && (
+          {paymentData.payments.data.length === 0 && (
             <div className="flex justify-center items-center min-h-[200px]">
               <p>No data available for this table</p>
             </div>
