@@ -198,7 +198,7 @@ const Rooms = () => {
                 setOpenScheduleDialog(true);
               }}
             >
-              <Plus /> Schedule
+              <Plus /> Schedule a Meeting
             </Button>
           </div>
           <Separator />
@@ -330,9 +330,9 @@ const Rooms = () => {
           )}
         </Card>
         <DialogContent className="w-1/2">
-          <DialogTitle>Create a new Meeting</DialogTitle>
+          <DialogTitle>Create a new Room</DialogTitle>
           <DialogDescription>
-            You will create a new meeting, accessible on the dashboard.
+            You will create a new meeting room, accessible on the dashboard.
           </DialogDescription>
           <CreateMeetingDialog setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -676,10 +676,10 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     name: z
       .string()
       .min(5, {
-        message: "Meeting name must be at least 5 characters long.",
+        message: "Room name must be at least 5 characters long.",
       })
       .refine((value) => value.trim().length > 0, {
-        message: "Meeting name is required and cannot be empty or whitespace.",
+        message: "Room name is required and cannot be empty or whitespace.",
       }),
     url: z.string().optional(),
   });
@@ -707,7 +707,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Meeting Name</FormLabel>
+              <FormLabel>Room Name</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>
@@ -720,7 +720,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           name="url"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Meeting URL</FormLabel>
+              <FormLabel>Room URL</FormLabel>
               <FormControl>
                 <Input {...field} placeholder="Optional" />
               </FormControl>
@@ -733,7 +733,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           className="self-center"
           disabled={createMeetingMutation.isPending}
         >
-          {createMeetingMutation.isPending ? "Creating..." : "Create Meeting"}
+          {createMeetingMutation.isPending ? "Creating..." : "Create Room"}
         </Button>
       </form>
     </Form>
