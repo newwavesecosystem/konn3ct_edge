@@ -1,10 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import {
   Table,
@@ -35,8 +30,6 @@ const AttendanceList = () => {
       try {
         setLoading(true);
         const data = await getMeetings();
-        // Assuming the API returns an array like:
-        // [{ id, host, date, time }, ...]
         setMeetings(data || []);
       } catch (err) {
         console.error("Failed to fetch meetings:", err);
@@ -49,9 +42,11 @@ const AttendanceList = () => {
     fetchMeetings();
   }, []);
 
-  const handleViewParticipants = (meetingId, attendanceId) => {
-    navigate(`/attendance-details/${meetingId}/${attendanceId}`);
+  // 🔥 Correct: id + identifier in URL
+const handleViewParticipants = (meeting_id, identifier) => {
+    navigate(`/attendance-details/${meeting_id}/${identifier}`);
   };
+
 
   if (loading) {
     return (
@@ -71,14 +66,12 @@ const AttendanceList = () => {
 
   return (
     <Card className="w-full max-w-3xl rounded-xl shadow border border-gray-200 flex flex-col mt-16">
-      {/* Header */}
       <CardHeader className="pb-2 px-4">
         <CardTitle className="text-base font-medium text-gray-800">
           Meeting Attendance
         </CardTitle>
       </CardHeader>
 
-      {/* Table */}
       <CardContent className="px-4 flex-1 overflow-y-auto max-h-[400px]">
         <div className="overflow-x-auto">
           {meetings.length === 0 ? (
@@ -113,23 +106,27 @@ const AttendanceList = () => {
                     <TableCell className="py-1.5 px-2 text-sm">
                       {index + 1}
                     </TableCell>
+
                     <TableCell className="py-1.5 px-2 text-sm">
                       {meeting.host || "N/A"}
                     </TableCell>
+
                     <TableCell className="py-1.5 px-2 text-sm">
                       {meeting.date
                         ? `${meeting.date} | ${meeting.time || ""}`
                         : "No Date"}
                     </TableCell>
+
                     <TableCell className="text-center py-1.5 px-2">
-                      <Button
+                     <Button
                         onClick={() =>
-                          handleViewParticipants(meeting.id, meeting.attendanceId || meeting.id)
+                          handleViewParticipants( meeting.meeting_id , meeting.identifier)
                         }
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-0.5 rounded-full shadow-sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-0.5 rounded-full"
                       >
                         View Participant(s)
                       </Button>
+
                     </TableCell>
                   </TableRow>
                 ))}
@@ -139,7 +136,6 @@ const AttendanceList = () => {
         </div>
       </CardContent>
 
-      {/* Pagination (Placeholder) */}
       <div className="flex justify-center items-center py-3 border-t">
         <Pagination>
           <PaginationContent className="flex items-center space-x-4">

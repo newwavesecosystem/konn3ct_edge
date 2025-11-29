@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAttendanceDetails } from "../api/attendanceApi";
-import { ArrowLeft } from "lucide-react"; // 👈 Added for back button icon
+import { ArrowLeft } from "lucide-react";
 
 const ViewAttendance = () => {
-  const { meetingId, attendanceId } = useParams();
+  const { meeting_id, identifier } = useParams(); // FIXED
   const navigate = useNavigate();
 
   const [attendanceData, setAttendanceData] = useState([]);
@@ -14,9 +14,12 @@ const ViewAttendance = () => {
   useEffect(() => {
     const fetchDetails = async () => {
       try {
-        setLoading(true);
-        const records = await getAttendanceDetails(meetingId, attendanceId);
-        setAttendanceData(records);
+        const data = await getAttendanceDetails(meeting_id, identifier);
+
+        if (Array.isArray(data)) setAttendanceData(data);
+        else if (typeof data === "object") setAttendanceData([data]);
+        else setAttendanceData([]);
+
       } catch (err) {
         console.error("Failed to load attendance details:", err);
         setError("Unable to load participant details.");
@@ -25,9 +28,15 @@ const ViewAttendance = () => {
       }
     };
 
-    fetchDetails();
-  }, [meetingId, attendanceId]);
+    if (!meeting_id || !identifier) {
+      setError("Missing meeting_id or identifier.");
+      setLoading(false);
+      return;
+    }
 
+    fetchDetails(); // ⭐ EXACTLY AS YOU REQUESTED
+
+  }, [meeting_id, identifier]);
   if (loading)
     return (
       <div className="flex justify-center items-center h-64">
@@ -45,23 +54,13 @@ const ViewAttendance = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-20 m-auto">
       <div className="w-full max-w-6xl bg-white rounded-2xl shadow-sm border p-8">
-        {/* Top Controls */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-3">
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">
-              COPY
-            </button>
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">
-              CSV
-            </button>
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">
-              EXCEL
-            </button>
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">
-              PRINT
-            </button>
+            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">COPY</button>
+            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">CSV</button>
+            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">EXCEL</button>
+            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">PRINT</button>
           </div>
-
           <input
             type="text"
             placeholder="Search"
@@ -69,13 +68,8 @@ const ViewAttendance = () => {
           />
         </div>
 
-        {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-gray-800">
-            Meeting Attendance
-          </h2>
-
-          {/* ✨ Redesigned Back Button */}
+          <h2 className="text-base font-semibold text-gray-800">Meeting Attendance</h2>
           <button
             onClick={() => navigate("/attendance")}
             className="flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-100 px-3 py-1.5 rounded-full text-sm font-medium transition-all"
@@ -85,9 +79,7 @@ const ViewAttendance = () => {
           </button>
         </div>
 
-        {/* Table */}
         <div className="space-y-3">
-          {/* Table Headers */}
           <div className="grid grid-cols-5 text-sm text-gray-500 font-medium">
             <span>S/N</span>
             <span>NAME</span>
@@ -96,7 +88,6 @@ const ViewAttendance = () => {
             <span>DATE & TIME</span>
           </div>
 
-          {/* Table Rows */}
           {attendanceData.length === 0 ? (
             <div className="text-center text-gray-500 text-sm py-10">
               No participants found for this meeting.
@@ -133,7 +124,6 @@ const ViewAttendance = () => {
           )}
         </div>
 
-        {/* Pagination Placeholder */}
         <div className="flex justify-center items-center gap-2 mt-6">
           <button className="text-gray-400 hover:text-gray-600 text-lg">‹</button>
           <span className="text-gray-600 text-sm">1/1</span>
