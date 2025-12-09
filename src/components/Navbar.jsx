@@ -39,10 +39,10 @@ const Navbar = () => {
         <NavigationMenu className="hidden md:flex ml-10">
           <NavigationMenuList className="flex space-x-6">
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()}>Solutions</Link>
+              <Link className={navigationMenuTriggerStyle()} to={`${process.env.REACT_APP_LANDING_URL}/Features`}>Solutions</Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()}>
+              <Link className={navigationMenuTriggerStyle()} to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
                 Plans & Pricing
               </Link>
             </NavigationMenuItem>
@@ -124,10 +124,10 @@ const Navbar = () => {
       {/* Mobile dropdown */}
       {mobileOpen && (
         <div className="md:hidden bg-white shadow-md border-t px-5 py-4 space-y-4">
-          <Link className="block" to="/">
+          <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Features`}>
             Solutions
           </Link>
-          <Link className="block" to="/">
+          <Link className="block"  to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
             Plans & Pricing
           </Link>
           <Link className="block" to="/">
