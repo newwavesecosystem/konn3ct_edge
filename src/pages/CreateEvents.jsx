@@ -2,6 +2,11 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPreRegEvent, getRooms } from "../api/eventsApi";
 
+// --- TIMEZONE GENERATOR ---
+const getTimezones = () => {
+  return Intl.supportedValuesOf("timeZone").map((tz) => tz);
+};
+
 const CreateEvents = () => {
   const navigate = useNavigate();
 
@@ -19,26 +24,31 @@ const CreateEvents = () => {
 
   const [loading, setLoading] = useState(false);
 
-  // New state for rooms
+  // Rooms state
   const [rooms, setRooms] = useState([]);
   const [roomLoading, setRoomLoading] = useState(true);
 
-  // Fetch rooms on mount
+  // --- NEW TIMEZONE STATE ---
+  const [timezones, setTimezones] = useState([]);
+
+  // Load timezones
+  useEffect(() => {
+    setTimezones(getTimezones());
+  }, []);
+
+  // Fetch rooms
   useEffect(() => {
     let cancelled = false;
     const loadRooms = async () => {
       try {
-        const res = await getRooms(); // your API helper
-        // Normalize possible response shapes into an array
+        const res = await getRooms();
         let list = res;
 
         if (!Array.isArray(list)) {
-          // common API shapes: { data: [...] } or { rooms: [...] }
           if (list && typeof list === "object") {
             if (Array.isArray(list.data)) list = list.data;
             else if (Array.isArray(list.rooms)) list = list.rooms;
             else {
-              // fallback: try to extract array values if possible
               const values = Object.values(list).filter((v) => Array.isArray(v));
               list = values.length > 0 ? values[0] : [];
             }
@@ -50,7 +60,7 @@ const CreateEvents = () => {
         if (!cancelled) setRooms(list);
       } catch (err) {
         console.error("Failed to load rooms:", err);
-        setRooms([]); // keep safe
+        setRooms([]);
       } finally {
         if (!cancelled) setRoomLoading(false);
       }
@@ -78,7 +88,6 @@ const CreateEvents = () => {
     try {
       const data = new FormData();
 
-      // Map frontend names to backend requirements
       if (formData.title) data.append("title", formData.title);
       if (formData.host) data.append("hostname", formData.host);
       if (formData.room) data.append("room_id", formData.room);
@@ -93,7 +102,7 @@ const CreateEvents = () => {
 
       if (res?.success) {
         alert("Event created successfully!");
-        navigate("/events"); // Go back to event list
+        navigate("/events");
       } else {
         alert(res?.message || "Event creation failed. Please check your inputs.");
       }
@@ -177,7 +186,10 @@ const CreateEvents = () => {
                   {Array.isArray(rooms) &&
                     rooms.map((room) => (
                       <option key={room.id} value={room.id}>
-                        {room.room_name || room.name || room.label || `Room ${room.id}`}
+                        {room.room_name ||
+                          room.name ||
+                          room.label ||
+                          `Room ${room.id}`}
                       </option>
                     ))}
                 </select>
@@ -207,6 +219,7 @@ const CreateEvents = () => {
                 />
               </div>
 
+              {/* ----------- NEW TIMEZONE DROPDOWN ----------- */}
               <div>
                 <label className="block text-gray-700 text-sm mb-1">Time Zone</label>
                 <select
@@ -215,10 +228,12 @@ const CreateEvents = () => {
                   onChange={handleChange}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
                 >
-                  <option value="">Select time zone</option>
-                  <option>WAT (GMT +1)</option>
-                  <option>CAT (GMT +2)</option>
-                  <option>EAT (GMT +3)</option>
+                  <option value="">Select timezone</option>
+                  {timezones.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -248,7 +263,6 @@ const CreateEvents = () => {
                 <option value="1">1 day before</option>
                 <option value="0.5">12 hours before</option>
               </select>
-
             </div>
 
             <div className="mt-4">

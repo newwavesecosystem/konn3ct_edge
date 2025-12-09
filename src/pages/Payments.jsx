@@ -98,8 +98,8 @@ const Payments = () => {
   });
 
   // ✅ Extract current plan safely
-  const currentPlan =
-    userData?.data?.user_plan?.name?.toUpperCase() || "BASIC";
+const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
+
 
   if (isLoading || userLoading) {
     return <div>Loading plans...</div>;
@@ -119,7 +119,7 @@ const Payments = () => {
               Current Plan
             </Badge>
             <div className="w-full h-[calc(100%-40px)] flex justify-center items-center">
-              <p className="text-4xl font-medium text-white">{currentPlan}</p>
+              <p className="text-4xl font-medium text-white">{currentPlan.toUpperCase()}</p>
             </div>
           </Card>
 
