@@ -16,7 +16,7 @@ import { Separator } from "../components/ui/separator";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getStreams, startStream, stopStreaming, getRooms} from "../api/streamApi";
+import { getStreams, startStream, stopStreaming, getRooms } from "../api/streamApi";
 import {
   Pagination,
   PaginationContent,
@@ -94,9 +94,24 @@ const Streaming = () => {
           <Button onClick={() => setOpenDialog(true)}>
             <Plus /> Stream
           </Button>
-          <StatCard value={1} name="Total Streams" icon={roomsIcon} />
+          <StatCard
+            value={streamQuery.data?.total ?? 0}
+            name="Total Streams"
+            icon={roomsIcon}
+          />
+
           <Separator orientation="vertical" className="h-[50px]" />
-          <StatCard value={2} name="Active streams" icon={activeIcon} />
+
+          <StatCard
+            value={
+              Array.isArray(streamQuery.data?.data)
+                ? streamQuery.data.data.filter((s) => s.status === 1).length
+                : 0
+            }
+            name="Active Streams"
+            icon={activeIcon}
+          />
+
         </div>
         <Separator />
         <Table>
@@ -207,12 +222,11 @@ const StreamForm = ({ setOpenDialog }) => {
     { value: "Facebook", label: "Facebook" },
   ];
 
-  // ✅ Fetch rooms on mount (same logic as CreateEvents)
   useEffect(() => {
     let cancelled = false;
     const loadRooms = async () => {
       try {
-        const res = await getRooms(); // your API helper
+        const res = await getRooms();
         let list = res;
 
         if (!Array.isArray(list)) {
@@ -274,8 +288,6 @@ const StreamForm = ({ setOpenDialog }) => {
     <div className="p-10">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-
-          {/* ✅ Room Selector - same logic as CreateEvents */}
           <FormField
             control={form.control}
             name="room_id"

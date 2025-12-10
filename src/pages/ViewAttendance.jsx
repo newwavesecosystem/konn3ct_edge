@@ -4,7 +4,7 @@ import { getAttendanceDetails } from "../api/attendanceApi";
 import { ArrowLeft } from "lucide-react";
 
 const ViewAttendance = () => {
-  const { meeting_id, identifier } = useParams(); // FIXED
+  const { meeting_id, identifier } = useParams(); 
   const navigate = useNavigate();
 
   const [attendanceData, setAttendanceData] = useState([]);
@@ -34,9 +34,10 @@ const ViewAttendance = () => {
       return;
     }
 
-    fetchDetails(); // ⭐ EXACTLY AS YOU REQUESTED
+    fetchDetails();
 
   }, [meeting_id, identifier]);
+
   if (loading)
     return (
       <div className="flex justify-center items-center h-64">
@@ -54,13 +55,31 @@ const ViewAttendance = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-20 m-auto">
       <div className="w-full max-w-6xl bg-white rounded-2xl shadow-sm border p-8">
+
+        {/* TOP BUTTONS SECTION */}
         <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-3">
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">COPY</button>
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">CSV</button>
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">EXCEL</button>
-            <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">PRINT</button>
+          <div>
+            <div className="flex gap-3 mb-3">
+              <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">COPY</button>
+              <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">CSV</button>
+              <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">EXCEL</button>
+              <button className="px-4 py-1.5 border rounded-md text-sm bg-white hover:bg-gray-50">PRINT</button>
+            </div>
+
+            {/* NEW BUTTONS ADDED HERE */}
+            <div className="flex gap-3">
+              <button className="px-4 py-2 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200">
+                Send Minutes of Meeting
+              </button>
+              <button className="px-4 py-2 text-xs bg-yellow-100 text-yellow-700 rounded-md hover:bg-yellow-200">
+                Send Meeting Highlight
+              </button>
+              <button className="px-4 py-2 text-xs bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200">
+                Send Meeting Summary
+              </button>
+            </div>
           </div>
+
           <input
             type="text"
             placeholder="Search"
@@ -68,6 +87,7 @@ const ViewAttendance = () => {
           />
         </div>
 
+        {/* PAGE TITLE + BACK BUTTON */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-gray-800">Meeting Attendance</h2>
           <button
@@ -101,6 +121,7 @@ const ViewAttendance = () => {
                 <span>{index + 1}</span>
                 <span>{row.name || row.attendee_name || "N/A"}</span>
                 <span>{row.email || row.attendee_email || "N/A"}</span>
+
                 <span>
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -112,6 +133,7 @@ const ViewAttendance = () => {
                     {row.status || "Unknown"}
                   </span>
                 </span>
+
                 <span>
                   {row.created_at
                     ? new Date(row.created_at).toLocaleString()

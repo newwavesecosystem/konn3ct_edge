@@ -23,9 +23,9 @@ const formSchema = z.object({
   lastName: z.string().min(2, {
     message: "Last name must be at least 2 characters.",
   }),
-  email: z.string().email({
-    message: "Invalid email address.",
-  }),
+  // email: z.string().email({
+  //   message: "Invalid email address.",
+  // }),
   phone: z.string().min(10, {
     message: "Phone number must be at least 10 digits.",
   }),
@@ -50,7 +50,7 @@ export function ProfileForm() {
     defaultValues: {
       firstName: "",
       lastName: "",
-      email: "",
+      // email: "",
       phone: "",
       profileImage: null,
     },
@@ -60,7 +60,7 @@ export function ProfileForm() {
     const formData = new FormData();
     formData.append("firstName", data.firstName);
     formData.append("lastName", data.lastName);
-    formData.append("email", data.email);
+    // formData.append("email", data.email);
     formData.append("phone", data.phone);
     if (data.profileImage) {
       formData.append("image", data.profileImage);
@@ -142,7 +142,7 @@ export function ProfileForm() {
           />
 
           {/* Email Field */}
-          <FormField
+          {/* <FormField
             control={form.control}
             name="email"
             render={({ field }) => (
@@ -154,7 +154,7 @@ export function ProfileForm() {
                 <FormMessage />
               </FormItem>
             )}
-          />
+          /> */}
 
           {/* Phone Field */}
           <FormField
