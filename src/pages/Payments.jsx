@@ -19,7 +19,7 @@ import {
   TableBody,
 } from "../components/ui/table";
 import { Check } from "lucide-react";
-import {getList, getPlans} from "../api/plansApi";
+import { getList, getPlans } from "../api/plansApi";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { TabsContent } from "@radix-ui/react-tabs";
 import { capitalize } from "../lib/utils";
@@ -98,7 +98,7 @@ const Payments = () => {
   });
 
   // ✅ Extract current plan safely
-const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
+  const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
 
 
   if (isLoading || userLoading) {
@@ -125,9 +125,14 @@ const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
 
           {/* BUTTONS SECTION */}
           <div className="flex flex-col gap-y-3">
-            <Button className="text-[#373131] bg-muted">
-              Renew Subscriptions
-            </Button>
+            {currentPlan.toLowerCase() !== "basic" && (
+              <DialogTrigger asChild>
+                <Button className="text-[#373131] bg-muted">
+                  Renew Subscriptions
+                </Button>
+              </DialogTrigger>
+            )}
+
             <DialogTrigger asChild>
               <Button variant="outline">Change Plan</Button>
             </DialogTrigger>
@@ -241,29 +246,29 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
                   text: plan.cta,
                   amount: plan.price * 100,
                   ...componentProps,
-                  metadata:{
+                  metadata: {
                     custom_fields: [
-                    {
-                      display_name: 'paymenttype',
-                      variable_name: 'paymenttype',
-                      value: 'subscription'
-                    },
-                    {
-                      display_name: 'plantype',
-                      variable_name: 'plantype',
-                      value: plan.category
-                    },
-                    {
-                      display_name: 'planname',
-                      variable_name: 'planname',
-                      value: plan.name
-                    },
-                    {
-                      display_name: 'planprice',
-                      variable_name: 'planprice',
-                      value: plan.price
-                    }
-                  ]
+                      {
+                        display_name: 'paymenttype',
+                        variable_name: 'paymenttype',
+                        value: 'subscription'
+                      },
+                      {
+                        display_name: 'plantype',
+                        variable_name: 'plantype',
+                        value: plan.category
+                      },
+                      {
+                        display_name: 'planname',
+                        variable_name: 'planname',
+                        value: plan.name
+                      },
+                      {
+                        display_name: 'planprice',
+                        variable_name: 'planprice',
+                        value: plan.price
+                      }
+                    ]
                   }
                 }}
               />
