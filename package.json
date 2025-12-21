@@ -33,6 +33,7 @@
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.54.1",
+    "react-markdown": "^10.1.0",
     "react-paystack": "^6.0.0",
     "react-router-dom": "^7.0.2",
     "react-scripts": "5.0.1",

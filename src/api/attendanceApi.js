@@ -1,8 +1,9 @@
-// attendanceApi.js
 import { api } from ".";
-const API = api;
 
-// Fetch all meeting attendance records
+const API = api;
+const AI_BASE_URL = process.env.REACT_APP_API_BOT;
+
+
 export const getMeetings = async () => {
   try {
     const response = await API.get("/meeting-attendance");
@@ -15,7 +16,7 @@ export const getMeetings = async () => {
 
     return records.map((item) => ({
       id: item.id,
-      meeting_id: item.meeting_id,  // IMPORTANT
+      meeting_id: item.meeting_id,
       host: item.room_info?.name || "Unknown Room",
       name: item.name,
       date: new Date(item.created_at).toLocaleDateString(),
@@ -29,7 +30,6 @@ export const getMeetings = async () => {
   }
 };
 
-// Fetch attendance details by meeting_id + identifier
 export const getAttendanceDetails = async (meeting_id, identifier) => {
   if (!meeting_id || !identifier)
     throw new Error("Missing meeting_id or identifier");
@@ -38,8 +38,6 @@ export const getAttendanceDetails = async (meeting_id, identifier) => {
     const response = await API.get(
       `/attendance-details/${meeting_id}/${identifier}`
     );
-
-    console.log("RAW ATTENDANCE DETAILS:", response.data);
 
     const payload = response.data?.data?.data;
 
@@ -52,3 +50,41 @@ export const getAttendanceDetails = async (meeting_id, identifier) => {
     throw error;
   }
 };
+
+
+// Meeting Summary
+export const getMeetingSummary = async (meetingID) => {
+  const res = await fetch(`${AI_BASE_URL}/summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meetingID }),
+  });
+
+  const data = await res.json();
+  return data.message;
+};
+
+// Meeting Highlights
+export const getMeetingHighlights = async (meetingID) => {
+  const res = await fetch(`${AI_BASE_URL}/highlights`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meetingID }),
+  });
+
+  const data = await res.json();
+  return data.message;
+};
+
+// Minutes of Meeting (ONLY if backend exists)
+export const getMeetingMinutes = async (meetingID) => {
+  const res = await fetch(`${AI_BASE_URL}/minutes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meetingID }),
+  });
+
+  const data = await res.json();
+  return data.message;
+};
+
