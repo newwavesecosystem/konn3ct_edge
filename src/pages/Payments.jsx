@@ -26,9 +26,107 @@ import { capitalize } from "../lib/utils";
 import { getUser } from "../api/userApi";
 import { useToast } from "../hooks/use-toast";
 import { PaystackButton } from "react-paystack";
-import { format, compareAsc, formatDistance, formatRelative, subDays } from 'date-fns'
+import { format } from "date-fns";
 
-// Transform the fetched plans
+/* ======================================
+   RECEIPT GENERATOR
+====================================== */
+const generateReceipt = (payment, user) => {
+  const win = window.open("", "_blank", "width=800,height=650");
+
+  win.document.write(`
+    <html>
+      <head>
+        <title>Payment Receipt</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            color: #222;
+          }
+          h1 {
+            text-align: center;
+            margin-bottom: 5px;
+          }
+          .subtitle {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .box {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 6px;
+          }
+          .row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+          }
+          .label {
+            font-weight: bold;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #777;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Konn3ct</h1>
+        <p class="subtitle">Payment Receipt</p>
+
+        <div class="box">
+          <div class="row">
+            <span class="label">Issued To:</span>
+            <span>${user.lastname} ${user.firstname}</span>
+          </div>
+          <div class="row">
+            <span class="label">Plan:</span>
+            <span>${payment.plan}</span>
+          </div>
+          <div class="row">
+            <span class="label">Payment Type:</span>
+            <span>${payment.type}</span>
+          </div>
+          <div class="row">
+            <span class="label">Payment Method:</span>
+            <span>${payment.method}</span>
+          </div>
+          <div class="row">
+            <span class="label">Reference:</span>
+            <span>${payment.reference}</span>
+          </div>
+          <div class="row">
+            <span class="label">Payment Date:</span>
+            <span>${payment.date}</span>
+          </div>
+          <div class="row">
+            <span class="label">Amount Paid:</span>
+            <span>${payment.currency} ${new Intl.NumberFormat().format(payment.amount)}</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>This receipt was generated electronically.</p>
+        </div>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+
+  win.document.close();
+};
+
+/* ======================================
+   TRANSFORM PLANS
+====================================== */
 const transformPlans = (data) => {
   const monthlyPlans = data.plan.map((plan) => ({
     name: plan.name,
@@ -72,67 +170,49 @@ const transformPlans = (data) => {
 const Payments = () => {
   const [openDialog, setOpenDialog] = useState(false);
 
-  // Fetch subscription plans
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["plans"],
     queryFn: getPlans,
     select: (data) => transformPlans(data.data),
   });
 
-  // Fetch user data (for current plan)
-  const {
-    data: userData,
-    isLoading: userLoading,
-    isError: userError,
-  } = useQuery({
-    queryKey: ["profile-dashboard"],
-    queryFn: getUser,
-  });
+  const { data: userData, isLoading: userLoading, isError: userError } =
+    useQuery({
+      queryKey: ["profile-dashboard"],
+      queryFn: getUser,
+    });
 
-  // Fetch user payment (for current plan)
-  const {
-    data: paymentData,
-  } = useQuery({
+  const { data: paymentData } = useQuery({
     queryKey: ["payments"],
     queryFn: getList,
   });
 
-  // ✅ Extract current plan safely
   const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
 
-
-  if (isLoading || userLoading) {
-    return <div>Loading plans...</div>;
-  }
-
-  if (isError || userError) {
-    return <div>Error: {error.message}</div>;
-  }
+  if (isLoading || userLoading) return <div>Loading plans...</div>;
+  if (isError || userError) return <div>Error: {error.message}</div>;
 
   return (
     <section className="page container mx-auto">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <div className="flex items-end gap-x-5 mb-10">
-          {/* CURRENT PLAN CARD */}
           <Card className="w-[260px] h-[200px] bg-primary">
-            <Badge className="bg-white hover:bg-white text-primary">
-              Current Plan
-            </Badge>
-            <div className="w-full h-[calc(100%-40px)] flex justify-center items-center">
-              <p className="text-4xl font-medium text-white">{currentPlan.toUpperCase()}</p>
+            <Badge className="bg-white text-primary">Current Plan</Badge>
+            <div className="flex justify-center items-center h-full">
+              <p className="text-4xl font-medium text-white">
+                {currentPlan.toUpperCase()}
+              </p>
             </div>
           </Card>
 
-          {/* BUTTONS SECTION */}
           <div className="flex flex-col gap-y-3">
             {currentPlan.toLowerCase() !== "basic" && (
               <DialogTrigger asChild>
-                <Button className="text-[#373131] bg-muted">
+                <Button className="bg-muted text-[#373131]">
                   Renew Subscriptions
                 </Button>
               </DialogTrigger>
             )}
-
             <DialogTrigger asChild>
               <Button variant="outline">Change Plan</Button>
             </DialogTrigger>
@@ -141,10 +221,11 @@ const Payments = () => {
 
         {/* PAYMENT LIST */}
         <Card className="mb-20">
-          <div className="p-4 pt-10 flex items-center gap-20">
+          <div className="p-4 pt-10">
             <h3 className="font-medium text-xl">Payment List</h3>
           </div>
           <Separator />
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -155,35 +236,60 @@ const Payments = () => {
                 <TableHead>Payment Method</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead>Payment Date</TableHead>
-                {/*<TableHead>Expiry Date</TableHead>*/}
                 <TableHead>Amount</TableHead>
-                {/*<TableHead>Action</TableHead>*/}
+                <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {paymentData.payments.data.map(({ type, name, gateway, date, plan_details, currency, amount, reference }, id) => (
-                <TableRow key={name + date}>
-                  <TableCell>{id + 1}</TableCell>
-                  <TableCell>{type}</TableCell>
-                  <TableCell>{plan_details?.name.toString().toUpperCase()}</TableCell>
-                  <TableCell>{userData?.user?.lastname} {userData?.user?.firstname}</TableCell>
-                  <TableCell>{gateway}</TableCell>
-                  <TableCell>{reference}</TableCell>
-                  <TableCell>{date}</TableCell>
-                  {/*<TableCell>{date}</TableCell>*/}
-                  <TableCell>{currency} {new Intl.NumberFormat().format(amount.toString())}</TableCell>
-                </TableRow>
-              ))}
+              {paymentData.payments.data.map(
+                (
+                  { type, gateway, date, plan_details, currency, amount, reference },
+                  id
+                ) => (
+                  <TableRow key={reference}>
+                    <TableCell>{id + 1}</TableCell>
+                    <TableCell>{type}</TableCell>
+                    <TableCell>{plan_details?.name.toUpperCase()}</TableCell>
+                    <TableCell>
+                      {userData.user.lastname} {userData.user.firstname}
+                    </TableCell>
+                    <TableCell>{gateway}</TableCell>
+                    <TableCell>{reference}</TableCell>
+                    <TableCell>{date}</TableCell>
+                    <TableCell>
+                      {currency}{" "}
+                      {new Intl.NumberFormat().format(amount)}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          generateReceipt(
+                            {
+                              type,
+                              plan: plan_details?.name.toUpperCase(),
+                              method: gateway,
+                              reference,
+                              date,
+                              currency,
+                              amount,
+                            },
+                            userData.user
+                          )
+                        }
+                      >
+                        Receipt
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              )}
             </TableBody>
           </Table>
-          {paymentData.payments.data.length === 0 && (
-            <div className="flex justify-center items-center min-h-[200px]">
-              <p>No data available for this table</p>
-            </div>
-          )}
         </Card>
 
-        {/* PLANS MODAL */}
         <DialogContent className="max-w-[95%] py-6">
           <DialogTitle>Plans and Payments</DialogTitle>
           <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
@@ -195,9 +301,9 @@ const Payments = () => {
 
 export default Payments;
 
-// ======================================
-// PAYMENTS DIALOG (PLANS + PAYSTACK)
-// ======================================
+/* ======================================
+   PAYMENTS DIALOG + PLAN CARD
+====================================== */
 const PaymentsDialog = ({ plans, setOpenDialog }) => {
   const { data, isSuccess } = useQuery({
     queryKey: ["profile"],
@@ -359,3 +465,4 @@ const PlanCard = ({
     </Card>
   );
 };
+
