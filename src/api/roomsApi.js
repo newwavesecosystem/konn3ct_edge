@@ -72,7 +72,7 @@ export const manageAccessCode = async (data) => {
 
 export const limitUser = async (data) => {
   try {
-    const payload = { ...data, id: String(data.id) }; // ✅ ensure id is string
+    const payload = { ...data, id: String(data.id) };
     const res = await api.post("/limituser", payload);
     return res.data;
   } catch (error) {
@@ -83,7 +83,7 @@ export const limitUser = async (data) => {
 export const bannerUpload = async (data) => {
   try {
     const formData = new FormData();
-    formData.append("id", String(data.id)); // ✅ ensure id is string
+    formData.append("id", String(data.id));
     formData.append("banner", data.banner);
 
     const res = await api.post("/bannerupload", formData, {
@@ -97,7 +97,7 @@ export const bannerUpload = async (data) => {
 
 export const transferRoom = async (data) => {
   try {
-    const payload = { ...data, id: String(data.id) }; // ✅ ensure id is string
+    const payload = { ...data, id: String(data.id) };
     const res = await api.post("/transfer-room", payload);
     return res.data;
   } catch (error) {

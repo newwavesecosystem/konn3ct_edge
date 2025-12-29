@@ -148,8 +148,8 @@ const Dashboard = () => {
                 src={
                   userQuery[1]?.data?.video_link
                     ? `https://www.youtube.com/embed/${extractYouTubeID(
-                        userQuery[1].data.video_link
-                      )}`
+                      userQuery[1].data.video_link
+                    )}`
                     : ""
                 }
                 title="YouTube video player"
@@ -220,13 +220,40 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="flex justify-center items-center flex-col">
-              <div className="bg-[#F2F2F2] w-full rounded p-2 text-[#424242] font-semibold my-6 sm:my-10">
-                {userQuery[2]?.data?.data?.length === 0
-                  ? "No upcoming Meetings"
-                  : userQuery[2]?.data?.data?.map((meeting) => (
-                      <p key={meeting.title}>{meeting.title}</p>
-                    ))}
+              <div className="bg-[#F2F2F2] w-full rounded p-3 text-[#424242] my-6 sm:my-10 space-y-3">
+                {userQuery[2]?.data?.data?.length === 0 ? (
+                  <p className="font-semibold text-center">No upcoming Meetings</p>
+                ) : (
+                  userQuery[2]?.data?.data?.map((meeting) => (
+                    <div
+                      key={meeting.id}
+                      className="bg-white rounded-lg p-3 shadow-sm"
+                    >
+                      {/* Meeting Title */}
+                      <p className="font-semibold text-base">
+                        {meeting.title}
+                      </p>
+
+                      {/* Room Name */}
+                      <p className="text-sm text-gray-700">
+                        Room: {meeting.roomname}
+                      </p>
+
+                      {/* Hostname */}
+                      <p className="text-xs text-gray-600 mt-1">
+                        Host: <span className="font-medium">{meeting.hostname}</span>
+                      </p>
+
+                      {/* Date & Time */}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {meeting.date} • {meeting.time}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
+
+
               <Button variant="outline" className="w-full sm:w-auto">
                 Test Audio and Video
               </Button>

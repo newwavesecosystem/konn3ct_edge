@@ -215,12 +215,12 @@ const Rooms = () => {
               icon={activeIcon}
             />
             <Separator orientation="vertical" className="h-[50px]" />
-            <div
-              className="cursor-pointer"
-              onClick={() => setOpenScheduleSide(true)}
-            >
-              <StatCard value={0} name="Scheduled Room" icon={scheduledIcon} />
-            </div>
+            <StatCard
+              value={meetingQuery.data?.data?.length || 0}
+              name="Scheduled Room"
+              icon={scheduledIcon}
+            />
+
             <Separator orientation="vertical" className="h-[50px]" />
             <StatCard
               value={roomQuery.data.total_rooms - roomQuery.data.active_rooms}
@@ -591,8 +591,7 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
   });
 
   const onSubmit = (data) => {
-    mutation.mutate({ id: String(roomId), ...data }); // ✅ cast id to string
-    setOpen(false);
+    mutation.mutate({ id: String(roomId), ...data }); 
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -634,16 +633,16 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     mutationFn: createMeeting,
     onSuccess: (res) => {
       setOpenDialog(false);
-      if(res.succces) {
+      if (res.succces) {
         queryClient.invalidateQueries(["rooms"]);
-        toast({description: "Meeting created successfully"});
-      }else {
+        toast({ description: "Meeting created successfully" });
+      } else {
         if (res.message?.includes("Maximum room")) {
           toast({
             variant: "destructive",
             title: "Plan Limit Reached",
             description:
-                "You’ve reached the maximum number of rooms for your current plan. Please upgrade to create more meetings or visit Addons to buy more room bundles",
+              "You’ve reached the maximum number of rooms for your current plan. Please upgrade to create more meetings or visit Addons to buy more room bundles",
           });
         } else {
           toast({
