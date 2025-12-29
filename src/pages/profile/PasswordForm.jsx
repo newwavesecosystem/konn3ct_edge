@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { useState } from "react";
 
 import { Button } from "../../components/ui/button";
 import {
@@ -16,28 +17,24 @@ import { useMutation } from "@tanstack/react-query";
 import { updatePassword } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 
-// Define the schema
+// Schema
 const formSchema = z
   .object({
     currentPassword: z.string().min(6, {
       message: "Current password must be at least 6 characters.",
     }),
-    newPassword: z
-      .string()
-      .min(6, {
-        message: "New password must be at least 6 characters.",
-      })
-      .refine((value) => value.trim().length > 0, {
-        message: "New password is required and cannot be empty or whitespace.",
-      }),
+    newPassword: z.string().min(6, {
+      message: "New password must be at least 6 characters.",
+    }),
     confirmPassword: z.string().min(6, {
       message: "Confirm password must be at least 6 characters.",
     }),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords must match.",
-    path: ["confirmPassword"], // Target this field in error messages
+    path: ["confirmPassword"],
   });
 
 export function PasswordForm() {
@@ -49,8 +46,14 @@ export function PasswordForm() {
       confirmPassword: "",
     },
   });
+
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Visibility states
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const passwordMutation = useMutation({
     mutationFn: updatePassword,
@@ -67,7 +70,6 @@ export function PasswordForm() {
       current_password: data.currentPassword,
       new_password: data.newPassword,
     };
-
     passwordMutation.mutate(payload);
     form.reset();
   };
@@ -75,7 +77,7 @@ export function PasswordForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        {/* Current Password Field */}
+        {/* Current Password */}
         <FormField
           control={form.control}
           name="currentPassword"
@@ -83,18 +85,27 @@ export function PasswordForm() {
             <FormItem>
               <FormLabel>Current Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Enter current password"
-                  {...field}
-                />
+                <div className="relative">
+                  <Input
+                    type={showCurrent ? "text" : "password"}
+                    placeholder="Enter current password"
+                    {...field}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrent(!showCurrent)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* New Password Field */}
+        {/* New Password */}
         <FormField
           control={form.control}
           name="newPassword"
@@ -102,18 +113,27 @@ export function PasswordForm() {
             <FormItem>
               <FormLabel>New Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Enter new password"
-                  {...field}
-                />
+                <div className="relative">
+                  <Input
+                    type={showNew ? "text" : "password"}
+                    placeholder="Enter new password"
+                    {...field}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNew(!showNew)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Confirm Password Field */}
+        {/* Confirm Password */}
         <FormField
           control={form.control}
           name="confirmPassword"
@@ -121,11 +141,20 @@ export function PasswordForm() {
             <FormItem>
               <FormLabel>Confirm New Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Confirm new password"
-                  {...field}
-                />
+                <div className="relative">
+                  <Input
+                    type={showConfirm ? "text" : "password"}
+                    placeholder="Confirm new password"
+                    {...field}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
