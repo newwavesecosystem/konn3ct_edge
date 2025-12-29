@@ -109,12 +109,12 @@ const ViewAttendance = () => {
               </div>
 
               <div className="flex gap-3">
-                <button
+                {/* <button
                   onClick={() => openPanel("minutes")}
                   className="px-4 py-2 text-xs bg-blue-100 text-blue-700 rounded-md"
                 >
                   Send Minutes of Meeting
-                </button>
+                </button> */}
                 <button
                   onClick={() => openPanel("highlights")}
                   className="px-4 py-2 text-xs bg-yellow-100 text-yellow-700 rounded-md"
