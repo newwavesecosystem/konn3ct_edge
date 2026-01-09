@@ -35,6 +35,12 @@ const EventList = () => {
     fetchData();
   }, []);
 
+  const copyEventUrl = (url) => {
+    if (!url) return;
+    navigator.clipboard.writeText(url);
+    alert("Event link copied!");
+  };
+
   return (
     <div className="flex justify-center items-start w-full p-6 mt-7">
       <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 w-full max-w-5xl">
@@ -133,12 +139,20 @@ const EventList = () => {
                     <td className="px-4 py-3">{ev.date || "-"}</td>
                     <td className="px-4 py-3">{ev.time || "-"}</td>
                     <td className="px-4 py-3">{ev.timezone || "-"}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right flex gap-2 justify-end">
                       <button
                         onClick={() => navigate(`/events/participants/${ev.reference}`)}
                         className="bg-[#227451] text-white text-xs font-medium px-4 py-1.5 rounded-full hover:bg-emerald-800 transition"
                       >
                         Participants
+                      </button>
+
+                      {/* ✅ NEW COPY BUTTON */}
+                      <button
+                        onClick={() => copyEventUrl(ev.event_url)}
+                        className="border border-gray-300 text-gray-700 text-xs font-medium px-4 py-1.5 rounded-full hover:bg-gray-100 transition"
+                      >
+                        Event Link
                       </button>
                     </td>
                   </tr>

@@ -75,8 +75,7 @@ export const getMeetingHighlights = async (meetingID) => {
   const data = await res.json();
   return data.message;
 };
-
-// Minutes of Meeting (ONLY if backend exists)
+// Meeting minutes
 export const getMeetingMinutes = async (meetingID) => {
   const res = await fetch(`${AI_BASE_URL}/minutes`, {
     method: "POST",

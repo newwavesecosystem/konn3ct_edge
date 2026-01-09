@@ -20,6 +20,11 @@ const CreateEvents = () => {
     about: "",
     reminder: "",
     logo: null,
+
+        free: "1",
+    currency: "NGN",
+    amount: "",
+
   });
 
   const [loading, setLoading] = useState(false);
@@ -97,6 +102,10 @@ const CreateEvents = () => {
       if (formData.about) data.append("about", formData.about);
       if (formData.reminder) data.append("reminder", formData.reminder);
       if (formData.logo) data.append("logo", formData.logo);
+            data.append("free", formData.free);
+      data.append("currency", formData.currency);
+      data.append("amount", formData.free === "1" ? 0 : formData.amount);
+
 
       const res = await createPreRegEvent(data);
 
@@ -218,6 +227,54 @@ const CreateEvents = () => {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
                 />
               </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+              <div>
+                <label className="block text-gray-700 text-sm mb-1">
+                  Event Type
+                </label>
+                <select
+                  name="free"
+                  value={formData.free}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                >
+                  <option value="1">Free</option>
+                  <option value="0">Paid</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 text-sm mb-1">
+                  Currency
+                </label>
+                <select
+                  name="currency"
+                  value={formData.currency}
+                  onChange={handleChange}
+                  disabled={formData.free === "1"}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                >
+                  <option value="NGN">NGN</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-700 text-sm mb-1">
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  name="amount"
+                  value={formData.amount}
+                  onChange={handleChange}
+                  disabled={formData.free === "1"}
+                  placeholder="6000"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                />
+              </div>
+            </div>
+
 
               {/* ----------- NEW TIMEZONE DROPDOWN ----------- */}
               <div>
