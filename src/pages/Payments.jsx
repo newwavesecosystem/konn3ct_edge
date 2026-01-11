@@ -34,6 +34,12 @@ import { format } from "date-fns";
 const generateReceipt = (payment, user) => {
   const win = window.open("", "_blank", "width=800,height=650");
 
+
+  if (!win) {
+    alert("Please allow popups to print receipt");
+    return;
+  }
+
   win.document.write(`
     <html>
       <head>
@@ -104,7 +110,9 @@ const generateReceipt = (payment, user) => {
           </div>
           <div class="row">
             <span class="label">Amount Paid:</span>
-            <span>${payment.currency} ${new Intl.NumberFormat().format(payment.amount)}</span>
+            <span>${payment.currency} ${new Intl.NumberFormat().format(
+              payment.amount
+            )}</span>
           </div>
         </div>
 
@@ -176,13 +184,19 @@ const Payments = () => {
     select: (data) => transformPlans(data.data),
   });
 
-  const { data: userData, isLoading: userLoading, isError: userError } =
-    useQuery({
-      queryKey: ["profile-dashboard"],
-      queryFn: getUser,
-    });
+  const {
+    data: userData,
+    isLoading: userLoading,
+    isError: userError,
+  } = useQuery({
+    queryKey: ["profile-dashboard"],
+    queryFn: getUser,
+  });
 
-  const { data: paymentData } = useQuery({
+  const {
+    data: paymentData,
+    isLoading: paymentsLoading,
+  } = useQuery({
     queryKey: ["payments"],
     queryFn: getList,
   });
@@ -242,21 +256,34 @@ const Payments = () => {
             </TableHeader>
 
             <TableBody>
-              {paymentData.payments.data.map(
+              {paymentData?.payments?.data?.map(
                 (
-                  { type, gateway, date, plan_details, currency, amount, reference },
+                  {
+                    type,
+                    gateway,
+                    date,
+                    plan_details,
+                    currency,
+                    amount,
+                    reference,
+                  },
                   id
                 ) => (
                   <TableRow key={reference}>
                     <TableCell>{id + 1}</TableCell>
                     <TableCell>{type}</TableCell>
-                    <TableCell>{plan_details?.name.toUpperCase()}</TableCell>
                     <TableCell>
-                      {userData.user.lastname} {userData.user.firstname}
+                      {plan_details?.name?.toUpperCase()}
+                    </TableCell>
+                    <TableCell>
+                      {userData?.user?.lastname}{" "}
+                      {userData?.user?.firstname}
                     </TableCell>
                     <TableCell>{gateway}</TableCell>
                     <TableCell>{reference}</TableCell>
-                    <TableCell>{date}</TableCell>
+                    <TableCell>
+                      {format(new Date(date), "PPP")}
+                    </TableCell>
                     <TableCell>
                       {currency}{" "}
                       {new Intl.NumberFormat().format(amount)}
@@ -269,7 +296,7 @@ const Payments = () => {
                           generateReceipt(
                             {
                               type,
-                              plan: plan_details?.name.toUpperCase(),
+                              plan: plan_details?.name?.toUpperCase(),
                               method: gateway,
                               reference,
                               date,
@@ -286,6 +313,15 @@ const Payments = () => {
                   </TableRow>
                 )
               )}
+
+              {!paymentsLoading &&
+                !paymentData?.payments?.data?.length && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-6">
+                      No payments found
+                    </TableCell>
+                  </TableRow>
+                )}
             </TableBody>
           </Table>
         </Card>
@@ -305,11 +341,17 @@ export default Payments;
    PAYMENTS DIALOG + PLAN CARD
 ====================================== */
 const PaymentsDialog = ({ plans, setOpenDialog }) => {
-  const { data, isSuccess } = useQuery({
+  const { data, isSuccess, isLoading } = useQuery({
     queryKey: ["profile"],
     queryFn: getUser,
   });
+
   const { toast } = useToast();
+
+  // ✅ FIX: wait before destructuring
+  if (isLoading || !isSuccess) {
+    return <div className="py-10 text-center">Loading user...</div>;
+  }
 
   const { email, lastName, phone } = data.user;
   const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
@@ -326,102 +368,53 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
     onClose: () => toast({ description: "Payment Cancelled" }),
   };
 
-  if (isSuccess)
-    return (
-      <div className="">
-        <Tabs defaultValue="monthly" className="flex flex-col">
-          <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
-            <TabsTrigger className="rounded-full" value="monthly">
-              Monthly
-            </TabsTrigger>
-            <TabsTrigger className="rounded-full" value="yearly">
-              Yearly
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
-            {plans.monthly.map((plan, index) => (
-              <PlanCard
-                key={index}
-                name={plan.name}
-                cta={plan.cta}
-                target={plan.target}
-                price={plan.price}
-                features={plan.features}
-                setOpenDialog={setOpenDialog}
-                paystackProps={{
-                  text: plan.cta,
-                  amount: plan.price * 100,
-                  ...componentProps,
-                  metadata: {
-                    custom_fields: [
-                      {
-                        display_name: 'paymenttype',
-                        variable_name: 'paymenttype',
-                        value: 'subscription'
-                      },
-                      {
-                        display_name: 'plantype',
-                        variable_name: 'plantype',
-                        value: plan.category
-                      },
-                      {
-                        display_name: 'planname',
-                        variable_name: 'planname',
-                        value: plan.name
-                      },
-                      {
-                        display_name: 'planprice',
-                        variable_name: 'planprice',
-                        value: plan.price
-                      }
-                    ]
-                  }
-                }}
-              />
-            ))}
+  return (
+    <div>
+      <Tabs defaultValue="monthly" className="flex flex-col">
+        <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
+          <TabsTrigger className="rounded-full" value="monthly">
+            Monthly
+          </TabsTrigger>
+          <TabsTrigger className="rounded-full" value="yearly">
+            Yearly
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
+          {plans.monthly.map((plan, index) => (
             <PlanCard
-              name="Enterprise"
-              cta="Contact Sales"
-              target="For Enterprise"
-              price="Custom"
-              features={["Custom Features"]}
+              key={index}
+              {...plan}
               setOpenDialog={setOpenDialog}
+              paystackProps={{
+                ...componentProps,
+                amount: Number(plan.price) * 100, // ✅ FIX
+              }}
             />
-          </TabsContent>
-          <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
-            {plans.yearly.map((plan, index) => (
-              <PlanCard
-                key={index}
-                name={plan.name}
-                cta={plan.cta}
-                target={plan.target}
-                price={plan.price}
-                features={plan.features}
-                setOpenDialog={setOpenDialog}
-                paystackProps={{
-                  text: plan.cta,
-                  amount: plan.price * 100,
-                  ...componentProps,
-                }}
-              />
-            ))}
+          ))}
+        </TabsContent>
+
+        <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
+          {plans.yearly.map((plan, index) => (
             <PlanCard
-              name="Enterprise"
-              cta="Contact Sales"
-              target="For Enterprise"
-              price="Custom"
-              features={["Custom Features"]}
+              key={index}
+              {...plan}
               setOpenDialog={setOpenDialog}
+              paystackProps={{
+                ...componentProps,
+                amount: Number(plan.price) * 100, // ✅ FIX
+              }}
             />
-          </TabsContent>
-        </Tabs>
-      </div>
-    );
+          ))}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 };
 
-// ======================================
-// PLAN CARD COMPONENT
-// ======================================
+/* ======================================
+   PLAN CARD COMPONENT
+====================================== */
 const PlanCard = ({
   name,
   target,
@@ -438,6 +431,7 @@ const PlanCard = ({
       <p className="text-center font-bold text-2xl mb-2">
         {isNaN(price) ? price : "₦" + price}
       </p>
+
       <div className="flex justify-center mb-6">
         {paystackProps ? (
           <div onClick={() => setOpenDialog(false)}>
@@ -454,6 +448,7 @@ const PlanCard = ({
           </Button>
         )}
       </div>
+
       <div className="mb-6">
         {features.map((feature, index) => (
           <div key={index} className="flex gap-x-2 items-center gap-y-1">
@@ -465,4 +460,3 @@ const PlanCard = ({
     </Card>
   );
 };
-
