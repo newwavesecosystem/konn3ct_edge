@@ -63,19 +63,25 @@ const Streaming = () => {
   const [page, setPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
 
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const streamQuery = useQuery({
     queryKey: ["streams", { page }],
     queryFn: () => getStreams(page),
     placeholderData: (prev) => prev,
-  });
 
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+    // ✅ Auto-refresh (near real-time)
+    refetchInterval: 2000, // every 2 seconds (adjust to taste)
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
 
   const stopStreamMutation = useMutation({
     mutationFn: stopStreaming,
     onSuccess: () => {
-      queryClient.invalidateQueries(["streams"]);
+      // ✅ Refetch streams after stopping
+      queryClient.invalidateQueries({ queryKey: ["streams"] });
       toast({ description: "Streaming successfully ended" });
     },
   });
@@ -94,6 +100,7 @@ const Streaming = () => {
           <Button onClick={() => setOpenDialog(true)}>
             <Plus /> Stream
           </Button>
+
           <StatCard
             value={streamQuery.data?.total ?? 0}
             name="Total Streams"
@@ -111,9 +118,10 @@ const Streaming = () => {
             name="Active Streams"
             icon={activeIcon}
           />
-
         </div>
+
         <Separator />
+
         <Table>
           <TableHeader>
             <TableRow>
@@ -126,6 +134,7 @@ const Streaming = () => {
               <TableHead>Action</TableHead>
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {streamQuery.data.data.map(
               ({ room, id, type, status, created_at, ended_at }) => (
@@ -133,19 +142,19 @@ const Streaming = () => {
                   <TableCell>{id}</TableCell>
                   <TableCell>{room?.name ?? "Temporary room"}</TableCell>
                   <TableCell>{type}</TableCell>
+
                   <TableCell className="text-center">
                     <Badge variant={status === 1 ? "" : "destructive"}>
                       {status === 1 ? "Running" : "Ended"}
                     </Badge>
                   </TableCell>
+
                   <TableCell>{formatDate(created_at)}</TableCell>
+
                   <TableCell>
-                    {ended_at === null ? (
-                      <Badge>Running</Badge>
-                    ) : (
-                      formatDate(ended_at)
-                    )}
+                    {ended_at === null ? <Badge>Running</Badge> : formatDate(ended_at)}
                   </TableCell>
+
                   {status === 1 && (
                     <TableCell>
                       <Button
@@ -161,11 +170,13 @@ const Streaming = () => {
             )}
           </TableBody>
         </Table>
+
         {streamQuery.data.data.length === 0 && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
             <p>No data available for this table</p>
           </div>
         )}
+
         <Pagination className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
           <PaginationContent>
             <PaginationItem>
@@ -174,19 +185,20 @@ const Streaming = () => {
                 onClick={() => setPage((prev) => prev - 1)}
               />
             </PaginationItem>
-            {Array.from(
-              { length: streamQuery.data.last_page },
-              (_, i) => 1 + i
-            ).map((index) => (
-              <PaginationItem key={`page-${index}`}>
-                <PaginationLink
-                  disabled={index === streamQuery.data.current_page}
-                  onClick={() => setPage(index)}
-                >
-                  {index}
-                </PaginationLink>
-              </PaginationItem>
-            ))}
+
+            {Array.from({ length: streamQuery.data.last_page }, (_, i) => 1 + i).map(
+              (index) => (
+                <PaginationItem key={`page-${index}`}>
+                  <PaginationLink
+                    disabled={index === streamQuery.data.current_page}
+                    onClick={() => setPage(index)}
+                  >
+                    {index}
+                  </PaginationLink>
+                </PaginationItem>
+              )
+            )}
+
             <PaginationItem>
               <PaginationNext
                 disabled={streamQuery.data.next_page_url == null}
@@ -196,6 +208,7 @@ const Streaming = () => {
           </PaginationContent>
         </Pagination>
       </Card>
+
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent className="w-1/2">
           <DialogTitle>Create a new stream</DialogTitle>
@@ -217,6 +230,8 @@ const StreamForm = ({ setOpenDialog }) => {
   const [rooms, setRooms] = useState([]);
   const [roomLoading, setRoomLoading] = useState(true);
 
+  const queryClient = useQueryClient(); // ✅ needed to refetch streams after start
+
   const types = [
     { value: "Youtube", label: "Youtube" },
     { value: "Facebook", label: "Facebook" },
@@ -224,6 +239,7 @@ const StreamForm = ({ setOpenDialog }) => {
 
   useEffect(() => {
     let cancelled = false;
+
     const loadRooms = async () => {
       try {
         const res = await getRooms();
@@ -259,14 +275,15 @@ const StreamForm = ({ setOpenDialog }) => {
     mutationFn: startStream,
     onSuccess: (res) => {
       toast({ description: res.message });
+
+      // ✅ instant update after starting a stream
+      queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
   });
 
   const formSchema = z.object({
     room_id: z.string().nonempty({ message: "Room is required." }),
-    type: z.enum(["Youtube", "Facebook"], {
-      message: "Select a valid type.",
-    }),
+    type: z.enum(["Youtube", "Facebook"], { message: "Select a valid type." }),
     key: z.string().default("123"),
   });
 
@@ -306,7 +323,10 @@ const StreamForm = ({ setOpenDialog }) => {
                     {Array.isArray(rooms) &&
                       rooms.map((room) => (
                         <option key={room.id} value={room.id}>
-                          {room.room_name || room.name || room.label || `Room ${room.id}`}
+                          {room.room_name ||
+                            room.name ||
+                            room.label ||
+                            `Room ${room.id}`}
                         </option>
                       ))}
                   </select>
@@ -316,7 +336,6 @@ const StreamForm = ({ setOpenDialog }) => {
             )}
           />
 
-          {/* Keep the rest of your form untouched */}
           <FormField
             control={form.control}
             name="type"
