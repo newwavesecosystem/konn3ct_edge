@@ -115,8 +115,8 @@ const InviteHistory = () => {
                   <TableCell>{capitalize(type)}</TableCell>
                   <TableCell className="">{roomname}</TableCell>
                   <TableCell className="flex flex-col gap-y-1">
-                    {guest.split(",").map((email, id) => (
-                      <p key={email + id}>{email}</p>
+                    {guest.split(",").map((email, idx) => (
+                      <p key={email + idx}>{email}</p>
                     ))}
                   </TableCell>
                   <TableCell>{formatDate(date, false)}</TableCell>
@@ -162,10 +162,7 @@ const InviteHistory = () => {
             <PaginationItem>
               <PaginationNext
                 disabled={inviteQuery.data.next_page_url == null}
-                onClick={() => {
-                  setPage((prev) => prev + 1);
-                  console.log(page);
-                }}
+                onClick={() => setPage((prev) => prev + 1)}
               />
             </PaginationItem>
           </PaginationContent>
@@ -270,7 +267,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-4">
-          {/* ✅ Fixed Room Field */}
+          {/* ✅ Room Field (FIXED SEARCH) */}
           <FormField
             control={form.control}
             name="room_id"
@@ -307,13 +304,15 @@ export const MeetingForm = ({ setOpenDialog }) => {
                               {rooms.map((room) => (
                                 <CommandItem
                                   key={room.id}
-                                  value={String(room.id)}
-                                  onSelect={(currentValue) => {
-                                    field.onChange(
-                                      currentValue === field.value
+                                  // ✅✅✅ IMPORTANT: search works on "value"
+                                  value={String(room.name ?? "").toLowerCase()}
+                                  onSelect={() => {
+                                    // set actual form value to room id
+                                    const newValue =
+                                      String(room.id) === field.value
                                         ? ""
-                                        : currentValue
-                                    );
+                                        : String(room.id);
+                                    field.onChange(newValue);
                                     setRoomOpen(false);
                                   }}
                                 >
@@ -414,6 +413,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
               </FormItem>
             )}
           />
+
           <FormField
             control={form.control}
             name="timezone"
@@ -518,8 +518,8 @@ export const MeetingForm = ({ setOpenDialog }) => {
             )}
           />
           <div className="flex justify-center">
-            <Button size="lg" type="submit">
-              Submit
+            <Button size="lg" type="submit" disabled={sendInviteMutation.isPending}>
+              {sendInviteMutation.isPending ? "Submitting..." : "Submit"}
             </Button>
           </div>
         </div>
