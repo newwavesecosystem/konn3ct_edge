@@ -111,8 +111,8 @@ const generateReceipt = (payment, user) => {
           <div class="row">
             <span class="label">Amount Paid:</span>
             <span>${payment.currency} ${new Intl.NumberFormat().format(
-              payment.amount
-            )}</span>
+    payment.amount
+  )}</span>
           </div>
         </div>
 
@@ -171,6 +171,25 @@ const transformPlans = (data) => {
     ],
     cta: plan.name === "basic" ? "Free" : "Upgrade",
   }));
+
+
+  const hasEnterprise = (arr) =>
+    arr.some((p) => String(p.name).toLowerCase() === "enterprise");
+
+  const enterprisePlan = {
+    name: "enterprise",
+    price: "Custom",
+    target: "For Enterprise",
+    features: ["Custom Features"],
+    cta: "Contact Sales",
+  };
+
+  if (!hasEnterprise(monthlyPlans)) {
+    monthlyPlans.push({ ...enterprisePlan, category: "monthly" });
+  }
+  if (!hasEnterprise(yearlyPlans)) {
+    yearlyPlans.push({ ...enterprisePlan, category: "yearly" });
+  }
 
   return { monthly: monthlyPlans, yearly: yearlyPlans };
 };
@@ -386,10 +405,14 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
               key={index}
               {...plan}
               setOpenDialog={setOpenDialog}
-              paystackProps={{
-                ...componentProps,
-                amount: Number(plan.price) * 100, // ✅ FIX
-              }}
+              paystackProps={
+                isNaN(Number(plan.price))
+                  ? undefined // e.g. Enterprise (Custom)
+                  : {
+                    ...componentProps,
+                    amount: Number(plan.price) * 100, // ✅ FIX
+                  }
+              }
             />
           ))}
         </TabsContent>
@@ -400,10 +423,14 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
               key={index}
               {...plan}
               setOpenDialog={setOpenDialog}
-              paystackProps={{
-                ...componentProps,
-                amount: Number(plan.price) * 100, // ✅ FIX
-              }}
+              paystackProps={
+                isNaN(Number(plan.price))
+                  ? undefined
+                  : {
+                    ...componentProps,
+                    amount: Number(plan.price) * 100, // ✅ FIX
+                  }
+              }
             />
           ))}
         </TabsContent>
@@ -442,10 +469,13 @@ const PlanCard = ({
           </div>
         ) : (
           <Button
-            onClick={() => (window.location.href = "mailto:info@konn3ct.com")}
+            onClick={() =>
+              window.open("https://www.newwavesecosystem.com/contactus", "_blank")
+            }
           >
             {cta}
           </Button>
+
         )}
       </div>
 
