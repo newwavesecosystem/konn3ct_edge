@@ -250,10 +250,11 @@ const Recordings = () => {
         </Table>
 
         {filteredRecordings.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p>No recordings match your filter</p>
           </div>
         )}
+
       </Card>
 
       {/* Delete Dialog */}
