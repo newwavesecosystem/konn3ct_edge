@@ -11,7 +11,7 @@ import { ArrowLeft } from "lucide-react";
 const NAVBAR_HEIGHT = 72;
 
 /* ======================================
-   EXPORT + PRINT HELPERS (Payments.jsx style)
+   HELPERS (COPY / CSV / EXCEL / PRINT)
 ====================================== */
 function escapeHtml(str = "") {
   return String(str)
@@ -52,7 +52,7 @@ function rowsToCSV(headers, rows) {
   return [headerLine, ...lines].join("\n");
 }
 
-// Excel: save as HTML table but download with .xls (Excel opens it fine)
+// Excel: save HTML table as .xls (Excel opens it fine)
 function rowsToExcelHTML(title, headers, rows) {
   const thead = `<tr>${headers
     .map((h) => `<th>${escapeHtml(h)}</th>`)
@@ -84,10 +84,10 @@ function rowsToExcelHTML(title, headers, rows) {
 }
 
 /**
- * ✅ PRINT (same method as Payments.jsx receipt):
- * - Open popup
- * - Write HTML
- * - In the popup: window.onload => window.print()
+ * ✅ PRINT (same method as Payments.jsx):
+ * - open popup
+ * - write HTML
+ * - in popup: window.onload => window.print()
  */
 function printTableLikePayments(title, headers, rows) {
   const win = window.open("", "_blank", "width=900,height=700");
@@ -175,8 +175,40 @@ function printTableLikePayments(title, headers, rows) {
   win.document.close();
 }
 
+/**
+ * ✅ COPY with fallback (works if navigator.clipboard fails)
+ */
+async function copyToClipboard(text) {
+  // modern clipboard (needs secure context)
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    // continue to fallback
+  }
+
+  // fallback method
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-9999px";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 /* ======================================
-   VIEW ATTENDANCE
+   VIEW ATTENDANCE COMPONENT
 ====================================== */
 const ViewAttendance = () => {
   const { meeting_id, identifier } = useParams();
@@ -187,6 +219,9 @@ const ViewAttendance = () => {
   const [error, setError] = useState(null);
 
   const [search, setSearch] = useState("");
+
+  // ✅ copy feedback
+  const [copied, setCopied] = useState(false);
 
   // Side panel
   const [panelOpen, setPanelOpen] = useState(false);
@@ -278,12 +313,14 @@ const ViewAttendance = () => {
 
   // Actions
   const handleCopy = async () => {
-    try {
-      const tsv = rowsToTSV(headers, filteredRows);
-      await navigator.clipboard.writeText(tsv);
-    } catch (e) {
-      console.error(e);
-      alert("Copy failed. Browser blocked clipboard access.");
+    const tsv = rowsToTSV(headers, filteredRows);
+    const ok = await copyToClipboard(tsv);
+
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      alert("Copy failed. Please allow clipboard permission or use HTTPS.");
     }
   };
 
@@ -342,7 +379,7 @@ const ViewAttendance = () => {
                   onClick={handleCopy}
                   className="px-4 py-1.5 border rounded-md text-sm"
                 >
-                  COPY
+                  {copied ? "COPIED ✅" : "COPY"}
                 </button>
                 <button
                   onClick={handleCSV}
