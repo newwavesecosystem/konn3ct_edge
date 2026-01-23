@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getAttendanceDetails,
@@ -10,6 +10,90 @@ import { ArrowLeft } from "lucide-react";
 
 const NAVBAR_HEIGHT = 72;
 
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function rowsToTSV(headers, rows) {
+  const headerLine = headers.join("\t");
+  const lines = rows.map((r) => headers.map((h) => (r[h] ?? "")).join("\t"));
+  return [headerLine, ...lines].join("\n");
+}
+
+function rowsToCSV(headers, rows) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    const needsQuotes = /[",\n\r]/.test(s);
+    const safe = s.replaceAll('"', '""');
+    return needsQuotes ? `"${safe}"` : safe;
+  };
+
+  const headerLine = headers.map(esc).join(",");
+  const lines = rows.map((r) => headers.map((h) => esc(r[h])).join(","));
+  return [headerLine, ...lines].join("\n");
+}
+
+function rowsToExcelHTML(title, headers, rows) {
+  const thead = `<tr>${headers
+    .map((h) => `<th>${escapeHtml(h)}</th>`)
+    .join("")}</tr>`;
+
+  const tbody = rows
+    .map(
+      (r) =>
+        `<tr>${headers
+          .map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`)
+          .join("")}</tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+</head>
+<body>
+  <h3>${escapeHtml(title)}</h3>
+  <table border="1" cellspacing="0" cellpadding="6">
+    <thead>${thead}</thead>
+    <tbody>${tbody}</tbody>
+  </table>
+</body>
+</html>`;
+}
+
+function printHTML(html) {
+  const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+  if (!w) return;
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+
+  w.focus();
+  setTimeout(() => {
+    w.print();
+    w.close();
+  }, 250);
+}
+
 const ViewAttendance = () => {
   const { meeting_id, identifier } = useParams();
   const navigate = useNavigate();
@@ -17,6 +101,8 @@ const ViewAttendance = () => {
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [search, setSearch] = useState("");
 
   // Side panel
   const [panelOpen, setPanelOpen] = useState(false);
@@ -78,6 +164,54 @@ const ViewAttendance = () => {
     }
   };
 
+  // Normalize rows for export + for filtering
+  const exportRows = useMemo(() => {
+    return (attendanceData || []).map((row, i) => ({
+      "S/N": i + 1,
+      NAME: row.name || row.attendee_name || "N/A",
+      EMAIL: row.email || row.attendee_email || "N/A",
+      STATUS: row.status || "Unknown",
+      "DATE & TIME": row.created_at
+        ? new Date(row.created_at).toLocaleString()
+        : row.date
+        ? row.date + (row.time ? ` | ${row.time}` : "")
+        : "N/A",
+    }));
+  }, [attendanceData]);
+
+  const headers = useMemo(
+    () => ["S/N", "NAME", "EMAIL", "STATUS", "DATE & TIME"],
+    []
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return exportRows;
+    return exportRows.filter((r) =>
+      Object.values(r).some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [exportRows, search]);
+
+  const handleCopy = async () => {
+    const tsv = rowsToTSV(headers, filteredRows);
+    await navigator.clipboard.writeText(tsv);
+  };
+
+  const handleCSV = () => {
+    const csv = rowsToCSV(headers, filteredRows);
+    downloadBlob(`attendance-${meeting_id || "export"}.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  };
+
+  const handleExcel = () => {
+    const html = rowsToExcelHTML(`Meeting Attendance (${filteredRows.length})`, headers, filteredRows);
+    downloadBlob(`attendance-${meeting_id || "export"}.xls`, new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" }));
+  };
+
+  const handlePrint = () => {
+    const html = rowsToExcelHTML(`Meeting Attendance (${filteredRows.length})`, headers, filteredRows);
+    printHTML(html);
+  };
+
   if (loading)
     return (
       <div className="flex justify-center items-center h-64">
@@ -97,15 +231,22 @@ const ViewAttendance = () => {
       {/* MAIN CONTENT */}
       <div className="min-h-screen flex items-center justify-center px-4 py-20 m-auto">
         <div className="w-full max-w-6xl bg-white rounded-2xl shadow-sm border p-8">
-
           {/* TOP ACTIONS */}
           <div className="flex justify-between items-center mb-6">
             <div>
               <div className="flex gap-3 mb-3">
-                <button className="px-4 py-1.5 border rounded-md text-sm">COPY</button>
-                <button className="px-4 py-1.5 border rounded-md text-sm">CSV</button>
-                <button className="px-4 py-1.5 border rounded-md text-sm">EXCEL</button>
-                <button className="px-4 py-1.5 border rounded-md text-sm">PRINT</button>
+                <button onClick={handleCopy} className="px-4 py-1.5 border rounded-md text-sm">
+                  COPY
+                </button>
+                <button onClick={handleCSV} className="px-4 py-1.5 border rounded-md text-sm">
+                  CSV
+                </button>
+                <button onClick={handleExcel} className="px-4 py-1.5 border rounded-md text-sm">
+                  EXCEL
+                </button>
+                <button onClick={handlePrint} className="px-4 py-1.5 border rounded-md text-sm">
+                  PRINT
+                </button>
               </div>
 
               <div className="flex gap-3">
@@ -131,6 +272,8 @@ const ViewAttendance = () => {
             </div>
 
             <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               type="text"
               placeholder="Search"
               className="border px-4 py-2 rounded-full w-64 text-sm"
@@ -160,42 +303,36 @@ const ViewAttendance = () => {
 
           {/* TABLE ROWS */}
           <div className="space-y-3">
-            {attendanceData.length === 0 ? (
+            {filteredRows.length === 0 ? (
               <div className="text-center text-gray-500 text-sm py-10">
                 No participants found for this meeting.
               </div>
             ) : (
-              attendanceData.map((row, index) => (
+              filteredRows.map((r, index) => (
                 <div
-                  key={row.id || index}
+                  key={index}
                   className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center bg-gray-50 hover:bg-gray-100 transition rounded-xl px-4 py-3 text-sm text-gray-700"
                 >
-                  <span>{index + 1}</span>
-                  <span>{row.name || row.attendee_name || "N/A"}</span>
+                  <span>{r["S/N"]}</span>
+                  <span>{r.NAME}</span>
 
-                  <span className="truncate" title={row.email || row.attendee_email}>
-                    {row.email || row.attendee_email || "N/A"}
+                  <span className="truncate" title={r.EMAIL}>
+                    {r.EMAIL}
                   </span>
 
                   <span>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                        row.status === "Joined" || row.status === "Present"
+                        r.STATUS === "Joined" || r.STATUS === "Present"
                           ? "bg-green-100 text-green-700"
                           : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {row.status || "Unknown"}
+                      {r.STATUS}
                     </span>
                   </span>
 
-                  <span>
-                    {row.created_at
-                      ? new Date(row.created_at).toLocaleString()
-                      : row.date
-                      ? row.date + (row.time ? ` | ${row.time}` : "")
-                      : "N/A"}
-                  </span>
+                  <span>{r["DATE & TIME"]}</span>
                 </div>
               ))
             )}
@@ -205,10 +342,7 @@ const ViewAttendance = () => {
 
       {/* OVERLAY */}
       {panelOpen && (
-        <div
-          onClick={() => setPanelOpen(false)}
-          className="fixed inset-0 bg-black/20 z-40"
-        />
+        <div onClick={() => setPanelOpen(false)} className="fixed inset-0 bg-black/20 z-40" />
       )}
 
       {/* SIDE PANEL */}
