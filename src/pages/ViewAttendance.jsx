@@ -10,6 +10,9 @@ import { ArrowLeft } from "lucide-react";
 
 const NAVBAR_HEIGHT = 72;
 
+/* ======================================
+   EXPORT + PRINT HELPERS (Payments.jsx style)
+====================================== */
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -49,6 +52,7 @@ function rowsToCSV(headers, rows) {
   return [headerLine, ...lines].join("\n");
 }
 
+// Excel: save as HTML table but download with .xls (Excel opens it fine)
 function rowsToExcelHTML(title, headers, rows) {
   const thead = `<tr>${headers
     .map((h) => `<th>${escapeHtml(h)}</th>`)
@@ -79,21 +83,101 @@ function rowsToExcelHTML(title, headers, rows) {
 </html>`;
 }
 
-function printHTML(html) {
-  const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-  if (!w) return;
+/**
+ * ✅ PRINT (same method as Payments.jsx receipt):
+ * - Open popup
+ * - Write HTML
+ * - In the popup: window.onload => window.print()
+ */
+function printTableLikePayments(title, headers, rows) {
+  const win = window.open("", "_blank", "width=900,height=700");
 
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  if (!win) {
+    alert("Please allow popups to print");
+    return;
+  }
 
-  w.focus();
-  setTimeout(() => {
-    w.print();
-    w.close();
-  }, 250);
+  const thead = `<tr>${headers
+    .map((h) => `<th>${escapeHtml(h)}</th>`)
+    .join("")}</tr>`;
+
+  const tbody = rows
+    .map(
+      (r) =>
+        `<tr>${headers
+          .map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`)
+          .join("")}</tr>`
+    )
+    .join("");
+
+  win.document.write(`
+    <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            color: #222;
+          }
+          h1 {
+            text-align: center;
+            margin-bottom: 5px;
+          }
+          .subtitle {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+          }
+          th, td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: left;
+            font-size: 13px;
+          }
+          th {
+            background: #f3f3f3;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #777;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Konn3ct</h1>
+        <p class="subtitle">${escapeHtml(title)}</p>
+
+        <table>
+          <thead>${thead}</thead>
+          <tbody>${tbody}</tbody>
+        </table>
+
+        <div class="footer">
+          <p>This printout was generated electronically.</p>
+        </div>
+
+        <script>
+          window.onload = function () {
+            window.print();
+          };
+        </script>
+      </body>
+    </html>
+  `);
+
+  win.document.close();
 }
 
+/* ======================================
+   VIEW ATTENDANCE
+====================================== */
 const ViewAttendance = () => {
   const { meeting_id, identifier } = useParams();
   const navigate = useNavigate();
@@ -116,7 +200,7 @@ const ViewAttendance = () => {
         const data = await getAttendanceDetails(meeting_id, identifier);
 
         if (Array.isArray(data)) setAttendanceData(data);
-        else if (typeof data === "object") setAttendanceData([data]);
+        else if (typeof data === "object" && data) setAttendanceData([data]);
         else setAttendanceData([]);
       } catch (err) {
         console.error(err);
@@ -164,7 +248,7 @@ const ViewAttendance = () => {
     }
   };
 
-  // Normalize rows for export + for filtering
+  // Normalize rows for export + filtering
   const exportRows = useMemo(() => {
     return (attendanceData || []).map((row, i) => ({
       "S/N": i + 1,
@@ -192,24 +276,43 @@ const ViewAttendance = () => {
     );
   }, [exportRows, search]);
 
+  // Actions
   const handleCopy = async () => {
-    const tsv = rowsToTSV(headers, filteredRows);
-    await navigator.clipboard.writeText(tsv);
+    try {
+      const tsv = rowsToTSV(headers, filteredRows);
+      await navigator.clipboard.writeText(tsv);
+    } catch (e) {
+      console.error(e);
+      alert("Copy failed. Browser blocked clipboard access.");
+    }
   };
 
   const handleCSV = () => {
     const csv = rowsToCSV(headers, filteredRows);
-    downloadBlob(`attendance-${meeting_id || "export"}.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    downloadBlob(
+      `attendance-${meeting_id || "export"}.csv`,
+      new Blob([csv], { type: "text/csv;charset=utf-8" })
+    );
   };
 
   const handleExcel = () => {
-    const html = rowsToExcelHTML(`Meeting Attendance (${filteredRows.length})`, headers, filteredRows);
-    downloadBlob(`attendance-${meeting_id || "export"}.xls`, new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" }));
+    const html = rowsToExcelHTML(
+      `Meeting Attendance (${filteredRows.length})`,
+      headers,
+      filteredRows
+    );
+    downloadBlob(
+      `attendance-${meeting_id || "export"}.xls`,
+      new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" })
+    );
   };
 
   const handlePrint = () => {
-    const html = rowsToExcelHTML(`Meeting Attendance (${filteredRows.length})`, headers, filteredRows);
-    printHTML(html);
+    printTableLikePayments(
+      `Meeting Attendance (${filteredRows.length})`,
+      headers,
+      filteredRows
+    );
   };
 
   if (loading)
@@ -235,16 +338,28 @@ const ViewAttendance = () => {
           <div className="flex justify-between items-center mb-6">
             <div>
               <div className="flex gap-3 mb-3">
-                <button onClick={handleCopy} className="px-4 py-1.5 border rounded-md text-sm">
+                <button
+                  onClick={handleCopy}
+                  className="px-4 py-1.5 border rounded-md text-sm"
+                >
                   COPY
                 </button>
-                <button onClick={handleCSV} className="px-4 py-1.5 border rounded-md text-sm">
+                <button
+                  onClick={handleCSV}
+                  className="px-4 py-1.5 border rounded-md text-sm"
+                >
                   CSV
                 </button>
-                <button onClick={handleExcel} className="px-4 py-1.5 border rounded-md text-sm">
+                <button
+                  onClick={handleExcel}
+                  className="px-4 py-1.5 border rounded-md text-sm"
+                >
                   EXCEL
                 </button>
-                <button onClick={handlePrint} className="px-4 py-1.5 border rounded-md text-sm">
+                <button
+                  onClick={handlePrint}
+                  className="px-4 py-1.5 border rounded-md text-sm"
+                >
                   PRINT
                 </button>
               </div>
@@ -323,7 +438,8 @@ const ViewAttendance = () => {
                   <span>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                        r.STATUS === "Joined" || r.STATUS === "Present"
+                        String(r.STATUS).toLowerCase() === "joined" ||
+                        String(r.STATUS).toLowerCase() === "present"
                           ? "bg-green-100 text-green-700"
                           : "bg-gray-100 text-gray-600"
                       }`}
@@ -342,7 +458,10 @@ const ViewAttendance = () => {
 
       {/* OVERLAY */}
       {panelOpen && (
-        <div onClick={() => setPanelOpen(false)} className="fixed inset-0 bg-black/20 z-40" />
+        <div
+          onClick={() => setPanelOpen(false)}
+          className="fixed inset-0 bg-black/20 z-40"
+        />
       )}
 
       {/* SIDE PANEL */}
