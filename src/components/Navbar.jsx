@@ -88,12 +88,15 @@ const Navbar = () => {
                   </NavigationMenuItem>
                 </NavigationMenuList>
               </NavigationMenu>
-              <Avatar className="rounded-lg">
-                {userQuery.isSuccess && (
-                  <AvatarImage src={userQuery.data.user.profile_photo_url} />
-                )}
-                <AvatarFallback>CN</AvatarFallback>
-              </Avatar>
+              <Link to="/profile">
+                <Avatar className="rounded-lg">
+                  {userQuery.isSuccess && (
+                    <AvatarImage src={userQuery.data.user.profile_photo_url} />
+                  )}
+                  <AvatarFallback>CN</AvatarFallback>
+                </Avatar>
+              </Link>
+
             </>
           ) : (
             <>
@@ -127,7 +130,7 @@ const Navbar = () => {
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Features`}>
             Solutions
           </Link>
-          <Link className="block"  to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
+          <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
             Plans & Pricing
           </Link>
           <Link className="block" to="/">
