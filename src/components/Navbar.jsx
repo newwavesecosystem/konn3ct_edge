@@ -31,7 +31,7 @@ const Navbar = () => {
     <nav className="fixed top-0 w-full z-[100] bg-white shadow-md">
       <div className="flex items-center justify-between px-5 py-3">
         {/* Logo */}
-        <Link to="/profile">
+        <Link to="/">
           <img src={logo} alt="Konne3ct logo" className="h-8" />
         </Link>
 
