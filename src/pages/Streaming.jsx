@@ -16,7 +16,13 @@ import { Separator } from "../components/ui/separator";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getStreams, startStream, stopStreaming, getRooms } from "../api/streamApi";
+import {
+  getStreams,
+  startStream,
+  stopStreaming,
+  getRooms,
+  startComboStreaming, // ✅ NEW
+} from "../api/streamApi";
 import {
   Pagination,
   PaginationContent,
@@ -72,7 +78,7 @@ const Streaming = () => {
     placeholderData: (prev) => prev,
 
     // ✅ Auto-refresh (near real-time)
-    refetchInterval: 2000, // every 2 seconds (adjust to taste)
+    refetchInterval: 2000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -80,7 +86,6 @@ const Streaming = () => {
   const stopStreamMutation = useMutation({
     mutationFn: stopStreaming,
     onSuccess: () => {
-      // ✅ Refetch streams after stopping
       queryClient.invalidateQueries({ queryKey: ["streams"] });
       toast({ description: "Streaming successfully ended" });
     },
@@ -152,7 +157,11 @@ const Streaming = () => {
                   <TableCell>{formatDate(created_at)}</TableCell>
 
                   <TableCell>
-                    {ended_at === null ? <Badge>Running</Badge> : formatDate(ended_at)}
+                    {ended_at === null ? (
+                      <Badge>Running</Badge>
+                    ) : (
+                      formatDate(ended_at)
+                    )}
                   </TableCell>
 
                   {status === 1 && (
@@ -186,18 +195,19 @@ const Streaming = () => {
               />
             </PaginationItem>
 
-            {Array.from({ length: streamQuery.data.last_page }, (_, i) => 1 + i).map(
-              (index) => (
-                <PaginationItem key={`page-${index}`}>
-                  <PaginationLink
-                    disabled={index === streamQuery.data.current_page}
-                    onClick={() => setPage(index)}
-                  >
-                    {index}
-                  </PaginationLink>
-                </PaginationItem>
-              )
-            )}
+            {Array.from(
+              { length: streamQuery.data.last_page },
+              (_, i) => 1 + i
+            ).map((index) => (
+              <PaginationItem key={`page-${index}`}>
+                <PaginationLink
+                  disabled={index === streamQuery.data.current_page}
+                  onClick={() => setPage(index)}
+                >
+                  {index}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
 
             <PaginationItem>
               <PaginationNext
@@ -230,11 +240,12 @@ const StreamForm = ({ setOpenDialog }) => {
   const [rooms, setRooms] = useState([]);
   const [roomLoading, setRoomLoading] = useState(true);
 
-  const queryClient = useQueryClient(); // ✅ needed to refetch streams after start
+  const queryClient = useQueryClient();
 
   const types = [
     { value: "Youtube", label: "Youtube" },
     { value: "Facebook", label: "Facebook" },
+    { value: "Combo", label: "Combo (YouTube + Facebook)" }, // ✅ NEW
   ];
 
   useEffect(() => {
@@ -274,30 +285,88 @@ const StreamForm = ({ setOpenDialog }) => {
   const startStreamMutation = useMutation({
     mutationFn: startStream,
     onSuccess: (res) => {
-      toast({ description: res.message });
-
-      // ✅ instant update after starting a stream
+      toast({ description: res.message || "Stream started" });
       queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
   });
 
-  const formSchema = z.object({
-    room_id: z.string().nonempty({ message: "Room is required." }),
-    type: z.enum(["Youtube", "Facebook"], { message: "Select a valid type." }),
-    key: z.string().default("123"),
+  const startComboMutation = useMutation({
+    mutationFn: startComboStreaming,
+    onSuccess: (res) => {
+      toast({ description: res.message || "Combo streaming started" });
+      queryClient.invalidateQueries({ queryKey: ["streams"] });
+    },
   });
+
+  const formSchema = z
+    .object({
+      room_id: z.string().nonempty({ message: "Room is required." }),
+      type: z.enum(["Youtube", "Facebook", "Combo"], {
+        message: "Select a valid type.",
+      }),
+
+      // single platform
+      key: z.string().optional(),
+
+      // combo
+      youtube_key: z.string().optional(),
+      facebook_key: z.string().optional(),
+    })
+    .superRefine((values, ctx) => {
+      if (values.type === "Combo") {
+        if (!values.youtube_key || values.youtube_key.trim() === "") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "YouTube key is required for Combo.",
+            path: ["youtube_key"],
+          });
+        }
+        if (!values.facebook_key || values.facebook_key.trim() === "") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Facebook key is required for Combo.",
+            path: ["facebook_key"],
+          });
+        }
+      } else {
+        if (!values.key || values.key.trim() === "") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Key is required.",
+            path: ["key"],
+          });
+        }
+      }
+    });
 
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       room_id: "",
       type: "Youtube",
-      key: "123",
+      key: "",
+      youtube_key: "",
+      facebook_key: "",
     },
   });
 
+  const selectedType = form.watch("type");
+
   const onSubmit = (data) => {
-    startStreamMutation.mutate(data);
+    if (data.type === "Combo") {
+      startComboMutation.mutate({
+        room_id: data.room_id,
+        youtube_key: data.youtube_key,
+        facebook_key: data.facebook_key,
+      });
+    } else {
+      startStreamMutation.mutate({
+        room_id: data.room_id,
+        type: data.type,
+        key: data.key,
+      });
+    }
+
     setOpenDialog(false);
   };
 
@@ -310,7 +379,9 @@ const StreamForm = ({ setOpenDialog }) => {
             name="room_id"
             render={({ field }) => (
               <FormItem>
-                <label className="block text-gray-700 text-sm mb-1">Select Room</label>
+                <label className="block text-gray-700 text-sm mb-1">
+                  Select Room
+                </label>
                 <FormControl>
                   <select
                     {...field}
@@ -393,24 +464,72 @@ const StreamForm = ({ setOpenDialog }) => {
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="key"
-            render={({ field }) => (
-              <FormItem>
-                <label htmlFor="key" className="block font-medium">
-                  Key
-                </label>
-                <FormControl>
-                  <Input id="key" placeholder="Enter Key" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {selectedType === "Combo" ? (
+            <>
+              <FormField
+                control={form.control}
+                name="youtube_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <label htmlFor="youtube_key" className="block font-medium">
+                      YouTube Key
+                    </label>
+                    <FormControl>
+                      <Input
+                        id="youtube_key"
+                        placeholder="Enter YouTube Key"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="facebook_key"
+                render={({ field }) => (
+                  <FormItem>
+                    <label htmlFor="facebook_key" className="block font-medium">
+                      Facebook Key
+                    </label>
+                    <FormControl>
+                      <Input
+                        id="facebook_key"
+                        placeholder="Enter Facebook Key"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          ) : (
+            <FormField
+              control={form.control}
+              name="key"
+              render={({ field }) => (
+                <FormItem>
+                  <label htmlFor="key" className="block font-medium">
+                    Key
+                  </label>
+                  <FormControl>
+                    <Input id="key" placeholder="Enter Key" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           <div className="flex justify-center">
-            <Button type="submit" size="lg">
+            <Button
+              type="submit"
+              size="lg"
+              disabled={startStreamMutation.isPending || startComboMutation.isPending}
+            >
               Submit
             </Button>
           </div>

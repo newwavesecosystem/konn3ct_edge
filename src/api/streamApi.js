@@ -27,6 +27,16 @@ export const startStream = async (data) => {
   }
 };
 
+// Start Combo Streaming (YouTube + Facebook)
+export const startComboStreaming = async (data) => {
+  try {
+    const res = await api.post("/start-streaming-combo", data);
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getRooms = async () => {
   try {
     const res = await api.get("/myrooms");
