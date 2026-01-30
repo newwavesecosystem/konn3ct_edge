@@ -137,12 +137,13 @@ const Dashboard = () => {
 
         {/* Right Side */}
         <div className="flex flex-col gap-10">
-          <div className="max-w-full lg:max-w-[355px]">
+          <div className="max-w-full lg:max-w-[355px] p-1">
             <h2 className="font-semibold text-[#707070] mb-3 text-center lg:text-left">
               Let's get you started
             </h2>
-            <div className="h-[200px] sm:h-[188px] outline rounded-xl">
+            <div className="h-[200px] sm:h-[188px] outline rounded-xl p-1">
               <iframe
+              className="rounded-xl"
                 width="100%"
                 height="100%"
                 src="https://www.youtube.com/embed/eTFcF4cgNn0"
