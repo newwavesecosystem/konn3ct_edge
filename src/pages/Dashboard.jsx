@@ -145,13 +145,7 @@ const Dashboard = () => {
               <iframe
                 width="100%"
                 height="100%"
-                src={
-                  userQuery[1]?.data?.video_link
-                    ? `https://www.youtube.com/embed/${extractYouTubeID(
-                      userQuery[1].data.video_link
-                    )}`
-                    : ""
-                }
+                src="https://www.youtube.com/embed/eTFcF4cgNn0"
                 title="YouTube video player"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; web-share"
                 referrerPolicy="strict-origin-when-cross-origin"
