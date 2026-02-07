@@ -208,6 +208,30 @@ async function copyToClipboard(text) {
 }
 
 /* ======================================
+   ✅ STATUS NORMALIZER (moderator/participant only)
+====================================== */
+const normalizeStatus = (status) => {
+  if (!status) return "participant";
+
+  const s = String(status ?? "").trim().toLowerCase();
+
+  // Treat these as moderator-like roles (optional, safe mapping)
+  if (
+    s === "moderator" ||
+    s === "host" ||
+    s === "admin" ||
+    s === "start meeting"
+  )
+    return "moderator";
+
+  // Backend "joined" => participant
+  if (s === "joined") return "participant";
+
+  // Everything else becomes participant
+  return "participant";
+};
+
+/* ======================================
    VIEW ATTENDANCE COMPONENT
 ====================================== */
 const ViewAttendance = () => {
@@ -289,7 +313,10 @@ const ViewAttendance = () => {
       "S/N": i + 1,
       NAME: row.name || row.attendee_name || "N/A",
       EMAIL: row.email || row.attendee_email || "N/A",
-      STATUS: row.status || "Unknown",
+
+      // ✅ CHANGED: only moderator/participant
+      STATUS: normalizeStatus(row.status),
+
       "DATE & TIME": row.created_at
         ? new Date(row.created_at).toLocaleString()
         : row.date
@@ -475,10 +502,9 @@ const ViewAttendance = () => {
                   <span>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                        String(r.STATUS).toLowerCase() === "joined" ||
-                        String(r.STATUS).toLowerCase() === "present"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
+                        String(r.STATUS).toLowerCase() === "moderator"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-blue-100 text-blue-700"
                       }`}
                     >
                       {r.STATUS}

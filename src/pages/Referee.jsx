@@ -62,23 +62,38 @@ const Referee = () => {
               <TableHead className="">#</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email Address</TableHead>
+              <TableHead>Referral Link</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>Date Registered</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {refereeQuery.data.data.map(
-              ({ lastname, firstname, email, plan, created_at }, id) => (
+              (
+                { lastname, firstname, email, plan, created_at, referral_code, referral_link, ref },
+                id
+              ) => {
+                const link =
+                  referral_link ||
+                  (referral_code || ref
+                    ? `${window.location.origin}/register?ref=${referral_code || ref}`
+                    : "");
+
+                return (
                 <TableRow key={email + lastname}>
                   <TableCell>{id + 1}</TableCell>
                   <TableCell>
                     {lastname} {firstname}
                   </TableCell>
                   <TableCell className="">{email}</TableCell>
+                  <TableCell className="max-w-[240px] truncate">
+                    {link || "—"}
+                  </TableCell>
                   <TableCell>{capitalize(plan.name)}</TableCell>
                   <TableCell>{formatDate(created_at)}</TableCell>
                 </TableRow>
-              )
+                );
+              }
             )}
           </TableBody>
         </Table>

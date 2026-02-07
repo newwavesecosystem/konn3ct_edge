@@ -45,10 +45,10 @@ export default function Donations() {
     <div className="flex-1 flex justify-center py-10 mt-14 items-center">
       {/* Step 1: Start KYC (only if no KYC yet) */}
       {step === "card" && !kycStatus?.success && (
-        kycStatus?.type === "individual" ? (
-          <IndividualDonation banks={banks} onComplete={() => setStep("status")} />
-        ) : (
+        kycStatus?.type === "business" ? (
           <BusinessVerificationFlow banks={banks} onComplete={() => setStep("status")} />
+        ) : (
+          <IndividualDonation banks={banks} onComplete={() => setStep("status")} />
         )
       )}
 
