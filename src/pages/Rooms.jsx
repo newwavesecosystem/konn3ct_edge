@@ -591,7 +591,7 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
   });
 
   const onSubmit = (data) => {
-    mutation.mutate({ id: String(roomId), ...data }); 
+    mutation.mutate({ id: String(roomId), ...data });
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -759,4 +759,3 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
     </Card>
   );
 };
-

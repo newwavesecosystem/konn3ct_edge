@@ -83,7 +83,20 @@ const CreateEvents = () => {
   };
 
   const handleFileChange = (e) => {
-    setFormData((prev) => ({ ...prev, logo: e.target.files[0] }));
+    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setFormData((prev) => ({ ...prev, logo: file }));
+  };
+
+  const handleFileDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files?.[0] || null;
+    if (file) {
+      setFormData((prev) => ({ ...prev, logo: file }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -326,13 +339,27 @@ const CreateEvents = () => {
               <label className="block text-gray-700 text-sm mb-2">
                 Upload a logo (Optional)
               </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                <input id="fileUpload" type="file" className="hidden" onChange={handleFileChange} />
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center"
+                onDragOver={handleFileDragOver}
+                onDrop={handleFileDrop}
+              >
+                <input
+                  id="fileUpload"
+                  name="logo"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
                 <label htmlFor="fileUpload" className="cursor-pointer text-gray-500 text-sm">
                   <span className="block mb-1">Select a file or drop here</span>
                   <span className="text-xs text-gray-400">JPG, PNG, or PDF (max 10MB)</span>
                 </label>
               </div>
+              {formData.logo ? (
+                <p className="text-xs text-gray-500 mt-2">Selected: {formData.logo.name}</p>
+              ) : null}
               <p className="text-xs text-gray-400 mt-1">Recommended: 80px by 80px, PNG format</p>
             </div>
 

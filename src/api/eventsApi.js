@@ -49,14 +49,13 @@ export const sendReminder = async (reference) => {
 
 export const createPreRegEvent = async (formData) => {
   try {
-    const res = await API.post("/pre-reg", formData, {
-      headers: {
-        "Content-Type":
-          formData instanceof FormData
-            ? "multipart/form-data"
-            : "application/json",
-      },
-    });
+    const isFormData = formData instanceof FormData;
+    const config = {};
+    if (!isFormData) {
+      config.headers = { "Content-Type": "application/json" };
+    }
+
+    const res = await API.post("/pre-reg", formData, config);
     return res.data;
   } catch (error) {
     console.error("Error creating pre-registration event:", error);
