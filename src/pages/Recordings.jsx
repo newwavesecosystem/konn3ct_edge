@@ -99,15 +99,16 @@ const Recordings = () => {
 
   // 🔽 ORIGINAL download logic (screenshare & chats stay the same)
   const download = (id, param) => {
-    const url = `https://dev.konn3ct.ng/recording/${id}/${param}`;
+    const RECORDING_DOWNLOAD_BASE = process.env.REACT_APP_RECORDING_DOWNLOAD_BASE;
+    const url = `${RECORDING_DOWNLOAD_BASE}/${id}/${param}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
   // ✅ NEW logic ONLY for video
   const downloadVideo = (recordId) => {
     if (!recordId) return;
-
-    const url = `https://meet.konn3ct.ng/presentation-download/${recordId}/video/webcams.mp4`;
+    const VIDEO_DOWNLOAD_BASE = process.env.REACT_APP_VIDEO_DOWNLOAD_BASE;
+    const url = `${VIDEO_DOWNLOAD_BASE}/${recordId}/video/webcams.mp4`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
