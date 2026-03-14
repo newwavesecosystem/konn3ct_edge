@@ -93,16 +93,16 @@ const Streaming = () => {
 
   if (streamQuery.isLoading)
     return (
-      <div className="page container mx-auto">
+      <div className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
         <Skeleton className="w-full min-h-full relative" />
       </div>
     );
 
   return (
-    <section className="page container mx-auto">
-      <Card className="w-full min-h-full relative pb-16">
-        <div className="p-4 pt-10 flex items-center gap-20">
-          <Button onClick={() => setOpenDialog(true)}>
+    <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+      <Card className="w-full min-h-full relative pb-6 md:pb-16">
+        <div className="p-4 pt-6 flex flex-col gap-4 md:pt-10 md:flex-row md:items-center md:gap-20">
+          <Button className="w-full sm:w-auto" onClick={() => setOpenDialog(true)}>
             <Plus /> Stream
           </Button>
 
@@ -112,7 +112,7 @@ const Streaming = () => {
             icon={roomsIcon}
           />
 
-          <Separator orientation="vertical" className="h-[50px]" />
+          <Separator orientation="vertical" className="hidden h-[50px] md:block" />
 
           <StatCard
             value={
@@ -127,7 +127,7 @@ const Streaming = () => {
 
         <Separator />
 
-        <Table>
+        <Table className="min-w-[780px] md:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead className="">No</TableHead>
@@ -167,6 +167,7 @@ const Streaming = () => {
                   {status === 1 && (
                     <TableCell>
                       <Button
+                        className="whitespace-nowrap"
                         variant="destructive"
                         onClick={() => stopStreamMutation.mutate(id)}
                       >
@@ -181,12 +182,12 @@ const Streaming = () => {
         </Table>
 
         {streamQuery.data.data.length === 0 && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+          <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center px-4 text-center">
             <p>No data available for this table</p>
           </div>
         )}
 
-        <Pagination className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+        <Pagination className="mt-4 mb-2 flex items-center justify-center md:absolute md:bottom-0 md:left-1/2 md:mb-0 md:-translate-x-1/2 md:-translate-y-1/2">
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
@@ -195,11 +196,15 @@ const Streaming = () => {
               />
             </PaginationItem>
 
+            <PaginationItem className="px-2 text-sm sm:hidden">
+              {streamQuery.data.current_page} / {streamQuery.data.last_page}
+            </PaginationItem>
+
             {Array.from(
               { length: streamQuery.data.last_page },
               (_, i) => 1 + i
             ).map((index) => (
-              <PaginationItem key={`page-${index}`}>
+              <PaginationItem key={`page-${index}`} className="hidden sm:block">
                 <PaginationLink
                   disabled={index === streamQuery.data.current_page}
                   onClick={() => setPage(index)}
@@ -220,7 +225,7 @@ const Streaming = () => {
       </Card>
 
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="w-1/2">
+        <DialogContent className="w-[calc(100%-2rem)] md:w-1/2">
           <DialogTitle>Create a new stream</DialogTitle>
           <DialogDescription>
             Start streaming your meeting on various platforms
@@ -371,7 +376,7 @@ const StreamForm = ({ setOpenDialog }) => {
   };
 
   return (
-    <div className="p-10">
+    <div className="p-4 md:p-10">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
@@ -430,7 +435,7 @@ const StreamForm = ({ setOpenDialog }) => {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="!w-[300px]">
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] md:!w-[300px]">
                       <Command>
                         <CommandInput placeholder="Search type..." />
                         <CommandList>
@@ -527,6 +532,7 @@ const StreamForm = ({ setOpenDialog }) => {
           <div className="flex justify-center">
             <Button
               type="submit"
+              className="w-full sm:w-auto"
               size="lg"
               disabled={startStreamMutation.isPending || startComboMutation.isPending}
             >

@@ -177,23 +177,23 @@ const Rooms = () => {
 
   if (roomQuery.isLoading || meetingQuery.isLoading)
     return (
-      <div className="page container mx-auto">
+      <div className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
         <Skeleton className="w-full min-h-full relative" />
       </div>
     );
 
   return (
-    <section className="page container mx-auto">
+    <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <Card className="w-full min-h-full relative">
-          <div className="py-5 flex gap-x-4">
+          <div className="py-5 flex flex-col gap-3 sm:flex-row sm:gap-x-4">
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus /> Create Room
               </Button>
             </DialogTrigger>
             <Button
-              className="bg-[#E7F0FF] border border-[#2D8CFF] text-[#2D8CFF]"
+              className="w-full sm:w-auto bg-[#E7F0FF] border border-[#2D8CFF] text-[#2D8CFF]"
               onClick={() => {
                 setOpenScheduleDialog(true);
               }}
@@ -202,39 +202,52 @@ const Rooms = () => {
             </Button>
           </div>
           <Separator />
-          <div className="p-4 pt-10 flex items-center justify-between gap-x-4">
+          <div className="p-4 pt-6 grid grid-cols-2 gap-4 md:pt-10 md:flex md:items-center md:justify-between md:gap-x-4">
             <StatCard
               value={roomQuery.data.total_rooms}
               name="Total room"
               icon={roomsIcon}
+              className="w-full min-w-0 md:w-[240px]"
             />
-            <Separator orientation="vertical" className="h-[50px]" />
+            <Separator
+              orientation="vertical"
+              className="hidden h-[50px] md:block"
+            />
             <StatCard
               value={roomQuery.data.active_rooms}
               name="Active room"
               icon={activeIcon}
+              className="w-full min-w-0 md:w-[240px]"
             />
-            <Separator orientation="vertical" className="h-[50px]" />
+            <Separator
+              orientation="vertical"
+              className="hidden h-[50px] md:block"
+            />
             <StatCard
               value={meetingQuery.data?.data?.length || 0}
               name="Scheduled Room"
               icon={scheduledIcon}
+              className="w-full min-w-0 md:w-[240px]"
             />
 
-            <Separator orientation="vertical" className="h-[50px]" />
+            <Separator
+              orientation="vertical"
+              className="hidden h-[50px] md:block"
+            />
             <StatCard
               value={roomQuery.data.total_rooms - roomQuery.data.active_rooms}
               name="Inactive room"
               icon={inactiveIcon}
+              className="w-full min-w-0 md:w-[240px]"
             />
           </div>
           <Separator />
-          <Table>
+          <Table className="min-w-[980px] md:min-w-0">
             <TableHeader>
               <TableRow>
                 <TableHead>NAME</TableHead>
-                <TableHead>ROOM URL</TableHead>
-                <TableHead>
+                <TableHead className="whitespace-nowrap">ROOM URL</TableHead>
+                <TableHead className="whitespace-nowrap">
                   <div className="flex justify-between">
                     <p>ACTIONS</p>
                   </div>
@@ -245,8 +258,8 @@ const Rooms = () => {
               {roomQuery.data.rooms.map(({ name, url, id, accesscode }) => (
                 <TableRow key={id}>
                   <TableCell>{name}</TableCell>
-                  <TableCell>{`${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`}</TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">{`${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`}</TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <div className="flex gap-x-2">
                       <Button variant="outline" onClick={() => handleCopy(url)}>
                         Copy Link
@@ -329,7 +342,7 @@ const Rooms = () => {
             </div>
           )}
         </Card>
-        <DialogContent className="w-1/2">
+        <DialogContent className="w-[calc(100%-2rem)] md:w-1/2">
           <DialogTitle>Create a new Room</DialogTitle>
           <DialogDescription>
             You will create a new meeting room, accessible on the dashboard.
@@ -366,7 +379,7 @@ const Rooms = () => {
 
       {/* Delete Prompt */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
-        <DialogContent className="w-1/2">
+        <DialogContent className="w-[calc(100%-2rem)] md:w-1/2">
           <DialogTitle>Confirm Deletion</DialogTitle>
           <DialogDescription>
             Are you sure you want to delete the room? This action cannot be undone.
@@ -390,7 +403,7 @@ const Rooms = () => {
 
       {/* Schedule */}
       <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
-        <DialogContent className="top-[50%] w-[50%] h-[90%] overflow-y-scroll">
+        <DialogContent className="top-[50%] w-[calc(100%-2rem)] md:w-[50%] h-[90%] overflow-y-scroll">
           <DialogTitle>Schedule a new meeting</DialogTitle>
           <DialogDescription>
             Send an invite for a scheduled meeting
@@ -445,7 +458,7 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-1/3">
+      <DialogContent className="w-[calc(100%-2rem)] md:w-1/3">
         <DialogTitle>Manage Access Code</DialogTitle>
         <Form {...form}>
           <form
@@ -503,7 +516,7 @@ const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-1/3">
+      <DialogContent className="w-[calc(100%-2rem)] md:w-1/3">
         <DialogTitle>Limit Users</DialogTitle>
         <Form {...form}>
           <form
@@ -548,7 +561,7 @@ const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-1/3">
+      <DialogContent className="w-[calc(100%-2rem)] md:w-1/3">
         <DialogTitle>Upload Room Banner</DialogTitle>
         <Form {...form}>
           <form
@@ -595,7 +608,7 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-1/3">
+      <DialogContent className="w-[calc(100%-2rem)] md:w-1/3">
         <DialogTitle>Transfer Room</DialogTitle>
         <Form {...form}>
           <form

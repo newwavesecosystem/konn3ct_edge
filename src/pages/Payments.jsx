@@ -226,10 +226,10 @@ const Payments = () => {
   if (isError || userError) return <div>Error: {error.message}</div>;
 
   return (
-    <section className="page container mx-auto">
+    <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <div className="flex items-end gap-x-5 mb-10">
-          <Card className="w-[260px] h-[200px] bg-primary">
+        <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:gap-x-5">
+          <Card className="h-[200px] w-full max-w-[260px] bg-primary md:w-[260px]">
             <Badge className="bg-white text-primary">Current Plan</Badge>
             <div className="flex justify-center items-center h-full">
               <p className="text-4xl font-medium text-white">
@@ -238,16 +238,18 @@ const Payments = () => {
             </div>
           </Card>
 
-          <div className="flex flex-col gap-y-3">
+          <div className="flex w-full flex-col gap-y-3 md:w-auto">
             {currentPlan.toLowerCase() !== "basic" && (
               <DialogTrigger asChild>
-                <Button className="bg-muted text-[#373131]">
+                <Button className="w-full bg-muted text-[#373131] md:w-auto">
                   Renew Subscriptions
                 </Button>
               </DialogTrigger>
             )}
             <DialogTrigger asChild>
-              <Button variant="outline">Change Plan</Button>
+              <Button variant="outline" className="w-full md:w-auto">
+                Change Plan
+              </Button>
             </DialogTrigger>
           </div>
         </div>
@@ -259,90 +261,92 @@ const Payments = () => {
           </div>
           <Separator />
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Issued to</TableHead>
-                <TableHead>Payment Method</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Payment Date</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="w-full overflow-x-auto">
+            <Table className="min-w-[760px] md:min-w-0">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Issued to</TableHead>
+                  <TableHead>Payment Method</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Payment Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
 
-            <TableBody>
-              {paymentData?.payments?.data?.map(
-                (
-                  {
-                    type,
-                    gateway,
-                    date,
-                    plan_details,
-                    currency,
-                    amount,
-                    reference,
-                  },
-                  id
-                ) => (
-                  <TableRow key={reference}>
-                    <TableCell>{id + 1}</TableCell>
-                    <TableCell>{type}</TableCell>
-                    <TableCell>
-                      {plan_details?.name?.toUpperCase()}
-                    </TableCell>
-                    <TableCell>
-                      {userData?.user?.lastname}{" "}
-                      {userData?.user?.firstname}
-                    </TableCell>
-                    <TableCell>{gateway}</TableCell>
-                    <TableCell>{reference}</TableCell>
-                    <TableCell>
-                      {format(new Date(date), "PPP")}
-                    </TableCell>
-                    <TableCell>
-                      {currency}{" "}
-                      {new Intl.NumberFormat().format(amount)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          generateReceipt(
-                            {
-                              type,
-                              plan: plan_details?.name?.toUpperCase(),
-                              method: gateway,
-                              reference,
-                              date,
-                              currency,
-                              amount,
-                            },
-                            userData.user
-                          )
-                        }
-                      >
-                        Receipt
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              )}
-
-              {!paymentsLoading &&
-                !paymentData?.payments?.data?.length && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-6">
-                      No payments found
-                    </TableCell>
-                  </TableRow>
+              <TableBody>
+                {paymentData?.payments?.data?.map(
+                  (
+                    {
+                      type,
+                      gateway,
+                      date,
+                      plan_details,
+                      currency,
+                      amount,
+                      reference,
+                    },
+                    id
+                  ) => (
+                    <TableRow key={reference}>
+                      <TableCell>{id + 1}</TableCell>
+                      <TableCell>{type}</TableCell>
+                      <TableCell>
+                        {plan_details?.name?.toUpperCase()}
+                      </TableCell>
+                      <TableCell>
+                        {userData?.user?.lastname}{" "}
+                        {userData?.user?.firstname}
+                      </TableCell>
+                      <TableCell>{gateway}</TableCell>
+                      <TableCell>{reference}</TableCell>
+                      <TableCell>
+                        {format(new Date(date), "PPP")}
+                      </TableCell>
+                      <TableCell>
+                        {currency}{" "}
+                        {new Intl.NumberFormat().format(amount)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            generateReceipt(
+                              {
+                                type,
+                                plan: plan_details?.name?.toUpperCase(),
+                                method: gateway,
+                                reference,
+                                date,
+                                currency,
+                                amount,
+                              },
+                              userData.user
+                            )
+                          }
+                        >
+                          Receipt
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
                 )}
-            </TableBody>
-          </Table>
+
+                {!paymentsLoading &&
+                  !paymentData?.payments?.data?.length && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-6">
+                        No payments found
+                      </TableCell>
+                    </TableRow>
+                  )}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
 
         <DialogContent className="max-w-[95%] py-6">
@@ -399,7 +403,10 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="monthly" className="flex justify-evenly gap-x-6">
+        <TabsContent
+          value="monthly"
+          className="flex flex-col items-center gap-4 md:flex-row md:items-stretch md:justify-evenly md:gap-x-6"
+        >
           {plans.monthly.map((plan, index) => (
             <PlanCard
               key={index}
@@ -417,7 +424,10 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
           ))}
         </TabsContent>
 
-        <TabsContent value="yearly" className="flex justify-evenly gap-x-6">
+        <TabsContent
+          value="yearly"
+          className="flex flex-col items-center gap-4 md:flex-row md:items-stretch md:justify-evenly md:gap-x-6"
+        >
           {plans.yearly.map((plan, index) => (
             <PlanCard
               key={index}
@@ -452,7 +462,7 @@ const PlanCard = ({
   cta,
 }) => {
   return (
-    <Card className="flex-1 max-w-[350px] rounded-2xl px-[30px] py-[20px] bg-muted">
+    <Card className="mx-auto flex-1 max-w-[350px] rounded-2xl bg-muted px-[30px] py-[20px] md:mx-0">
       <h3 className="font-medium text-2xl mb-1">{capitalize(name)}</h3>
       <p className="mb-4">{target}</p>
       <p className="text-center font-bold text-2xl mb-2">
