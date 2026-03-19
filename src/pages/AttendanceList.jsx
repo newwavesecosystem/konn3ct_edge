@@ -22,8 +22,10 @@ const AttendanceList = () => {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const navigate = useNavigate();
+  const PAGE_SIZE = 8;
 
   useEffect(() => {
     const fetchMeetings = async () => {
@@ -43,9 +45,17 @@ const AttendanceList = () => {
   }, []);
 
   // 🔥 Correct: id + identifier in URL
-const handleViewParticipants = (meeting_id, identifier) => {
+  const handleViewParticipants = (meeting_id, identifier) => {
     navigate(`/attendance-details/${meeting_id}/${identifier}`);
   };
+
+  const totalPages = Math.max(1, Math.ceil(meetings.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedMeetings = meetings.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
 
   if (loading) {
@@ -98,13 +108,13 @@ const handleViewParticipants = (meeting_id, identifier) => {
               </TableHeader>
 
               <TableBody>
-                {meetings.map((meeting, index) => (
+                {paginatedMeetings.map((meeting, index) => (
                   <TableRow
                     key={meeting.id || index}
                     className="hover:bg-gray-50 transition"
                   >
                     <TableCell className="py-1.5 px-2 text-sm">
-                      {index + 1}
+                      {pageStart + index + 1}
                     </TableCell>
 
                     <TableCell className="py-1.5 px-2 text-sm">
@@ -118,15 +128,14 @@ const handleViewParticipants = (meeting_id, identifier) => {
                     </TableCell>
 
                     <TableCell className="text-center py-1.5 px-2">
-                     <Button
+                      <Button
                         onClick={() =>
-                          handleViewParticipants( meeting.meeting_id , meeting.identifier)
+                          handleViewParticipants(meeting.meeting_id, meeting.identifier)
                         }
                         className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-0.5 rounded-full"
                       >
                         View Participant(s)
                       </Button>
-
                     </TableCell>
                   </TableRow>
                 ))}
@@ -140,15 +149,35 @@ const handleViewParticipants = (meeting_id, identifier) => {
         <Pagination>
           <PaginationContent className="flex items-center space-x-4">
             <PaginationItem>
-              <button className="p-1.5 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-100">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className={`p-1.5 rounded-md border border-gray-300 text-gray-500 ${
+                  currentPage === 1 ? "cursor-not-allowed opacity-50" : "hover:bg-gray-100"
+                }`}
+              >
                 <ChevronLeft size={14} />
               </button>
             </PaginationItem>
             <PaginationItem>
-              <span className="text-gray-700 text-xs">1 / 1</span>
+              <span className="text-gray-700 text-xs">
+                {currentPage} / {totalPages}
+              </span>
             </PaginationItem>
             <PaginationItem>
-              <button className="p-1.5 rounded-md border border-gray-300 text-gray-500 hover:bg-gray-100">
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
+                disabled={currentPage === totalPages}
+                className={`p-1.5 rounded-md border border-gray-300 text-gray-500 ${
+                  currentPage === totalPages
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:bg-gray-100"
+                }`}
+              >
                 <ChevronRight size={14} />
               </button>
             </PaginationItem>

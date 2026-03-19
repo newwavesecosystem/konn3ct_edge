@@ -93,8 +93,9 @@ const EventParticipants = () => {
   const { reference } = useParams();
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -151,6 +152,17 @@ const EventParticipants = () => {
       Object.values(r).some((v) => String(v).toLowerCase().includes(q))
     );
   }, [exportRows, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedRows = filteredRows.slice(pageStart, pageStart + PAGE_SIZE);
+  const showingFrom = filteredRows.length === 0 ? 0 : pageStart + 1;
+  const showingTo =
+    filteredRows.length === 0 ? 0 : pageStart + paginatedRows.length;
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleCopy = async () => {
     try {
@@ -223,7 +235,10 @@ const EventParticipants = () => {
       <div className="mb-5">
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
           type="text"
           placeholder="Search"
           className="w-full sm:w-64 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
@@ -263,12 +278,12 @@ const EventParticipants = () => {
                   Loading...
                 </td>
               </tr>
-            ) : filteredRows.length > 0 ? (
-              filteredRows.map((r, index) => (
+            ) : paginatedRows.length > 0 ? (
+              paginatedRows.map((r, index) => (
                 <tr
-                  key={index}
+                  key={`${r["S/N"]}-${index}`}
                   className={`border-t hover:bg-gray-50 transition ${
-                    index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                    (pageStart + index) % 2 === 0 ? "bg-white" : "bg-gray-50"
                   }`}
                 >
                   <td className="px-4 py-3">{r["S/N"]}</td>
@@ -291,13 +306,37 @@ const EventParticipants = () => {
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-4 text-xs text-gray-500">
-        <span>Showing {filteredRows.length > 0 ? `1-${filteredRows.length}` : "0/0"}</span>
-        {/* pagination buttons still dummy - optional */}
+        <span>
+          Showing {showingFrom}-{showingTo} of {filteredRows.length}
+        </span>
         <div className="flex space-x-1">
-          <button className="border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={loading || currentPage === 1}
+            className={`border border-gray-300 rounded-md px-2 py-1 ${
+              loading || currentPage === 1
+                ? "cursor-not-allowed opacity-50"
+                : "hover:bg-gray-100"
+            }`}
+          >
             &lt;
           </button>
-          <button className="border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100">
+          <span className="px-1 py-1">
+            {currentPage}/{totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentPage((page) => Math.min(totalPages, page + 1))
+            }
+            disabled={loading || currentPage === totalPages}
+            className={`border border-gray-300 rounded-md px-2 py-1 ${
+              loading || currentPage === totalPages
+                ? "cursor-not-allowed opacity-50"
+                : "hover:bg-gray-100"
+            }`}
+          >
             &gt;
           </button>
         </div>

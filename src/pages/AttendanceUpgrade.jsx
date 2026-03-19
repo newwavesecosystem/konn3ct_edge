@@ -1,13 +1,73 @@
-import React from "react";
+import React, { useState } from "react";
 import { Wifi, Mic, Video, MessageCircle } from "lucide-react";
 
 const users = [
-  { name: "Odejimni Samuel", initials: "OD", time: "Oct 2, 05:35:47 PM", online: "00:06:43", talk: "00:00:04", webcam: "00:06:17", messages: 3, reaction: "😅", raise: 4 },
-  { name: "Akanji Joseph", initials: "AJ", time: "Oct 2, 05:50:00 PM", online: "00:06:43", talk: "00:00:04", webcam: "00:06:17", messages: 3, reaction: "😅", raise: 2 },
-  { name: "Debbie Williams", initials: "DW", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
-  { name: "Name Name", initials: "NN", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
-  { name: "Name Name", initials: "NN", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
-  { name: "Name Name", initials: "NN", time: "Oct 2, 05:35:47 PM", online: "00:02:43", talk: "00:01:14", webcam: "00:01:17", messages: 8, reaction: "😅", raise: 2 },
+  {
+    name: "Odejimni Samuel",
+    initials: "OD",
+    time: "Oct 2, 05:35:47 PM",
+    online: "00:06:43",
+    talk: "00:00:04",
+    webcam: "00:06:17",
+    messages: 3,
+    reaction: "\u{1F605}",
+    raise: 4,
+  },
+  {
+    name: "Akanji Joseph",
+    initials: "AJ",
+    time: "Oct 2, 05:50:00 PM",
+    online: "00:06:43",
+    talk: "00:00:04",
+    webcam: "00:06:17",
+    messages: 3,
+    reaction: "\u{1F605}",
+    raise: 2,
+  },
+  {
+    name: "Debbie Williams",
+    initials: "DW",
+    time: "Oct 2, 05:35:47 PM",
+    online: "00:02:43",
+    talk: "00:01:14",
+    webcam: "00:01:17",
+    messages: 8,
+    reaction: "\u{1F605}",
+    raise: 2,
+  },
+  {
+    name: "Name Name",
+    initials: "NN",
+    time: "Oct 2, 05:35:47 PM",
+    online: "00:02:43",
+    talk: "00:01:14",
+    webcam: "00:01:17",
+    messages: 8,
+    reaction: "\u{1F605}",
+    raise: 2,
+  },
+  {
+    name: "Name Name",
+    initials: "NN",
+    time: "Oct 2, 05:35:47 PM",
+    online: "00:02:43",
+    talk: "00:01:14",
+    webcam: "00:01:17",
+    messages: 8,
+    reaction: "\u{1F605}",
+    raise: 2,
+  },
+  {
+    name: "Name Name",
+    initials: "NN",
+    time: "Oct 2, 05:35:47 PM",
+    online: "00:02:43",
+    talk: "00:01:14",
+    webcam: "00:01:17",
+    messages: 8,
+    reaction: "\u{1F605}",
+    raise: 2,
+  },
 ];
 
 const stats = [
@@ -19,6 +79,12 @@ const stats = [
 ];
 
 export default function AttendanceUpgrade() {
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 4;
+  const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedUsers = users.slice(pageStart, pageStart + PAGE_SIZE);
+
   return (
     <div className="min-h-screen flex flex-col items-center py-6 px-2">
       <div className="max-w-6xl w-full bg-white rounded-2xl shadow p-4">
@@ -53,9 +119,9 @@ export default function AttendanceUpgrade() {
 
         {/* User Rows */}
         <div className="space-y-2">
-          {users.map((u, i) => (
+          {paginatedUsers.map((u, i) => (
             <div
-              key={i}
+              key={`${u.name}-${pageStart + i}`}
               className="grid grid-cols-7 items-center bg-white rounded-lg shadow-sm hover:shadow-md transition p-2"
             >
               <div className="flex items-center gap-2">
@@ -86,11 +152,11 @@ export default function AttendanceUpgrade() {
 
               <div className="flex items-center gap-1 text-xs text-gray-700">
                 <span>{u.reaction}</span>
-                <span>{u.reaction === "😅" ? 1 : 0}</span>
+                <span>{u.reaction === "\u{1F605}" ? 1 : 0}</span>
               </div>
 
               <div className="flex items-center gap-1 text-xs text-gray-700">
-                <span>🔥</span> {u.raise}
+                <span>{"\u{1F525}"}</span> {u.raise}
               </div>
             </div>
           ))}
@@ -98,9 +164,29 @@ export default function AttendanceUpgrade() {
 
         {/* Pagination */}
         <div className="flex justify-center items-center mt-4 text-xs text-gray-600 font-medium">
-          <button className="px-2 py-1 border rounded-l-md hover:bg-gray-100">‹</button>
-          <span className="px-3">1/5</span>
-          <button className="px-2 py-1 border rounded-r-md hover:bg-gray-100">›</button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+            className={`px-2 py-1 border rounded-l-md ${
+              currentPage === 1 ? "cursor-not-allowed opacity-50" : "hover:bg-gray-100"
+            }`}
+          >
+            &lt;
+          </button>
+          <span className="px-3">
+            {currentPage}/{totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage === totalPages}
+            className={`px-2 py-1 border rounded-r-md ${
+              currentPage === totalPages ? "cursor-not-allowed opacity-50" : "hover:bg-gray-100"
+            }`}
+          >
+            &gt;
+          </button>
         </div>
       </div>
     </div>

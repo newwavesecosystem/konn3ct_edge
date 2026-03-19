@@ -5,7 +5,9 @@ import { getPreRegList, getPreRegSummary } from "../api/eventsApi";
 const EventList = () => {
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState({ totalEvents: 0, totalParticipants: 0 });
+  const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
+  const PAGE_SIZE = 10;
 
   const fetchData = async () => {
     try {
@@ -34,6 +36,14 @@ const EventList = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(events.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedEvents = events.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const copyEventUrl = (url) => {
     if (!url) return;
@@ -121,10 +131,10 @@ const EventList = () => {
             </thead>
             <tbody className="text-sm text-gray-700">
               {events.length > 0 ? (
-                events.map((ev, index) => (
+                paginatedEvents.map((ev, index) => (
                   <tr
                     key={ev.id || index}
-                    className={`border-t hover:bg-gray-50 transition ${index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                    className={`border-t hover:bg-gray-50 transition ${(pageStart + index) % 2 === 0 ? "bg-white" : "bg-gray-50"
                       }`}
                   >
                     <td className="px-4 py-3">{ev.title || "Untitled"}</td>
@@ -168,13 +178,32 @@ const EventList = () => {
           </table>
         </div>
 
-        {/* Pagination Placeholder */}
         <div className="flex items-center justify-center mt-4 text-xs text-gray-500">
-          <button className="border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+            className={`border border-gray-300 rounded-md px-2 py-1 ${
+              currentPage === 1 ? "cursor-not-allowed opacity-50" : "hover:bg-gray-100"
+            }`}
+          >
             &lt;
           </button>
-          <span className="mx-2">1/1</span>
-          <button className="border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100">
+          <span className="mx-2">
+            {currentPage}/{totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentPage((page) => Math.min(totalPages, page + 1))
+            }
+            disabled={currentPage === totalPages}
+            className={`border border-gray-300 rounded-md px-2 py-1 ${
+              currentPage === totalPages
+                ? "cursor-not-allowed opacity-50"
+                : "hover:bg-gray-100"
+            }`}
+          >
             &gt;
           </button>
         </div>

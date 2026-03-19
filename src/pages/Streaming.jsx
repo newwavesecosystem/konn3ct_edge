@@ -76,11 +76,15 @@ const Streaming = () => {
     queryKey: ["streams", { page }],
     queryFn: () => getStreams(page),
     placeholderData: (prev) => prev,
-
-    // ✅ Auto-refresh (near real-time)
-    refetchInterval: 2000,
+    staleTime: 15_000,
+    // Poll only while streams are actively running to avoid request spam.
+    refetchInterval: (query) => {
+      const streamRows = query.state.data?.data;
+      if (!Array.isArray(streamRows)) return 15_000;
+      return streamRows.some((stream) => stream.status === 1) ? 15_000 : false;
+    },
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const stopStreamMutation = useMutation({
