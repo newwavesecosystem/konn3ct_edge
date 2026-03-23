@@ -7,6 +7,7 @@ import {
   getMeetingMinutes,
 } from "../api/attendanceApi";
 import { ArrowLeft } from "lucide-react";
+import { useToast } from "../hooks/use-toast";
 
 const NAVBAR_HEIGHT = 72;
 
@@ -89,11 +90,11 @@ function rowsToExcelHTML(title, headers, rows) {
  * - write HTML
  * - in popup: window.onload => window.print()
  */
-function printTableLikePayments(title, headers, rows) {
+function printTableLikePayments(title, headers, rows, onPopupBlocked) {
   const win = window.open("", "_blank", "width=900,height=700");
 
   if (!win) {
-    alert("Please allow popups to print");
+    onPopupBlocked?.();
     return;
   }
 
@@ -237,6 +238,7 @@ const normalizeStatus = (status) => {
 const ViewAttendance = () => {
   const { meeting_id, identifier } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -347,7 +349,11 @@ const ViewAttendance = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } else {
-      alert("Copy failed. Please allow clipboard permission or use HTTPS.");
+      toast({
+        description:
+          "Copy failed. Please allow clipboard permission or use HTTPS.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -375,7 +381,12 @@ const ViewAttendance = () => {
     printTableLikePayments(
       `Meeting Attendance (${filteredRows.length})`,
       headers,
-      filteredRows
+      filteredRows,
+      () =>
+        toast({
+          description: "Please allow popups to print",
+          variant: "destructive",
+        })
     );
   };
 

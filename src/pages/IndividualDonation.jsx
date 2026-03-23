@@ -11,11 +11,13 @@ import {
     SelectItem,
 } from "../components/ui/select";
 import { User } from "lucide-react";
+import { useToast } from "../hooks/use-toast";
 
 import { getBankList, verifyBank, submitKyc, fetchKyc } from "../api/donationApi";
 import VerificationStatus from "./VerificationStatus";
 
 export default function IndividualDonation({ onComplete }) {
+    const { toast } = useToast();
     const [step, setStep] = useState("card");
     const [banks, setBanks] = useState([]);
     const [accountName, setAccountName] = useState("");
@@ -80,10 +82,17 @@ export default function IndividualDonation({ onComplete }) {
 
             const res = await submitKyc(fd);
             if (res.success) onComplete();
-            else alert(res.message || "KYC failed");
+            else
+                toast({
+                    description: res.message || "KYC failed",
+                    variant: "destructive",
+                });
         } catch (err) {
             console.error(err);
-            alert("Error submitting KYC");
+            toast({
+                description: "Error submitting KYC",
+                variant: "destructive",
+            });
         }
     };
 

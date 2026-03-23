@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getPreRegList, getPreRegSummary } from "../api/eventsApi";
+import { useToast } from "../hooks/use-toast";
 
 const EventList = () => {
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState({ totalEvents: 0, totalParticipants: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
-  const PAGE_SIZE = 10;
+  const { toast } = useToast();
+  const PAGE_SIZE = 4;
 
   const fetchData = async () => {
     try {
@@ -48,25 +50,25 @@ const EventList = () => {
   const copyEventUrl = (url) => {
     if (!url) return;
     navigator.clipboard.writeText(url);
-    alert("Event link copied!");
+    toast({ description: "Event link copied!" });
   };
 
   return (
-    <div className="flex justify-center items-start w-full p-6 mt-7">
-      <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 w-full max-w-5xl">
+    <div className="flex justify-center items-start w-full px-2 py-4 mt-5 md:p-6 md:mt-7">
+      <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 md:p-6 w-full max-w-5xl">
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col items-start gap-4 mb-6 md:flex-row md:items-center md:justify-between">
           <button
             onClick={() => navigate("/events/create")}
-            className="inline-flex items-center gap-2 bg-[#227451] hover:bg-emerald-700 text-white text-sm font-medium px-6 py-2 rounded-full transition-all"
+            className="mt-2 md:mt-0 inline-flex w-full md:w-auto items-center justify-center gap-2 bg-[#227451] hover:bg-emerald-700 text-white text-sm font-medium px-6 py-2 rounded-full transition-all"
           >
             <span className="text-lg">+</span>
             <span className="leading-none">Create</span>
           </button>
 
-          <div className="flex items-center gap-6">
+          <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center md:gap-6">
             {/* Total Events */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 md:border-0 md:p-0 md:justify-start md:gap-3">
               <div className="w-9 h-9 rounded-full bg-[#eef6ff] flex items-center justify-center">
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="20" cy="20" r="20" fill="#E8F1FF" />
@@ -87,10 +89,10 @@ const EventList = () => {
               </div>
             </div>
 
-            <div className="w-px h-8 bg-gray-200" />
+            <div className="hidden w-px h-8 bg-gray-200 md:block" />
 
             {/* Total Participants */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 md:border-0 md:p-0 md:justify-start md:gap-3">
               <div className="w-9 h-9 rounded-full bg-[#ecfdf5] flex items-center justify-center">
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="20" cy="20" r="20" fill="#D8FFEE" />
@@ -117,16 +119,16 @@ const EventList = () => {
 
         {/* Table Section */}
         <div className="overflow-x-auto">
-          <table className="min-w-full border border-gray-100 rounded-xl overflow-hidden">
+          <table className="min-w-[900px] md:min-w-full border border-gray-100 rounded-xl overflow-hidden">
             <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Title</th>
-                <th className="px-4 py-3 text-left font-medium">Host</th>
-                <th className="px-4 py-3 text-left font-medium">Room</th>
-                <th className="px-4 py-3 text-left font-medium">Date</th>
-                <th className="px-4 py-3 text-left font-medium">Time</th>
-                <th className="px-4 py-3 text-left font-medium">Time Zone</th>
-                <th className="px-4 py-3 text-left font-medium">Action</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Title</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Host</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Room</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Date</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Time</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Time Zone</th>
+                <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody className="text-sm text-gray-700">
@@ -137,30 +139,30 @@ const EventList = () => {
                     className={`border-t hover:bg-gray-50 transition ${(pageStart + index) % 2 === 0 ? "bg-white" : "bg-gray-50"
                       }`}
                   >
-                    <td className="px-4 py-3">{ev.title || "Untitled"}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">{ev.title || "Untitled"}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {ev.host_name ||
                         `${ev.owner?.firstname || ""} ${ev.owner?.lastname || ""}`.trim() ||
                         "N/A"}
                     </td>
-                    <td className="px-4 py-3 text-blue-600 underline cursor-pointer">
+                    <td className="px-4 py-3 text-blue-600 underline cursor-pointer whitespace-nowrap">
                       {ev.room?.name || "No Room"}
                     </td>
-                    <td className="px-4 py-3">{ev.date || "-"}</td>
-                    <td className="px-4 py-3">{ev.time || "-"}</td>
-                    <td className="px-4 py-3">{ev.timezone || "-"}</td>
-                    <td className="px-4 py-3 text-right flex gap-2 justify-end">
+                    <td className="px-4 py-3 whitespace-nowrap">{ev.date || "-"}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{ev.time || "-"}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{ev.timezone || "-"}</td>
+                    <td className="px-4 py-3 text-right flex flex-col gap-2 items-end">
                       <button
                         onClick={() => navigate(`/events/participants/${ev.reference}`)}
-                        className="bg-[#227451] text-white text-xs font-medium px-4 py-1.5 rounded-full hover:bg-emerald-800 transition"
+                        className="bg-[#227451] text-white text-xs font-medium px-4 py-1.5 rounded-full hover:bg-emerald-800 transition whitespace-nowrap"
                       >
                         Participants
                       </button>
 
-                      {/* ✅ NEW COPY BUTTON */}
+                      {/* NEW COPY BUTTON */}
                       <button
                         onClick={() => copyEventUrl(ev.event_url)}
-                        className="border border-gray-300 text-gray-700 text-xs font-medium px-4 py-1.5 rounded-full hover:bg-gray-100 transition"
+                        className="border border-gray-300 text-gray-700 text-xs font-medium px-4 py-1.5 rounded-full hover:bg-gray-100 transition whitespace-nowrap"
                       >
                         Event Link
                       </button>

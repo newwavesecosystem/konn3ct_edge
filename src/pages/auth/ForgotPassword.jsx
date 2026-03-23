@@ -4,6 +4,7 @@ import {
   requestForgotPassword,
   resetForgotPassword,
 } from "../../api/forgetpassword.js";
+import { useToast } from "../../hooks/use-toast";
 
 export function ForgotPassword() {
   const [step, setStep] = useState(1);
@@ -12,11 +13,15 @@ export function ForgotPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
   // Step 1: Request reset
   const handleResetPassword = async () => {
     if (!email) {
-      alert("Please enter your email address.");
+      toast({
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -27,7 +32,10 @@ export function ForgotPassword() {
       setStep(2);
     } catch (err) {
       console.error(err);
-      alert(err.message || "Failed to request reset.");
+      toast({
+        description: err.message || "Failed to request reset.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -51,18 +59,27 @@ export function ForgotPassword() {
     if (enteredCode.length === 4) {
       setStep(3);
     } else {
-      alert("Enter a valid 4-digit code.");
+      toast({
+        description: "Enter a valid 4-digit code.",
+        variant: "destructive",
+      });
     }
   };
 
   // Step 3: Reset password
   const handleUpdatePassword = async () => {
     if (!password || !confirmPassword) {
-      alert("Please fill in all fields.");
+      toast({
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
       return;
     }
     if (password !== confirmPassword) {
-      alert("Passwords do not match.");
+      toast({
+        description: "Passwords do not match.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -73,7 +90,10 @@ export function ForgotPassword() {
       setStep(4);
     } catch (err) {
       console.error(err);
-      alert(err.message || "Failed to reset password.");
+      toast({
+        description: err.message || "Failed to reset password.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

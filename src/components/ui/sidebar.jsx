@@ -23,6 +23,7 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "22rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "65px";
+const SIDEBAR_TOP_OFFSET = "80px";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 const SidebarContext = React.createContext(null);
@@ -174,6 +175,8 @@ const Sidebar = React.forwardRef(
             className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
             style={{
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              top: SIDEBAR_TOP_OFFSET,
+              height: "auto",
             }}
             side={side}
           >

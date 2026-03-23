@@ -5,11 +5,13 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../components/ui/select";
 import { Building2, CheckCircle } from "lucide-react";
+import { useToast } from "../hooks/use-toast";
 
 import { getBankList, verifyBank, submitBusinessKyc, fetchKyc } from "../api/donationApi";
 import VerificationStatus from "./VerificationStatus";
 
 export default function BusinessVerificationFlow({ onComplete }) {
+    const { toast } = useToast();
     const [step, setStep] = useState("card");
     const [banks, setBanks] = useState([]);
     const [bankCode, setBankCode] = useState(null);
@@ -83,10 +85,17 @@ export default function BusinessVerificationFlow({ onComplete }) {
 
             const res = await submitBusinessKyc(fd);
             if (res.success) onComplete();
-            else alert(res.message || "KYC failed");
+            else
+                toast({
+                    description: res.message || "KYC failed",
+                    variant: "destructive",
+                });
         } catch (err) {
             console.error(err);
-            alert("Error submitting business KYC");
+            toast({
+                description: "Error submitting business KYC",
+                variant: "destructive",
+            });
         }
     };
 

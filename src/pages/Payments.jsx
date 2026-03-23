@@ -31,12 +31,15 @@ import { format } from "date-fns";
 /* ======================================
    RECEIPT GENERATOR
 ====================================== */
-const generateReceipt = (payment, user) => {
+const generateReceipt = (payment, user, toast) => {
   const win = window.open("", "_blank", "width=800,height=650");
 
 
   if (!win) {
-    alert("Please allow popups to print receipt");
+    toast({
+      description: "Please allow popups to print receipt",
+      variant: "destructive",
+    });
     return;
   }
 
@@ -196,6 +199,7 @@ const transformPlans = (data) => {
 
 const Payments = () => {
   const [openDialog, setOpenDialog] = useState(false);
+  const { toast } = useToast();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["plans"],
@@ -325,7 +329,8 @@ const Payments = () => {
                                 currency,
                                 amount,
                               },
-                              userData.user
+                              userData.user,
+                              toast
                             )
                           }
                         >

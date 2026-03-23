@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPreRegEvent, getRooms } from "../api/eventsApi";
+import { useToast } from "../hooks/use-toast";
 
 // --- TIMEZONE GENERATOR ---
 const getTimezones = () => {
@@ -9,6 +10,7 @@ const getTimezones = () => {
 
 const CreateEvents = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -28,6 +30,7 @@ const CreateEvents = () => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [logoError, setLogoError] = useState("");
 
   // Rooms state
   const [rooms, setRooms] = useState([]);
@@ -84,6 +87,7 @@ const CreateEvents = () => {
 
   const handleFileChange = (e) => {
     const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setLogoError("");
     setFormData((prev) => ({ ...prev, logo: file }));
   };
 
@@ -95,12 +99,19 @@ const CreateEvents = () => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0] || null;
     if (file) {
+      setLogoError("");
       setFormData((prev) => ({ ...prev, logo: file }));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.logo) {
+      setLogoError("Logo upload is required.");
+      return;
+    }
+
+    setLogoError("");
     setLoading(true);
 
     try {
@@ -123,14 +134,21 @@ const CreateEvents = () => {
       const res = await createPreRegEvent(data);
 
       if (res?.success) {
-        alert("Event created successfully!");
+        toast({ description: "Event created successfully!" });
         navigate("/events");
       } else {
-        alert(res?.message || "Event creation failed. Please check your inputs.");
+        toast({
+          description:
+            res?.message || "Event creation failed. Please check your inputs.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Error creating event:", error);
-      alert("Failed to create event. Please try again.");
+      toast({
+        description: "Failed to create event. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -337,10 +355,12 @@ const CreateEvents = () => {
 
             <div className="mt-4">
               <label className="block text-gray-700 text-sm mb-2">
-                Upload a logo (Optional)
+                Upload a logo *
               </label>
               <div
-                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center"
+                className={`border-2 border-dashed rounded-lg p-6 text-center ${
+                  logoError ? "border-red-400" : "border-gray-300"
+                }`}
                 onDragOver={handleFileDragOver}
                 onDrop={handleFileDrop}
               >
@@ -360,6 +380,7 @@ const CreateEvents = () => {
               {formData.logo ? (
                 <p className="text-xs text-gray-500 mt-2">Selected: {formData.logo.name}</p>
               ) : null}
+              {logoError ? <p className="text-xs text-red-500 mt-2">{logoError}</p> : null}
               <p className="text-xs text-gray-400 mt-1">Recommended: 80px by 80px, PNG format</p>
             </div>
 
