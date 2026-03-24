@@ -48,8 +48,8 @@ import RefereeIcon from "./assets/components/RefereeIcon";
 import HistoryIcon from "./assets/components/HistoryIcon";
 import DonationIcon from "./assets/components/DonationIcon";
 import AttendanceIcon from "./assets/components/AttendanceIcon";
-import SettingsIcon from "./assets/components/SettingsIcon";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
+import { RouteErrorFallback } from "./components/ui/resilience";
 
 const items = [
   { title: "Home", url: "/", icon: HomeIcon },
@@ -64,7 +64,6 @@ const items = [
   { title: "Attendance", url: "/attendance", icon: AttendanceIcon },
   { title: "Events", url: "/events", icon: EventIcon },
   { title: "Invite history", url: "/history", icon: HistoryIcon },
-  // { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
 ];
 
@@ -94,71 +93,86 @@ export function AppSidebar() {
   );
 }
 
+const AuthenticatedAppLayout = () => {
+  return (
+    <IsAuthenticated>
+      <Navbar />
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarTrigger />
+        <Outlet />
+      </SidebarProvider>
+    </IsAuthenticated>
+  );
+};
+
 const router = createBrowserRouter([
   {
-    path: "/login",
-    element: (
-      <>
-        <Navbar />
-        <Login />
-      </>
-    ),
-  },
-  {
-    path: "/register",
-    element: (
-      <>
-        <Navbar />
-        <Register />
-      </>
-    ),
-  },
-  {
-    path: "/forgot-password",
-    element: (
-      <>
-        <Navbar />
-        <ForgotPassword />
-      </>
-    ),
-  },
-  {
-    path: "/join",
-    element: (
-      <>
-        <Navbar />
-        <JoinRoom />
-      </>
-    ),
-  },
-  {
     path: "/",
-    element: (
-      <IsAuthenticated>
-        <Navbar />
-        <SidebarProvider>
-          <AppSidebar />
-          <SidebarTrigger />
-          <Outlet />
-        </SidebarProvider>
-      </IsAuthenticated>
-    ),
+    errorElement: <RouteErrorFallback />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: "rooms", element: <Rooms /> },
-      { path: "profile", element: <Profile /> },
-      { path: "streams", element: <Streaming /> },
-      { path: "recordings", element: <Recordings /> },
-      { path: "payments", element: <Payments /> },
-      { path: "addons", element: <Addon /> },
-      { path: "referees", element: <Referee /> },
-      { path: "donations", element: <Donations /> },
-      { path: "attendance", element: <Attendance /> },
-      { path: "attendance-details/:meeting_id/:identifier", element: <ViewAttendance /> },
-      { path: "events/participants/:reference", element: <EventParticipants /> },
-      { path: "events/*", element: <Events /> },
-      { path: "history", element: <InviteHistory /> },
-      { path: "settings", element: <Settings /> },
+      {
+        path: "login",
+        element: (
+          <>
+            <Navbar />
+            <Login />
+          </>
+        ),
+      },
+      {
+        path: "register",
+        element: (
+          <>
+            <Navbar />
+            <Register />
+          </>
+        ),
+      },
+      {
+        path: "forgot-password",
+        element: (
+          <>
+            <Navbar />
+            <ForgotPassword />
+          </>
+        ),
+      },
+      {
+        path: "join",
+        element: (
+          <>
+            <Navbar />
+            <JoinRoom />
+          </>
+        ),
+      },
+      {
+        element: <AuthenticatedAppLayout />,
+        children: [
+          { index: true, element: <Dashboard /> },
+          { path: "rooms", element: <Rooms /> },
+          { path: "profile", element: <Profile /> },
+          { path: "streams", element: <Streaming /> },
+          { path: "recordings", element: <Recordings /> },
+          { path: "payments", element: <Payments /> },
+          { path: "addons", element: <Addon /> },
+          { path: "referees", element: <Referee /> },
+          { path: "donations", element: <Donations /> },
+          { path: "attendance", element: <Attendance /> },
+          {
+            path: "attendance-details/:meeting_id/:identifier",
+            element: <ViewAttendance />,
+          },
+          {
+            path: "events/participants/:reference",
+            element: <EventParticipants />,
+          },
+          { path: "events/*", element: <Events /> },
+          { path: "history", element: <InviteHistory /> },
+          { path: "settings", element: <Settings /> },
+        ],
+      },
     ],
   },
 ]);

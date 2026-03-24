@@ -39,6 +39,32 @@ const Referee = () => {
       </div>
     );
 
+  if (refereeQuery.isError) {
+    return (
+      <section className="page container mx-auto">
+        <Card className="p-6">
+          <p className="font-medium">Unable to load referees.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Please try again when your network is stable.
+          </p>
+        </Card>
+      </section>
+    );
+  }
+
+  const refereeData = refereeQuery.data ?? {};
+  const refereeRows = Array.isArray(refereeData.data) ? refereeData.data : [];
+  const currentPage =
+    Number.isFinite(Number(refereeData.current_page)) &&
+    Number(refereeData.current_page) > 0
+      ? Number(refereeData.current_page)
+      : 1;
+  const lastPage =
+    Number.isFinite(Number(refereeData.last_page)) &&
+    Number(refereeData.last_page) > 0
+      ? Number(refereeData.last_page)
+      : 1;
+
   return (
     <section className="page container mx-auto">
       <Card className="w-full min-h-full relative">
@@ -68,7 +94,7 @@ const Referee = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {refereeQuery.data.data.map(
+            {refereeRows.map(
               (
                 { lastname, firstname, email, plan, created_at, referral_code, referral_link, ref },
                 id
@@ -89,7 +115,7 @@ const Referee = () => {
                   <TableCell className="max-w-[240px] truncate">
                     {link || "—"}
                   </TableCell>
-                  <TableCell>{capitalize(plan.name)}</TableCell>
+                  <TableCell>{capitalize(plan?.name ?? "N/A")}</TableCell>
                   <TableCell>{formatDate(created_at)}</TableCell>
                 </TableRow>
                 );
@@ -97,7 +123,7 @@ const Referee = () => {
             )}
           </TableBody>
         </Table>
-        {refereeQuery.data.data.length === 0 && (
+        {refereeRows.length === 0 && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
             <p>No data available for this table</p>
           </div>
@@ -106,17 +132,17 @@ const Referee = () => {
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
-                disabled={refereeQuery.data.prev_page_url === null}
-                onClick={() => setPage((prev) => prev - 1)}
+                disabled={refereeData.prev_page_url === null || currentPage <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               />
             </PaginationItem>
             {Array.from(
-              { length: refereeQuery.data?.last_page ?? 1 },
+              { length: lastPage },
               (_, i) => 1 + i
             ).map((index) => (
               <PaginationItem key={index}>
                 <PaginationLink
-                  disabled={index === refereeQuery.data.current_page}
+                  disabled={index === currentPage}
                   onClick={() => setPage(index)}
                 >
                   {index}
@@ -125,8 +151,8 @@ const Referee = () => {
             ))}
             <PaginationItem>
               <PaginationNext
-                disabled={refereeQuery.data.next_page_url == null}
-                onClick={() => setPage((prev) => prev + 1)}
+                disabled={refereeData.next_page_url == null || currentPage >= lastPage}
+                onClick={() => setPage((prev) => Math.min(lastPage, prev + 1))}
               />
             </PaginationItem>
           </PaginationContent>

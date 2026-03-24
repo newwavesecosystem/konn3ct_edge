@@ -86,6 +86,32 @@ const InviteHistory = () => {
       </div>
     );
 
+  if (inviteQuery.isError) {
+    return (
+      <section className="page container mx-auto">
+        <Card className="p-6">
+          <p className="font-medium">Unable to load invite history.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Check your connection and try again.
+          </p>
+        </Card>
+      </section>
+    );
+  }
+
+  const inviteData = inviteQuery.data ?? {};
+  const inviteRows = Array.isArray(inviteData.data) ? inviteData.data : [];
+  const currentPage =
+    Number.isFinite(Number(inviteData.current_page)) &&
+    Number(inviteData.current_page) > 0
+      ? Number(inviteData.current_page)
+      : 1;
+  const lastPage =
+    Number.isFinite(Number(inviteData.last_page)) &&
+    Number(inviteData.last_page) > 0
+      ? Number(inviteData.last_page)
+      : 1;
+
   return (
     <section className="page container mx-auto">
       <Card className="w-full min-h-full relative pb-16">
@@ -108,16 +134,19 @@ const InviteHistory = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {inviteQuery.data.data.map(
+            {inviteRows.map(
               ({ type, roomname, guest, date, id }) => (
                 <TableRow key={roomname + date + id}>
                   <TableCell>{id + 1}</TableCell>
                   <TableCell>{capitalize(type)}</TableCell>
                   <TableCell className="">{roomname}</TableCell>
                   <TableCell className="flex flex-col gap-y-1">
-                    {guest.split(",").map((email, idx) => (
+                    {String(guest ?? "")
+                      .split(",")
+                      .filter(Boolean)
+                      .map((email, idx) => (
                       <p key={email + idx}>{email}</p>
-                    ))}
+                      ))}
                   </TableCell>
                   <TableCell>{formatDate(date, false)}</TableCell>
                   <TableCell>
@@ -133,7 +162,7 @@ const InviteHistory = () => {
             )}
           </TableBody>
         </Table>
-        {inviteQuery.data.data.length === 0 && (
+        {inviteRows.length === 0 && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
             <p>No data available for this table</p>
           </div>
@@ -142,17 +171,17 @@ const InviteHistory = () => {
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
-                disabled={inviteQuery.data.prev_page_url === null}
-                onClick={() => setPage((prev) => prev - 1)}
+                disabled={inviteData.prev_page_url === null || currentPage <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               />
             </PaginationItem>
             {Array.from(
-              { length: inviteQuery.data?.last_page ?? 1 },
+              { length: lastPage },
               (_, i) => 1 + i
             ).map((index) => (
               <PaginationItem key={index}>
                 <PaginationLink
-                  disabled={index === inviteQuery.data.current_page}
+                  disabled={index === currentPage}
                   onClick={() => setPage(index)}
                 >
                   {index}
@@ -161,8 +190,8 @@ const InviteHistory = () => {
             ))}
             <PaginationItem>
               <PaginationNext
-                disabled={inviteQuery.data.next_page_url == null}
-                onClick={() => setPage((prev) => prev + 1)}
+                disabled={inviteData.next_page_url == null || currentPage >= lastPage}
+                onClick={() => setPage((prev) => Math.min(lastPage, prev + 1))}
               />
             </PaginationItem>
           </PaginationContent>
@@ -261,7 +290,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
 
   if (!roomQuery.isSuccess) return <></>;
 
-  const rooms = roomQuery.data.rooms || [];
+  const rooms = roomQuery.data?.rooms || [];
 
   return (
     <Form {...form}>

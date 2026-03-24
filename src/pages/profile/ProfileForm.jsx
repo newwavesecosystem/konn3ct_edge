@@ -96,6 +96,15 @@ export function ProfileForm() {
   };
 
   if (userQuery.isLoading) return null;
+  if (userQuery.isError) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        Unable to load profile details right now.
+      </div>
+    );
+  }
+
+  const profileUser = userQuery.data?.user ?? {};
 
   return (
     <Form {...form}>
@@ -109,7 +118,7 @@ export function ProfileForm() {
           <img
             src={
               preview ||
-              userQuery.data.user.profile_photo_url ||
+              profileUser.profile_photo_url ||
               "/avatar.png"
             }
             alt="Profile"
@@ -134,7 +143,7 @@ export function ProfileForm() {
               <FormControl>
                 <Input
                   {...field}
-                  placeholder={userQuery.data.user.firstname}
+                  placeholder={profileUser.firstname ?? ""}
                 />
               </FormControl>
               <FormMessage />
@@ -152,7 +161,7 @@ export function ProfileForm() {
               <FormControl>
                 <Input
                   {...field}
-                  placeholder={userQuery.data.user.lastname}
+                  placeholder={profileUser.lastname ?? ""}
                 />
               </FormControl>
               <FormMessage />
@@ -170,7 +179,7 @@ export function ProfileForm() {
               <FormControl>
                 <Input
                   {...field}
-                  placeholder={userQuery.data.user.phone}
+                  placeholder={profileUser.phone ?? ""}
                 />
               </FormControl>
               <FormMessage />
@@ -182,9 +191,9 @@ export function ProfileForm() {
         <Button
           type="submit"
           className="w-full"
-          disabled={profileMutation.isLoading}
+          disabled={profileMutation.isPending}
         >
-          {profileMutation.isLoading ? "Updating..." : "Update Profile"}
+          {profileMutation.isPending ? "Updating..." : "Update Profile"}
         </Button>
       </form>
     </Form>

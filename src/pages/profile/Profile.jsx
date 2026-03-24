@@ -70,8 +70,20 @@ const ProfileInformation = () => {
   };
 
   if (userQuery.isLoading) return null;
+  if (userQuery.isError) {
+    return (
+      <Card className="p-4">
+        <p className="font-medium">Unable to load profile information.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Please refresh and try again.
+        </p>
+      </Card>
+    );
+  }
 
-  const referralCode = userQuery.data.user.referral_code;
+  const user = userQuery.data?.user ?? {};
+  const userPlan = userQuery.data?.user_plan ?? {};
+  const referralCode = user?.referral_code ?? "";
   const referralLink = `${window.location.origin}/register?ref=${referralCode}`;
 
   return (
@@ -91,12 +103,12 @@ const ProfileInformation = () => {
               Active plan
             </CardTitle>
             <p className="text-sm md:text-base">
-              {capitalize(userQuery.data.user_plan.name)}
+              {capitalize(userPlan?.name ?? "basic")}
             </p>
           </CardHeader>
 
           <Button className="mt-3 md:mt-0 md:ml-auto">
-            {capitalize(userQuery.data.user_plan.status)}
+            {capitalize(userPlan?.status ?? "active")}
           </Button>
         </Card>
 
@@ -107,7 +119,7 @@ const ProfileInformation = () => {
               Referral Code
             </CardTitle>
             <p className="text-sm md:text-base font-mono">
-              {referralCode}
+              {referralCode || "N/A"}
             </p>
           </CardHeader>
 
@@ -189,9 +201,24 @@ const BrowserSessions = () => {
       </Card>
     );
 
-  const sessionName = sessionQuery.data.currentToken.name.split("||");
+  if (sessionQuery.isError) {
+    return (
+      <Card className="min-h-full p-6">
+        <p className="font-medium">Unable to load browser sessions.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Please refresh and try again.
+        </p>
+      </Card>
+    );
+  }
+
+  const sessionName = String(sessionQuery.data?.currentToken?.name ?? "").split(
+    "||"
+  );
+  const browserInfo = sessionName[0] || "Unknown browser";
+  const locationInfo = sessionName[1] || "Unknown location";
   const currentUserAgent = navigator.userAgent;
-  const thisUser = sessionName[0] === currentUserAgent;
+  const thisUser = browserInfo === currentUserAgent;
 
   return (
     <Card className="min-h-full flex items-center justify-center p-6">
@@ -204,9 +231,9 @@ const BrowserSessions = () => {
         <div className="flex flex-col md:flex-row my-6 gap-4 items-start md:items-center font-medium">
           <Computer className="w-8 h-8 md:w-10 md:h-10" />
           <div>
-            <p className="text-sm md:text-base">{sessionName[0]}</p>
+            <p className="text-sm md:text-base">{browserInfo}</p>
             <p className="text-sm md:text-base">
-              {sessionName[1]}.
+              {locationInfo}.
               <span className="ml-1 text-accent">
                 {thisUser ? "This device" : "Other devices"}
               </span>

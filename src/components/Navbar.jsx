@@ -91,7 +91,7 @@ const Navbar = () => {
               <Link to="/profile">
                 <Avatar className="rounded-lg">
                   {userQuery.isSuccess && (
-                    <AvatarImage src={userQuery.data.user.profile_photo_url} />
+                    <AvatarImage src={userQuery.data?.user?.profile_photo_url} />
                   )}
                   <AvatarFallback>CN</AvatarFallback>
                 </Avatar>

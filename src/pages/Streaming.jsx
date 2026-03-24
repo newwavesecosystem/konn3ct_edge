@@ -102,6 +102,32 @@ const Streaming = () => {
       </div>
     );
 
+  if (streamQuery.isError) {
+    return (
+      <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+        <Card className="p-6">
+          <p className="font-medium">Unable to load streams right now.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Please retry after checking your connection.
+          </p>
+        </Card>
+      </section>
+    );
+  }
+
+  const streamData = streamQuery.data ?? {};
+  const streamRows = Array.isArray(streamData.data) ? streamData.data : [];
+  const currentPage =
+    Number.isFinite(Number(streamData.current_page)) &&
+    Number(streamData.current_page) > 0
+      ? Number(streamData.current_page)
+      : 1;
+  const lastPage =
+    Number.isFinite(Number(streamData.last_page)) &&
+    Number(streamData.last_page) > 0
+      ? Number(streamData.last_page)
+      : 1;
+
   return (
     <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
       <Card className="w-full min-h-full relative pb-6 md:pb-16">
@@ -111,7 +137,7 @@ const Streaming = () => {
           </Button>
 
           <StatCard
-            value={streamQuery.data?.total ?? 0}
+            value={streamData.total ?? streamRows.length}
             name="Total Streams"
             icon={roomsIcon}
           />
@@ -120,9 +146,7 @@ const Streaming = () => {
 
           <StatCard
             value={
-              Array.isArray(streamQuery.data?.data)
-                ? streamQuery.data.data.filter((s) => s.status === 1).length
-                : 0
+              streamRows.filter((stream) => stream.status === 1).length
             }
             name="Active Streams"
             icon={activeIcon}
@@ -145,7 +169,7 @@ const Streaming = () => {
           </TableHeader>
 
           <TableBody>
-            {streamQuery.data.data.map(
+            {streamRows.map(
               ({ room, id, type, status, created_at, ended_at }) => (
                 <TableRow key={id + created_at}>
                   <TableCell>{id}</TableCell>
@@ -185,7 +209,7 @@ const Streaming = () => {
           </TableBody>
         </Table>
 
-        {streamQuery.data.data.length === 0 && (
+        {streamRows.length === 0 && (
           <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center px-4 text-center">
             <p>No data available for this table</p>
           </div>
@@ -195,22 +219,22 @@ const Streaming = () => {
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
-                disabled={streamQuery.data.prev_page_url === null}
-                onClick={() => setPage((prev) => prev - 1)}
+                disabled={streamData.prev_page_url === null || currentPage <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               />
             </PaginationItem>
 
             <PaginationItem className="px-2 text-sm sm:hidden">
-              {streamQuery.data.current_page} / {streamQuery.data.last_page}
+              {currentPage} / {lastPage}
             </PaginationItem>
 
             {Array.from(
-              { length: streamQuery.data.last_page },
+              { length: lastPage },
               (_, i) => 1 + i
             ).map((index) => (
               <PaginationItem key={`page-${index}`} className="hidden sm:block">
                 <PaginationLink
-                  disabled={index === streamQuery.data.current_page}
+                  disabled={index === currentPage}
                   onClick={() => setPage(index)}
                 >
                   {index}
@@ -220,8 +244,8 @@ const Streaming = () => {
 
             <PaginationItem>
               <PaginationNext
-                disabled={streamQuery.data.next_page_url == null}
-                onClick={() => setPage((prev) => prev + 1)}
+                disabled={streamData.next_page_url == null || currentPage >= lastPage}
+                onClick={() => setPage((prev) => Math.min(lastPage, prev + 1))}
               />
             </PaginationItem>
           </PaginationContent>

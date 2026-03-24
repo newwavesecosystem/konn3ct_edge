@@ -32,6 +32,8 @@ import { format } from "date-fns";
    RECEIPT GENERATOR
 ====================================== */
 const generateReceipt = (payment, user, toast) => {
+  const userLastName = user?.lastname ?? user?.lastName ?? "";
+  const userFirstName = user?.firstname ?? user?.firstName ?? "";
   const win = window.open("", "_blank", "width=800,height=650");
 
 
@@ -89,7 +91,7 @@ const generateReceipt = (payment, user, toast) => {
         <div class="box">
           <div class="row">
             <span class="label">Issued To:</span>
-            <span>${user.lastname} ${user.firstname}</span>
+            <span>${userLastName} ${userFirstName}</span>
           </div>
           <div class="row">
             <span class="label">Plan:</span>
@@ -139,9 +141,11 @@ const generateReceipt = (payment, user, toast) => {
    TRANSFORM PLANS
 ====================================== */
 const transformPlans = (data) => {
-  const monthlyPlans = data.plan.map((plan) => ({
+  const planList = Array.isArray(data?.plan) ? data.plan : [];
+
+  const monthlyPlans = planList.map((plan) => ({
     name: plan.name,
-    price: plan.monthly_cost.split("/")[0],
+    price: String(plan?.monthly_cost ?? "0").split("/")[0],
     target: "For individuals",
     category: "monthly",
     features: [
@@ -157,9 +161,9 @@ const transformPlans = (data) => {
     cta: plan.name === "basic" ? "Free" : "Upgrade",
   }));
 
-  const yearlyPlans = data.plan.map((plan) => ({
+  const yearlyPlans = planList.map((plan) => ({
     name: plan.name,
-    price: plan.yearly_cost.split("/")[0],
+    price: String(plan?.yearly_cost ?? "0").split("/")[0],
     target: "For individuals",
     category: "yearly",
     features: [
@@ -197,11 +201,16 @@ const transformPlans = (data) => {
   return { monthly: monthlyPlans, yearly: yearlyPlans };
 };
 
+const formatPaymentDate = (value) => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "N/A" : format(parsed, "PPP");
+};
+
 const Payments = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const { toast } = useToast();
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["plans"],
     queryFn: getPlans,
     select: (data) => transformPlans(data.data),
@@ -225,9 +234,23 @@ const Payments = () => {
   });
 
   const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
+  const paymentRows = Array.isArray(paymentData?.payments?.data)
+    ? paymentData.payments.data
+    : [];
 
   if (isLoading || userLoading) return <div>Loading plans...</div>;
-  if (isError || userError) return <div>Error: {error.message}</div>;
+  if (isError || userError) {
+    return (
+      <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+        <Card className="p-6">
+          <p className="font-medium">Unable to load payments and plans.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Please refresh and try again.
+          </p>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
@@ -282,7 +305,7 @@ const Payments = () => {
               </TableHeader>
 
               <TableBody>
-                {paymentData?.payments?.data?.map(
+                {paymentRows.map(
                   (
                     {
                       type,
@@ -308,7 +331,7 @@ const Payments = () => {
                       <TableCell>{gateway}</TableCell>
                       <TableCell>{reference}</TableCell>
                       <TableCell>
-                        {format(new Date(date), "PPP")}
+                        {formatPaymentDate(date)}
                       </TableCell>
                       <TableCell>
                         {currency}{" "}
@@ -329,7 +352,7 @@ const Payments = () => {
                                 currency,
                                 amount,
                               },
-                              userData.user,
+                              userData?.user ?? {},
                               toast
                             )
                           }
@@ -342,7 +365,7 @@ const Payments = () => {
                 )}
 
                 {!paymentsLoading &&
-                  !paymentData?.payments?.data?.length && (
+                  !paymentRows.length && (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-6">
                         No payments found
@@ -369,7 +392,7 @@ export default Payments;
    PAYMENTS DIALOG + PLAN CARD
 ====================================== */
 const PaymentsDialog = ({ plans, setOpenDialog }) => {
-  const { data, isSuccess, isLoading } = useQuery({
+  const { data, isSuccess, isLoading, isError } = useQuery({
     queryKey: ["profile"],
     queryFn: getUser,
   });
@@ -377,12 +400,25 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   const { toast } = useToast();
 
   // ✅ FIX: wait before destructuring
+  if (isError) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        Unable to load your profile details for checkout.
+      </div>
+    );
+  }
+
   if (isLoading || !isSuccess) {
     return <div className="py-10 text-center">Loading user...</div>;
   }
 
-  const { email, lastName, phone } = data.user;
+  const profileUser = data?.user ?? {};
+  const email = profileUser.email ?? "";
+  const lastName = profileUser.lastName ?? profileUser.lastname ?? "";
+  const phone = profileUser.phone ?? "";
   const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
+  const monthlyPlans = Array.isArray(plans?.monthly) ? plans.monthly : [];
+  const yearlyPlans = Array.isArray(plans?.yearly) ? plans.yearly : [];
 
   const componentProps = {
     email,
@@ -412,7 +448,7 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
           value="monthly"
           className="flex flex-col items-center gap-4 md:flex-row md:items-stretch md:justify-evenly md:gap-x-6"
         >
-          {plans.monthly.map((plan, index) => (
+          {monthlyPlans.map((plan, index) => (
             <PlanCard
               key={index}
               {...plan}
@@ -433,7 +469,7 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
           value="yearly"
           className="flex flex-col items-center gap-4 md:flex-row md:items-stretch md:justify-evenly md:gap-x-6"
         >
-          {plans.yearly.map((plan, index) => (
+          {yearlyPlans.map((plan, index) => (
             <PlanCard
               key={index}
               {...plan}
@@ -461,11 +497,13 @@ const PlanCard = ({
   name,
   target,
   price,
-  features,
+  features = [],
   paystackProps,
   setOpenDialog,
   cta,
 }) => {
+  const planFeatures = Array.isArray(features) ? features : [];
+
   return (
     <Card className="mx-auto flex-1 max-w-[350px] rounded-2xl bg-muted px-[30px] py-[20px] md:mx-0">
       <h3 className="font-medium text-2xl mb-1">{capitalize(name)}</h3>
@@ -495,7 +533,7 @@ const PlanCard = ({
       </div>
 
       <div className="mb-6">
-        {features.map((feature, index) => (
+        {planFeatures.map((feature, index) => (
           <div key={index} className="flex gap-x-2 items-center gap-y-1">
             <Check className="h-4 w-4" />
             <p>{feature}</p>

@@ -63,7 +63,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../components/ui/sheet";
-import { capitalize } from "../lib/utils";
 
 const Rooms = () => {
   const roomQuery = useQuery({
@@ -83,7 +82,6 @@ const Rooms = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
-  const [meetingUrls, setMeetingUrls] = useState({});
   const [roomIdToDelete, setRoomIdToDelete] = useState(null);
   const [openScheduledSide, setOpenScheduleSide] = useState(false);
 
@@ -137,9 +135,17 @@ const Rooms = () => {
   const startMeetingMutation = useMutation({
     mutationFn: startMeeting,
     onSuccess: (res, id) => {
+      const meetingUrl = res?.data?.url;
+      if (!meetingUrl) {
+        toast({
+          variant: "destructive",
+          description: "Meeting started but no launch URL was returned.",
+        });
+        return;
+      }
+
       toast({ description: "Meeting started successfully" });
-      setMeetingUrls((prev) => ({ ...prev, [id]: res.data.url }));
-      window.open(res.data.url, "_blank");
+      window.open(meetingUrl, "_blank");
     },
   });
 
@@ -182,6 +188,37 @@ const Rooms = () => {
       </div>
     );
 
+  if (roomQuery.isError || meetingQuery.isError) {
+    return (
+      <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+        <Card className="p-6">
+          <p className="font-medium">Unable to load rooms right now.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Please check your connection and retry.
+          </p>
+        </Card>
+      </section>
+    );
+  }
+
+  const roomsData = roomQuery.data ?? {};
+  const meetingData = meetingQuery.data ?? {};
+  const rooms = Array.isArray(roomsData.rooms) ? roomsData.rooms : [];
+  const scheduledMeetings = Array.isArray(meetingData.data)
+    ? meetingData.data
+    : [];
+  const totalRooms =
+    Number.isFinite(Number(roomsData.total_rooms)) &&
+    Number(roomsData.total_rooms) >= 0
+      ? Number(roomsData.total_rooms)
+      : rooms.length;
+  const activeRooms =
+    Number.isFinite(Number(roomsData.active_rooms)) &&
+    Number(roomsData.active_rooms) >= 0
+      ? Number(roomsData.active_rooms)
+      : 0;
+  const inactiveRooms = Math.max(0, totalRooms - activeRooms);
+
   return (
     <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
@@ -204,7 +241,7 @@ const Rooms = () => {
           <Separator />
           <div className="p-4 pt-6 grid grid-cols-2 gap-4 md:pt-10 md:flex md:items-center md:justify-between md:gap-x-4">
             <StatCard
-              value={roomQuery.data.total_rooms}
+              value={totalRooms}
               name="Total room"
               icon={roomsIcon}
               className="w-full min-w-0 md:w-[240px]"
@@ -214,7 +251,7 @@ const Rooms = () => {
               className="hidden h-[50px] md:block"
             />
             <StatCard
-              value={roomQuery.data.active_rooms}
+              value={activeRooms}
               name="Active room"
               icon={activeIcon}
               className="w-full min-w-0 md:w-[240px]"
@@ -224,7 +261,7 @@ const Rooms = () => {
               className="hidden h-[50px] md:block"
             />
             <StatCard
-              value={meetingQuery.data?.data?.length || 0}
+              value={scheduledMeetings.length}
               name="Scheduled Room"
               icon={scheduledIcon}
               className="w-full min-w-0 md:w-[240px]"
@@ -235,7 +272,7 @@ const Rooms = () => {
               className="hidden h-[50px] md:block"
             />
             <StatCard
-              value={roomQuery.data.total_rooms - roomQuery.data.active_rooms}
+              value={inactiveRooms}
               name="Inactive room"
               icon={inactiveIcon}
               className="w-full min-w-0 md:w-[240px]"
@@ -255,7 +292,7 @@ const Rooms = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {roomQuery.data.rooms.map(({ name, url, id, accesscode }) => (
+              {rooms.map(({ name, url, id }) => (
                 <TableRow key={id}>
                   <TableCell>{name}</TableCell>
                   <TableCell className="whitespace-nowrap">{`${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`}</TableCell>
@@ -336,7 +373,7 @@ const Rooms = () => {
               ))}
             </TableBody>
           </Table>
-          {roomQuery.data.rooms.length === 0 && (
+          {rooms.length === 0 && (
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
               <p>No data available for this table</p>
             </div>
@@ -420,7 +457,7 @@ const Rooms = () => {
             <SheetDescription>Your upcoming meetings.</SheetDescription>
           </SheetHeader>
           <div className="mt-5 pb-12 flex flex-col gap-y-2 overflow-y-scroll h-[90vh] pr-3">
-            {meetingQuery.data.data.map(({ date, time, roomname, guest }) => (
+            {scheduledMeetings.map(({ date, time, roomname, guest }) => (
               <ScheduleMeetingCard
                 key={roomname + date}
                 date={date}

@@ -5,7 +5,9 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-export const capitalize = (str) => {
+export const capitalize = (value = "") => {
+  const str = String(value ?? "").trim();
+  if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 };
 

@@ -6,7 +6,6 @@ import {
   TableRow,
   TableCell,
 } from "../components/ui/table";
-import { Button } from "../components/ui/button";
 import React from "react";
 import { Card } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
@@ -19,17 +18,30 @@ import { getUser } from "../api/userApi";
 import { useToast } from "../hooks/use-toast";
 
 const Addon = () => {
-  const { data, error, isSuccess, isError } = useQuery({
+  const { data, isSuccess, isError } = useQuery({
     queryFn: getAddons,
     queryKey: ["addons"],
   });
-  const { data: userData, isSuccess: userIsSuccess } = useQuery({
+  const { data: userData, isSuccess: userIsSuccess, isError: userIsError } = useQuery({
     queryKey: ["profile"],
     queryFn: getUser,
   });
   const { toast } = useToast();
 
   const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
+
+  if (isError || userIsError) {
+    return (
+      <section className="page container mx-auto">
+        <Card className="p-6">
+          <p className="font-medium">Unable to load addons right now.</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Please retry in a moment.
+          </p>
+        </Card>
+      </section>
+    );
+  }
 
   if (!isSuccess || !userIsSuccess) {
     return (
@@ -39,9 +51,12 @@ const Addon = () => {
     );
   }
 
-  if (isError) {
-    return <div>Error: {error.message}</div>;
-  }
+  const addons = Array.isArray(data?.data) ? data.data : [];
+  const addonStatus = data?.current_status ?? {};
+  const user = userData?.user ?? {};
+  const email = user.email ?? "";
+  const lastName = user.lastName ?? user.lastname ?? "";
+  const phone = user.phone ?? "";
 
   return (
     <section className="page container mx-auto">
@@ -62,8 +77,7 @@ const Addon = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.data.map(({ name, description, price, status, id }) => {
-              const { email, lastName, phone } = userData.user;
+            {addons.map(({ name, description, price, id }) => {
               const componentProps = {
                 email,
                 amount: price * 100,
@@ -107,12 +121,12 @@ const Addon = () => {
                   <TableCell className="text-center">
                     <Badge
                       variant={
-                        data.current_status["addon" + id] === "active"
+                        addonStatus["addon" + id] === "active"
                           ? ""
                           : "destructive"
                       }
                     >
-                      {data.current_status["addon" + id] ?? "..."}
+                      {addonStatus["addon" + id] ?? "..."}
                     </Badge>
                   </TableCell>
                   <TableCell>{price}</TableCell>
@@ -127,7 +141,7 @@ const Addon = () => {
             })}
           </TableBody>
         </Table>
-        {data.data.length === 0 && <p>No data available for this table</p>}
+        {addons.length === 0 && <p>No data available for this table</p>}
       </Card>
     </section>
   );

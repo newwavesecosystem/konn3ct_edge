@@ -7,6 +7,10 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { Toaster } from "./components/ui/toaster";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import {
+  GlobalErrorBoundary,
+  GlobalNetworkGuard,
+} from "./components/ui/resilience";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 const queryClient = new QueryClient();
@@ -15,8 +19,12 @@ root.render(
     <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <App />
-          <Toaster />
+          <GlobalErrorBoundary>
+            <GlobalNetworkGuard>
+              <App />
+              <Toaster />
+            </GlobalNetworkGuard>
+          </GlobalErrorBoundary>
         </AuthProvider>
         <ReactQueryDevtools />
       </QueryClientProvider>
