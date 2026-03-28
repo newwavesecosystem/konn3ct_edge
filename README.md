@@ -1,70 +1,246 @@
-# Getting Started with Create React App12
+# Konn3ct Dashboard Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This repository contains the React frontend for the Konn3ct dashboard. It is a Create React App single-page application that provides public authentication and meeting-join screens plus an authenticated dashboard for managing rooms, streaming, recordings, billing, donations, attendance, and event pre-registration.
 
-## Available Scripts
+This repo is frontend-only. It depends on external Konn3ct APIs and related third-party services for authentication, payments, social login, AI-generated attendance insights, and media playback/downloads.
 
-In the project directory, you can run:
+## What the application does
 
-### `npm start`
+- Authenticates users with email/password and social providers.
+- Lets authenticated users create, manage, start, and share meeting rooms.
+- Supports meeting invite scheduling and invite history.
+- Starts and stops livestreams for YouTube, Facebook, and combo streaming.
+- Lists recordings and exposes playback, download, copy-link, and delete actions.
+- Shows plans, payments, receipts, and paid add-ons using Paystack checkout.
+- Handles donation onboarding with individual and business KYC flows.
+- Displays attendance data and calls an external AI service for meeting minutes, highlights, and summaries.
+- Manages pre-registration events and participant exports/reminders.
+- Provides profile editing, password change, and browser session management.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Stack and architecture
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- Framework: React 18 with Create React App (`react-scripts`).
+- Routing: `react-router-dom` with a browser router and nested authenticated layout.
+- Data fetching/state: `@tanstack/react-query`.
+- HTTP client: `axios` with a shared API client that attaches a bearer token from `localStorage`.
+- UI: Tailwind CSS, Radix UI primitives, and shadcn-style component scaffolding.
+- Forms/validation: `react-hook-form` and `zod`.
+- Integrations:
+  - Google OAuth
+  - Facebook SDK login
+  - Apple login
+  - Paystack payments
+  - External AI attendance service
+  - Google Analytics snippet in `public/index.html`
+- Resilience layer: global error boundary, offline guard, route-level fallback screens.
 
-### `npm test`
+At startup, `src/index.js` wires together:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- `GoogleOAuthProvider`
+- `QueryClientProvider`
+- `AuthProvider`
+- `GlobalErrorBoundary`
+- `GlobalNetworkGuard`
+- the app router and toaster
 
-### `npm run build`
+The authenticated portion of the app is gated by `IsAuthenticated`, which checks the auth context populated from `localStorage`. API requests use the shared Axios instance in `src/api/index.js`, which adds `Authorization: Bearer <token>` when a token exists.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Main feature areas
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Public routes
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- `/login`: email/password login plus Google, Facebook, Apple, and a placeholder SSO entry.
+- `/register`: email/password registration plus social sign-in entry points.
+- `/forgot-password`: request reset code and submit a new password.
+- `/join`: join a room by room name or room ID.
 
-### `npm run eject`
+### Authenticated routes
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+- `/`: dashboard overview with profile summary, room statistics, quick actions, and upcoming meetings.
+- `/rooms`: create rooms, delete rooms, start meetings, copy meeting links, manage access code, limit users, upload banners, transfer rooms, and schedule invites.
+- `/streams`: start/stop livestreams and review stream history.
+- `/recordings`: browse, search, filter, play, copy, download, and delete recordings.
+- `/payments`: inspect current plan, payment history, receipts, and change/renew plans.
+- `/addons`: buy add-on services through Paystack and inspect their activation status.
+- `/referees`: list referees/referrals.
+- `/donations`: complete KYC and access the donations dashboard.
+- `/attendance`: list meetings with attendance data.
+- `/attendance-details/:meeting_id/:identifier`: inspect meeting attendance, export data, print it, and request AI-generated minutes/highlights/summary.
+- `/events/*`: manage pre-registration events and participant lists.
+- `/history`: invite history plus resend/send invite flows.
+- `/profile`: profile information, password update, and browser sessions.
+- `/settings`: placeholder settings tabs only; no settings persistence is implemented here.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Project structure
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```text
+.
+|- public/                  Static HTML and public assets
+|- src/
+|  |- api/                  API client and feature-specific request modules
+|  |- assets/               Logos, icons, and React icon components
+|  |- components/           Shared app components and UI primitives
+|  |  `- ui/                shadcn/Radix-based UI layer + resilience helpers
+|  |- hooks/                Auth, toast, mobile, and Facebook SDK hooks
+|  |- lib/                  Route guard and small utility helpers
+|  `- pages/                Route screens and feature flows
+|     |- auth/              Login, register, forgot password, auth-side copy
+|     `- profile/           Profile, password, and session screens
+|- Dockerfile               Multi-stage frontend build + nginx image
+|- default.conf             nginx SPA routing config
+|- tailwind.config.js       Tailwind theme configuration
+|- components.json          shadcn/ui component config
+`- jsconfig.json            Base path alias config (`@/*`)
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## API modules
 
-## Learn More
+`src/api/` is organized by feature:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+- `authService.js`: login, social login, registration
+- `userApi.js`: profile, password, session management
+- `roomsApi.js`: rooms, meetings, access code, limits, banners, transfer, join
+- `streamApi.js`: stream list, start, combo start, stop
+- `recordingApi.js`: recordings list and delete
+- `plansApi.js`: plans and payment history
+- `addonsApi.js`: add-on list
+- `invitesApi.js`: invite list, resend, create
+- `attendanceApi.js`: attendance list/details and AI summary/minutes/highlights
+- `eventsApi.js`: pre-registration events, summary, participants, reminders
+- `donationApi.js`: bank lookup, bank verification, KYC, donations, donation stats
+- `refereeApi.js`: referees list
+- `forgetpassword.js`: forgot-password request/reset
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Environment configuration
 
-### Code Splitting
+Create or update a root `.env` file before running or building the app. Because this project uses Create React App, `REACT_APP_*` values are compiled into the frontend at build time.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+```env
+REACT_APP_BASE_URL=
+REACT_APP_BASE_BACKENED_URL=
+REACT_APP_API_BOT=
+REACT_APP_CLIENT_ID=
+REACT_APP_PAYSTACK_KEY=
+REACT_APP_PLAYBACK_URL=
+REACT_APP_FACEBOOK_APP_ID=
+REACT_APP_APPLE_CLIENT_ID=
+REACT_APP_APPLE_REDIRECT_URI=
+REACT_APP_LANDING_URL=
+REACT_APP_RECORDING_DOWNLOAD_BASE=
+REACT_APP_VIDEO_DOWNLOAD_BASE=
+```
 
-### Analyzing the Bundle Size
+What each variable is used for:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+- `REACT_APP_BASE_URL`: primary backend API base URL used by the shared Axios client.
+- `REACT_APP_BASE_BACKENED_URL`: base URL used when building public join links in the rooms UI.
+- `REACT_APP_API_BOT`: AI service used for attendance summaries, minutes, and highlights.
+- `REACT_APP_CLIENT_ID`: Google OAuth client ID.
+- `REACT_APP_PAYSTACK_KEY`: Paystack public key used in plan and add-on checkout.
+- `REACT_APP_PLAYBACK_URL`: recording playback base URL.
+- `REACT_APP_FACEBOOK_APP_ID`: Facebook SDK app ID.
+- `REACT_APP_APPLE_CLIENT_ID`: Apple sign-in client ID.
+- `REACT_APP_APPLE_REDIRECT_URI`: Apple sign-in redirect URL.
+- `REACT_APP_LANDING_URL`: marketing-site base URL used by navbar links.
+- `REACT_APP_RECORDING_DOWNLOAD_BASE`: base URL for recording asset downloads.
+- `REACT_APP_VIDEO_DOWNLOAD_BASE`: base URL for webcam video downloads.
 
-### Making a Progressive Web App
+Important notes:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+- The code reads `REACT_APP_BASE_BACKENED_URL` with that exact spelling. Keep the existing key unless the code is changed.
+- The checked-in `.env` currently includes a `REACT_APP_FACEBOOK_APP_SECRET` entry. That secret is not used by the frontend code and should not live in a client-side env file.
+- Since CRA injects env values at build time, Docker builds and production builds must have the correct env values available before `npm run build`.
 
-### Advanced Configuration
+## Local development
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### Prerequisites
 
-### Deployment
+- Node.js 22 is the safest baseline because the Docker build uses `node:22-alpine`.
+- npm
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### Install and start
 
-### `npm run build` fails to minify
+```bash
+npm install
+npm start
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+The CRA dev server runs at `http://localhost:3000` by default.
+
+### Other available scripts
+
+```bash
+npm run build
+npm test
+```
+
+Notes:
+
+- `npm run build` outputs a production bundle to `build/`.
+- `npm test` is available because the project uses CRA, but there are currently no test files in the repository.
+
+## Deployment
+
+This repo includes a production Docker setup:
+
+- Stage 1: build the CRA app with Node 22 Alpine.
+- Stage 2: copy the generated `build/` output into nginx.
+- `default.conf` enables SPA routing with `try_files $uri $uri/ /index.html;`.
+
+### Build and run with Docker
+
+```bash
+docker build -t konn3ct-dashboard .
+docker run --rm -p 8080:80 konn3ct-dashboard
+```
+
+The container serves the app on port `80`, so the example above exposes it on `http://localhost:8080`.
+
+You can also deploy the compiled `build/` directory behind any static host or reverse proxy that supports an SPA fallback to `index.html`.
+
+## Feature flow notes
+
+### Authentication flow
+
+- Login/register uses the auth context in `src/hooks/useAuth.jsx`.
+- Successful login stores both `user` and `token` in `localStorage`.
+- Protected pages rely on that stored state and the shared API interceptor.
+
+### Room and invite flow
+
+- Room management lives in `Rooms.jsx`.
+- Scheduled meeting invitations are created through the reusable `MeetingForm` exported from `InviteHistory.jsx`.
+- The dashboard reuses the same invite form modal for quick scheduling.
+
+### Attendance and AI flow
+
+- Attendance list data comes from the backend via `attendanceApi.js`.
+- Detailed attendance exports are generated client-side in the browser.
+- Meeting minutes, highlights, and summary are fetched from a separate AI endpoint defined by `REACT_APP_API_BOT`.
+
+### Donations flow
+
+- The donations page first checks KYC status.
+- Verified users see a donation dashboard.
+- Unverified users are routed into individual or corporate KYC forms.
+
+### Events flow
+
+- Events are pre-registration events tied to rooms.
+- Users can create free or paid events, view participant lists, export participant data, and send reminders.
+
+## Important caveats discovered during audit
+
+- This repository does not contain the backend. All business data, auth validation, payments, and media operations depend on external services.
+- `src/pages/Settings.jsx` is a placeholder UI only. The tab labels exist, but no settings behavior is implemented.
+- `src/pages/AttendanceUpgrade.jsx` exists but is not part of the active route flow.
+- `src/components/PricingCard.jsx` exists but is not used by the current payments UI.
+- `src/pages/JoinRoom.jsx` hardcodes the post-join meeting URL host as `https://k4.konn3ct.ng/` instead of reading it from configuration.
+- Event participant routing is partially inconsistent: one route path uses `:reference`, while the nested events route defines `:id`, but `EventParticipants` reads `reference`.
+- The repository currently tracks `.env`, including sensitive-looking values. Those values should be removed from version control and rotated if they are real.
+- Social login is only partially symmetrical across providers. For example, the SSO option is a UI placeholder that only shows an error toast.
+- `public/index.html` includes a legacy Google Analytics UA snippet and the Apple sign-in script directly in the document.
+
+## Summary
+
+Konn3ct Dashboard Frontend is a React SPA for managing Konn3ct user operations after sign-in: meetings, livestreams, recordings, plan billing, add-ons, donations/KYC, attendance insights, invites, events, and user profile data. The source is organized primarily by feature pages and API modules, and production deployment is handled as a static SPA served by nginx.
