@@ -1,22 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+import { getMeetings } from "../api/attendanceApi";
 import { Button } from "../components/ui/button";
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableRow,
-  TableBody,
-  TableCell,
-} from "../components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import {
   Pagination,
   PaginationContent,
   PaginationItem,
 } from "../components/ui/pagination";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { getMeetings } from "../api/attendanceApi";
-import { useNavigate } from "react-router-dom";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
 
 const AttendanceList = () => {
   const [meetings, setMeetings] = useState([]);
@@ -44,9 +45,8 @@ const AttendanceList = () => {
     fetchMeetings();
   }, []);
 
-  // 🔥 Correct: id + identifier in URL
-  const handleViewParticipants = (meeting_id, identifier) => {
-    navigate(`/attendance-details/${meeting_id}/${identifier}`);
+  const handleViewParticipants = (meetingId, identifier) => {
+    navigate(`/attendance-details/${meetingId}/${identifier}`);
   };
 
   const totalPages = Math.max(1, Math.ceil(meetings.length / PAGE_SIZE));
@@ -57,51 +57,50 @@ const AttendanceList = () => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
-
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <p className="text-gray-600 text-sm">Loading meetings...</p>
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading meetings...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <p className="text-red-500 text-sm">{error}</p>
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-sm text-red-500">{error}</p>
       </div>
     );
   }
 
   return (
-    <Card className="w-full max-w-3xl rounded-xl shadow border border-gray-200 flex flex-col mt-16">
-      <CardHeader className="pb-2 px-4">
-        <CardTitle className="text-base font-medium text-gray-800">
+    <Card className="mt-16 flex w-full max-w-3xl flex-col rounded-xl border border-gray-200 shadow dark:border-border">
+      <CardHeader className="px-4 pb-2">
+        <CardTitle className="text-base font-medium text-gray-800 dark:text-foreground">
           Meeting Attendance
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="px-4 flex-1 overflow-y-auto max-h-[400px]">
+      <CardContent className="max-h-[400px] flex-1 overflow-y-auto px-4">
         <div className="overflow-x-auto">
           {meetings.length === 0 ? (
-            <p className="text-center text-gray-500 text-sm py-6">
+            <p className="py-6 text-center text-sm text-gray-500 dark:text-muted-foreground">
               No meeting attendance found.
             </p>
           ) : (
             <Table className="min-w-[640px] text-sm lg:min-w-0">
               <TableHeader>
                 <TableRow className="border-b">
-                  <TableHead className="w-[40px] text-gray-700 font-medium py-1.5">
+                  <TableHead className="w-[40px] py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
                     S/N
                   </TableHead>
-                  <TableHead className="text-gray-700 font-medium py-1.5">
+                  <TableHead className="py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
                     Meeting Host
                   </TableHead>
-                  <TableHead className="text-gray-700 font-medium py-1.5">
+                  <TableHead className="py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
                     Date & Time
                   </TableHead>
-                  <TableHead className="text-gray-700 font-medium text-center py-1.5">
+                  <TableHead className="py-1.5 text-center font-medium text-gray-700 dark:text-muted-foreground">
                     Action
                   </TableHead>
                 </TableRow>
@@ -111,26 +110,26 @@ const AttendanceList = () => {
                 {paginatedMeetings.map((meeting, index) => (
                   <TableRow
                     key={meeting.id || index}
-                    className="hover:bg-gray-50 transition"
+                    className="transition hover:bg-gray-50 dark:hover:bg-muted/60"
                   >
-                    <TableCell className="py-1.5 px-2 text-sm">
+                    <TableCell className="px-2 py-1.5 text-sm">
                       {pageStart + index + 1}
                     </TableCell>
-
-                    <TableCell className="py-1.5 px-2 text-sm">
+                    <TableCell className="px-2 py-1.5 text-sm">
                       {meeting.host || "N/A"}
                     </TableCell>
-
-                    <TableCell className="py-1.5 px-2 text-sm">
+                    <TableCell className="px-2 py-1.5 text-sm">
                       {meeting.date
                         ? `${meeting.date} | ${meeting.time || ""}`
                         : "No Date"}
                     </TableCell>
-
-                    <TableCell className="text-center py-1.5 px-2">
+                    <TableCell className="px-2 py-1.5 text-center">
                       <Button
                         onClick={() =>
-                          handleViewParticipants(meeting.meeting_id, meeting.identifier)
+                          handleViewParticipants(
+                            meeting.meeting_id,
+                            meeting.identifier
+                          )
                         }
                         className="rounded-full bg-emerald-600 px-3 py-0.5 text-xs text-white hover:bg-emerald-700 md:h-auto md:whitespace-normal md:leading-snug lg:whitespace-nowrap"
                       >
@@ -145,7 +144,7 @@ const AttendanceList = () => {
         </div>
       </CardContent>
 
-      <div className="flex justify-center items-center py-3 border-t">
+      <div className="flex items-center justify-center border-t py-3 dark:border-border">
         <Pagination>
           <PaginationContent className="flex items-center space-x-4">
             <PaginationItem>
@@ -153,15 +152,13 @@ const AttendanceList = () => {
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={currentPage === 1}
-                className={`p-1.5 rounded-md border border-gray-300 text-gray-500 ${
-                  currentPage === 1 ? "cursor-not-allowed opacity-50" : "hover:bg-gray-100"
-                }`}
+                className="rounded-md border border-gray-300 p-1.5 text-gray-500 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
               >
                 <ChevronLeft size={14} />
               </button>
             </PaginationItem>
             <PaginationItem>
-              <span className="text-gray-700 text-xs">
+              <span className="text-xs text-gray-700 dark:text-muted-foreground">
                 {currentPage} / {totalPages}
               </span>
             </PaginationItem>
@@ -172,11 +169,7 @@ const AttendanceList = () => {
                   setCurrentPage((page) => Math.min(totalPages, page + 1))
                 }
                 disabled={currentPage === totalPages}
-                className={`p-1.5 rounded-md border border-gray-300 text-gray-500 ${
-                  currentPage === totalPages
-                    ? "cursor-not-allowed opacity-50"
-                    : "hover:bg-gray-100"
-                }`}
+                className="rounded-md border border-gray-300 p-1.5 text-gray-500 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
               >
                 <ChevronRight size={14} />
               </button>

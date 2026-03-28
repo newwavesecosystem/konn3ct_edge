@@ -55,7 +55,7 @@ const EventList = () => {
 
   return (
     <div className="mt-5 flex w-full items-start justify-center px-2 py-4 md:mt-6 md:px-4 md:py-5 lg:mt-7 lg:p-6">
-      <div className="w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-4 shadow-md md:p-5 lg:p-6">
+      <div className="w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-4 shadow-md dark:border-border dark:bg-card md:p-5 lg:p-6">
         {/* Header Section */}
         <div className="mb-6 flex flex-col items-start gap-4 lg:flex-row lg:items-center lg:justify-between">
           <button
@@ -68,8 +68,8 @@ const EventList = () => {
 
           <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center lg:gap-6">
             {/* Total Events */}
-            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 lg:justify-start lg:gap-3 lg:border-0 lg:p-0">
-              <div className="w-9 h-9 rounded-full bg-[#eef6ff] flex items-center justify-center">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 dark:border-border lg:justify-start lg:gap-3 lg:border-0 lg:p-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef6ff] dark:bg-blue-500/15">
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="20" cy="20" r="20" fill="#E8F1FF" />
                   <path d="M23.0159 17.861L23.4558 18.7483C23.5158 18.8718 23.6758 18.9902 23.8108 19.0128L24.6082 19.1464C25.1181 19.2322 25.2381 19.6052 24.8706 19.9731L24.2507 20.5982C24.1457 20.704 24.0882 20.9082 24.1207 21.0543L24.2982 21.8281C24.4382 22.4406 24.1157 22.6775 23.5783 22.3574L22.8309 21.9113C22.6959 21.8307 22.4735 21.8307 22.336 21.9113L21.5886 22.3574C21.0536 22.6775 20.7286 22.4381 20.8686 21.8281L21.0461 21.0543C21.0786 20.9082 21.0211 20.704 20.9161 20.5982L20.2962 19.9731C19.9312 19.6052 20.0487 19.2322 20.5586 19.1464L21.3561 19.0128C21.4886 18.9902 21.6486 18.8718 21.7086 18.7483L22.1485 17.861C22.3885 17.3797 22.7784 17.3797 23.0159 17.861Z" stroke="#2D8CFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -80,20 +80,20 @@ const EventList = () => {
 
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-800 leading-none">
+                <p className="text-sm font-semibold leading-none text-gray-800 dark:text-foreground">
                   {summary.totalEvents}
                 </p>
-                <p className="text-[11px] text-gray-400 uppercase tracking-wide">
+                <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-muted-foreground">
                   Total Events
                 </p>
               </div>
             </div>
 
-            <div className="hidden h-8 w-px bg-gray-200 lg:block" />
+            <div className="hidden h-8 w-px bg-gray-200 dark:bg-border lg:block" />
 
             {/* Total Participants */}
-            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 lg:justify-start lg:gap-3 lg:border-0 lg:p-0">
-              <div className="w-9 h-9 rounded-full bg-[#ecfdf5] flex items-center justify-center">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 dark:border-border lg:justify-start lg:gap-3 lg:border-0 lg:p-0">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ecfdf5] dark:bg-emerald-500/15">
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="20" cy="20" r="20" fill="#D8FFEE" />
                   <path d="M22.9173 19.1667C22.9173 17.5558 21.6115 16.25 20.0007 16.25C18.3898 16.25 17.084 17.5558 17.084 19.1667C17.084 20.7775 18.3898 22.0833 20.0007 22.0833C21.6115 22.0833 22.9173 20.7775 22.9173 19.1667Z" stroke="#36B37E" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" />
@@ -106,10 +106,10 @@ const EventList = () => {
 
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-800 leading-none">
+                <p className="text-sm font-semibold leading-none text-gray-800 dark:text-foreground">
                   {summary.totalParticipants}
                 </p>
-                <p className="text-[11px] text-gray-400 uppercase tracking-wide">
+                <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-muted-foreground">
                   Total Participants
                 </p>
               </div>
@@ -119,8 +119,8 @@ const EventList = () => {
 
         {/* Table Section */}
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] rounded-xl border border-gray-100 overflow-hidden lg:min-w-full">
-            <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+          <table className="min-w-[900px] overflow-hidden rounded-xl border border-gray-100 dark:border-border lg:min-w-full">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-muted/70 dark:text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Title</th>
                 <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Host</th>
@@ -131,12 +131,12 @@ const EventList = () => {
                 <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Action</th>
               </tr>
             </thead>
-            <tbody className="text-sm text-gray-700">
+            <tbody className="text-sm text-gray-700 dark:text-foreground">
               {events.length > 0 ? (
                 paginatedEvents.map((ev, index) => (
                   <tr
                     key={ev.id || index}
-                    className={`border-t hover:bg-gray-50 transition ${(pageStart + index) % 2 === 0 ? "bg-white" : "bg-gray-50"
+                    className={`border-t transition dark:border-border dark:hover:bg-muted/60 ${(pageStart + index) % 2 === 0 ? "bg-white dark:bg-background/30" : "bg-gray-50 dark:bg-muted/40"
                       }`}
                   >
                     <td className="px-4 py-3 whitespace-nowrap">{ev.title || "Untitled"}</td>
@@ -145,7 +145,7 @@ const EventList = () => {
                         `${ev.owner?.firstname || ""} ${ev.owner?.lastname || ""}`.trim() ||
                         "N/A"}
                     </td>
-                    <td className="px-4 py-3 text-blue-600 underline cursor-pointer whitespace-nowrap">
+                    <td className="cursor-pointer whitespace-nowrap px-4 py-3 text-blue-600 underline">
                       {ev.room?.name || "No Room"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">{ev.date || "-"}</td>
@@ -162,7 +162,7 @@ const EventList = () => {
                       {/* NEW COPY BUTTON */}
                       <button
                         onClick={() => copyEventUrl(ev.event_url)}
-                        className="border border-gray-300 text-gray-700 text-xs font-medium px-4 py-1.5 rounded-full hover:bg-gray-100 transition whitespace-nowrap"
+                        className="whitespace-nowrap rounded-full border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
                       >
                         Event Link
                       </button>
@@ -171,7 +171,7 @@ const EventList = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="text-center py-6 text-gray-500">
+                  <td colSpan="7" className="py-6 text-center text-gray-500 dark:text-muted-foreground">
                     No events found.
                   </td>
                 </tr>
@@ -180,13 +180,15 @@ const EventList = () => {
           </table>
         </div>
 
-        <div className="flex items-center justify-center mt-4 text-xs text-gray-500">
+        <div className="mt-4 flex items-center justify-center text-xs text-gray-500 dark:text-muted-foreground">
           <button
             type="button"
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             disabled={currentPage === 1}
-            className={`border border-gray-300 rounded-md px-2 py-1 ${
-              currentPage === 1 ? "cursor-not-allowed opacity-50" : "hover:bg-gray-100"
+            className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
+              currentPage === 1
+                ? "cursor-not-allowed opacity-50"
+                : "hover:bg-gray-100 dark:hover:bg-accent dark:hover:text-accent-foreground"
             }`}
           >
             &lt;
@@ -200,10 +202,10 @@ const EventList = () => {
               setCurrentPage((page) => Math.min(totalPages, page + 1))
             }
             disabled={currentPage === totalPages}
-            className={`border border-gray-300 rounded-md px-2 py-1 ${
+            className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               currentPage === totalPages
                 ? "cursor-not-allowed opacity-50"
-                : "hover:bg-gray-100"
+                : "hover:bg-gray-100 dark:hover:bg-accent dark:hover:text-accent-foreground"
             }`}
           >
             &gt;

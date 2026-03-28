@@ -11,23 +11,26 @@ import {
   GlobalErrorBoundary,
   GlobalNetworkGuard,
 } from "./components/ui/resilience";
+import { ThemeProvider } from "./providers/ThemeProvider";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 const queryClient = new QueryClient();
 root.render(
   <React.StrictMode>
-    <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <GlobalErrorBoundary>
-            <GlobalNetworkGuard>
-              <App />
-              <Toaster />
-            </GlobalNetworkGuard>
-          </GlobalErrorBoundary>
-        </AuthProvider>
-        <ReactQueryDevtools />
-      </QueryClientProvider>
-    </GoogleOAuthProvider>
+    <ThemeProvider>
+      <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <GlobalErrorBoundary>
+              <GlobalNetworkGuard>
+                <App />
+                <Toaster />
+              </GlobalNetworkGuard>
+            </GlobalErrorBoundary>
+          </AuthProvider>
+          <ReactQueryDevtools />
+        </QueryClientProvider>
+      </GoogleOAuthProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );

@@ -193,31 +193,31 @@ const EventParticipants = () => {
   };
 
   return (
-    <div className="mx-auto mt-16 w-full max-w-5xl rounded-2xl bg-white p-6 shadow-sm">
+    <div className="mx-auto mt-16 w-full max-w-5xl rounded-2xl bg-white p-6 shadow-sm dark:border dark:border-border dark:bg-card">
       {/* Toolbar */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-start lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleCopy}
-            className="border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
             Copy
           </button>
           <button
             onClick={handleCSV}
-            className="border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
             CSV
           </button>
           <button
             onClick={handleExcel}
-            className="border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
             Excel
           </button>
           <button
             onClick={handlePrint}
-            className="border border-gray-300 text-gray-700 text-sm px-3 py-1.5 rounded-md hover:bg-gray-50"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
             Print
           </button>
@@ -241,13 +241,13 @@ const EventParticipants = () => {
           }}
           type="text"
           placeholder="Search"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 sm:w-64 md:w-full lg:w-64"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring sm:w-64 md:w-full lg:w-64"
         />
       </div>
 
       {/* Header + Back Button */}
       <div className="mb-3 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-        <h2 className="text-md font-semibold text-gray-800">
+        <h2 className="text-md font-semibold text-gray-800 dark:text-foreground">
           Pre-Registered Users ({filteredRows.length})
         </h2>
         <button
@@ -260,8 +260,8 @@ const EventParticipants = () => {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-[720px] rounded-xl border border-gray-100 overflow-hidden lg:min-w-full">
-          <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
+        <table className="min-w-[720px] overflow-hidden rounded-xl border border-gray-100 dark:border-border lg:min-w-full">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-muted/70 dark:text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left font-medium">S/N</th>
               <th className="px-4 py-3 text-left font-medium">Name</th>
@@ -271,10 +271,10 @@ const EventParticipants = () => {
             </tr>
           </thead>
 
-          <tbody className="text-sm text-gray-700">
+          <tbody className="text-sm text-gray-700 dark:text-foreground">
             {loading ? (
               <tr>
-                <td colSpan="5" className="text-center py-6 text-gray-500">
+                <td colSpan="5" className="py-6 text-center text-gray-500 dark:text-muted-foreground">
                   Loading...
                 </td>
               </tr>
@@ -282,8 +282,10 @@ const EventParticipants = () => {
               paginatedRows.map((r, index) => (
                 <tr
                   key={`${r["S/N"]}-${index}`}
-                  className={`border-t hover:bg-gray-50 transition ${
-                    (pageStart + index) % 2 === 0 ? "bg-white" : "bg-gray-50"
+                  className={`border-t transition dark:border-border dark:hover:bg-muted/60 ${
+                    (pageStart + index) % 2 === 0
+                      ? "bg-white dark:bg-background/30"
+                      : "bg-gray-50 dark:bg-muted/40"
                   }`}
                 >
                   <td className="px-4 py-3">{r["S/N"]}</td>
@@ -295,7 +297,7 @@ const EventParticipants = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="5" className="text-center py-6 text-gray-500">
+                <td colSpan="5" className="py-6 text-center text-gray-500 dark:text-muted-foreground">
                   No participants found.
                 </td>
               </tr>
@@ -305,7 +307,7 @@ const EventParticipants = () => {
       </div>
 
       {/* Footer */}
-      <div className="mt-4 flex items-center justify-between text-xs text-gray-500 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
+      <div className="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-muted-foreground md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
         <span>
           Showing {showingFrom}-{showingTo} of {filteredRows.length}
         </span>
@@ -314,10 +316,10 @@ const EventParticipants = () => {
             type="button"
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             disabled={loading || currentPage === 1}
-            className={`border border-gray-300 rounded-md px-2 py-1 ${
+            className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               loading || currentPage === 1
                 ? "cursor-not-allowed opacity-50"
-                : "hover:bg-gray-100"
+                : "hover:bg-gray-100 dark:hover:bg-accent dark:hover:text-accent-foreground"
             }`}
           >
             &lt;
@@ -331,10 +333,10 @@ const EventParticipants = () => {
               setCurrentPage((page) => Math.min(totalPages, page + 1))
             }
             disabled={loading || currentPage === totalPages}
-            className={`border border-gray-300 rounded-md px-2 py-1 ${
+            className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               loading || currentPage === totalPages
                 ? "cursor-not-allowed opacity-50"
-                : "hover:bg-gray-100"
+                : "hover:bg-gray-100 dark:hover:bg-accent dark:hover:text-accent-foreground"
             }`}
           >
             &gt;

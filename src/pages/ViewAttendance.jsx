@@ -393,7 +393,7 @@ const ViewAttendance = () => {
   if (loading)
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-gray-600 text-sm">Loading participant data...</p>
+        <p className="text-sm text-gray-600 dark:text-muted-foreground">Loading participant data...</p>
       </div>
     );
 
@@ -408,32 +408,32 @@ const ViewAttendance = () => {
     <>
       {/* MAIN CONTENT */}
       <div className="m-auto flex min-h-screen items-center justify-center px-4 py-20 md:px-6 lg:px-4">
-        <div className="w-full max-w-6xl bg-white rounded-2xl shadow-sm border p-8">
+        <div className="w-full max-w-6xl rounded-2xl border bg-white p-8 shadow-sm dark:border-border dark:bg-card">
           {/* TOP ACTIONS */}
           <div className="mb-6 flex items-center justify-between md:flex-col md:items-stretch md:gap-4 lg:flex-row lg:items-center">
             <div>
               <div className="mb-3 flex gap-3 md:flex-wrap lg:flex-nowrap">
                 <button
                   onClick={handleCopy}
-                  className="px-4 py-1.5 border rounded-md text-sm"
+                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
                   {copied ? "COPIED ✅" : "COPY"}
                 </button>
                 <button
                   onClick={handleCSV}
-                  className="px-4 py-1.5 border rounded-md text-sm"
+                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
                   CSV
                 </button>
                 <button
                   onClick={handleExcel}
-                  className="px-4 py-1.5 border rounded-md text-sm"
+                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
                   EXCEL
                 </button>
                 <button
                   onClick={handlePrint}
-                  className="px-4 py-1.5 border rounded-md text-sm"
+                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
                   PRINT
                 </button>
@@ -442,19 +442,19 @@ const ViewAttendance = () => {
               <div className="flex gap-3 md:flex-wrap lg:flex-nowrap">
                 <button
                   onClick={() => openPanel("minutes")}
-                  className="px-4 py-2 text-xs bg-blue-100 text-blue-700 rounded-md"
+                  className="rounded-md bg-blue-100 px-4 py-2 text-xs text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                 >
                   Send Minutes of Meeting
                 </button>
                 <button
                   onClick={() => openPanel("highlights")}
-                  className="px-4 py-2 text-xs bg-yellow-100 text-yellow-700 rounded-md"
+                  className="rounded-md bg-yellow-100 px-4 py-2 text-xs text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
                 >
                   Send Meeting Highlight
                 </button>
                 <button
                   onClick={() => openPanel("summary")}
-                  className="px-4 py-2 text-xs bg-purple-100 text-purple-700 rounded-md"
+                  className="rounded-md bg-purple-100 px-4 py-2 text-xs text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                 >
                   Send Meeting Summary
                 </button>
@@ -466,7 +466,7 @@ const ViewAttendance = () => {
               onChange={(e) => setSearch(e.target.value)}
               type="text"
               placeholder="Search"
-              className="w-64 rounded-full border px-4 py-2 text-sm md:w-full lg:w-64"
+              className="w-64 rounded-full border border-input bg-white px-4 py-2 text-sm shadow-sm dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground md:w-full lg:w-64"
             />
           </div>
 
@@ -475,7 +475,7 @@ const ViewAttendance = () => {
             <h2 className="text-base font-semibold">Meeting Attendance</h2>
             <button
               onClick={() => navigate("/attendance")}
-              className="flex items-center gap-2 border px-3 py-1.5 rounded-full text-sm"
+              className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
             >
               <ArrowLeft size={16} />
               Back to Attendance
@@ -485,7 +485,7 @@ const ViewAttendance = () => {
           {/* TABLE HEADER */}
           <div className="md:overflow-x-auto lg:overflow-visible">
             <div className="md:min-w-[760px] lg:min-w-0">
-              <div className="mb-2 grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm font-medium text-gray-500">
+              <div className="mb-2 grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm font-medium text-gray-500 dark:text-muted-foreground">
                 <span>S/N</span>
                 <span>NAME</span>
                 <span>EMAIL</span>
@@ -496,14 +496,14 @@ const ViewAttendance = () => {
               {/* TABLE ROWS */}
               <div className="space-y-3">
                 {filteredRows.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-gray-500">
+                  <div className="py-10 text-center text-sm text-gray-500 dark:text-muted-foreground">
                     No participants found for this meeting.
                   </div>
                 ) : (
                   filteredRows.map((r, index) => (
                     <div
                       key={index}
-                      className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100"
+                      className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100 dark:bg-background/40 dark:text-foreground dark:hover:bg-muted/70"
                     >
                       <span>{r["S/N"]}</span>
                       <span>{r.NAME}</span>
@@ -516,8 +516,8 @@ const ViewAttendance = () => {
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                             String(r.STATUS).toLowerCase() === "moderator"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-blue-100 text-blue-700"
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
+                              : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                           }`}
                         >
                           {r.STATUS}
@@ -544,7 +544,7 @@ const ViewAttendance = () => {
 
       {/* SIDE PANEL */}
       <div
-        className={`fixed right-0 bg-white border-l shadow-xl z-50 transition-transform duration-300
+        className={`fixed right-0 z-50 border-l bg-white shadow-xl transition-transform duration-300 dark:border-border dark:bg-popover
         w-full md:w-[420px] lg:w-[360px]
         ${panelOpen ? "translate-x-0" : "translate-x-full"}`}
         style={{
@@ -553,11 +553,11 @@ const ViewAttendance = () => {
         }}
       >
         {/* HEADER */}
-        <div className="flex justify-between items-center px-4 py-3 border-b">
+        <div className="flex items-center justify-between border-b px-4 py-3 dark:border-border">
           <h3 className="text-sm font-semibold">{panelTitle}</h3>
           <button
             onClick={() => setPanelOpen(false)}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-accent"
           >
             ✕
           </button>
@@ -566,9 +566,9 @@ const ViewAttendance = () => {
         {/* CONTENT */}
         <div className="p-4 overflow-y-auto h-[calc(100%-56px)]">
           {panelLoading ? (
-            <p className="text-sm text-gray-500">Loading...</p>
+            <p className="text-sm text-gray-500 dark:text-muted-foreground">Loading...</p>
           ) : (
-            <div className="bg-gray-50 border rounded-lg p-4 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+            <div className="rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed whitespace-pre-wrap text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">
               {panelContent}
             </div>
           )}

@@ -29,6 +29,46 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#042c69" />
+    <script>
+      (function () {
+        var storageKey = "theme";
+        var root = document.documentElement;
+        var metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        var storedTheme;
+
+        try {
+          storedTheme = window.localStorage.getItem(storageKey);
+        } catch (error) {
+          storedTheme = null;
+        }
+
+        var theme =
+          storedTheme === "light" ||
+          storedTheme === "dark" ||
+          storedTheme === "system"
+            ? storedTheme
+            : "system";
+        var systemPrefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+        var resolvedTheme =
+          theme === "system"
+            ? systemPrefersDark
+              ? "dark"
+              : "light"
+            : theme;
+
+        root.classList.toggle("dark", resolvedTheme === "dark");
+        root.style.colorScheme = resolvedTheme;
+
+        if (metaThemeColor) {
+          metaThemeColor.setAttribute(
+            "content",
+            resolvedTheme === "dark" ? "#020617" : "#042c69"
+          );
+        }
+      })();
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

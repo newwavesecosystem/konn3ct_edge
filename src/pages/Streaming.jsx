@@ -412,14 +412,14 @@ const StreamForm = ({ setOpenDialog }) => {
             name="room_id"
             render={({ field }) => (
               <FormItem>
-                <label className="block text-gray-700 text-sm mb-1">
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
                   Select Room
                 </label>
                 <FormControl>
                   <select
                     {...field}
                     disabled={roomLoading}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                   >
                     <option value="">
                       {roomLoading ? "Loading rooms..." : "Select Room"}

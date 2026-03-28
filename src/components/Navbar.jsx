@@ -28,7 +28,7 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <nav className="fixed top-0 w-full z-[100] bg-white shadow-md">
+    <nav className="fixed top-0 z-[100] w-full border-b border-border/80 bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 transition-colors duration-300">
       <div className="flex items-center justify-between px-5 py-3">
         {/* Logo */}
         <Link to="/">
@@ -68,7 +68,7 @@ const Navbar = () => {
                 <NavigationMenuList>
                   <NavigationMenuItem>
                     <NavigationMenuTrigger>Host</NavigationMenuTrigger>
-                    <NavigationMenuContent className="!w-[200px] rounded bg-[#FFF] shadow p-4 ">
+                    <NavigationMenuContent className="!w-[200px] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-md">
                       <div className="flex flex-col gap-y-5">
                         <Link
                           to="/rooms"
@@ -117,7 +117,7 @@ const Navbar = () => {
 
         {/* Mobile toggle button */}
         <button
-          className="p-2 lg:hidden"
+          className="rounded-md p-2 text-foreground transition-colors duration-300 hover:bg-accent hover:text-accent-foreground lg:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -126,7 +126,7 @@ const Navbar = () => {
 
       {/* Mobile dropdown */}
       {mobileOpen && (
-        <div className="border-t bg-white px-5 py-4 shadow-md space-y-4 lg:hidden">
+        <div className="space-y-4 border-t border-border bg-background px-5 py-4 text-foreground shadow-md transition-colors duration-300 lg:hidden">
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Features`}>
             Solutions
           </Link>

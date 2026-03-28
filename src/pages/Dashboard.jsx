@@ -1,3 +1,14 @@
+import React, { useState } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { Copy } from "lucide-react";
+
+import { getUser } from "../api/userApi";
+import { getMeetings, getRooms } from "../api/roomsApi";
+import useAuth from "../hooks/useAuth";
+import { useToast } from "../hooks/use-toast";
+import { capitalize } from "../lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -6,34 +17,23 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
-import React, { useState } from "react";
+import { Dialog, DialogContent } from "../components/ui/dialog";
+import { DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { Separator } from "../components/ui/separator";
+import { Skeleton } from "../components/ui/skeleton";
 import StatCard from "../components/StatCard";
+import { MeetingForm } from "./InviteHistory";
 import activeIcon from "../assets/icons/active.svg";
+import calendar from "../assets/icons/calendar.svg";
 import inactiveIcon from "../assets/icons/inactive.svg";
+import join from "../assets/icons/add-square.svg";
 import privateIcon from "../assets/icons/privateIcon.svg";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
-import { Separator } from "../components/ui/separator";
-import calendar from "../assets/icons/calendar.svg";
-import join from "../assets/icons/add-square.svg";
 import video from "../assets/icons/video-01.svg";
-import { Copy } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
-import { getUser } from "../api/userApi";
-import { capitalize, extractYouTubeID } from "../lib/utils";
-import { getMeetings, getRooms } from "../api/roomsApi";
-import { Link } from "react-router-dom";
-import useAuth from "../hooks/useAuth";
-import { Skeleton } from "../components/ui/skeleton";
-import { useToast } from "../hooks/use-toast";
-import { Dialog, DialogContent } from "../components/ui/dialog";
-import { MeetingForm } from "./InviteHistory";
-import { DialogTitle, DialogDescription } from "../components/ui/dialog";
 
 const Dashboard = () => {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-
   const [openSchedule, setOpenSchedule] = useState(false);
 
   const userQuery = useQueries({
@@ -49,12 +49,13 @@ const Dashboard = () => {
     ],
   });
 
-  if (userQuery.every((query) => query.isLoading))
+  if (userQuery.every((query) => query.isLoading)) {
     return (
       <div className="page container mx-auto px-4 sm:px-0">
-        <Skeleton className="w-full min-h-full relative" />
+        <Skeleton className="relative min-h-full w-full" />
       </div>
     );
+  }
 
   const handleCopy = (text) => {
     if (text) {
@@ -65,209 +66,199 @@ const Dashboard = () => {
     }
   };
 
-  if (userQuery.every((query) => query.isSuccess))
-    return (
-      <div className="container mx-auto page grid grid-cols-1 lg:grid-cols-3 gap-5 px-4 sm:px-0">
-        {/* Left Side */}
-        <div className="flex flex-col gap-10 lg:col-span-2">
-          {/* Main detail Card */}
-          <Card className="flex flex-col">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-              <Avatar className="rounded-lg h-[78px] w-[78px]">
-                <AvatarImage
-                  src={userQuery[0]?.data?.user?.profile_photo_url}
-                />
-                <AvatarFallback>AJ</AvatarFallback>
-              </Avatar>
-              <CardHeader className="p-0 sm:p-6">
-                <CardTitle className="text-2xl text-center sm:text-left">
-                  {userQuery[0]?.data?.user?.lastname}{" "}
-                  {userQuery[0]?.data?.user?.firstname}
-                </CardTitle>
-                <CardDescription className="text-black font-medium text-center sm:text-left">
-                  Your current plan: Konn3ct{" "}
-                  {capitalize(userQuery[0]?.data?.user_plan?.name || "")}
-                </CardDescription>
-              </CardHeader>
-            </div>
-            <CardContent className="self-center mt-6 sm:mt-10">
-              <Link to="/payments">
-                <Button className="w-full sm:w-auto">Manage Plan</Button>
-              </Link>
-            </CardContent>
-          </Card>
+  if (!userQuery.every((query) => query.isSuccess)) {
+    return null;
+  }
 
-          {/* Rooms Card */}
-          <Card>
-            <div className="flex flex-col sm:flex-row gap-8 sm:gap-4 items-center justify-evenly">
-              <div className="flex flex-col gap-y-6 sm:gap-y-10">
-                <StatCard
-                  value={userQuery[1]?.data?.total_rooms ?? 0}
-                  name="Total room"
-                  icon={roomsIcon}
-                />
-                <StatCard
-                  value={userQuery[1]?.data?.active_rooms ?? 0}
-                  name="Active room"
-                  icon={activeIcon}
-                />
-              </div>
-              <Separator
-                orientation="vertical"
-                className="hidden sm:block h-[200px]"
+  return (
+    <div className="container mx-auto page grid grid-cols-1 gap-5 px-4 sm:px-0 lg:grid-cols-3">
+      <div className="flex flex-col gap-10 lg:col-span-2">
+        <Card className="flex flex-col">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <Avatar className="h-[78px] w-[78px] rounded-lg">
+              <AvatarImage src={userQuery[0]?.data?.user?.profile_photo_url} />
+              <AvatarFallback>AJ</AvatarFallback>
+            </Avatar>
+            <CardHeader className="p-0 sm:p-6">
+              <CardTitle className="text-center text-2xl sm:text-left">
+                {userQuery[0]?.data?.user?.lastname}{" "}
+                {userQuery[0]?.data?.user?.firstname}
+              </CardTitle>
+              <CardDescription className="text-center font-medium sm:text-left">
+                Your current plan: Konn3ct{" "}
+                {capitalize(userQuery[0]?.data?.user_plan?.name || "")}
+              </CardDescription>
+            </CardHeader>
+          </div>
+          <CardContent className="mt-6 self-center sm:mt-10">
+            <Link to="/payments">
+              <Button className="w-full sm:w-auto">Manage Plan</Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <div className="flex flex-col items-center justify-evenly gap-8 sm:flex-row sm:gap-4">
+            <div className="flex flex-col gap-y-6 sm:gap-y-10">
+              <StatCard
+                value={userQuery[1]?.data?.total_rooms ?? 0}
+                name="Total room"
+                icon={roomsIcon}
               />
-              <div className="flex flex-col gap-y-6 sm:gap-y-10">
-                <StatCard
-                  value={
-                    (userQuery[1]?.data?.total_rooms ?? 0) -
-                    (userQuery[1]?.data?.active_rooms ?? 0)
-                  }
-                  name="Inactive room"
-                  icon={inactiveIcon}
-                />
-                <StatCard
-                  value={userQuery[1]?.data?.private_rooms ?? 0}
-                  name="Private room"
-                  icon={privateIcon}
-                />
-              </div>
+              <StatCard
+                value={userQuery[1]?.data?.active_rooms ?? 0}
+                name="Active room"
+                icon={activeIcon}
+              />
             </div>
-          </Card>
+            <Separator
+              orientation="vertical"
+              className="hidden h-[200px] sm:block"
+            />
+            <div className="flex flex-col gap-y-6 sm:gap-y-10">
+              <StatCard
+                value={
+                  (userQuery[1]?.data?.total_rooms ?? 0) -
+                  (userQuery[1]?.data?.active_rooms ?? 0)
+                }
+                name="Inactive room"
+                icon={inactiveIcon}
+              />
+              <StatCard
+                value={userQuery[1]?.data?.private_rooms ?? 0}
+                name="Private room"
+                icon={privateIcon}
+              />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-10">
+        <div className="max-w-full p-1 lg:max-w-[355px]">
+          <h2 className="mb-3 text-center font-semibold text-muted-foreground lg:text-left">
+            Let&apos;s get you started
+          </h2>
+          <div className="h-[200px] rounded-xl border border-border/70 p-1 shadow-sm transition-colors duration-300 sm:h-[188px]">
+            <iframe
+              className="rounded-xl"
+              width="100%"
+              height="100%"
+              src="https://www.youtube.com/embed/eTFcF4cgNn0"
+              title="YouTube video player"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            ></iframe>
+          </div>
         </div>
 
-        {/* Right Side */}
-        <div className="flex flex-col gap-10">
-          <div className="max-w-full lg:max-w-[355px] p-1">
-            <h2 className="font-semibold text-[#707070] mb-3 text-center lg:text-left">
-              Let's get you started
-            </h2>
-            <div className="h-[200px] sm:h-[188px] outline rounded-xl p-1">
-              <iframe
-              className="rounded-xl"
-                width="100%"
-                height="100%"
-                src="https://www.youtube.com/embed/eTFcF4cgNn0"
-                title="YouTube video player"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              ></iframe>
+        <Card className="flex flex-col items-center">
+          <div className="mb-6 flex w-full flex-wrap justify-evenly gap-6 sm:gap-0">
+            <div className="flex flex-col items-center gap-y-4">
+              <div
+                onClick={() => setOpenSchedule(true)}
+                className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setOpenSchedule(true);
+                  }
+                }}
+              >
+                <div className="flex h-[65px] w-[65px] items-center justify-center rounded-xl bg-[#227451] shadow-sm transition-transform duration-300 hover:scale-[1.02]">
+                  <img src={calendar} alt="schedule" />
+                </div>
+              </div>
+              Schedule
+            </div>
+            <div className="flex flex-col items-center gap-y-4">
+              <Link to="/join">
+                <div className="flex h-[65px] w-[65px] items-center justify-center rounded-xl bg-[#227451] shadow-sm transition-transform duration-300 hover:scale-[1.02]">
+                  <img src={join} alt="join" />
+                </div>
+              </Link>
+              Join
+            </div>
+            <div className="flex flex-col items-center gap-y-4">
+              <Link to="/rooms">
+                <div className="flex h-[65px] w-[65px] items-center justify-center rounded-xl bg-[#012E89] shadow-sm transition-transform duration-300 hover:scale-[1.02]">
+                  <img src={video} alt="host" />
+                </div>
+              </Link>
+              Host
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <Card className="flex flex-col items-center">
-            <div className="flex justify-evenly w-full mb-6 flex-wrap gap-6 sm:gap-0">
-              <div className="flex flex-col items-center gap-y-4">
-                <div
-                  onClick={() => setOpenSchedule(true)}
-                  className="cursor-pointer"
-                >
-                  <div className="w-[65px] h-[65px] bg-[#227451] flex justify-center items-center rounded-xl">
-                    <img src={calendar} alt="schedule" />
+          <p className="mb-1 font-semibold">Personal Meeting ID</p>
+          <div className="flex items-center gap-x-2">
+            <p className="max-w-[200px] truncate text-base text-muted-foreground">
+              {userQuery[1]?.data?.personal_room?.id ?? "No ID available"}
+            </p>
+            <Copy
+              className="h-5 w-5 cursor-pointer"
+              onClick={() => handleCopy(userQuery[1]?.data?.personal_room?.id)}
+            />
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex flex-col items-start justify-between space-y-2 sm:flex-row sm:items-end sm:space-y-0">
+            <div className="text-2xl font-semibold">Meetings</div>
+            <div>
+              <Link
+                to="/rooms"
+                className="text-sm font-semibold leading-7 text-[#2D8CFF]"
+              >
+                Visit Meeting
+              </Link>
+            </div>
+          </div>
+          <div className="flex flex-col items-center justify-center">
+            <div className="my-6 w-full space-y-3 rounded-lg border border-border/70 bg-muted/50 p-3 text-foreground transition-colors duration-300 sm:my-10">
+              {userQuery[2]?.data?.data?.length === 0 ? (
+                <p className="text-center font-semibold">No upcoming Meetings</p>
+              ) : (
+                userQuery[2]?.data?.data?.map((meeting) => (
+                  <div
+                    key={meeting.id}
+                    className="rounded-lg border border-border/70 bg-background p-3 shadow-sm transition-colors duration-300"
+                  >
+                    <p className="text-base font-semibold">{meeting.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Room: {meeting.roomname}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Host: <span className="font-medium">{meeting.hostname}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {meeting.date} {" \u2022 "} {meeting.time}
+                    </p>
                   </div>
-                </div>
-                Schedule
-              </div>
-              <div className="flex flex-col items-center gap-y-4">
-                <Link to="/join">
-                  <div className="w-[65px] h-[65px] bg-[#227451] flex justify-center items-center rounded-xl">
-                    <img src={join} alt="join" />
-                  </div>
-                </Link>
-                Join
-              </div>
-              <div className="flex flex-col items-center gap-y-4">
-                <Link to="/rooms">
-                  <div className="w-[65px] h-[65px] bg-[#012E89] flex justify-center items-center rounded-xl">
-                    <img src={video} alt="host" />
-                  </div>
-                </Link>
-                Host
-              </div>
+                ))
+              )}
             </div>
 
-            <p className="font-semibold mb-1">Personal Meeting ID</p>
-            <div className="flex gap-x-2 items-center">
-              <p className="text-base text-[#707070] truncate max-w-[200px]">
-                {userQuery[1]?.data?.personal_room?.id ?? "No ID available"}
-              </p>
-              <Copy
-                className="h-5 w-5 cursor-pointer"
-                onClick={() =>
-                  handleCopy(userQuery[1]?.data?.personal_room?.id)
-                }
-              />
-            </div>
-          </Card>
-
-          {/* Meetings */}
-          <Card>
-            <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between space-y-2 sm:space-y-0">
-              <div className="text-2xl font-semibold">Meetings</div>
-              <div>
-                <Link
-                  to="/rooms"
-                  className="text-sm font-semibold text-[#2D8CFF] leading-7"
-                >
-                  Visit Meeting
-                </Link>
-              </div>
-            </div>
-            <div className="flex justify-center items-center flex-col">
-              <div className="bg-[#F2F2F2] w-full rounded p-3 text-[#424242] my-6 sm:my-10 space-y-3">
-                {userQuery[2]?.data?.data?.length === 0 ? (
-                  <p className="font-semibold text-center">No upcoming Meetings</p>
-                ) : (
-                  userQuery[2]?.data?.data?.map((meeting) => (
-                    <div
-                      key={meeting.id}
-                      className="bg-white rounded-lg p-3 shadow-sm"
-                    >
-                      {/* Meeting Title */}
-                      <p className="font-semibold text-base">
-                        {meeting.title}
-                      </p>
-
-                      {/* Room Name */}
-                      <p className="text-sm text-gray-700">
-                        Room: {meeting.roomname}
-                      </p>
-
-                      {/* Hostname */}
-                      <p className="text-xs text-gray-600 mt-1">
-                        Host: <span className="font-medium">{meeting.hostname}</span>
-                      </p>
-
-                      {/* Date & Time */}
-                      <p className="text-xs text-gray-500 mt-1">
-                        {meeting.date} • {meeting.time}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-
-
-              <Button variant="outline" className="w-full sm:w-auto">
-                Test Audio and Video
-              </Button>
-            </div>
-          </Card>
-        </div>
-
-        {/* Dialog */}
-        <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
-          <DialogContent className="top-[50%] h-[90%] w-[90%] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-3xl lg:w-[50%]">
-            <DialogTitle>Send a new Invite</DialogTitle>
-            <DialogDescription>
-              Send an invite for a scheduled meeting
-            </DialogDescription>
-            <MeetingForm setOpenDialog={setOpenSchedule} />
-          </DialogContent>
-        </Dialog>
+            <Button variant="outline" className="w-full sm:w-auto">
+              Test Audio and Video
+            </Button>
+          </div>
+        </Card>
       </div>
-    );
+
+      <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
+        <DialogContent className="top-[50%] h-[90%] w-[90%] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-3xl lg:w-[50%]">
+          <DialogTitle>Send a new Invite</DialogTitle>
+          <DialogDescription>
+            Send an invite for a scheduled meeting
+          </DialogDescription>
+          <MeetingForm setOpenDialog={setOpenSchedule} />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 };
 
 export default Dashboard;

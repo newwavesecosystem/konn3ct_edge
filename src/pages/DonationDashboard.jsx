@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Card } from "../components/ui/card";
+
+import { fetchDonationStats, fetchDonations } from "../api/donationApi";
 import { Button } from "../components/ui/button";
-import { fetchDonations, fetchDonationStats } from "../api/donationApi";
+import { Card } from "../components/ui/card";
 
 export default function DonationDashboard({ setStep }) {
   const [stats, setStats] = useState(null);
@@ -15,7 +16,6 @@ export default function DonationDashboard({ setStep }) {
           fetchDonationStats(),
           fetchDonations(),
         ]);
-        console.log(donationsRes?.data);
         setStats(statsRes?.data || {});
         setDonations(donationsRes?.data || []);
       } catch (err) {
@@ -24,64 +24,63 @@ export default function DonationDashboard({ setStep }) {
         setLoading(false);
       }
     };
+
     loadData();
   }, []);
 
   return (
-
     <div className="mx-auto mt-10 w-full max-w-5xl space-y-6 px-3">
-      {/* Header */}
       <div className="mt-20 flex items-center justify-between md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center">
         <div>
           <h2 className="text-xl font-bold">Donations Dashboard</h2>
-          <p className="text-gray-500 text-sm">Individual Account • Verified</p>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">
+            Individual Account • Verified
+          </p>
         </div>
         {setStep && (
           <Button variant="outline" size="sm" onClick={() => setStep("success")}>
-            ← Back
+            Back
           </Button>
         )}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="p-4">
-          <h4 className="text-gray-500 text-sm">Total Donations</h4>
-          <p className="text-xl font-bold">
-            ₦{stats?.donation_sum || 0}
-          </p>
-          <p className="text-sm text-gray-500">
+          <h4 className="text-sm text-gray-500 dark:text-muted-foreground">
+            Total Donations
+          </h4>
+          <p className="text-xl font-bold">N{stats?.donation_sum || 0}</p>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">
             {stats?.donation_count || 0} donations received
           </p>
         </Card>
 
         <Card className="p-4">
-          <h4 className="text-gray-500 text-sm">Settlements</h4>
-          <p className="text-xl font-bold">
-            ₦{stats?.settlement_sum || 0}
-          </p>
-          <p className="text-sm text-gray-500">
+          <h4 className="text-sm text-gray-500 dark:text-muted-foreground">
+            Settlements
+          </h4>
+          <p className="text-xl font-bold">N{stats?.settlement_sum || 0}</p>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">
             {stats?.settlement_count || 0} settlements completed
           </p>
         </Card>
 
         <Card className="p-4">
-          <h4 className="text-gray-500 text-sm">Pending</h4>
-          <p className="text-xl font-bold">
-            ₦{stats?.pending_sum || 0}
-          </p>
-          <p className="text-sm text-gray-500">
+          <h4 className="text-sm text-gray-500 dark:text-muted-foreground">
+            Pending
+          </h4>
+          <p className="text-xl font-bold">N{stats?.pending_sum || 0}</p>
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">
             {stats?.pending_count || 0} transaction(s) pending
           </p>
         </Card>
       </div>
 
-      {/* Transaction History */}
-      <div className="border rounded-lg p-4">
+      <div className="rounded-lg border border-border p-4 shadow-sm transition-colors duration-300 dark:bg-card">
         <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
           <div>
             <h3 className="font-semibold">Transaction History</h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-muted-foreground">
               View all your donation and settlement transactions
             </p>
           </div>
@@ -89,8 +88,8 @@ export default function DonationDashboard({ setStep }) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] rounded-lg border text-left text-sm lg:min-w-0">
-            <thead className="bg-gray-100">
+          <table className="w-full min-w-[960px] overflow-hidden rounded-lg border border-border text-left text-sm lg:min-w-0">
+            <thead className="bg-gray-100 dark:bg-muted/70 dark:text-muted-foreground">
               <tr>
                 <th className="p-3">#</th>
                 <th className="p-3">Reference</th>
@@ -106,30 +105,54 @@ export default function DonationDashboard({ setStep }) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="text-center p-6 text-gray-400">Loading...</td>
+                  <td
+                    colSpan="9"
+                    className="p-6 text-center text-gray-400 dark:text-muted-foreground"
+                  >
+                    Loading...
+                  </td>
                 </tr>
               ) : donations.length > 0 ? (
-                donations.map((d, i) => (
-                  <tr key={d.id} className="border-b">
-                    <td className="p-3">{i + 1}</td>
-                    <td className="p-3">{d.reference}</td>
-                    <td className="p-3">{d.payee_name}</td>
+                donations.map((donation, index) => (
+                  <tr
+                    key={donation.id}
+                    className="border-b border-border/80 dark:bg-background/30"
+                  >
+                    <td className="p-3">{index + 1}</td>
+                    <td className="p-3">{donation.reference}</td>
+                    <td className="p-3">{donation.payee_name}</td>
                     <td className="p-3">Donation</td>
-                    <td className="p-3">{d.description}</td>
-                    <td className="p-3">{d.provider}</td>
-                    <td className="p-3">₦{Number(d.amount).toLocaleString()} {d.currency}</td>
-                    <td className="p-3">{new Date(d.paid_at || d.created_at).toLocaleString()}</td>
-                    <td className="p-3">{d.status === 1 ? "Successful" : d.status === 0 ? "Pending" : "Failed"}</td>
+                    <td className="p-3">{donation.description}</td>
+                    <td className="p-3">{donation.provider}</td>
+                    <td className="p-3">
+                      N{Number(donation.amount).toLocaleString()}{" "}
+                      {donation.currency}
+                    </td>
+                    <td className="p-3">
+                      {new Date(
+                        donation.paid_at || donation.created_at
+                      ).toLocaleString()}
+                    </td>
+                    <td className="p-3">
+                      {donation.status === 1
+                        ? "Successful"
+                        : donation.status === 0
+                        ? "Pending"
+                        : "Failed"}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="text-center p-6 text-gray-400">No transactions yet</td>
+                  <td
+                    colSpan="9"
+                    className="p-6 text-center text-gray-400 dark:text-muted-foreground"
+                  >
+                    No transactions yet
+                  </td>
                 </tr>
               )}
             </tbody>
-
-
           </table>
         </div>
       </div>

@@ -1,8 +1,8 @@
 import { Card } from "../components/ui/card";
 
-export default function VerificationStatus({ status, onBack, onFinish }) {
+export default function VerificationStatus({ status }) {
   const kyc = status?.data || {};
-  const overallStatus = status?.status; // 0 = verified, 1 = pending
+  const overallStatus = status?.status;
 
   const steps = [
     {
@@ -32,89 +32,77 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
     },
   ];
 
-  const completed = steps.filter((s) => s.isDone).length;
-  const progress = overallStatus === 0 ? 100 : Math.round((completed / steps.length) * 100);
+  const completed = steps.filter((step) => step.isDone).length;
+  const progress =
+    overallStatus === 0 ? 100 : Math.round((completed / steps.length) * 100);
 
   return (
-    <Card className="p-6 w-full max-w-2xl mx-auto rounded-2xl shadow-md space-y-6">
+    <Card className="mx-auto w-full max-w-2xl space-y-6 rounded-2xl p-6 shadow-md">
       <div className="flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
         <div>
-          <h2 className="font-semibold text-lg flex items-center gap-2">
-            <span className="bg-green-100 text-green-700 p-2 rounded-full">👤</span>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <span className="rounded-full bg-green-100 p-2 text-green-700 dark:bg-green-500/15 dark:text-green-300">
+              User
+            </span>
             Verification Status
           </h2>
-          <p className="text-sm text-gray-500">
-          Account verification progress
+          <p className="text-sm text-gray-500 dark:text-muted-foreground">
+            Account verification progress
           </p>
         </div>
-        {/* <button
-          className="px-4 py-1 border rounded-md"
-          onClick={onBack}
-        >
-          ← Back
-        </button> */}
       </div>
 
-      {/* Progress Bar */}
-      <div className="border rounded-xl p-4 space-y-3">
-        <div className="flex justify-between items-center">
+      <div className="space-y-3 rounded-xl border border-border p-4 dark:bg-background/40">
+        <div className="flex items-center justify-between">
           <h3 className="font-medium">Overall Verification Status</h3>
           <span
-            className={`text-xs px-2 py-1 rounded-full ${
+            className={`rounded-full px-2 py-1 text-xs ${
               overallStatus === 0
-                ? "bg-green-100 text-green-700"
-                : "bg-yellow-100 text-yellow-700"
+                ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300"
+                : "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
             }`}
           >
-            {overallStatus === 0 ? "Verified ✓" : "In Progress"}
+            {overallStatus === 0 ? "Verified" : "In Progress"}
           </span>
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-muted-foreground">
           {completed} of {steps.length} verification levels completed
         </p>
-        <div className="w-full bg-gray-200 rounded-full h-2">
+        <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-muted">
           <div
-            className="bg-green-500 h-2 rounded-full"
+            className="h-2 rounded-full bg-green-500"
             style={{ width: `${progress}%` }}
           ></div>
         </div>
-        <p className="text-right text-xs text-gray-500">{progress}%</p>
+        <p className="text-right text-xs text-gray-500 dark:text-muted-foreground">
+          {progress}%
+        </p>
       </div>
 
-      {/* Step List */}
       <div className="space-y-3">
         {steps.map((step) => (
           <div
             key={step.key}
-            className="flex items-center justify-between rounded-xl border p-4 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center"
+            className="flex items-center justify-between rounded-xl border border-border p-4 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center dark:bg-background/30"
           >
             <div>
               <p className="font-medium">{step.title}</p>
-              <p className="text-sm text-gray-500">{step.desc}</p>
+              <p className="text-sm text-gray-500 dark:text-muted-foreground">
+                {step.desc}
+              </p>
             </div>
             <span
-              className={`text-xs px-2 py-1 rounded-full ${
+              className={`rounded-full px-2 py-1 text-xs ${
                 step.isDone
-                  ? "bg-green-100 text-green-700"
-                  : "bg-yellow-100 text-yellow-700"
+                  ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300"
+                  : "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
               }`}
             >
-              {step.isDone ? "Verified ✓" : "Pending ⏳"}
+              {step.isDone ? "Verified" : "Pending"}
             </span>
           </div>
         ))}
       </div>
-
-      {/* {overallStatus === 0 && (
-        <div className="flex justify-center mt-6">
-          <button
-            onClick={onFinish}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg"
-          >
-            Finish Verification
-          </button>
-        </div>
-      )} */}
     </Card>
   );
 }

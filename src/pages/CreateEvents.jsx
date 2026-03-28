@@ -156,13 +156,13 @@ const CreateEvents = () => {
 
   return (
     <div className="min-h-screen w-full px-10 py-10 md:px-6 lg:px-10">
-      <div className="w-full rounded-2xl border border-gray-100 bg-white p-10 shadow-sm md:p-6 lg:p-10">
+      <div className="w-full rounded-2xl border border-gray-100 bg-white p-10 shadow-sm dark:border-border dark:bg-card md:p-6 lg:p-10">
         {/* Header */}
         <div className="flex items-start gap-3 mb-8">
-          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/15">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="w-5 h-5 text-green-600"
+              className="h-5 w-5 text-green-600 dark:text-green-300"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -176,8 +176,8 @@ const CreateEvents = () => {
             </svg>
           </div>
           <div>
-            <h2 className="text-2xl font-semibold text-gray-800">Create Event</h2>
-            <p className="text-gray-500 text-sm">
+            <h2 className="text-2xl font-semibold text-gray-800 dark:text-foreground">Create Event</h2>
+            <p className="text-sm text-gray-500 dark:text-muted-foreground">
               Fill the form to create an event instantly
             </p>
           </div>
@@ -187,38 +187,38 @@ const CreateEvents = () => {
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
           <div className="max-w-5xl">
             <div>
-              <label className="block text-gray-700 text-sm mb-1">Event Title</label>
+              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Event Title</label>
               <input
                 type="text"
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
                 placeholder="Enter your event title"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="mt-4">
-              <label className="block text-gray-700 text-sm mb-1">Host Name</label>
+              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Host Name</label>
               <input
                 type="text"
                 name="host"
                 value={formData.host}
                 onChange={handleChange}
                 placeholder="Enter host name"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <div>
-                <label className="block text-gray-700 text-sm mb-1">Select Room</label>
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Select Room</label>
                 <select
                   name="room"
                   value={formData.room}
                   onChange={handleChange}
                   disabled={roomLoading}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 >
                   <option value="">
                     {roomLoading ? "Loading rooms..." : "Select Room"}
@@ -236,38 +236,38 @@ const CreateEvents = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-1">Event Date</label>
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Event Date</label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <div>
-                <label className="block text-gray-700 text-sm mb-1">Event Time</label>
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Event Time</label>
                 <input
                   type="time"
                   name="time"
                   value={formData.time}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 />
               </div>
                           <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               <div>
-                <label className="block text-gray-700 text-sm mb-1">
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
                   Event Type
                 </label>
                 <select
                   name="free"
                   value={formData.free}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground"
                 >
                   <option value="1">Free</option>
                   <option value="0">Paid</option>
@@ -275,7 +275,7 @@ const CreateEvents = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-1">
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
                   Currency
                 </label>
                 <select
@@ -283,7 +283,7 @@ const CreateEvents = () => {
                   value={formData.currency}
                   onChange={handleChange}
                   disabled={formData.free === "1"}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground"
                 >
                   <option value="NGN">NGN</option>
                   <option value="USD">USD</option>
@@ -291,7 +291,7 @@ const CreateEvents = () => {
               </div>
 
               <div>
-                <label className="block text-gray-700 text-sm mb-1">
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
                   Amount
                 </label>
                 <input
@@ -301,7 +301,7 @@ const CreateEvents = () => {
                   onChange={handleChange}
                   disabled={formData.free === "1"}
                   placeholder="6000"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                 />
               </div>
             </div>
@@ -309,12 +309,12 @@ const CreateEvents = () => {
 
               {/* ----------- NEW TIMEZONE DROPDOWN ----------- */}
               <div>
-                <label className="block text-gray-700 text-sm mb-1">Time Zone</label>
+                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Time Zone</label>
                 <select
                   name="timezone"
                   value={formData.timezone}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 >
                   <option value="">Select timezone</option>
                   {timezones.map((tz) => (
@@ -327,24 +327,24 @@ const CreateEvents = () => {
             </div>
 
             <div className="mt-4">
-              <label className="block text-gray-700 text-sm mb-1">About the event</label>
+              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">About the event</label>
               <textarea
                 name="about"
                 rows="4"
                 value={formData.about}
                 onChange={handleChange}
                 placeholder="Write a short description about your event"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="mt-4">
-              <label className="block text-gray-700 text-sm mb-1">Set Reminder</label>
+              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">Set Reminder</label>
               <select
                 name="reminder"
                 value={formData.reminder}
                 onChange={handleChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
               >
                 <option value="">Select reminder</option>
                 <option value="2">2 days before</option>
@@ -354,12 +354,14 @@ const CreateEvents = () => {
             </div>
 
             <div className="mt-4">
-              <label className="block text-gray-700 text-sm mb-2">
+              <label className="mb-2 block text-sm text-gray-700 dark:text-foreground">
                 Upload a logo *
               </label>
               <div
-                className={`border-2 border-dashed rounded-lg p-6 text-center ${
-                  logoError ? "border-red-400" : "border-gray-300"
+                className={`rounded-lg border-2 border-dashed p-6 text-center ${
+                  logoError
+                    ? "border-red-400 dark:border-red-500/60"
+                    : "border-gray-300 dark:border-border"
                 }`}
                 onDragOver={handleFileDragOver}
                 onDrop={handleFileDrop}
@@ -372,23 +374,23 @@ const CreateEvents = () => {
                   className="hidden"
                   onChange={handleFileChange}
                 />
-                <label htmlFor="fileUpload" className="cursor-pointer text-gray-500 text-sm">
+                <label htmlFor="fileUpload" className="cursor-pointer text-sm text-gray-500 dark:text-muted-foreground">
                   <span className="block mb-1">Select a file or drop here</span>
-                  <span className="text-xs text-gray-400">JPG, PNG, or PDF (max 10MB)</span>
+                  <span className="text-xs text-gray-400 dark:text-muted-foreground/80">JPG, PNG, or PDF (max 10MB)</span>
                 </label>
               </div>
               {formData.logo ? (
-                <p className="text-xs text-gray-500 mt-2">Selected: {formData.logo.name}</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-muted-foreground">Selected: {formData.logo.name}</p>
               ) : null}
               {logoError ? <p className="text-xs text-red-500 mt-2">{logoError}</p> : null}
-              <p className="text-xs text-gray-400 mt-1">Recommended: 80px by 80px, PNG format</p>
+              <p className="mt-1 text-xs text-gray-400 dark:text-muted-foreground/80">Recommended: 80px by 80px, PNG format</p>
             </div>
 
             <div className="flex justify-end gap-3 pt-6">
               <button
                 type="button"
                 onClick={() => navigate("/events")}
-                className="bg-red-100 text-red-600 px-5 py-2 rounded-lg hover:bg-red-200 transition"
+                className="rounded-lg bg-red-100 px-5 py-2 text-red-600 transition hover:bg-red-200 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
               >
                 Cancel
               </button>

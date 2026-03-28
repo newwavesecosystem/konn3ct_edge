@@ -1,5 +1,5 @@
-// ForgotPassword.jsx
 import React, { useState } from "react";
+
 import {
   requestForgotPassword,
   resetForgotPassword,
@@ -9,13 +9,12 @@ import { useToast } from "../../hooks/use-toast";
 export function ForgotPassword() {
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState(Array(4).fill("")); // backend expects 4-digit
+  const [code, setCode] = useState(Array(4).fill(""));
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // Step 1: Request reset
   const handleResetPassword = async () => {
     if (!email) {
       toast({
@@ -27,8 +26,7 @@ export function ForgotPassword() {
 
     try {
       setLoading(true);
-      const res = await requestForgotPassword(email, "email");
-      console.log("Reset request success:", res);
+      await requestForgotPassword(email, "email");
       setStep(2);
     } catch (err) {
       console.error(err);
@@ -41,7 +39,6 @@ export function ForgotPassword() {
     }
   };
 
-  // Step 2: Code input
   const handleCodeChange = (value, index) => {
     if (/^[0-9]?$/.test(value)) {
       const newCode = [...code];
@@ -66,7 +63,6 @@ export function ForgotPassword() {
     }
   };
 
-  // Step 3: Reset password
   const handleUpdatePassword = async () => {
     if (!password || !confirmPassword) {
       toast({
@@ -75,6 +71,7 @@ export function ForgotPassword() {
       });
       return;
     }
+
     if (password !== confirmPassword) {
       toast({
         description: "Passwords do not match.",
@@ -85,8 +82,7 @@ export function ForgotPassword() {
 
     try {
       setLoading(true);
-      const res = await resetForgotPassword(email, "email", code.join(""), password);
-      console.log("Password reset success:", res);
+      await resetForgotPassword(email, "email", code.join(""), password);
       setStep(4);
     } catch (err) {
       console.error(err);
@@ -100,16 +96,16 @@ export function ForgotPassword() {
   };
 
   const handleGoToLogin = () => {
-    window.location.href = "/login"; // Redirect to login page
+    window.location.href = "/login";
   };
 
   return (
-    <div className="flex justify-center items-center h-screen bg-gray-50">
-      <div className="w-[400px] rounded-2xl bg-white p-8 text-center shadow-md md:w-[480px] lg:w-[400px]">
+    <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-background">
+      <div className="w-[400px] rounded-2xl bg-white p-8 text-center shadow-md dark:border dark:border-border dark:bg-card md:w-[480px] lg:w-[400px]">
         {step === 1 && (
           <>
-            <h2 className="text-lg font-bold mb-2">Forgot password</h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <h2 className="mb-2 text-lg font-bold">Forgot password</h2>
+            <p className="mb-4 text-sm text-gray-500 dark:text-muted-foreground">
               Please enter your email to reset the password
             </p>
             <input
@@ -117,12 +113,12 @@ export function ForgotPassword() {
               placeholder="Enter your email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="border rounded-lg w-full p-2 mb-4"
+              className="mb-4 w-full rounded-lg border p-2 dark:border-input dark:bg-background dark:text-foreground"
             />
             <button
               onClick={handleResetPassword}
               disabled={loading}
-              className="bg-[#012E89] text-white w-full py-2 rounded-lg"
+              className="w-full rounded-lg bg-[#012E89] py-2 text-white"
             >
               {loading ? "Sending..." : "Reset Password"}
             </button>
@@ -131,11 +127,11 @@ export function ForgotPassword() {
 
         {step === 2 && (
           <>
-            <h2 className="text-lg font-bold mb-2">Check your email</h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <h2 className="mb-2 text-lg font-bold">Check your email</h2>
+            <p className="mb-4 text-sm text-gray-500 dark:text-muted-foreground">
               We sent a reset code to {email}. Enter the 4-digit code.
             </p>
-            <div className="flex justify-center gap-2 mb-4">
+            <div className="mb-4 flex justify-center gap-2">
               {code.map((digit, index) => (
                 <input
                   key={index}
@@ -144,13 +140,13 @@ export function ForgotPassword() {
                   maxLength="1"
                   value={digit}
                   onChange={(e) => handleCodeChange(e.target.value, index)}
-                  className="w-12 h-12 text-center text-lg font-bold border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="h-12 w-12 rounded-lg border text-center text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-input dark:bg-background dark:text-foreground"
                 />
               ))}
             </div>
             <button
               onClick={handleVerifyCode}
-              className="bg-[#012E89] text-white w-full py-2 rounded-lg"
+              className="w-full rounded-lg bg-[#012E89] py-2 text-white"
             >
               Continue
             </button>
@@ -159,13 +155,13 @@ export function ForgotPassword() {
 
         {step === 3 && (
           <>
-            <h2 className="text-lg font-bold mb-2">Set a new password</h2>
-            <p className="text-sm text-gray-500 mb-4">
+            <h2 className="mb-2 text-lg font-bold">Set a new password</h2>
+            <p className="mb-4 text-sm text-gray-500 dark:text-muted-foreground">
               Create a new password. Ensure it differs from previous ones.
             </p>
 
-            <div className="text-left mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="mb-4 text-left">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-foreground">
                 Password
               </label>
               <input
@@ -173,12 +169,12 @@ export function ForgotPassword() {
                 placeholder="Enter new password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="border rounded-lg w-full p-2"
+                className="w-full rounded-lg border p-2 dark:border-input dark:bg-background dark:text-foreground"
               />
             </div>
 
-            <div className="text-left mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="mb-4 text-left">
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-foreground">
                 Confirm Password
               </label>
               <input
@@ -186,14 +182,14 @@ export function ForgotPassword() {
                 placeholder="Re-enter password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="border rounded-lg w-full p-2"
+                className="w-full rounded-lg border p-2 dark:border-input dark:bg-background dark:text-foreground"
               />
             </div>
 
             <button
               onClick={handleUpdatePassword}
               disabled={loading}
-              className="bg-[#012E89] text-white w-full py-2 rounded-lg"
+              className="w-full rounded-lg bg-[#012E89] py-2 text-white"
             >
               {loading ? "Updating..." : "Update Password"}
             </button>
@@ -202,22 +198,22 @@ export function ForgotPassword() {
 
         {step === 4 && (
           <>
-            <h2 className="text-lg font-bold mb-2 text-green-600">
-              🎉 Password Updated!
+            <h2 className="mb-2 text-lg font-bold text-green-600 dark:text-green-300">
+              Password Updated!
             </h2>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="mb-6 text-sm text-gray-500 dark:text-muted-foreground">
               Your password has been successfully reset. You can now sign in
               with your new password.
             </p>
             <button
               onClick={handleGoToLogin}
-              className="bg-[#012E89] text-white w-full py-2 rounded-lg"
+              className="w-full rounded-lg bg-[#012E89] py-2 text-white"
             >
               Go to Login
             </button>
           </>
         )}
       </div>
-    </div>  
+    </div>
   );
 }

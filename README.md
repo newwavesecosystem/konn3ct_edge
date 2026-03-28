@@ -16,6 +16,7 @@ This repo is frontend-only. It depends on external Konn3ct APIs and related thir
 - Displays attendance data and calls an external AI service for meeting minutes, highlights, and summaries.
 - Manages pre-registration events and participant exports/reminders.
 - Provides profile editing, password change, and browser session management.
+- Supports light, dark, and system theme preferences from the Settings screen.
 
 ## Stack and architecture
 
@@ -25,6 +26,7 @@ This repo is frontend-only. It depends on external Konn3ct APIs and related thir
 - HTTP client: `axios` with a shared API client that attaches a bearer token from `localStorage`.
 - UI: Tailwind CSS, Radix UI primitives, and shadcn-style component scaffolding.
 - Forms/validation: `react-hook-form` and `zod`.
+- Theme system: `ThemeProvider` + `useTheme`, persisted in `localStorage` and resolved against system color-scheme preferences.
 - Integrations:
   - Google OAuth
   - Facebook SDK login
@@ -33,9 +35,11 @@ This repo is frontend-only. It depends on external Konn3ct APIs and related thir
   - External AI attendance service
   - Google Analytics snippet in `public/index.html`
 - Resilience layer: global error boundary, offline guard, route-level fallback screens.
+- Styling mode: Tailwind uses class-based dark mode, and `public/index.html` applies the saved theme before React mounts to reduce flash on load.
 
 At startup, `src/index.js` wires together:
 
+- `ThemeProvider`
 - `GoogleOAuthProvider`
 - `QueryClientProvider`
 - `AuthProvider`
@@ -69,7 +73,7 @@ The authenticated portion of the app is gated by `IsAuthenticated`, which checks
 - `/events/*`: manage pre-registration events and participant lists.
 - `/history`: invite history plus resend/send invite flows.
 - `/profile`: profile information, password update, and browser sessions.
-- `/settings`: placeholder settings tabs only; no settings persistence is implemented here.
+- `/settings`: working appearance controls for light/dark/system theme selection, plus placeholder tabs for other future settings sections.
 
 ## Project structure
 
@@ -83,6 +87,7 @@ The authenticated portion of the app is gated by `IsAuthenticated`, which checks
 |  |  `- ui/                shadcn/Radix-based UI layer + resilience helpers
 |  |- hooks/                Auth, toast, mobile, and Facebook SDK hooks
 |  |- lib/                  Route guard and small utility helpers
+|  |- providers/            Cross-cutting React providers such as theming
 |  `- pages/                Route screens and feature flows
 |     |- auth/              Login, register, forgot password, auth-side copy
 |     `- profile/           Profile, password, and session screens
@@ -206,6 +211,13 @@ You can also deploy the compiled `build/` directory behind any static host or re
 - Successful login stores both `user` and `token` in `localStorage`.
 - Protected pages rely on that stored state and the shared API interceptor.
 
+### Theme and settings flow
+
+- Theme state is provided globally by `src/providers/ThemeProvider.jsx`.
+- The selected theme is stored in `localStorage` under `theme`.
+- `system` mode follows `prefers-color-scheme`, and the resolved theme updates the document class and browser theme color.
+- The Settings screen currently exposes appearance controls; the other settings tabs are still scaffolding for future work.
+
 ### Room and invite flow
 
 - Room management lives in `Rooms.jsx`.
@@ -232,14 +244,14 @@ You can also deploy the compiled `build/` directory behind any static host or re
 ## Important caveats discovered during audit
 
 - This repository does not contain the backend. All business data, auth validation, payments, and media operations depend on external services.
-- `src/pages/Settings.jsx` is a placeholder UI only. The tab labels exist, but no settings behavior is implemented.
+- `src/pages/Settings.jsx` now implements appearance settings, but the Meeting, Recording, Audio Conference, White Board, and Scheduling tabs are still placeholders.
 - `src/pages/AttendanceUpgrade.jsx` exists but is not part of the active route flow.
 - `src/components/PricingCard.jsx` exists but is not used by the current payments UI.
 - `src/pages/JoinRoom.jsx` hardcodes the post-join meeting URL host as `https://k4.konn3ct.ng/` instead of reading it from configuration.
 - Event participant routing is partially inconsistent: one route path uses `:reference`, while the nested events route defines `:id`, but `EventParticipants` reads `reference`.
 - The repository currently tracks `.env`, including sensitive-looking values. Those values should be removed from version control and rotated if they are real.
 - Social login is only partially symmetrical across providers. For example, the SSO option is a UI placeholder that only shows an error toast.
-- `public/index.html` includes a legacy Google Analytics UA snippet and the Apple sign-in script directly in the document.
+- `public/index.html` includes a legacy Google Analytics UA snippet, the Apple sign-in script, and a pre-hydration theme bootstrap script directly in the document.
 
 ## Summary
 

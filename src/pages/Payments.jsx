@@ -256,10 +256,15 @@ const Payments = () => {
     <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <div className="mb-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-x-5">
-          <Card className="h-[200px] w-full max-w-[260px] bg-primary lg:w-[260px]">
-            <Badge className="bg-white text-primary">Current Plan</Badge>
+          <Card className="h-[200px] w-full max-w-[260px] border-slate-200 bg-white text-slate-900 dark:border-border dark:bg-card dark:text-foreground lg:w-[260px]">
+            <Badge
+              variant="outline"
+              className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 dark:border-border dark:bg-muted dark:text-muted-foreground dark:hover:bg-muted"
+            >
+              Current Plan
+            </Badge>
             <div className="flex justify-center items-center h-full">
-              <p className="text-4xl font-medium text-white">
+              <p className="text-4xl font-medium text-slate-900 dark:text-foreground">
                 {currentPlan.toUpperCase()}
               </p>
             </div>
@@ -268,7 +273,7 @@ const Payments = () => {
           <div className="flex w-full flex-col gap-y-3 lg:w-auto">
             {currentPlan.toLowerCase() !== "basic" && (
               <DialogTrigger asChild>
-                <Button className="w-full bg-muted text-[#373131] lg:w-auto">
+                <Button className="w-full bg-muted text-foreground hover:bg-muted/80 lg:w-auto">
                   Renew Subscriptions
                 </Button>
               </DialogTrigger>
@@ -435,7 +440,7 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   return (
     <div>
       <Tabs defaultValue="monthly" className="flex flex-col">
-        <TabsList className="grid grid-cols-2 mx-auto mb-6 w-[300px] shadow-md border-2 bg-slate-50 rounded-full p-0">
+        <TabsList className="mx-auto mb-6 grid w-[300px] grid-cols-2 rounded-full border-2 bg-muted p-0 shadow-md">
           <TabsTrigger className="rounded-full" value="monthly">
             Monthly
           </TabsTrigger>

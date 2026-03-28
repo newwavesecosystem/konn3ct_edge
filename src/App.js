@@ -47,6 +47,7 @@ import AddonIcon from "./assets/components/AddonIcon";
 import RefereeIcon from "./assets/components/RefereeIcon";
 import HistoryIcon from "./assets/components/HistoryIcon";
 import DonationIcon from "./assets/components/DonationIcon";
+import SettingsIcon from "./assets/components/SettingsIcon";
 import AttendanceIcon from "./assets/components/AttendanceIcon";
 import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { RouteErrorFallback } from "./components/ui/resilience";
@@ -64,6 +65,7 @@ const items = [
   { title: "Attendance", url: "/attendance", icon: AttendanceIcon },
   { title: "Events", url: "/events", icon: EventIcon },
   { title: "Invite history", url: "/history", icon: HistoryIcon },
+  { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Logout", url: "/login", icon: LogOut },
 ];
 
