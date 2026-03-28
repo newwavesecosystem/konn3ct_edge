@@ -103,7 +103,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
         <div className="flex-1 flex justify-center py-10 mt-14 items-center">
             {/* Step 1: Card */}
             {step === "card" && (
-                <Card className="w-[320px] shadow-md rounded-2xl border border-gray-200">
+                <Card className="w-[320px] rounded-2xl border border-gray-200 shadow-md md:w-[380px] lg:w-[320px]">
                     <CardContent className="flex flex-col items-center text-center p-6">
                         <div className="w-14 h-14 flex items-center justify-center bg-green-100 rounded-full mb-4">
                             <Building2 className="w-7 h-7 text-green-600" />
@@ -221,8 +221,8 @@ export default function BusinessVerificationFlow({ onComplete }) {
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select your bank" />
                                         </SelectTrigger>
-                                        <SelectContent className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-[300px] overflow-y-auto p-2">
-                                            <div className="grid grid-cols-2 md:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto p-2">
+                                        <SelectContent className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto p-2 lg:grid-cols-4">
+                                            <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto p-2 md:grid-cols-2">
                                                 {banks.map(bank => (
                                                     <SelectItem key={bank.code} value={bank} >
                                                         <div className="!static whitespace-normal text-sm px-2 py-1">

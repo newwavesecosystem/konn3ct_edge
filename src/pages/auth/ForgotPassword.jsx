@@ -105,7 +105,7 @@ export function ForgotPassword() {
 
   return (
     <div className="flex justify-center items-center h-screen bg-gray-50">
-      <div className="bg-white shadow-md rounded-2xl p-8 w-[400px] text-center">
+      <div className="w-[400px] rounded-2xl bg-white p-8 text-center shadow-md md:w-[480px] lg:w-[400px]">
         {step === 1 && (
           <>
             <h2 className="text-lg font-bold mb-2">Forgot password</h2>

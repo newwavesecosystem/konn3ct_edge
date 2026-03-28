@@ -37,7 +37,7 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
 
   return (
     <Card className="p-6 w-full max-w-2xl mx-auto rounded-2xl shadow-md space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
         <div>
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <span className="bg-green-100 text-green-700 p-2 rounded-full">👤</span>
@@ -86,7 +86,7 @@ export default function VerificationStatus({ status, onBack, onFinish }) {
         {steps.map((step) => (
           <div
             key={step.key}
-            className="flex justify-between items-center border rounded-xl p-4"
+            className="flex items-center justify-between rounded-xl border p-4 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center"
           >
             <div>
               <p className="font-medium">{step.title}</p>

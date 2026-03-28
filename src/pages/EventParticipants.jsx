@@ -193,9 +193,9 @@ const EventParticipants = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-5xl mx-auto mt-16">
+    <div className="mx-auto mt-16 w-full max-w-5xl rounded-2xl bg-white p-6 shadow-sm">
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-start lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleCopy}
@@ -241,12 +241,12 @@ const EventParticipants = () => {
           }}
           type="text"
           placeholder="Search"
-          className="w-full sm:w-64 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 sm:w-64 md:w-full lg:w-64"
         />
       </div>
 
       {/* Header + Back Button */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
         <h2 className="text-md font-semibold text-gray-800">
           Pre-Registered Users ({filteredRows.length})
         </h2>
@@ -260,7 +260,7 @@ const EventParticipants = () => {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-100 rounded-xl overflow-hidden">
+        <table className="min-w-[720px] rounded-xl border border-gray-100 overflow-hidden lg:min-w-full">
           <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
             <tr>
               <th className="px-4 py-3 text-left font-medium">S/N</th>
@@ -305,7 +305,7 @@ const EventParticipants = () => {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-4 text-xs text-gray-500">
+      <div className="mt-4 flex items-center justify-between text-xs text-gray-500 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
         <span>
           Showing {showingFrom}-{showingTo} of {filteredRows.length}
         </span>

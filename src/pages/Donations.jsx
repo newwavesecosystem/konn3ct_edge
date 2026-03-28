@@ -63,7 +63,7 @@ export default function Donations() {
 
       {/* Step 3: Success → then Dashboard */}
       {step === "success" && (
-        <Card className="w-[360px] shadow-md rounded-2xl border border-gray-200 text-center p-8 space-y-4">
+        <Card className="w-[360px] rounded-2xl border border-gray-200 p-8 text-center shadow-md space-y-4 md:w-[420px] lg:w-[360px]">
           <div className="flex justify-center">
             <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
               <CheckCircle className="w-8 h-8 text-green-600" />

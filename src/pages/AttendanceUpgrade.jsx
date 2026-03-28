@@ -106,60 +106,64 @@ export default function AttendanceUpgrade() {
         {/* Overview Section */}
         <h3 className="text-sm font-semibold mb-2">Overview</h3>
 
-        {/* Header Row */}
-        <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b pb-1 mb-2">
-          <p>User</p>
-          <p>Online</p>
-          <p>Talk</p>
-          <p>Webcam</p>
-          <p>Msgs</p>
-          <p>React</p>
-          <p>Raise</p>
-        </div>
-
-        {/* User Rows */}
-        <div className="space-y-2">
-          {paginatedUsers.map((u, i) => (
-            <div
-              key={`${u.name}-${pageStart + i}`}
-              className="grid grid-cols-7 items-center bg-white rounded-lg shadow-sm hover:shadow-md transition p-2"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-medium text-gray-700">
-                  {u.initials}
-                </div>
-                <div className="leading-tight">
-                  <p className="font-medium text-xs">{u.name}</p>
-                  <p className="text-[10px] text-gray-500">{u.time}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-700">
-                <Wifi size={12} /> {u.online}
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-700">
-                <Mic size={12} /> {u.talk}
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-700">
-                <Video size={12} /> {u.webcam}
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-700">
-                <MessageCircle size={12} /> {u.messages}
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-700">
-                <span>{u.reaction}</span>
-                <span>{u.reaction === "\u{1F605}" ? 1 : 0}</span>
-              </div>
-
-              <div className="flex items-center gap-1 text-xs text-gray-700">
-                <span>{"\u{1F525}"}</span> {u.raise}
-              </div>
+        <div className="md:overflow-x-auto lg:overflow-visible">
+          <div className="md:min-w-[720px] lg:min-w-0">
+            {/* Header Row */}
+            <div className="mb-2 grid grid-cols-7 border-b pb-1 text-xs font-semibold text-gray-600">
+              <p>User</p>
+              <p>Online</p>
+              <p>Talk</p>
+              <p>Webcam</p>
+              <p>Msgs</p>
+              <p>React</p>
+              <p>Raise</p>
             </div>
-          ))}
+
+            {/* User Rows */}
+            <div className="space-y-2">
+              {paginatedUsers.map((u, i) => (
+                <div
+                  key={`${u.name}-${pageStart + i}`}
+                  className="grid grid-cols-7 items-center rounded-lg bg-white p-2 shadow-sm transition hover:shadow-md"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-[10px] font-medium text-gray-700">
+                      {u.initials}
+                    </div>
+                    <div className="leading-tight">
+                      <p className="text-xs font-medium">{u.name}</p>
+                      <p className="text-[10px] text-gray-500">{u.time}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-700">
+                    <Wifi size={12} /> {u.online}
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-700">
+                    <Mic size={12} /> {u.talk}
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-700">
+                    <Video size={12} /> {u.webcam}
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-700">
+                    <MessageCircle size={12} /> {u.messages}
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-700">
+                    <span>{u.reaction}</span>
+                    <span>{u.reaction === "\u{1F605}" ? 1 : 0}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-700">
+                    <span>{"\u{1F525}"}</span> {u.raise}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Pagination */}

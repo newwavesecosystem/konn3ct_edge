@@ -142,14 +142,14 @@ const Recordings = () => {
               placeholder="Search by meeting name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
+              className="md:max-w-none lg:max-w-sm"
             />
 
             <Input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="max-w-xs"
+              className="md:max-w-[220px] lg:max-w-xs"
             />
 
             {(searchTerm || selectedDate) && (
@@ -168,7 +168,7 @@ const Recordings = () => {
 
         <Separator />
 
-        <Table>
+        <Table className="min-w-[840px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead>Meeting Name</TableHead>
@@ -260,7 +260,7 @@ const Recordings = () => {
 
       {/* Delete Dialog */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
-        <DialogContent className="w-1/2">
+        <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-xl lg:w-1/2">
           <DialogTitle>Confirm Deletion</DialogTitle>
           <DialogDescription>
             Are you sure you want to delete this recording? This action cannot be

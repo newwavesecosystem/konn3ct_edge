@@ -114,15 +114,15 @@ const InviteHistory = () => {
 
   return (
     <section className="page container mx-auto">
-      <Card className="w-full min-h-full relative pb-16">
-        <div className="p-4 pt-10 flex items-center gap-5">
+      <Card className="relative w-full min-h-full pb-6 lg:pb-16">
+        <div className="flex items-center gap-5 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-5 lg:pt-10">
           <Button onClick={() => setOpenDialog(true)}>
             <Send /> Send Invite
           </Button>
           <h3 className="font-medium text-xl">Invite History</h3>
         </div>
         <Separator />
-        <Table>
+        <Table className="min-w-[760px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead className="">#</TableHead>
@@ -167,7 +167,7 @@ const InviteHistory = () => {
             <p>No data available for this table</p>
           </div>
         )}
-        <Pagination className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+        <Pagination className="mt-4 flex items-center justify-center lg:absolute lg:bottom-0 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2">
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
@@ -198,7 +198,7 @@ const InviteHistory = () => {
         </Pagination>
       </Card>
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="top-[50%] w-[50%] h-[90%]  overflow-y-scroll">
+        <DialogContent className="top-[50%] h-[90%] w-[calc(100%-2rem)] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-[50%]">
           <DialogTitle>Send an new Invite</DialogTitle>
           <DialogDescription>
             Send an invite for a scheduled meeting
@@ -311,7 +311,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                           variant="outline"
                           role="combobox"
                           aria-expanded={roomOpen}
-                          className="w-[300px] justify-between"
+                          className="w-[300px] justify-between md:w-[320px] lg:w-[300px]"
                         >
                           {field.value
                             ? rooms.find(
@@ -321,7 +321,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                           <ChevronsUpDown className="ml-2 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[300px] p-0">
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] p-0">
                         <Command>
                           <CommandInput
                             placeholder="Search room..."
@@ -456,7 +456,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                         variant="outline"
                         role="combobox"
                         aria-expanded={timezoneOpen}
-                        className="w-[300px] justify-between"
+                        className="w-[300px] justify-between md:w-[320px] lg:w-[300px]"
                       >
                         {field.value
                           ? timezones.find((tz) => tz.value === field.value)
@@ -466,7 +466,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      className="w-[600px] p-0"
+                      className="w-[min(40rem,calc(100vw-2rem))] p-0"
                       side="left"
                       align="start"
                     >

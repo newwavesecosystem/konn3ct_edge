@@ -38,9 +38,9 @@ export default function Login() {
   }, []);
 
   return (
-    <div className="page container mx-auto flex flex-col sm:flex-row justify-center px-4 sm:px-0">
-      <SideDetail className="hidden sm:block" />
-      <Card className="w-full max-w-md sm:max-w-[560px] flex-1">
+    <div className="page container mx-auto flex flex-col justify-center px-4 sm:flex-row md:flex-col lg:flex-row lg:px-0">
+      <SideDetail className="md:hidden lg:flex" />
+      <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <LoginForm />
         <p className="text-[#0A2540] text-center text-xs sm:text-sm px-2">
           By signing up you understand and agree to the Konn3ct
@@ -229,7 +229,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className="px-4 sm:px-20">
+    <div className="px-4 sm:px-20 md:px-8 lg:px-20">
       <div className="flex justify-center mb-6">
         <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
@@ -238,7 +238,7 @@ export function LoginForm() {
         Continue with:
       </p>
 
-      <div className="flex flex-wrap justify-center sm:justify-evenly gap-6 sm:gap-0">
+      <div className="flex flex-wrap justify-center gap-6 sm:justify-evenly sm:gap-0 md:gap-4 lg:gap-0">
         {/* ✅ Facebook */}
         <div
           className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"

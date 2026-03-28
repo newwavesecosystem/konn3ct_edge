@@ -36,7 +36,7 @@ const Navbar = () => {
         </Link>
 
         {/* Desktop menu */}
-        <NavigationMenu className="hidden md:flex ml-10">
+        <NavigationMenu className="ml-10 hidden lg:flex">
           <NavigationMenuList className="flex space-x-6">
             <NavigationMenuItem>
               <Link className={navigationMenuTriggerStyle()} to={`${process.env.REACT_APP_LANDING_URL}/Features`}>Solutions</Link>
@@ -55,7 +55,7 @@ const Navbar = () => {
         </NavigationMenu>
 
         {/* Right side (auth or guest) */}
-        <div className="hidden md:flex ml-auto items-center gap-6">
+        <div className="ml-auto hidden items-center gap-6 lg:flex">
           {isAuthenticated ? (
             <>
               <Link className={navigationMenuTriggerStyle()} to="/rooms">
@@ -117,7 +117,7 @@ const Navbar = () => {
 
         {/* Mobile toggle button */}
         <button
-          className="md:hidden p-2"
+          className="p-2 lg:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -126,7 +126,7 @@ const Navbar = () => {
 
       {/* Mobile dropdown */}
       {mobileOpen && (
-        <div className="md:hidden bg-white shadow-md border-t px-5 py-4 space-y-4">
+        <div className="border-t bg-white px-5 py-4 shadow-md space-y-4 lg:hidden">
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Features`}>
             Solutions
           </Link>

@@ -22,7 +22,7 @@ import { useToast } from "../hooks/use-toast";
 const JoinRoom = () => {
   return (
     <div className="container page mx-auto flex justify-center">
-      <SideDetail />
+      <SideDetail className="md:hidden lg:flex" />
       <Card className="max-w-[560px] flex-1 ">
         <JoinForm />
         <p className="text-[#0A2540] text-center text-sm">
@@ -91,7 +91,7 @@ const JoinForm = () => {
   };
 
   return (
-    <div className="px-20">
+    <div className="px-20 md:px-10 lg:px-20">
       <div className="flex justify-center mb-16">
         <img src={logo} alt="konn3ct" />
       </div>

@@ -29,9 +29,9 @@ export default function DonationDashboard({ setStep }) {
 
   return (
 
-    <div className="w-full max-w-5xl space-y-6 mx-auto mt-10 px-3">
+    <div className="mx-auto mt-10 w-full max-w-5xl space-y-6 px-3">
       {/* Header */}
-      <div className="flex mt-20 justify-between items-center">
+      <div className="mt-20 flex items-center justify-between md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center">
         <div>
           <h2 className="text-xl font-bold">Donations Dashboard</h2>
           <p className="text-gray-500 text-sm">Individual Account • Verified</p>
@@ -44,7 +44,7 @@ export default function DonationDashboard({ setStep }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="p-4">
           <h4 className="text-gray-500 text-sm">Total Donations</h4>
           <p className="text-xl font-bold">
@@ -78,7 +78,7 @@ export default function DonationDashboard({ setStep }) {
 
       {/* Transaction History */}
       <div className="border rounded-lg p-4">
-        <div className="flex justify-between items-center mb-4">
+        <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
           <div>
             <h3 className="font-semibold">Transaction History</h3>
             <p className="text-sm text-gray-500">
@@ -89,7 +89,7 @@ export default function DonationDashboard({ setStep }) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border rounded-lg">
+          <table className="w-full min-w-[960px] rounded-lg border text-left text-sm lg:min-w-0">
             <thead className="bg-gray-100">
               <tr>
                 <th className="p-3">#</th>

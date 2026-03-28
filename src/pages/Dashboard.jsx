@@ -258,7 +258,7 @@ const Dashboard = () => {
 
         {/* Dialog */}
         <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
-          <DialogContent className="top-[50%] w-[90%] lg:w-[50%] h-[90%] overflow-y-scroll">
+          <DialogContent className="top-[50%] h-[90%] w-[90%] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-3xl lg:w-[50%]">
             <DialogTitle>Send a new Invite</DialogTitle>
             <DialogDescription>
               Send an invite for a scheduled meeting

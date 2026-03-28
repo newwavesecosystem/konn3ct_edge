@@ -241,7 +241,7 @@ const Payments = () => {
   if (isLoading || userLoading) return <div>Loading plans...</div>;
   if (isError || userError) {
     return (
-      <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+      <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
           <p className="font-medium">Unable to load payments and plans.</p>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -253,10 +253,10 @@ const Payments = () => {
   }
 
   return (
-    <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+    <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:gap-x-5">
-          <Card className="h-[200px] w-full max-w-[260px] bg-primary md:w-[260px]">
+        <div className="mb-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-x-5">
+          <Card className="h-[200px] w-full max-w-[260px] bg-primary lg:w-[260px]">
             <Badge className="bg-white text-primary">Current Plan</Badge>
             <div className="flex justify-center items-center h-full">
               <p className="text-4xl font-medium text-white">
@@ -265,16 +265,16 @@ const Payments = () => {
             </div>
           </Card>
 
-          <div className="flex w-full flex-col gap-y-3 md:w-auto">
+          <div className="flex w-full flex-col gap-y-3 lg:w-auto">
             {currentPlan.toLowerCase() !== "basic" && (
               <DialogTrigger asChild>
-                <Button className="w-full bg-muted text-[#373131] md:w-auto">
+                <Button className="w-full bg-muted text-[#373131] lg:w-auto">
                   Renew Subscriptions
                 </Button>
               </DialogTrigger>
             )}
             <DialogTrigger asChild>
-              <Button variant="outline" className="w-full md:w-auto">
+              <Button variant="outline" className="w-full lg:w-auto">
                 Change Plan
               </Button>
             </DialogTrigger>
@@ -289,7 +289,7 @@ const Payments = () => {
           <Separator />
 
           <div className="w-full overflow-x-auto">
-            <Table className="min-w-[760px] md:min-w-0">
+            <Table className="min-w-[760px] lg:min-w-0">
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
@@ -377,7 +377,7 @@ const Payments = () => {
           </div>
         </Card>
 
-        <DialogContent className="max-w-[95%] py-6">
+        <DialogContent className="w-[calc(100%-2rem)] py-6 md:w-[calc(100%-4rem)] md:max-w-5xl lg:max-w-[95%]">
           <DialogTitle>Plans and Payments</DialogTitle>
           <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -446,7 +446,7 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
 
         <TabsContent
           value="monthly"
-          className="flex flex-col items-center gap-4 md:flex-row md:items-stretch md:justify-evenly md:gap-x-6"
+          className="flex flex-col items-center gap-4 md:grid md:w-full md:grid-cols-2 md:items-stretch lg:flex lg:flex-row lg:justify-evenly lg:gap-x-6"
         >
           {monthlyPlans.map((plan, index) => (
             <PlanCard
@@ -467,7 +467,7 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
 
         <TabsContent
           value="yearly"
-          className="flex flex-col items-center gap-4 md:flex-row md:items-stretch md:justify-evenly md:gap-x-6"
+          className="flex flex-col items-center gap-4 md:grid md:w-full md:grid-cols-2 md:items-stretch lg:flex lg:flex-row lg:justify-evenly lg:gap-x-6"
         >
           {yearlyPlans.map((plan, index) => (
             <PlanCard
@@ -505,7 +505,7 @@ const PlanCard = ({
   const planFeatures = Array.isArray(features) ? features : [];
 
   return (
-    <Card className="mx-auto flex-1 max-w-[350px] rounded-2xl bg-muted px-[30px] py-[20px] md:mx-0">
+    <Card className="mx-auto w-full flex-1 max-w-[350px] rounded-2xl bg-muted px-[30px] py-[20px] md:max-w-none lg:mx-0 lg:max-w-[350px]">
       <h3 className="font-medium text-2xl mb-1">{capitalize(name)}</h3>
       <p className="mb-4">{target}</p>
       <p className="text-center font-bold text-2xl mb-2">

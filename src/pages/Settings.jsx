@@ -12,18 +12,18 @@ const Settings = () => {
   return (
     <section className="container mx-auto page">
       <Card className="h-full">
-        <div className="p-4 pt-10 flex items-center gap-20">
+        <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
           <h3 className="font-medium text-xl">Settings</h3>
         </div>
         <Tabs defaultValue="general" className="">
           <Separator />
-          <TabsList className="flex justify-between">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="meeting">Meeting</TabsTrigger>
-            <TabsTrigger value="recording">Recording</TabsTrigger>
-            <TabsTrigger value="audio">Audio Conference</TabsTrigger>
-            <TabsTrigger value="whiteBoard">White Board</TabsTrigger>
-            <TabsTrigger value="scheduling">Scheduling</TabsTrigger>
+          <TabsList className="md:grid md:grid-cols-2 md:gap-2 lg:flex lg:justify-between">
+            <TabsTrigger className="md:w-full lg:w-auto" value="general">General</TabsTrigger>
+            <TabsTrigger className="md:w-full lg:w-auto" value="meeting">Meeting</TabsTrigger>
+            <TabsTrigger className="md:w-full lg:w-auto" value="recording">Recording</TabsTrigger>
+            <TabsTrigger className="md:w-full lg:w-auto" value="audio">Audio Conference</TabsTrigger>
+            <TabsTrigger className="md:w-full lg:w-auto" value="whiteBoard">White Board</TabsTrigger>
+            <TabsTrigger className="md:w-full lg:w-auto" value="scheduling">Scheduling</TabsTrigger>
           </TabsList>
           <Separator />
           <TabsContent value="general">General</TabsContent>

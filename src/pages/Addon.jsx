@@ -61,11 +61,11 @@ const Addon = () => {
   return (
     <section className="page container mx-auto">
       <Card className="w-full min-h-full">
-        <div className="p-4 pt-10 flex items-center gap-20">
+        <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
           <h3 className="font-medium text-xl">Addon List</h3>
         </div>
         <Separator />
-        <Table>
+        <Table className="min-w-[760px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead className="">#</TableHead>

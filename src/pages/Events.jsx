@@ -8,7 +8,7 @@ const Events = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex justify-center items-start w-full px-3 py-4 md:p-8">
+    <div className="flex w-full items-start justify-center px-3 py-4 md:px-4 md:py-6 lg:p-8">
       <Routes>
         {/* Default route: event list */}
         <Route path="/" element={<EventList />} />

@@ -97,14 +97,14 @@ const Streaming = () => {
 
   if (streamQuery.isLoading)
     return (
-      <div className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+      <div className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Skeleton className="w-full min-h-full relative" />
       </div>
     );
 
   if (streamQuery.isError) {
     return (
-      <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
+      <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
           <p className="font-medium">Unable to load streams right now.</p>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -129,9 +129,9 @@ const Streaming = () => {
       : 1;
 
   return (
-    <section className="page container mx-auto !px-4 sm:!px-6 md:!px-[33px]">
-      <Card className="w-full min-h-full relative pb-6 md:pb-16">
-        <div className="p-4 pt-6 flex flex-col gap-4 md:pt-10 md:flex-row md:items-center md:gap-20">
+    <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
+      <Card className="relative w-full min-h-full pb-6 lg:pb-16">
+        <div className="flex flex-col gap-4 p-4 pt-6 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
           <Button className="w-full sm:w-auto" onClick={() => setOpenDialog(true)}>
             <Plus /> Stream
           </Button>
@@ -142,7 +142,7 @@ const Streaming = () => {
             icon={roomsIcon}
           />
 
-          <Separator orientation="vertical" className="hidden h-[50px] md:block" />
+          <Separator orientation="vertical" className="hidden h-[50px] lg:block" />
 
           <StatCard
             value={
@@ -155,7 +155,7 @@ const Streaming = () => {
 
         <Separator />
 
-        <Table className="min-w-[780px] md:min-w-0">
+        <Table className="min-w-[780px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead className="">No</TableHead>
@@ -215,7 +215,7 @@ const Streaming = () => {
           </div>
         )}
 
-        <Pagination className="mt-4 mb-2 flex items-center justify-center md:absolute md:bottom-0 md:left-1/2 md:mb-0 md:-translate-x-1/2 md:-translate-y-1/2">
+        <Pagination className="mt-4 mb-2 flex items-center justify-center lg:absolute lg:bottom-0 lg:left-1/2 lg:mb-0 lg:-translate-x-1/2 lg:-translate-y-1/2">
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
@@ -253,7 +253,7 @@ const Streaming = () => {
       </Card>
 
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="w-[calc(100%-2rem)] md:w-1/2">
+        <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-1/2">
           <DialogTitle>Create a new stream</DialogTitle>
           <DialogDescription>
             Start streaming your meeting on various platforms
@@ -404,7 +404,7 @@ const StreamForm = ({ setOpenDialog }) => {
   };
 
   return (
-    <div className="p-4 md:p-10">
+    <div className="p-4 md:p-6 lg:p-10">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField
@@ -463,7 +463,7 @@ const StreamForm = ({ setOpenDialog }) => {
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] md:!w-[300px]">
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] lg:!w-[300px]">
                       <Command>
                         <CommandInput placeholder="Search type..." />
                         <CommandList>

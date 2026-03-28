@@ -1,7 +1,9 @@
 import { CircleCheck } from "lucide-react";
 import React from "react";
 
-const SideDetail = () => {
+import { cn } from "../../lib/utils";
+
+const SideDetail = ({ className }) => {
   const meetingFeatures = [
     "Meeting length up to 60 min for FREE",
     "Transcription & Translation",
@@ -15,7 +17,9 @@ const SideDetail = () => {
   ];
 
   return (
-    <div className="flex-1 flex flex-col gap-y-6 font-medium mb-10">
+    <div
+      className={cn("mb-10 flex flex-1 flex-col gap-y-6 font-medium", className)}
+    >
       {meetingFeatures.map((message, id) => (
         <div key={id} className="flex gap-x-2 items-center">
           <CircleCheck className="h-[20px] w-[20px]" />

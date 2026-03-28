@@ -407,12 +407,12 @@ const ViewAttendance = () => {
   return (
     <>
       {/* MAIN CONTENT */}
-      <div className="min-h-screen flex items-center justify-center px-4 py-20 m-auto">
+      <div className="m-auto flex min-h-screen items-center justify-center px-4 py-20 md:px-6 lg:px-4">
         <div className="w-full max-w-6xl bg-white rounded-2xl shadow-sm border p-8">
           {/* TOP ACTIONS */}
-          <div className="flex justify-between items-center mb-6">
+          <div className="mb-6 flex items-center justify-between md:flex-col md:items-stretch md:gap-4 lg:flex-row lg:items-center">
             <div>
-              <div className="flex gap-3 mb-3">
+              <div className="mb-3 flex gap-3 md:flex-wrap lg:flex-nowrap">
                 <button
                   onClick={handleCopy}
                   className="px-4 py-1.5 border rounded-md text-sm"
@@ -439,7 +439,7 @@ const ViewAttendance = () => {
                 </button>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 md:flex-wrap lg:flex-nowrap">
                 <button
                   onClick={() => openPanel("minutes")}
                   className="px-4 py-2 text-xs bg-blue-100 text-blue-700 rounded-md"
@@ -466,12 +466,12 @@ const ViewAttendance = () => {
               onChange={(e) => setSearch(e.target.value)}
               type="text"
               placeholder="Search"
-              className="border px-4 py-2 rounded-full w-64 text-sm"
+              className="w-64 rounded-full border px-4 py-2 text-sm md:w-full lg:w-64"
             />
           </div>
 
           {/* TITLE */}
-          <div className="flex justify-between items-center mb-4">
+          <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
             <h2 className="text-base font-semibold">Meeting Attendance</h2>
             <button
               onClick={() => navigate("/attendance")}
@@ -483,49 +483,53 @@ const ViewAttendance = () => {
           </div>
 
           {/* TABLE HEADER */}
-          <div className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm text-gray-500 font-medium mb-2">
-            <span>S/N</span>
-            <span>NAME</span>
-            <span>EMAIL</span>
-            <span>STATUS</span>
-            <span>DATE & TIME</span>
-          </div>
-
-          {/* TABLE ROWS */}
-          <div className="space-y-3">
-            {filteredRows.length === 0 ? (
-              <div className="text-center text-gray-500 text-sm py-10">
-                No participants found for this meeting.
+          <div className="md:overflow-x-auto lg:overflow-visible">
+            <div className="md:min-w-[760px] lg:min-w-0">
+              <div className="mb-2 grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm font-medium text-gray-500">
+                <span>S/N</span>
+                <span>NAME</span>
+                <span>EMAIL</span>
+                <span>STATUS</span>
+                <span>DATE & TIME</span>
               </div>
-            ) : (
-              filteredRows.map((r, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center bg-gray-50 hover:bg-gray-100 transition rounded-xl px-4 py-3 text-sm text-gray-700"
-                >
-                  <span>{r["S/N"]}</span>
-                  <span>{r.NAME}</span>
 
-                  <span className="truncate" title={r.EMAIL}>
-                    {r.EMAIL}
-                  </span>
-
-                  <span>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                        String(r.STATUS).toLowerCase() === "moderator"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-blue-100 text-blue-700"
-                      }`}
+              {/* TABLE ROWS */}
+              <div className="space-y-3">
+                {filteredRows.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-gray-500">
+                    No participants found for this meeting.
+                  </div>
+                ) : (
+                  filteredRows.map((r, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100"
                     >
-                      {r.STATUS}
-                    </span>
-                  </span>
+                      <span>{r["S/N"]}</span>
+                      <span>{r.NAME}</span>
 
-                  <span>{r["DATE & TIME"]}</span>
-                </div>
-              ))
-            )}
+                      <span className="truncate" title={r.EMAIL}>
+                        {r.EMAIL}
+                      </span>
+
+                      <span>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                            String(r.STATUS).toLowerCase() === "moderator"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {r.STATUS}
+                        </span>
+                      </span>
+
+                      <span>{r["DATE & TIME"]}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -541,7 +545,7 @@ const ViewAttendance = () => {
       {/* SIDE PANEL */}
       <div
         className={`fixed right-0 bg-white border-l shadow-xl z-50 transition-transform duration-300
-        w-full sm:w-[360px]
+        w-full md:w-[420px] lg:w-[360px]
         ${panelOpen ? "translate-x-0" : "translate-x-full"}`}
         style={{
           top: NAVBAR_HEIGHT,

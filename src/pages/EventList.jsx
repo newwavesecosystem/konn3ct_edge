@@ -54,21 +54,21 @@ const EventList = () => {
   };
 
   return (
-    <div className="flex justify-center items-start w-full px-2 py-4 mt-5 md:p-6 md:mt-7">
-      <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 md:p-6 w-full max-w-5xl">
+    <div className="mt-5 flex w-full items-start justify-center px-2 py-4 md:mt-6 md:px-4 md:py-5 lg:mt-7 lg:p-6">
+      <div className="w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-4 shadow-md md:p-5 lg:p-6">
         {/* Header Section */}
-        <div className="flex flex-col items-start gap-4 mb-6 md:flex-row md:items-center md:justify-between">
+        <div className="mb-6 flex flex-col items-start gap-4 lg:flex-row lg:items-center lg:justify-between">
           <button
             onClick={() => navigate("/events/create")}
-            className="mt-2 md:mt-0 inline-flex w-full md:w-auto items-center justify-center gap-2 bg-[#227451] hover:bg-emerald-700 text-white text-sm font-medium px-6 py-2 rounded-full transition-all"
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#227451] px-6 py-2 text-sm font-medium text-white transition-all hover:bg-emerald-700 lg:mt-0 lg:w-auto"
           >
             <span className="text-lg">+</span>
             <span className="leading-none">Create</span>
           </button>
 
-          <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center md:gap-6">
+          <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center lg:gap-6">
             {/* Total Events */}
-            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 md:border-0 md:p-0 md:justify-start md:gap-3">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 lg:justify-start lg:gap-3 lg:border-0 lg:p-0">
               <div className="w-9 h-9 rounded-full bg-[#eef6ff] flex items-center justify-center">
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="20" cy="20" r="20" fill="#E8F1FF" />
@@ -89,10 +89,10 @@ const EventList = () => {
               </div>
             </div>
 
-            <div className="hidden w-px h-8 bg-gray-200 md:block" />
+            <div className="hidden h-8 w-px bg-gray-200 lg:block" />
 
             {/* Total Participants */}
-            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 md:border-0 md:p-0 md:justify-start md:gap-3">
+            <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 lg:justify-start lg:gap-3 lg:border-0 lg:p-0">
               <div className="w-9 h-9 rounded-full bg-[#ecfdf5] flex items-center justify-center">
                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="20" cy="20" r="20" fill="#D8FFEE" />
@@ -119,7 +119,7 @@ const EventList = () => {
 
         {/* Table Section */}
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] md:min-w-full border border-gray-100 rounded-xl overflow-hidden">
+          <table className="min-w-[900px] rounded-xl border border-gray-100 overflow-hidden lg:min-w-full">
             <thead className="bg-gray-50 text-gray-600 text-xs uppercase">
               <tr>
                 <th className="px-4 py-3 text-left font-medium whitespace-nowrap">Title</th>

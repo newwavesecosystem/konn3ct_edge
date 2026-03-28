@@ -89,7 +89,7 @@ const AttendanceList = () => {
               No meeting attendance found.
             </p>
           ) : (
-            <Table className="text-sm">
+            <Table className="min-w-[640px] text-sm lg:min-w-0">
               <TableHeader>
                 <TableRow className="border-b">
                   <TableHead className="w-[40px] text-gray-700 font-medium py-1.5">
@@ -132,7 +132,7 @@ const AttendanceList = () => {
                         onClick={() =>
                           handleViewParticipants(meeting.meeting_id, meeting.identifier)
                         }
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-0.5 rounded-full"
+                        className="rounded-full bg-emerald-600 px-3 py-0.5 text-xs text-white hover:bg-emerald-700 md:h-auto md:whitespace-normal md:leading-snug lg:whitespace-nowrap"
                       >
                         View Participant(s)
                       </Button>

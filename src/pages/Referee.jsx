@@ -67,22 +67,23 @@ const Referee = () => {
 
   return (
     <section className="page container mx-auto">
-      <Card className="w-full min-h-full relative">
-        <div className="p-4 pt-10 flex items-center gap-20">
+      <Card className="relative flex w-full min-h-full flex-col pb-6 lg:pb-0">
+        <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
           <h3 className="font-medium text-xl">Referee List</h3>
         </div>
         <Separator />
-        <div className="flex items-center py-1">
+        <div className="flex items-center py-1 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
           <div className="flex">
             <p className="text-sm font-medium">Show entries</p>
           </div>
-          <div className="flex ml-auto items-center text-sm font-medium gap-x-5">
+          <div className="ml-auto flex items-center gap-x-5 text-sm font-medium md:ml-0 md:w-full lg:ml-auto lg:w-auto">
             Search:
-            <Input className="shadow rounded-lg my-2" />
+            <Input className="my-2 rounded-lg shadow md:w-full lg:w-auto" />
           </div>
         </div>
         <Separator />
-        <Table>
+        <div className="flex-1">
+        <Table className="min-w-[820px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead className="">#</TableHead>
@@ -112,7 +113,7 @@ const Referee = () => {
                     {lastname} {firstname}
                   </TableCell>
                   <TableCell className="">{email}</TableCell>
-                  <TableCell className="max-w-[240px] truncate">
+                  <TableCell className="truncate md:max-w-[320px] lg:max-w-[240px]">
                     {link || "—"}
                   </TableCell>
                   <TableCell>{capitalize(plan?.name ?? "N/A")}</TableCell>
@@ -124,11 +125,12 @@ const Referee = () => {
           </TableBody>
         </Table>
         {refereeRows.length === 0 && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+          <div className="flex min-h-[220px] items-center justify-center px-4 text-center">
             <p>No data available for this table</p>
           </div>
         )}
-        <Pagination className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
+        </div>
+        <Pagination className="mt-4 flex items-center justify-center md:pb-2 lg:absolute lg:bottom-0 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2">
           <PaginationContent>
             <PaginationItem>
               <PaginationPrevious
