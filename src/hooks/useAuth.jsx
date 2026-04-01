@@ -1,5 +1,16 @@
-import { useState, useEffect, createContext, useContext } from "react";
-import {login as apiLogin, loginSocial, register as apiRegister} from "../api/authService";
+import {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  useCallback,
+  useMemo,
+} from "react";
+import {
+  login as apiLogin,
+  loginSocial,
+  register as apiRegister,
+} from "../api/authService";
 
 // Create Auth Context
 const AuthContext = createContext(null);
@@ -21,7 +32,7 @@ export function AuthProvider({ children }) {
   // --------------------------
   // ✅ Normal Login Function
   // --------------------------
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     try {
       const res = await apiLogin(credentials);
       setUser(res.data);
@@ -31,9 +42,9 @@ export function AuthProvider({ children }) {
     } catch (error) {
       throw error;
     }
-  };
+  }, []);
 
-  const login_social = async (credentials) => {
+  const login_social = useCallback(async (credentials) => {
     try {
       const res = await loginSocial(credentials);
       setUser(res.data);
@@ -43,24 +54,24 @@ export function AuthProvider({ children }) {
     } catch (error) {
       throw error;
     }
-  };
+  }, []);
 
   // --------------------------
   // ✅ Register Function
   // --------------------------
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     try {
       const data = await apiRegister(userData);
       return data;
     } catch (error) {
       throw error;
     }
-  };
+  }, []);
 
   // --------------------------
   // ✅ Facebook Login Function
   // --------------------------
-  const loginWithFacebook = async () => {
+  const loginWithFacebook = useCallback(async () => {
     return new Promise((resolve, reject) => {
       if (!window.FB) {
         return reject(new Error("Facebook SDK not loaded"));
@@ -99,27 +110,30 @@ export function AuthProvider({ children }) {
         { scope: "public_profile,email" }
       );
     });
-  };
+  }, []);
 
   // --------------------------
   // ✅ Logout Function
   // --------------------------
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem("user");
     localStorage.removeItem("token");
-  };
+  }, []);
 
-  const value = {
-    user,
-    isAuthenticated: !!user,
-    login,
-    login_social,
-    register,
-    loginWithFacebook, // 👉 Now available everywhere
-    logout,
-    loading,
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      isAuthenticated: !!user,
+      login,
+      login_social,
+      register,
+      loginWithFacebook,
+      logout,
+      loading,
+    }),
+    [user, login, login_social, register, loginWithFacebook, logout, loading]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

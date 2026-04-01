@@ -31,8 +31,10 @@ import {
 } from "../components/ui/dropdown-menu";
 import { Copy } from "lucide-react";
 import { Input } from "../components/ui/input";
+import { useTranslation } from "react-i18next";
 
 const Recordings = () => {
+  const { t } = useTranslation();
   const recordingQuery = useQuery({
     queryKey: ["recordings"],
     queryFn: getRecordings,
@@ -54,7 +56,7 @@ const Recordings = () => {
     mutationFn: deleteRecording,
     onSuccess: () => {
       queryClient.invalidateQueries(["recordings"]);
-      toast({ description: "Recording successfully deleted" });
+      toast({ description: t("recordings.deletedSuccess") });
     },
   });
 
@@ -93,7 +95,7 @@ const Recordings = () => {
     const playbackBaseUrl = process.env.REACT_APP_PLAYBACK_URL;
     const link = `${playbackBaseUrl}/${id}`;
     navigator.clipboard.writeText(link).then(() => {
-      toast({ description: "Recording link copied to clipboard" });
+      toast({ description: t("recordings.copiedSuccess") });
     });
   };
 
@@ -132,14 +134,14 @@ const Recordings = () => {
         <div className="p-4 pt-10">
           <StatCard
             value={filteredRecordings.length}
-            name="Total recordings"
+            name={t("recordings.totalRecordings")}
             icon={roomsIcon}
           />
 
           {/* Filters */}
           <div className="flex flex-wrap gap-4 mt-6">
             <Input
-              placeholder="Search by meeting name..."
+              placeholder={t("recordings.searchPlaceholder")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="md:max-w-none lg:max-w-sm"
@@ -160,7 +162,7 @@ const Recordings = () => {
                   setSelectedDate("");
                 }}
               >
-                Clear Filters
+                {t("actions.clearFilters")}
               </Button>
             )}
           </div>
@@ -171,10 +173,10 @@ const Recordings = () => {
         <Table className="min-w-[840px] lg:min-w-0">
           <TableHeader>
             <TableRow>
-              <TableHead>Meeting Name</TableHead>
-              <TableHead>Parameters</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Options</TableHead>
+              <TableHead>{t("recordings.meetingName")}</TableHead>
+              <TableHead>{t("recordings.parameters")}</TableHead>
+              <TableHead>{t("recordings.date")}</TableHead>
+              <TableHead>{t("recordings.options")}</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -185,9 +187,13 @@ const Recordings = () => {
                   <TableCell>{name}</TableCell>
 
                   <TableCell>
-                    <p>{participants} participants</p>
                     <p>
-                      {((endTime - startTime) / (1000 * 60)).toFixed(2)} Minutes
+                      {t("recordings.participantsCount", { count: participants })}
+                    </p>
+                    <p>
+                      {t("recordings.minutes", {
+                        count: ((endTime - startTime) / (1000 * 60)).toFixed(2),
+                      })}
                     </p>
                     <p>{byteToMB(size)} MB</p>
                   </TableCell>
@@ -197,7 +203,7 @@ const Recordings = () => {
                   <TableCell>
                     <div className="flex gap-2 flex-wrap">
                       <Button onClick={() => handlePlay(recordID)}>
-                        Play video
+                        {t("recordings.playVideo")}
                       </Button>
 
                       <Button
@@ -206,12 +212,12 @@ const Recordings = () => {
                         className="flex items-center gap-1 text-white"
                       >
                         <Copy className="w-4 h-4" />
-                        Copy Link
+                        {t("recordings.copyLink")}
                       </Button>
 
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full text-sm font-medium">
-                          Download
+                          {t("actions.download")}
                         </DropdownMenuTrigger>
 
                         <DropdownMenuContent>
@@ -219,19 +225,19 @@ const Recordings = () => {
                           <DropdownMenuItem
                             onClick={() => downloadVideo(recordID)}
                           >
-                            Video
+                            {t("recordings.video")}
                           </DropdownMenuItem>
 
                           <DropdownMenuItem
                             onClick={() => download(recordID, "screenshare")}
                           >
-                            Screenshare
+                            {t("recordings.screenshare")}
                           </DropdownMenuItem>
 
                           <DropdownMenuItem
                             onClick={() => download(recordID, "chats")}
                           >
-                            Chats
+                            {t("recordings.chats")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -240,7 +246,7 @@ const Recordings = () => {
                         variant="destructive"
                         onClick={() => handleDeleteClick(recordID)}
                       >
-                        Delete
+                        {t("actions.delete")}
                       </Button>
                     </div>
                   </TableCell>
@@ -252,7 +258,7 @@ const Recordings = () => {
 
         {filteredRecordings.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p>No recordings match your filter</p>
+            <p>{t("recordings.noResults")}</p>
           </div>
         )}
 
@@ -261,10 +267,9 @@ const Recordings = () => {
       {/* Delete Dialog */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-xl lg:w-1/2">
-          <DialogTitle>Confirm Deletion</DialogTitle>
+          <DialogTitle>{t("recordings.deleteTitle")}</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete this recording? This action cannot be
-            undone.
+            {t("recordings.deleteDescription")}
           </DialogDescription>
 
           <div className="flex gap-4">
@@ -272,7 +277,7 @@ const Recordings = () => {
               variant="outline"
               onClick={() => setOpenDeleteDialog(false)}
             >
-              Cancel
+              {t("actions.cancel")}
             </Button>
 
             <Button
@@ -282,7 +287,7 @@ const Recordings = () => {
                 setOpenDeleteDialog(false);
               }}
             >
-              Delete
+              {t("actions.delete")}
             </Button>
           </div>
         </DialogContent>

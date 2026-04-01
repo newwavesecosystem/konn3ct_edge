@@ -16,8 +16,10 @@ import { useQuery } from "@tanstack/react-query";
 import { getUser } from "../api/userApi";
 import { Button } from "./ui/button";
 import { Menu, X } from "lucide-react"; // icons for mobile toggle
+import { useTranslation } from "react-i18next";
 
 const Navbar = () => {
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
   const userQuery = useQuery({
     queryKey: ["profile"],
@@ -39,16 +41,24 @@ const Navbar = () => {
         <NavigationMenu className="ml-10 hidden lg:flex">
           <NavigationMenuList className="flex space-x-6">
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()} to={`${process.env.REACT_APP_LANDING_URL}/Features`}>Solutions</Link>
+              <Link
+                className={navigationMenuTriggerStyle()}
+                to={`${process.env.REACT_APP_LANDING_URL}/Features`}
+              >
+                {t("navigation.solutions")}
+              </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <Link className={navigationMenuTriggerStyle()} to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
-                Plans & Pricing
+              <Link
+                className={navigationMenuTriggerStyle()}
+                to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}
+              >
+                {t("navigation.plansPricing")}
               </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <Link className={navigationMenuTriggerStyle()} to="/">
-                Dashboard
+                {t("navigation.dashboard")}
               </Link>
             </NavigationMenuItem>
           </NavigationMenuList>
@@ -59,29 +69,31 @@ const Navbar = () => {
           {isAuthenticated ? (
             <>
               <Link className={navigationMenuTriggerStyle()} to="/rooms">
-                Schedule
+                {t("navigation.schedule")}
               </Link>
               <Link className={navigationMenuTriggerStyle()} to="/join">
-                Join
+                {t("navigation.join")}
               </Link>
               <NavigationMenu>
                 <NavigationMenuList>
                   <NavigationMenuItem>
-                    <NavigationMenuTrigger>Host</NavigationMenuTrigger>
+                    <NavigationMenuTrigger>
+                      {t("navigation.host")}
+                    </NavigationMenuTrigger>
                     <NavigationMenuContent className="!w-[200px] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-md">
                       <div className="flex flex-col gap-y-5">
                         <Link
                           to="/rooms"
                           className="text-xs text-[#2D8CFF] cursor-pointer"
                         >
-                          Create new meeting
+                          {t("navigation.createMeeting")}
                         </Link>
                         <Separator />
                         <Link
                           to="/streams"
                           className="text-xs text-[#2D8CFF] cursor-pointer"
                         >
-                          Start streaming
+                          {t("navigation.startStreaming")}
                         </Link>
                       </div>
                     </NavigationMenuContent>
@@ -101,14 +113,14 @@ const Navbar = () => {
           ) : (
             <>
               <Link to="/join" className={navigationMenuTriggerStyle()}>
-                Join a Meeting Room
+                {t("navigation.joinMeetingRoom")}
               </Link>
               <Link to="/login" className={navigationMenuTriggerStyle()}>
-                Sign in
+                {t("navigation.signIn")}
               </Link>
               <Link to="/register">
                 <Button className="bg-[#012E89] text-white rounded-full">
-                  Sign up, It's Free
+                  {t("navigation.signUpFree")}
                 </Button>
               </Link>
             </>
@@ -128,41 +140,41 @@ const Navbar = () => {
       {mobileOpen && (
         <div className="space-y-4 border-t border-border bg-background px-5 py-4 text-foreground shadow-md transition-colors duration-300 lg:hidden">
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Features`}>
-            Solutions
+            {t("navigation.solutions")}
           </Link>
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
-            Plans & Pricing
+            {t("navigation.plansPricing")}
           </Link>
           <Link className="block" to="/">
-            Dashboard
+            {t("navigation.dashboard")}
           </Link>
           <Separator />
           {isAuthenticated ? (
             <>
               <Link className="block" to="/rooms">
-                Schedule
+                {t("navigation.schedule")}
               </Link>
               <Link className="block" to="/join">
-                Join
+                {t("navigation.join")}
               </Link>
               <Link className="block" to="/rooms">
-                Create new meeting
+                {t("navigation.createMeeting")}
               </Link>
               <Link className="block" to="/streams">
-                Start streaming
+                {t("navigation.startStreaming")}
               </Link>
             </>
           ) : (
             <>
               <Link className="block" to="/join">
-                Join a Meeting Room
+                {t("navigation.joinMeetingRoom")}
               </Link>
               <Link className="block" to="/login">
-                Sign in
+                {t("navigation.signIn")}
               </Link>
               <Link className="block" to="/register">
                 <Button className="w-full bg-[#012E89] text-white rounded-full">
-                  Sign up, It's Free
+                  {t("navigation.signUpFree")}
                 </Button>
               </Link>
             </>

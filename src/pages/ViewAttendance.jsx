@@ -8,6 +8,7 @@ import {
 } from "../api/attendanceApi";
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
+import { useTranslation } from "react-i18next";
 
 const NAVBAR_HEIGHT = 72;
 
@@ -90,7 +91,13 @@ function rowsToExcelHTML(title, headers, rows) {
  * - write HTML
  * - in popup: window.onload => window.print()
  */
-function printTableLikePayments(title, headers, rows, onPopupBlocked) {
+function printTableLikePayments(
+  title,
+  headers,
+  rows,
+  footerLabel,
+  onPopupBlocked
+) {
   const win = window.open("", "_blank", "width=900,height=700");
 
   if (!win) {
@@ -161,7 +168,7 @@ function printTableLikePayments(title, headers, rows, onPopupBlocked) {
         </table>
 
         <div class="footer">
-          <p>This printout was generated electronically.</p>
+          <p>${escapeHtml(footerLabel)}</p>
         </div>
 
         <script>
@@ -236,6 +243,7 @@ const normalizeStatus = (status) => {
    VIEW ATTENDANCE COMPONENT
 ====================================== */
 const ViewAttendance = () => {
+  const { t } = useTranslation();
   const { meeting_id, identifier } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -265,20 +273,20 @@ const ViewAttendance = () => {
         else setAttendanceData([]);
       } catch (err) {
         console.error(err);
-        setError("Unable to load participant details.");
+        setError(t("attendance.loadParticipantsError"));
       } finally {
         setLoading(false);
       }
     };
 
     if (!meeting_id || !identifier) {
-      setError("Missing meeting_id or identifier.");
+      setError(t("attendance.missingMeetingIdentifier"));
       setLoading(false);
       return;
     }
 
     fetchDetails();
-  }, [meeting_id, identifier]);
+  }, [meeting_id, identifier, t]);
 
   const openPanel = async (type) => {
     setPanelOpen(true);
@@ -288,48 +296,66 @@ const ViewAttendance = () => {
     try {
       let result = "";
       if (type === "minutes") {
-        setPanelTitle("Minutes of Meeting");
+        setPanelTitle(t("attendance.minutesOfMeeting"));
         result = await getMeetingMinutes(meeting_id);
       }
       if (type === "highlights") {
-        setPanelTitle("Meeting Highlights");
+        setPanelTitle(t("attendance.meetingHighlights"));
         result = await getMeetingHighlights(meeting_id);
       }
       if (type === "summary") {
-        setPanelTitle("Meeting Summary");
+        setPanelTitle(t("attendance.meetingSummary"));
         result = await getMeetingSummary(meeting_id);
       }
 
-      setPanelContent(result || "No data returned.");
+      setPanelContent(result || t("attendance.noDataReturned"));
     } catch (err) {
       console.error(err);
-      setPanelContent("Failed to load content.");
+      setPanelContent(t("attendance.failedToLoadContent"));
     } finally {
       setPanelLoading(false);
     }
   };
 
+  const serialHeader = t("attendance.serialNumber");
+  const nameHeader = t("attendance.name");
+  const emailHeader = t("attendance.email");
+  const statusHeader = t("attendance.status");
+  const dateTimeHeader = t("attendance.dateTime");
+
   // Normalize rows for export + filtering
   const exportRows = useMemo(() => {
     return (attendanceData || []).map((row, i) => ({
-      "S/N": i + 1,
-      NAME: row.name || row.attendee_name || "N/A",
-      EMAIL: row.email || row.attendee_email || "N/A",
+      [serialHeader]: i + 1,
+      [nameHeader]: row.name || row.attendee_name || t("generic.notAvailable"),
+      [emailHeader]:
+        row.email || row.attendee_email || t("generic.notAvailable"),
 
       // ✅ CHANGED: only moderator/participant
-      STATUS: normalizeStatus(row.status),
+      [statusHeader]:
+        normalizeStatus(row.status) === "moderator"
+          ? t("attendance.moderator")
+          : t("attendance.participant"),
 
-      "DATE & TIME": row.created_at
+      [dateTimeHeader]: row.created_at
         ? new Date(row.created_at).toLocaleString()
         : row.date
         ? row.date + (row.time ? ` | ${row.time}` : "")
-        : "N/A",
+        : t("generic.notAvailable"),
     }));
-  }, [attendanceData]);
+  }, [
+    attendanceData,
+    dateTimeHeader,
+    emailHeader,
+    nameHeader,
+    serialHeader,
+    statusHeader,
+    t,
+  ]);
 
   const headers = useMemo(
-    () => ["S/N", "NAME", "EMAIL", "STATUS", "DATE & TIME"],
-    []
+    () => [serialHeader, nameHeader, emailHeader, statusHeader, dateTimeHeader],
+    [dateTimeHeader, emailHeader, nameHeader, serialHeader, statusHeader]
   );
 
   const filteredRows = useMemo(() => {
@@ -350,8 +376,7 @@ const ViewAttendance = () => {
       setTimeout(() => setCopied(false), 1500);
     } else {
       toast({
-        description:
-          "Copy failed. Please allow clipboard permission or use HTTPS.",
+        description: t("attendance.copyFailed"),
         variant: "destructive",
       });
     }
@@ -367,7 +392,7 @@ const ViewAttendance = () => {
 
   const handleExcel = () => {
     const html = rowsToExcelHTML(
-      `Meeting Attendance (${filteredRows.length})`,
+      `${t("attendance.meetingAttendance")} (${filteredRows.length})`,
       headers,
       filteredRows
     );
@@ -379,12 +404,13 @@ const ViewAttendance = () => {
 
   const handlePrint = () => {
     printTableLikePayments(
-      `Meeting Attendance (${filteredRows.length})`,
+      `${t("attendance.meetingAttendance")} (${filteredRows.length})`,
       headers,
       filteredRows,
+      t("attendance.printFooter"),
       () =>
         toast({
-          description: "Please allow popups to print",
+          description: t("attendance.printBlocked"),
           variant: "destructive",
         })
     );
@@ -393,7 +419,9 @@ const ViewAttendance = () => {
   if (loading)
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-sm text-gray-600 dark:text-muted-foreground">Loading participant data...</p>
+        <p className="text-sm text-gray-600 dark:text-muted-foreground">
+          {t("generic.loadingParticipants")}
+        </p>
       </div>
     );
 
@@ -417,25 +445,25 @@ const ViewAttendance = () => {
                   onClick={handleCopy}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {copied ? "COPIED ✅" : "COPY"}
+                  {copied ? t("actions.copied") : t("attendance.copy")}
                 </button>
                 <button
                   onClick={handleCSV}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  CSV
+                  {t("attendance.csv")}
                 </button>
                 <button
                   onClick={handleExcel}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  EXCEL
+                  {t("attendance.excel")}
                 </button>
                 <button
                   onClick={handlePrint}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  PRINT
+                  {t("attendance.print")}
                 </button>
               </div>
 
@@ -444,19 +472,19 @@ const ViewAttendance = () => {
                   onClick={() => openPanel("minutes")}
                   className="rounded-md bg-blue-100 px-4 py-2 text-xs text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                 >
-                  Send Minutes of Meeting
+                  {t("attendance.sendMinutes")}
                 </button>
                 <button
                   onClick={() => openPanel("highlights")}
                   className="rounded-md bg-yellow-100 px-4 py-2 text-xs text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
                 >
-                  Send Meeting Highlight
+                  {t("attendance.sendHighlights")}
                 </button>
                 <button
                   onClick={() => openPanel("summary")}
                   className="rounded-md bg-purple-100 px-4 py-2 text-xs text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                 >
-                  Send Meeting Summary
+                  {t("attendance.sendSummary")}
                 </button>
               </div>
             </div>
@@ -465,20 +493,22 @@ const ViewAttendance = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               type="text"
-              placeholder="Search"
+              placeholder={t("attendance.searchPlaceholder")}
               className="w-64 rounded-full border border-input bg-white px-4 py-2 text-sm shadow-sm dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground md:w-full lg:w-64"
             />
           </div>
 
           {/* TITLE */}
           <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-            <h2 className="text-base font-semibold">Meeting Attendance</h2>
+            <h2 className="text-base font-semibold">
+              {t("attendance.meetingAttendance")}
+            </h2>
             <button
               onClick={() => navigate("/attendance")}
               className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
             >
               <ArrowLeft size={16} />
-              Back to Attendance
+              {t("attendance.backToAttendance")}
             </button>
           </div>
 
@@ -486,18 +516,18 @@ const ViewAttendance = () => {
           <div className="md:overflow-x-auto lg:overflow-visible">
             <div className="md:min-w-[760px] lg:min-w-0">
               <div className="mb-2 grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm font-medium text-gray-500 dark:text-muted-foreground">
-                <span>S/N</span>
-                <span>NAME</span>
-                <span>EMAIL</span>
-                <span>STATUS</span>
-                <span>DATE & TIME</span>
+                <span>{serialHeader}</span>
+                <span>{nameHeader}</span>
+                <span>{emailHeader}</span>
+                <span>{statusHeader}</span>
+                <span>{dateTimeHeader}</span>
               </div>
 
               {/* TABLE ROWS */}
               <div className="space-y-3">
                 {filteredRows.length === 0 ? (
                   <div className="py-10 text-center text-sm text-gray-500 dark:text-muted-foreground">
-                    No participants found for this meeting.
+                    {t("attendance.noParticipants")}
                   </div>
                 ) : (
                   filteredRows.map((r, index) => (
@@ -505,26 +535,27 @@ const ViewAttendance = () => {
                       key={index}
                       className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100 dark:bg-background/40 dark:text-foreground dark:hover:bg-muted/70"
                     >
-                      <span>{r["S/N"]}</span>
-                      <span>{r.NAME}</span>
+                      <span>{r[serialHeader]}</span>
+                      <span>{r[nameHeader]}</span>
 
-                      <span className="truncate" title={r.EMAIL}>
-                        {r.EMAIL}
+                      <span className="truncate" title={r[emailHeader]}>
+                        {r[emailHeader]}
                       </span>
 
                       <span>
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                            String(r.STATUS).toLowerCase() === "moderator"
+                            String(r[statusHeader]).toLowerCase() ===
+                            t("attendance.moderator").toLowerCase()
                               ? "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                               : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                           }`}
                         >
-                          {r.STATUS}
+                          {r[statusHeader]}
                         </span>
                       </span>
 
-                      <span>{r["DATE & TIME"]}</span>
+                      <span>{r[dateTimeHeader]}</span>
                     </div>
                   ))
                 )}
@@ -566,7 +597,9 @@ const ViewAttendance = () => {
         {/* CONTENT */}
         <div className="p-4 overflow-y-auto h-[calc(100%-56px)]">
           {panelLoading ? (
-            <p className="text-sm text-gray-500 dark:text-muted-foreground">Loading...</p>
+            <p className="text-sm text-gray-500 dark:text-muted-foreground">
+              {t("generic.loadingContent")}
+            </p>
           ) : (
             <div className="rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed whitespace-pre-wrap text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">
               {panelContent}

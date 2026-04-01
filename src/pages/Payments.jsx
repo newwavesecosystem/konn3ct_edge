@@ -27,19 +27,16 @@ import { getUser } from "../api/userApi";
 import { useToast } from "../hooks/use-toast";
 import { PaystackButton } from "react-paystack";
 import { format } from "date-fns";
+import { useTranslation } from "react-i18next";
 
-/* ======================================
-   RECEIPT GENERATOR
-====================================== */
-const generateReceipt = (payment, user, toast) => {
+const generateReceipt = (payment, user, toast, t, language) => {
   const userLastName = user?.lastname ?? user?.lastName ?? "";
   const userFirstName = user?.firstname ?? user?.firstName ?? "";
   const win = window.open("", "_blank", "width=800,height=650");
 
-
   if (!win) {
     toast({
-      description: "Please allow popups to print receipt",
+      description: t("payments.popupBlocked"),
       variant: "destructive",
     });
     return;
@@ -48,7 +45,7 @@ const generateReceipt = (payment, user, toast) => {
   win.document.write(`
     <html>
       <head>
-        <title>Payment Receipt</title>
+        <title>${t("payments.receipt.title")}</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -86,43 +83,43 @@ const generateReceipt = (payment, user, toast) => {
       </head>
       <body>
         <h1>Konn3ct</h1>
-        <p class="subtitle">Payment Receipt</p>
+        <p class="subtitle">${t("payments.receipt.title")}</p>
 
         <div class="box">
           <div class="row">
-            <span class="label">Issued To:</span>
+            <span class="label">${t("payments.receipt.issuedTo")}</span>
             <span>${userLastName} ${userFirstName}</span>
           </div>
           <div class="row">
-            <span class="label">Plan:</span>
+            <span class="label">${t("payments.receipt.plan")}</span>
             <span>${payment.plan}</span>
           </div>
           <div class="row">
-            <span class="label">Payment Type:</span>
+            <span class="label">${t("payments.receipt.paymentType")}</span>
             <span>${payment.type}</span>
           </div>
           <div class="row">
-            <span class="label">Payment Method:</span>
+            <span class="label">${t("payments.receipt.paymentMethod")}</span>
             <span>${payment.method}</span>
           </div>
           <div class="row">
-            <span class="label">Reference:</span>
+            <span class="label">${t("payments.receipt.reference")}</span>
             <span>${payment.reference}</span>
           </div>
           <div class="row">
-            <span class="label">Payment Date:</span>
+            <span class="label">${t("payments.receipt.paymentDate")}</span>
             <span>${payment.date}</span>
           </div>
           <div class="row">
-            <span class="label">Amount Paid:</span>
-            <span>${payment.currency} ${new Intl.NumberFormat().format(
+            <span class="label">${t("payments.receipt.amountPaid")}</span>
+            <span>${payment.currency} ${new Intl.NumberFormat(language).format(
     payment.amount
   )}</span>
           </div>
         </div>
 
         <div class="footer">
-          <p>This receipt was generated electronically.</p>
+          <p>${t("payments.receipt.footer")}</p>
         </div>
 
         <script>
@@ -137,58 +134,59 @@ const generateReceipt = (payment, user, toast) => {
   win.document.close();
 };
 
-/* ======================================
-   TRANSFORM PLANS
-====================================== */
-const transformPlans = (data) => {
+const transformPlans = (data, t) => {
   const planList = Array.isArray(data?.plan) ? data.plan : [];
+  const yes = t("generic.yes");
+  const no = t("generic.no");
+
+  const buildFeatures = (plan) => [
+    t("payments.features.recording", {
+      value: plan.recording ? yes : no,
+    }),
+    t("payments.features.duration", { value: plan.duration }),
+    t("payments.features.participants", { value: plan.participant }),
+    t("payments.features.rooms", { value: plan.rooms }),
+    t("payments.features.customizeLink", {
+      value: plan.customize_link ? yes : no,
+    }),
+    t("payments.features.breakoutRooms", {
+      value: plan.breakout_rooms ? yes : no,
+    }),
+    t("payments.features.accessCode", {
+      value: plan.access_code ? yes : no,
+    }),
+    t("payments.features.dialIn", {
+      value: plan.dialin ? yes : no,
+    }),
+  ];
 
   const monthlyPlans = planList.map((plan) => ({
     name: plan.name,
     price: String(plan?.monthly_cost ?? "0").split("/")[0],
-    target: "For individuals",
+    target: t("payments.forIndividuals"),
     category: "monthly",
-    features: [
-      `Recording: ${plan.recording ? "Yes" : "No"}`,
-      `Duration: ${plan.duration} minutes`,
-      `Participants: ${plan.participant}`,
-      `Rooms: ${plan.rooms}`,
-      `Customize Link: ${plan.customize_link ? "Yes" : "No"}`,
-      `Breakout Rooms: ${plan.breakout_rooms ? "Yes" : "No"}`,
-      `Access Code: ${plan.access_code ? "Yes" : "No"}`,
-      `Dial-in: ${plan.dialin ? "Yes" : "No"}`,
-    ],
-    cta: plan.name === "basic" ? "Free" : "Upgrade",
+    features: buildFeatures(plan),
+    cta: plan.name === "basic" ? t("payments.free") : t("payments.upgrade"),
   }));
 
   const yearlyPlans = planList.map((plan) => ({
     name: plan.name,
     price: String(plan?.yearly_cost ?? "0").split("/")[0],
-    target: "For individuals",
+    target: t("payments.forIndividuals"),
     category: "yearly",
-    features: [
-      `Recording: ${plan.recording ? "Yes" : "No"}`,
-      `Duration: ${plan.duration} minutes`,
-      `Participants: ${plan.participant}`,
-      `Rooms: ${plan.rooms}`,
-      `Customize Link: ${plan.customize_link ? "Yes" : "No"}`,
-      `Breakout Rooms: ${plan.breakout_rooms ? "Yes" : "No"}`,
-      `Access Code: ${plan.access_code ? "Yes" : "No"}`,
-      `Dial-in: ${plan.dialin ? "Yes" : "No"}`,
-    ],
-    cta: plan.name === "basic" ? "Free" : "Upgrade",
+    features: buildFeatures(plan),
+    cta: plan.name === "basic" ? t("payments.free") : t("payments.upgrade"),
   }));
-
 
   const hasEnterprise = (arr) =>
     arr.some((p) => String(p.name).toLowerCase() === "enterprise");
 
   const enterprisePlan = {
     name: "enterprise",
-    price: "Custom",
-    target: "For Enterprise",
-    features: ["Custom Features"],
-    cta: "Contact Sales",
+    price: t("payments.custom"),
+    target: t("payments.forEnterprise"),
+    features: [t("payments.customFeatures")],
+    cta: t("payments.contactSales"),
   };
 
   if (!hasEnterprise(monthlyPlans)) {
@@ -207,13 +205,14 @@ const formatPaymentDate = (value) => {
 };
 
 const Payments = () => {
+  const { t, i18n } = useTranslation();
   const [openDialog, setOpenDialog] = useState(false);
   const { toast } = useToast();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["plans"],
     queryFn: getPlans,
-    select: (data) => transformPlans(data.data),
+    select: (response) => transformPlans(response.data, t),
   });
 
   const {
@@ -238,14 +237,15 @@ const Payments = () => {
     ? paymentData.payments.data
     : [];
 
-  if (isLoading || userLoading) return <div>Loading plans...</div>;
+  if (isLoading || userLoading) return <div>{t("payments.loadingPlans")}</div>;
+
   if (isError || userError) {
     return (
       <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
-          <p className="font-medium">Unable to load payments and plans.</p>
+          <p className="font-medium">{t("payments.loadErrorTitle")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Please refresh and try again.
+            {t("payments.loadErrorDescription")}
           </p>
         </Card>
       </section>
@@ -261,9 +261,9 @@ const Payments = () => {
               variant="outline"
               className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 dark:border-border dark:bg-muted dark:text-muted-foreground dark:hover:bg-muted"
             >
-              Current Plan
+              {t("payments.currentPlan")}
             </Badge>
-            <div className="flex justify-center items-center h-full">
+            <div className="flex h-full items-center justify-center">
               <p className="text-4xl font-medium text-slate-900 dark:text-foreground">
                 {currentPlan.toUpperCase()}
               </p>
@@ -274,22 +274,21 @@ const Payments = () => {
             {currentPlan.toLowerCase() !== "basic" && (
               <DialogTrigger asChild>
                 <Button className="w-full bg-muted text-foreground hover:bg-muted/80 lg:w-auto">
-                  Renew Subscriptions
+                  {t("payments.renewSubscriptions")}
                 </Button>
               </DialogTrigger>
             )}
             <DialogTrigger asChild>
               <Button variant="outline" className="w-full lg:w-auto">
-                Change Plan
+                {t("payments.changePlan")}
               </Button>
             </DialogTrigger>
           </div>
         </div>
 
-        {/* PAYMENT LIST */}
         <Card className="mb-20">
           <div className="p-4 pt-10">
-            <h3 className="font-medium text-xl">Payment List</h3>
+            <h3 className="font-medium text-xl">{t("payments.paymentList")}</h3>
           </div>
           <Separator />
 
@@ -298,14 +297,14 @@ const Payments = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Issued to</TableHead>
-                  <TableHead>Payment Method</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead>Payment Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>{t("payments.type")}</TableHead>
+                  <TableHead>{t("payments.plan")}</TableHead>
+                  <TableHead>{t("payments.issuedTo")}</TableHead>
+                  <TableHead>{t("payments.paymentMethod")}</TableHead>
+                  <TableHead>{t("payments.reference")}</TableHead>
+                  <TableHead>{t("payments.paymentDate")}</TableHead>
+                  <TableHead>{t("payments.amount")}</TableHead>
+                  <TableHead>{t("payments.action")}</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -326,21 +325,15 @@ const Payments = () => {
                     <TableRow key={reference}>
                       <TableCell>{id + 1}</TableCell>
                       <TableCell>{type}</TableCell>
+                      <TableCell>{plan_details?.name?.toUpperCase()}</TableCell>
                       <TableCell>
-                        {plan_details?.name?.toUpperCase()}
-                      </TableCell>
-                      <TableCell>
-                        {userData?.user?.lastname}{" "}
-                        {userData?.user?.firstname}
+                        {userData?.user?.lastname} {userData?.user?.firstname}
                       </TableCell>
                       <TableCell>{gateway}</TableCell>
                       <TableCell>{reference}</TableCell>
+                      <TableCell>{formatPaymentDate(date)}</TableCell>
                       <TableCell>
-                        {formatPaymentDate(date)}
-                      </TableCell>
-                      <TableCell>
-                        {currency}{" "}
-                        {new Intl.NumberFormat().format(amount)}
+                        {currency} {new Intl.NumberFormat(i18n.language).format(amount)}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -358,32 +351,33 @@ const Payments = () => {
                                 amount,
                               },
                               userData?.user ?? {},
-                              toast
+                              toast,
+                              t,
+                              i18n.language
                             )
                           }
                         >
-                          Receipt
+                          {t("payments.receiptButton")}
                         </Button>
                       </TableCell>
                     </TableRow>
                   )
                 )}
 
-                {!paymentsLoading &&
-                  !paymentRows.length && (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-6">
-                        No payments found
-                      </TableCell>
-                    </TableRow>
-                  )}
+                {!paymentsLoading && !paymentRows.length && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-6 text-center">
+                      {t("payments.noPayments")}
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
         </Card>
 
         <DialogContent className="w-[calc(100%-2rem)] py-6 md:w-[calc(100%-4rem)] md:max-w-5xl lg:max-w-[95%]">
-          <DialogTitle>Plans and Payments</DialogTitle>
+          <DialogTitle>{t("payments.dialogTitle")}</DialogTitle>
           <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
         </DialogContent>
       </Dialog>
@@ -393,10 +387,8 @@ const Payments = () => {
 
 export default Payments;
 
-/* ======================================
-   PAYMENTS DIALOG + PLAN CARD
-====================================== */
 const PaymentsDialog = ({ plans, setOpenDialog }) => {
+  const { t } = useTranslation();
   const { data, isSuccess, isLoading, isError } = useQuery({
     queryKey: ["profile"],
     queryFn: getUser,
@@ -404,17 +396,16 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
 
   const { toast } = useToast();
 
-  // ✅ FIX: wait before destructuring
   if (isError) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
-        Unable to load your profile details for checkout.
+        {t("payments.unableToLoadCheckout")}
       </div>
     );
   }
 
   if (isLoading || !isSuccess) {
-    return <div className="py-10 text-center">Loading user...</div>;
+    return <div className="py-10 text-center">{t("generic.loadingUser")}</div>;
   }
 
   const profileUser = data?.user ?? {};
@@ -432,9 +423,9 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
       phone,
     },
     publicKey,
-    text: "Pay Now",
-    onSuccess: () => toast({ description: "Purchase successful" }),
-    onClose: () => toast({ description: "Payment Cancelled" }),
+    text: t("payments.payNow"),
+    onSuccess: () => toast({ description: t("payments.purchaseSuccessful") }),
+    onClose: () => toast({ description: t("payments.paymentCancelled") }),
   };
 
   return (
@@ -442,10 +433,10 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
       <Tabs defaultValue="monthly" className="flex flex-col">
         <TabsList className="mx-auto mb-6 grid w-[300px] grid-cols-2 rounded-full border-2 bg-muted p-0 shadow-md">
           <TabsTrigger className="rounded-full" value="monthly">
-            Monthly
+            {t("payments.monthly")}
           </TabsTrigger>
           <TabsTrigger className="rounded-full" value="yearly">
-            Yearly
+            {t("payments.yearly")}
           </TabsTrigger>
         </TabsList>
 
@@ -460,11 +451,11 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
               setOpenDialog={setOpenDialog}
               paystackProps={
                 isNaN(Number(plan.price))
-                  ? undefined // e.g. Enterprise (Custom)
+                  ? undefined
                   : {
-                    ...componentProps,
-                    amount: Number(plan.price) * 100, // ✅ FIX
-                  }
+                      ...componentProps,
+                      amount: Number(plan.price) * 100,
+                    }
               }
             />
           ))}
@@ -483,9 +474,9 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
                 isNaN(Number(plan.price))
                   ? undefined
                   : {
-                    ...componentProps,
-                    amount: Number(plan.price) * 100, // ✅ FIX
-                  }
+                      ...componentProps,
+                      amount: Number(plan.price) * 100,
+                    }
               }
             />
           ))}
@@ -495,9 +486,6 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   );
 };
 
-/* ======================================
-   PLAN CARD COMPONENT
-====================================== */
 const PlanCard = ({
   name,
   target,
@@ -510,18 +498,18 @@ const PlanCard = ({
   const planFeatures = Array.isArray(features) ? features : [];
 
   return (
-    <Card className="mx-auto w-full flex-1 max-w-[350px] rounded-2xl bg-muted px-[30px] py-[20px] md:max-w-none lg:mx-0 lg:max-w-[350px]">
-      <h3 className="font-medium text-2xl mb-1">{capitalize(name)}</h3>
+    <Card className="mx-auto w-full max-w-[350px] flex-1 rounded-2xl bg-muted px-[30px] py-[20px] md:max-w-none lg:mx-0 lg:max-w-[350px]">
+      <h3 className="mb-1 text-2xl font-medium">{capitalize(name)}</h3>
       <p className="mb-4">{target}</p>
-      <p className="text-center font-bold text-2xl mb-2">
+      <p className="mb-2 text-center text-2xl font-bold">
         {isNaN(price) ? price : "₦" + price}
       </p>
 
-      <div className="flex justify-center mb-6">
+      <div className="mb-6 flex justify-center">
         {paystackProps ? (
           <div onClick={() => setOpenDialog(false)}>
             <PaystackButton
-              className="bg-primary text-primary-foreground shadow px-4 rounded-full py-1"
+              className="rounded-full bg-primary px-4 py-1 text-primary-foreground shadow"
               {...paystackProps}
             />
           </div>
@@ -533,13 +521,12 @@ const PlanCard = ({
           >
             {cta}
           </Button>
-
         )}
       </div>
 
       <div className="mb-6">
         {planFeatures.map((feature, index) => (
-          <div key={index} className="flex gap-x-2 items-center gap-y-1">
+          <div key={index} className="flex items-center gap-x-2 gap-y-1">
             <Check className="h-4 w-4" />
             <p>{feature}</p>
           </div>

@@ -28,29 +28,29 @@ import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 
 export default function Login() {
+  const { t } = useTranslation();
   useFacebookSDK();
   const { logout } = useAuth();
 
   useEffect(() => {
     logout();
-  }, []);
+  }, [logout]);
 
   return (
     <div className="page container mx-auto flex flex-col justify-center px-4 sm:flex-row md:flex-col lg:flex-row lg:px-0">
       <SideDetail className="md:hidden lg:flex" />
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <LoginForm />
-        <p className="text-[#0A2540] text-center text-xs sm:text-sm px-2">
-          By signing up you understand and agree to the Konn3ct
-          Terms of Use. For more information about Privacy Data
-          visit the{" "}
+        <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
+          {t("auth.termsPrefix")}{" "}
           <a
             href="https://konn3ct.com/docs/DATAPRIVACY.pdf"
             className="text-blue-500"
           >
-            Konn3ct Privacy Data Sheets.
+            {t("auth.privacyLinkLabel")}
           </a>
         </p>
       </Card>
@@ -59,11 +59,14 @@ export default function Login() {
 }
 
 export function LoginForm() {
+  const { t } = useTranslation();
   const formSchema = z.object({
-    username: z.string().email({ message: "Invalid email address." }),
+    username: z
+      .string()
+      .email({ message: t("auth.validation.invalidEmail") }),
     password: z
       .string()
-      .min(6, { message: "Password must be at least 6 characters." }),
+      .min(6, { message: t("auth.validation.passwordMin6") }),
   });
 
   const form = useForm({
@@ -83,11 +86,11 @@ export function LoginForm() {
     mutationFn: login,
     onSuccess: (res) => {
       if (res.success) {
-        toast({ title: "Login Successful", description: res.message });
+        toast({ title: t("auth.loginSuccessful"), description: res.message });
         navigate("/");
       } else {
         toast({
-          title: "Login Unsuccessful",
+          title: t("auth.loginUnsuccessful"),
           description: res.message,
           variant: "destructive",
         });
@@ -95,7 +98,7 @@ export function LoginForm() {
     },
     onError: (error) => {
       toast({
-        title: "Login Unsuccessful",
+        title: t("auth.loginUnsuccessful"),
         description: error.message,
         variant: "destructive",
       });
@@ -106,11 +109,11 @@ export function LoginForm() {
     mutationFn: login_social,
     onSuccess: (res) => {
       if (res.success) {
-        toast({ title: "Login Successful", description: res.message });
+        toast({ title: t("auth.loginSuccessful"), description: res.message });
         navigate("/");
       } else {
         toast({
-          title: "Login Unsuccessful",
+          title: t("auth.loginUnsuccessful"),
           description: res.message,
           variant: "destructive",
         });
@@ -118,7 +121,7 @@ export function LoginForm() {
     },
     onError: (error) => {
       toast({
-        title: "Login Unsuccessful",
+        title: t("auth.loginUnsuccessful"),
         description: error.message,
         variant: "destructive",
       });
@@ -130,44 +133,39 @@ export function LoginForm() {
   }
 
   const handleGoogleLogin = useGoogleLogin({
-      onSuccess: async (tokenResponse) => {
-          // tokenResponse contains the access_token and other details
-          console.log('Google Login Success:', tokenResponse);
+    onSuccess: async (tokenResponse) => {
+      console.log("Google Login Success:", tokenResponse);
 
-          // 2. Fetch User Info (Optional, but recommended for user details)
-          // The useGoogleLogin hook (in the default implicit flow) returns an access_token.
-          // We use this token to securely fetch the user's public profile data from Google.
-          try {
-              const userInfoResponse = await axios.get(
-                  'https://www.googleapis.com/oauth2/v3/userinfo',
-                  {
-                      headers: {
-                          Authorization: `Bearer ${tokenResponse.access_token}`,
-                      },
-                  }
-              );
-
-              console.log('User Info:', userInfoResponse.data);
-
-              // Send token & profile to backend
-              socialLoginMutation.mutate({
-                  provider: "google",
-                  accessstoken: tokenResponse.access_token,
-                  email: userInfoResponse.data.email,
-                  name: userInfoResponse.data.name,
-                  id: userInfoResponse.sub,
-                  avatar: userInfoResponse.data.picture,
-              });
-
-          } catch (error) {
-              console.error('Error fetching user info or sending to backend:', error);
-              // Handle server communication errors
+      try {
+        const userInfoResponse = await axios.get(
+          "https://www.googleapis.com/oauth2/v3/userinfo",
+          {
+            headers: {
+              Authorization: `Bearer ${tokenResponse.access_token}`,
+            },
           }
-      },
+        );
+
+        console.log("User Info:", userInfoResponse.data);
+
+        socialLoginMutation.mutate({
+          provider: "google",
+          accessstoken: tokenResponse.access_token,
+          email: userInfoResponse.data.email,
+          name: userInfoResponse.data.name,
+          id: userInfoResponse.sub,
+          avatar: userInfoResponse.data.picture,
+        });
+      } catch (error) {
+        console.error(
+          "Error fetching user info or sending to backend:",
+          error
+        );
+      }
+    },
     onError: (error) => console.log(error),
   });
 
-  // ✅ Facebook login
   const handleFacebookLogin = () => {
     if (!window.FB) {
       console.error("FB SDK not loaded");
@@ -179,22 +177,20 @@ export function LoginForm() {
         if (response.authResponse) {
           const { accessToken } = response.authResponse;
 
-          // Get basic profile info
           window.FB.api(
             "/me",
             { fields: "id,name,email,picture" },
             (profile) => {
               console.log("Facebook profile:", profile);
 
-              // Send token & profile to backend
-                socialLoginMutation.mutate({
-                    provider: "facebook",
-                    accessstoken: accessToken,
-                    email: profile.email,
-                    name: profile.name,
-                    facebookId: profile.id,
-                    avatar: profile.picture?.data?.url,
-                  });
+              socialLoginMutation.mutate({
+                provider: "facebook",
+                accessstoken: accessToken,
+                email: profile.email,
+                name: profile.name,
+                facebookId: profile.id,
+                avatar: profile.picture?.data?.url,
+              });
             }
           );
         } else {
@@ -205,12 +201,11 @@ export function LoginForm() {
     );
   };
 
-  // ✅ Apple login handler
   const handleAppleResponse = (res) => {
     console.log("Apple login response:", res);
 
     if (res?.authorization?.code) {
-        socialLoginMutation.mutate({
+      socialLoginMutation.mutate({
         provider: "apple",
         accessstoken: res.authorization.code,
         email: res.user?.email,
@@ -221,8 +216,8 @@ export function LoginForm() {
       });
     } else {
       toast({
-        title: "Apple login failed",
-        description: "Could not complete Apple login",
+        title: t("auth.appleLoginFailed"),
+        description: t("auth.appleLoginDescription"),
         variant: "destructive",
       });
     }
@@ -230,34 +225,33 @@ export function LoginForm() {
 
   return (
     <div className="px-4 sm:px-20 md:px-8 lg:px-20">
-      <div className="flex justify-center mb-6">
+      <div className="mb-6 flex justify-center">
         <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
-      <h3 className="text-lg sm:text-xl font-bold mb-6 text-center">Sign in</h3>
-      <p className="text-base sm:text-xl font-medium text-center mb-8">
-        Continue with:
+      <h3 className="mb-6 text-center text-lg font-bold sm:text-xl">
+        {t("auth.loginTitle")}
+      </h3>
+      <p className="mb-8 text-center text-base font-medium sm:text-xl">
+        {t("auth.continueWith")}
       </p>
 
       <div className="flex flex-wrap justify-center gap-6 sm:justify-evenly sm:gap-0 md:gap-4 lg:gap-0">
-        {/* ✅ Facebook */}
         <div
-          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
-          onClick={() => handleFacebookLogin()}
+          className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
+          onClick={handleFacebookLogin}
         >
           <img className="h-8" src={facebook} alt="Facebook" />
           <p className="text-[10px] font-medium">Facebook</p>
         </div>
 
-        {/* ✅ Google */}
         <div
-          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+          className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
           onClick={() => handleGoogleLogin()}
         >
           <img className="h-8" src={google} alt="Google" />
           <p className="text-[10px] font-medium">Google</p>
         </div>
 
-        {/* ✅ Apple */}
         <AppleLogin
           clientId={process.env.REACT_APP_APPLE_CLIENT_ID}
           redirectURI={process.env.REACT_APP_APPLE_REDIRECT_URI}
@@ -267,7 +261,7 @@ export function LoginForm() {
           render={(renderProps) => (
             <div
               onClick={renderProps.onClick}
-              className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+              className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
             >
               <img className="h-8" src={apple} alt="Apple" />
               <p className="text-[10px] font-medium">Apple</p>
@@ -276,21 +270,25 @@ export function LoginForm() {
           callback={handleAppleResponse}
         />
 
-        {/* ✅ SSO */}
-        <div onClick={()=>toast({
-            title: "SSO Login Failed",
-            description: "Your device is not registered for this access. Please contact your system administrator.",
-            variant: "destructive",
-        })} className="flex flex-col justify-center items-center gap-y-1 cursor-pointer">
-          <img className="grayscale h-8" src={sso} alt="SSO" />
+        <div
+          onClick={() =>
+            toast({
+              title: t("auth.ssoLoginFailed"),
+              description: t("auth.ssoLoginDescription"),
+              variant: "destructive",
+            })
+          }
+          className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
+        >
+          <img className="h-8 grayscale" src={sso} alt="SSO" />
           <p className="text-[10px] font-medium">SSO</p>
         </div>
       </div>
 
-      <div className="flex my-8 justify-center items-center">
-        <Separator className="flex-1 bg-black h-[1px]" />
-        <p className="mx-2 text-sm sm:text-base font-medium">OR</p>
-        <Separator className="flex-1 bg-black h-[1px]" />
+      <div className="my-8 flex items-center justify-center">
+        <Separator className="h-[1px] flex-1 bg-black" />
+        <p className="mx-2 text-sm font-medium sm:text-base">{t("auth.or")}</p>
+        <Separator className="h-[1px] flex-1 bg-black" />
       </div>
 
       <Form {...form}>
@@ -300,14 +298,14 @@ export function LoginForm() {
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">
-                  Email address
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.emailAddress")}
                 </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="you@example.com"
-                    className="rounded-full px-4 w-full"
+                    placeholder={t("auth.emailPlaceholder")}
+                    className="w-full rounded-full px-4"
                     {...field}
                   />
                 </FormControl>
@@ -321,27 +319,29 @@ export function LoginForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">
-                  Password
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.password")}
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      className="rounded-full px-4 w-full"
+                      placeholder={t("auth.passwordPlaceholder")}
+                      className="w-full rounded-full px-4"
                       {...field}
                     />
                   </div>
                 </FormControl>
                 <FormMessage />
-                <div className="flex justify-center mt-4">
+                <div className="mt-4 flex justify-center">
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-[#012E89] text-sm sm:text-[14px] font-bold"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="text-sm font-bold text-[#012E89] sm:text-[14px]"
                   >
-                    {showPassword ? "Hide password" : "Show password"}
+                    {showPassword
+                      ? t("auth.hidePassword")
+                      : t("auth.showPassword")}
                   </button>
                 </div>
               </FormItem>
@@ -353,22 +353,22 @@ export function LoginForm() {
             className="w-full bg-[#012E89] shadow-md"
             disabled={loginMutation.isPending}
           >
-            Sign in
+            {t("auth.signIn")}
           </Button>
         </form>
       </Form>
 
-      <div className="flex justify-center my-4 gap-x-2 text-sm sm:text-base">
-        <p>Don't have an account?</p>
+      <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
+        <p>{t("auth.noAccount")}</p>
         <Link to="/register" className="text-[#012E89]">
-          Sign up
+          {t("auth.signUp")}
         </Link>
       </div>
       <Link
         to="/forgot-password"
-        className="text-[#012E89] flex justify-center mb-8 text-sm sm:text-base"
+        className="mb-8 flex justify-center text-sm text-[#012E89] sm:text-base"
       >
-        Forgot password?
+        {t("auth.forgotPasswordLink")}
       </Link>
     </div>
   );

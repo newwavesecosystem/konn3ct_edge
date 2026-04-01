@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CheckCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { fetchKyc, getBankList } from "../api/donationApi";
 import { Button } from "../components/ui/button";
@@ -10,6 +11,7 @@ import IndividualDonation from "./IndividualDonation";
 import VerificationStatus from "./VerificationStatus";
 
 export default function Donations() {
+  const { t } = useTranslation();
   const [step, setStep] = useState("card");
   const [banks, setBanks] = useState([]);
   const [kycStatus, setKycStatus] = useState(null);
@@ -68,17 +70,16 @@ export default function Donations() {
             </div>
           </div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">
-            Verification Complete!
+            {t("donations.verificationCompleteTitle")}
           </h2>
           <p className="text-sm text-gray-500 dark:text-muted-foreground">
-            Your account has been successfully verified. You can now start
-            accepting donations.
+            {t("donations.verificationCompleteDescription")}
           </p>
           <Button
             className="rounded-lg bg-green-600 px-6 py-2 text-white hover:bg-green-700"
             onClick={() => setStep("dashboard")}
           >
-            Go to Dashboard
+            {t("donations.goToDashboard")}
           </Button>
         </Card>
       )}

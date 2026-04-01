@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { getMeetings } from "../api/attendanceApi";
 import { Button } from "../components/ui/button";
@@ -20,6 +21,7 @@ import {
 } from "../components/ui/table";
 
 const AttendanceList = () => {
+  const { t } = useTranslation();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,14 +38,14 @@ const AttendanceList = () => {
         setMeetings(data || []);
       } catch (err) {
         console.error("Failed to fetch meetings:", err);
-        setError("Unable to load meeting attendance data.");
+        setError(t("attendance.loadError"));
       } finally {
         setLoading(false);
       }
     };
 
     fetchMeetings();
-  }, []);
+  }, [t]);
 
   const handleViewParticipants = (meetingId, identifier) => {
     navigate(`/attendance-details/${meetingId}/${identifier}`);
@@ -60,7 +62,9 @@ const AttendanceList = () => {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading meetings...</p>
+        <p className="text-sm text-muted-foreground">
+          {t("generic.loadingMeetings")}
+        </p>
       </div>
     );
   }
@@ -77,7 +81,7 @@ const AttendanceList = () => {
     <Card className="mt-16 flex w-full max-w-3xl flex-col rounded-xl border border-gray-200 shadow dark:border-border">
       <CardHeader className="px-4 pb-2">
         <CardTitle className="text-base font-medium text-gray-800 dark:text-foreground">
-          Meeting Attendance
+          {t("attendance.meetingAttendance")}
         </CardTitle>
       </CardHeader>
 
@@ -85,23 +89,23 @@ const AttendanceList = () => {
         <div className="overflow-x-auto">
           {meetings.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-500 dark:text-muted-foreground">
-              No meeting attendance found.
+              {t("attendance.noMeetings")}
             </p>
           ) : (
             <Table className="min-w-[640px] text-sm lg:min-w-0">
               <TableHeader>
                 <TableRow className="border-b">
                   <TableHead className="w-[40px] py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
-                    S/N
+                    {t("attendance.serialNumber")}
                   </TableHead>
                   <TableHead className="py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
-                    Meeting Host
+                    {t("attendance.meetingHost")}
                   </TableHead>
                   <TableHead className="py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
-                    Date & Time
+                    {t("attendance.dateTime")}
                   </TableHead>
                   <TableHead className="py-1.5 text-center font-medium text-gray-700 dark:text-muted-foreground">
-                    Action
+                    {t("attendance.action")}
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -116,12 +120,12 @@ const AttendanceList = () => {
                       {pageStart + index + 1}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 text-sm">
-                      {meeting.host || "N/A"}
+                      {meeting.host || t("generic.notAvailable")}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 text-sm">
                       {meeting.date
                         ? `${meeting.date} | ${meeting.time || ""}`
-                        : "No Date"}
+                        : t("attendance.noDate")}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 text-center">
                       <Button
@@ -133,7 +137,7 @@ const AttendanceList = () => {
                         }
                         className="rounded-full bg-emerald-600 px-3 py-0.5 text-xs text-white hover:bg-emerald-700 md:h-auto md:whitespace-normal md:leading-snug lg:whitespace-nowrap"
                       >
-                        View Participant(s)
+                        {t("attendance.viewParticipants")}
                       </Button>
                     </TableCell>
                   </TableRow>

@@ -20,7 +20,6 @@ import logo from "../../assets/konn3ct_logo.png";
 import facebook from "../../assets/icons/facebook.svg";
 import google from "../../assets/icons/google.svg";
 import apple from "../../assets/icons/apple.svg";
-import sso from "../../assets/icons/sso.svg";
 import { Separator } from "../../components/ui/separator";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
@@ -29,25 +28,24 @@ import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 
 export default function Register() {
+  const { t } = useTranslation();
   useFacebookSDK();
 
   return (
     <div className="page container mx-auto flex flex-col justify-center px-4 sm:flex-row md:flex-col lg:flex-row lg:px-0">
-      {/* Side detail (desktop only) */}
       <SideDetail className="md:hidden lg:flex" />
-      {/* Form card */}
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <RegisterForm />
-        <p className="text-[#0A2540] text-center text-xs sm:text-sm px-2">
-          By signing up you understand and agree to the Konn3ct Terms of Use. For
-          more information about Privacy Data visit the{" "}
+        <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
+          {t("auth.termsPrefix")}{" "}
           <a
             href="https://konn3ct.com/docs/DATAPRIVACY.pdf"
             className="text-blue-500"
           >
-            Konn3ct Privacy Data Sheets.
+            {t("auth.privacyLinkLabel")}
           </a>
         </p>
       </Card>
@@ -55,28 +53,36 @@ export default function Register() {
   );
 }
 
-// ✅ Validation schema
-const formSchema = z.object({
-  email: z.string().email({ message: "Invalid email address." }),
-  password: z
-    .string()
-    .min(8, { message: "Password must be at least 8 characters." })
-    .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter." })
-    .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter." })
-    .regex(/[0-9]/, { message: "Password must contain at least one number." })
-    .regex(/[@$!%*?&]/, {
-      message: "Password must contain at least one special character (@$!%*?&).",
-    }),
-  firstname: z.string().min(2, { message: "First name is required." }).refine((v) => v.trim().length > 0, {
-    message: "First name is required and cannot be empty or whitespace.",
-  }),
-  lastname: z.string().min(2, { message: "Last name is required." }).refine((v) => v.trim().length > 0, {
-    message: "Last name is required and cannot be empty or whitespace.",
-  }),
-  phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
-});
-
 export function RegisterForm() {
+  const { t } = useTranslation();
+  const formSchema = z.object({
+    email: z.string().email({ message: t("auth.validation.invalidEmail") }),
+    password: z
+      .string()
+      .min(8, { message: t("auth.validation.passwordMin8") })
+      .regex(/[A-Z]/, { message: t("auth.validation.passwordUppercase") })
+      .regex(/[a-z]/, { message: t("auth.validation.passwordLowercase") })
+      .regex(/[0-9]/, { message: t("auth.validation.passwordNumber") })
+      .regex(/[@$!%*?&]/, {
+        message: t("auth.validation.passwordSpecial"),
+      }),
+    firstname: z
+      .string()
+      .min(2, { message: t("auth.validation.firstNameRequired") })
+      .refine((value) => value.trim().length > 0, {
+        message: t("auth.validation.firstNameWhitespace"),
+      }),
+    lastname: z
+      .string()
+      .min(2, { message: t("auth.validation.lastNameRequired") })
+      .refine((value) => value.trim().length > 0, {
+        message: t("auth.validation.lastNameWhitespace"),
+      }),
+    phone: z
+      .string()
+      .min(10, { message: t("auth.validation.phoneMin10") }),
+  });
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -97,145 +103,144 @@ export function RegisterForm() {
     mutationFn: register,
     onSuccess: (res) => {
       if (res.success) {
-        toast({ title: "Sign-up Successful", description: res.message });
+        toast({ title: t("auth.signUpSuccessful"), description: res.message });
         navigate("/");
       } else {
-        toast({ title: "Sign-up Unsuccessful", description: res.message, variant: "destructive" });
+        toast({
+          title: t("auth.signUpUnsuccessful"),
+          description: res.message,
+          variant: "destructive",
+        });
       }
     },
     onError: (error) => {
-      toast({ title: "Sign-up Unsuccessful", description: error.message, variant: "destructive" });
+      toast({
+        title: t("auth.signUpUnsuccessful"),
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
+  const socialLoginMutation = useMutation({
+    mutationFn: login_social,
+    onSuccess: (res) => {
+      if (res.success) {
+        toast({ title: t("auth.loginSuccessful"), description: res.message });
+        navigate("/");
+      } else {
+        toast({
+          title: t("auth.loginUnsuccessful"),
+          description: res.message,
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: t("auth.loginUnsuccessful"),
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
-    const socialLoginMutation = useMutation({
-        mutationFn: login_social,
-        onSuccess: (res) => {
-            if (res.success) {
-                toast({ title: "Login Successful", description: res.message });
-                navigate("/");
-            } else {
-                toast({
-                    title: "Login Unsuccessful",
-                    description: res.message,
-                    variant: "destructive",
-                });
-            }
-        },
-        onError: (error) => {
-            toast({
-                title: "Login Unsuccessful",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
-    });
-
-
-    async function onSubmit(values) {
+  async function onSubmit(values) {
     registerMutation.mutate(values);
   }
 
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      console.log("Google Login Success:", tokenResponse);
 
-    const handleGoogleLogin = useGoogleLogin({
-        onSuccess: async (tokenResponse) => {
-            // tokenResponse contains the access_token and other details
-            console.log('Google Login Success:', tokenResponse);
-
-            // 2. Fetch User Info (Optional, but recommended for user details)
-            // The useGoogleLogin hook (in the default implicit flow) returns an access_token.
-            // We use this token to securely fetch the user's public profile data from Google.
-            try {
-                const userInfoResponse = await axios.get(
-                    'https://www.googleapis.com/oauth2/v3/userinfo',
-                    {
-                        headers: {
-                            Authorization: `Bearer ${tokenResponse.access_token}`,
-                        },
-                    }
-                );
-
-                console.log('User Info:', userInfoResponse.data);
-
-                // Send token & profile to backend
-                socialLoginMutation.mutate({
-                    provider: "google",
-                    accessstoken: tokenResponse.access_token,
-                    email: userInfoResponse.data.email,
-                    name: userInfoResponse.data.name,
-                    id: userInfoResponse.sub,
-                    avatar: userInfoResponse.data.picture,
-                });
-
-            } catch (error) {
-                console.error('Error fetching user info or sending to backend:', error);
-                // Handle server communication errors
-            }
-        },
-        onError: (error) => console.log(error),
-    });
-
-    // ✅ Facebook login
-    const handleFacebookLogin = () => {
-        if (!window.FB) {
-            console.error("FB SDK not loaded");
-            return;
-        }
-
-        window.FB.login(
-            (response) => {
-                if (response.authResponse) {
-                    const { accessToken } = response.authResponse;
-
-                    // Get basic profile info
-                    window.FB.api(
-                        "/me",
-                        { fields: "id,name,email,picture" },
-                        (profile) => {
-                            console.log("Facebook profile:", profile);
-
-                            // Send token & profile to backend
-                            socialLoginMutation.mutate({
-                                provider: "facebook",
-                                accessstoken: accessToken,
-                                email: profile.email,
-                                name: profile.name,
-                                facebookId: profile.id,
-                                avatar: profile.picture?.data?.url,
-                            });
-                        }
-                    );
-                } else {
-                    console.log("Facebook login cancelled/failed", response);
-                }
+      try {
+        const userInfoResponse = await axios.get(
+          "https://www.googleapis.com/oauth2/v3/userinfo",
+          {
+            headers: {
+              Authorization: `Bearer ${tokenResponse.access_token}`,
             },
-            { scope: "email,public_profile" }
+          }
         );
-    };
+
+        console.log("User Info:", userInfoResponse.data);
+
+        socialLoginMutation.mutate({
+          provider: "google",
+          accessstoken: tokenResponse.access_token,
+          email: userInfoResponse.data.email,
+          name: userInfoResponse.data.name,
+          id: userInfoResponse.sub,
+          avatar: userInfoResponse.data.picture,
+        });
+      } catch (error) {
+        console.error(
+          "Error fetching user info or sending to backend:",
+          error
+        );
+      }
+    },
+    onError: (error) => console.log(error),
+  });
+
+  const handleFacebookLogin = () => {
+    if (!window.FB) {
+      console.error("FB SDK not loaded");
+      return;
+    }
+
+    window.FB.login(
+      (response) => {
+        if (response.authResponse) {
+          const { accessToken } = response.authResponse;
+
+          window.FB.api(
+            "/me",
+            { fields: "id,name,email,picture" },
+            (profile) => {
+              console.log("Facebook profile:", profile);
+
+              socialLoginMutation.mutate({
+                provider: "facebook",
+                accessstoken: accessToken,
+                email: profile.email,
+                name: profile.name,
+                facebookId: profile.id,
+                avatar: profile.picture?.data?.url,
+              });
+            }
+          );
+        } else {
+          console.log("Facebook login cancelled/failed", response);
+        }
+      },
+      { scope: "email,public_profile" }
+    );
+  };
 
   return (
     <div className="px-4 sm:px-20 md:px-8 lg:px-20">
-      <div className="flex justify-center mb-6">
+      <div className="mb-6 flex justify-center">
         <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
-      <h3 className="text-lg sm:text-xl font-bold mb-6 text-center">Sign Up</h3>
-      <p className="text-base sm:text-xl font-medium text-center mb-8">
-        Continue with:
+      <h3 className="mb-6 text-center text-lg font-bold sm:text-xl">
+        {t("auth.registerTitle")}
+      </h3>
+      <p className="mb-8 text-center text-base font-medium sm:text-xl">
+        {t("auth.continueWith")}
       </p>
 
-      {/* Social logins */}
       <div className="flex flex-wrap justify-center gap-6 sm:justify-evenly sm:gap-0 md:gap-4 lg:gap-0">
         <div
-          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
-          onClick={() => handleFacebookLogin()}
+          className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
+          onClick={handleFacebookLogin}
         >
           <img className="h-8" src={facebook} alt="Facebook" />
           <p className="text-[10px] font-medium">Facebook</p>
         </div>
 
         <div
-          className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+          className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
           onClick={() => handleGoogleLogin()}
         >
           <img className="h-8" src={google} alt="Google" />
@@ -251,7 +256,7 @@ export function RegisterForm() {
           render={(renderProps) => (
             <div
               onClick={renderProps.onClick}
-              className="flex flex-col justify-center items-center gap-y-1 cursor-pointer"
+              className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
             >
               <img className="h-8" src={apple} alt="Apple" />
               <p className="text-[10px] font-medium">Apple</p>
@@ -261,31 +266,29 @@ export function RegisterForm() {
             console.log("Apple response:", res);
           }}
         />
-
       </div>
 
-      {/* Divider */}
-      <div className="flex my-8 justify-center items-center">
-        <Separator className="flex-1 bg-black h-[1px]" />
-        <p className="mx-2 text-sm sm:text-base font-medium">OR</p>
-        <Separator className="flex-1 bg-black h-[1px]" />
+      <div className="my-8 flex items-center justify-center">
+        <Separator className="h-[1px] flex-1 bg-black" />
+        <p className="mx-2 text-sm font-medium sm:text-base">{t("auth.or")}</p>
+        <Separator className="h-[1px] flex-1 bg-black" />
       </div>
 
-      {/* Form fields */}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          {/* Email */}
           <FormField
             control={form.control}
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">Email</FormLabel>
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.email")}
+                </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="you@example.com"
-                    className="rounded-full px-4 w-full"
+                    placeholder={t("auth.emailPlaceholder")}
+                    className="w-full rounded-full px-4"
                     {...field}
                   />
                 </FormControl>
@@ -294,24 +297,25 @@ export function RegisterForm() {
             )}
           />
 
-          {/* Password */}
           <FormField
             control={form.control}
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">Password</FormLabel>
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.password")}
+                </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      className="rounded-full px-4 w-full"
+                      placeholder={t("auth.passwordPlaceholder")}
+                      className="w-full rounded-full px-4"
                       {...field}
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={() => setShowPassword((prev) => !prev)}
                       className="absolute right-3 top-2 focus:outline-none"
                     >
                       {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -323,17 +327,18 @@ export function RegisterForm() {
             )}
           />
 
-          {/* First Name */}
           <FormField
             control={form.control}
             name="firstname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">First Name</FormLabel>
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.register.firstName")}
+                </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Samuel"
-                    className="rounded-full px-4 w-full"
+                    placeholder={t("auth.register.firstNamePlaceholder")}
+                    className="w-full rounded-full px-4"
                     {...field}
                   />
                 </FormControl>
@@ -342,17 +347,18 @@ export function RegisterForm() {
             )}
           />
 
-          {/* Last Name */}
           <FormField
             control={form.control}
             name="lastname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">Last Name</FormLabel>
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.register.lastName")}
+                </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Odejinmi"
-                    className="rounded-full px-4 w-full"
+                    placeholder={t("auth.register.lastNamePlaceholder")}
+                    className="w-full rounded-full px-4"
                     {...field}
                   />
                 </FormControl>
@@ -361,18 +367,19 @@ export function RegisterForm() {
             )}
           />
 
-          {/* Phone */}
           <FormField
             control={form.control}
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[#0A2540] font-bold">Phone</FormLabel>
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("auth.register.phone")}
+                </FormLabel>
                 <FormControl>
                   <Input
                     type="tel"
-                    placeholder="08166390205"
-                    className="rounded-full px-4 w-full"
+                    placeholder={t("auth.register.phonePlaceholder")}
+                    className="w-full rounded-full px-4"
                     {...field}
                   />
                 </FormControl>
@@ -381,17 +388,20 @@ export function RegisterForm() {
             )}
           />
 
-          <Button type="submit" className="w-full bg-[#012E89] shadow-md">
-            Sign up
+          <Button
+            type="submit"
+            className="w-full bg-[#012E89] shadow-md"
+            disabled={registerMutation.isPending}
+          >
+            {t("auth.signUp")}
           </Button>
         </form>
       </Form>
 
-      {/* Footer */}
-      <div className="flex justify-center my-4 gap-x-2 text-sm sm:text-base">
-        <p>Already have an account?</p>
+      <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
+        <p>{t("auth.haveAccount")}</p>
         <Link to="/login" className="text-[#012E89]">
-          Sign in
+          {t("auth.signIn")}
         </Link>
       </div>
     </div>

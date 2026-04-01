@@ -1,32 +1,34 @@
 import { Card } from "../components/ui/card";
+import { useTranslation } from "react-i18next";
 
 export default function VerificationStatus({ status }) {
+  const { t } = useTranslation();
   const kyc = status?.data || {};
   const overallStatus = status?.status;
 
   const steps = [
     {
       key: "personal",
-      title: "Personal Information",
-      desc: "Basic personal details and contact info",
+      title: t("donations.steps.personal.title"),
+      desc: t("donations.steps.personal.description"),
       isDone: !!(kyc.first_name && kyc.last_name && kyc.email && kyc.address),
     },
     {
       key: "identity",
-      title: "Identity Verification",
-      desc: "Government-issued ID verification",
+      title: t("donations.steps.identity.title"),
+      desc: t("donations.steps.identity.description"),
       isDone: !!kyc.id_type && !!kyc.id_document,
     },
     {
       key: "bvn",
-      title: "BVN Verification",
-      desc: "Bank Verification Number validation",
+      title: t("donations.steps.bvn.title"),
+      desc: t("donations.steps.bvn.description"),
       isDone: !!kyc.bvn,
     },
     {
       key: "bank",
-      title: "Bank Account Verification",
-      desc: "Bank account details for settlements",
+      title: t("donations.steps.bank.title"),
+      desc: t("donations.steps.bank.description"),
       isDone:
         !!kyc.bank_name && !!kyc.bank_account_number && !!kyc.bank_account_name,
     },
@@ -44,17 +46,19 @@ export default function VerificationStatus({ status }) {
             <span className="rounded-full bg-green-100 p-2 text-green-700 dark:bg-green-500/15 dark:text-green-300">
               User
             </span>
-            Verification Status
+            {t("donations.verificationStatus")}
           </h2>
           <p className="text-sm text-gray-500 dark:text-muted-foreground">
-            Account verification progress
+            {t("donations.accountVerificationProgress")}
           </p>
         </div>
       </div>
 
       <div className="space-y-3 rounded-xl border border-border p-4 dark:bg-background/40">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium">Overall Verification Status</h3>
+          <h3 className="font-medium">
+            {t("donations.overallVerificationStatus")}
+          </h3>
           <span
             className={`rounded-full px-2 py-1 text-xs ${
               overallStatus === 0
@@ -62,11 +66,16 @@ export default function VerificationStatus({ status }) {
                 : "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
             }`}
           >
-            {overallStatus === 0 ? "Verified" : "In Progress"}
+            {overallStatus === 0
+              ? t("donations.verifiedStatus")
+              : t("status.inProgress")}
           </span>
         </div>
         <p className="text-sm text-gray-500 dark:text-muted-foreground">
-          {completed} of {steps.length} verification levels completed
+          {t("donations.verificationLevelsCompleted", {
+            completed,
+            total: steps.length,
+          })}
         </p>
         <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-muted">
           <div
@@ -98,7 +107,9 @@ export default function VerificationStatus({ status }) {
                   : "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
               }`}
             >
-              {step.isDone ? "Verified" : "Pending"}
+              {step.isDone
+                ? t("donations.verifiedStatus")
+                : t("donations.pendingStatus")}
             </span>
           </div>
         ))}

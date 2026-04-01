@@ -1,5 +1,6 @@
 import React from "react";
 import { Monitor, Moon, SunMedium } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   Card,
@@ -15,32 +16,20 @@ import {
   TabsList,
   TabsContent,
 } from "../components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
+  getLanguageOption,
+  LANGUAGE_STORAGE_KEY,
+  SUPPORTED_LANGUAGES,
+} from "../constants/languages";
 import useTheme from "../hooks/useTheme";
 import { capitalize, cn } from "../lib/utils";
-
-const themeOptions = [
-  {
-    value: "light",
-    label: "Light",
-    icon: SunMedium,
-    description:
-      "Use a brighter interface with crisp surfaces and higher daylight visibility.",
-  },
-  {
-    value: "dark",
-    label: "Dark",
-    icon: Moon,
-    description:
-      "Reduce glare with deeper surfaces that are easier on the eyes at night.",
-  },
-  {
-    value: "system",
-    label: "System",
-    icon: Monitor,
-    description:
-      "Sync automatically with your device preference and react to system changes.",
-  },
-];
 
 const SettingsPlaceholder = ({ title, description }) => {
   return (
@@ -54,18 +43,55 @@ const SettingsPlaceholder = ({ title, description }) => {
 };
 
 const Settings = () => {
+  const { t, i18n } = useTranslation();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const systemModeLabel = capitalize(resolvedTheme);
+  const currentLanguage = getLanguageOption(i18n.resolvedLanguage || i18n.language);
+
+  const themeOptions = [
+    {
+      value: "light",
+      label: t("themes.light.label"),
+      icon: SunMedium,
+      description: t("themes.light.description"),
+    },
+    {
+      value: "dark",
+      label: t("themes.dark.label"),
+      icon: Moon,
+      description: t("themes.dark.description"),
+    },
+    {
+      value: "system",
+      label: t("themes.system.label"),
+      icon: Monitor,
+      description: t("themes.system.description"),
+    },
+  ];
+
+  const handleLanguageChange = (language) => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    i18n.changeLanguage(language);
+  };
+
+  // Keep the language selector logic wired for later while its UI stays commented out.
+  void Select;
+  void SelectContent;
+  void SelectItem;
+  void SelectTrigger;
+  void SelectValue;
+  void SUPPORTED_LANGUAGES;
+  void currentLanguage;
+  void handleLanguageChange;
 
   return (
     <section className="container mx-auto page">
       <Card className="h-full overflow-hidden border-border/70 bg-card/95 px-0 py-0 shadow-sm transition-colors duration-300">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:px-8 lg:pt-10">
           <div>
-            <h3 className="text-xl font-semibold">Settings</h3>
+            <h3 className="text-xl font-semibold">{t("settings.title")}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage your dashboard preferences and keep your workspace
-              comfortable.
+              {t("settings.description")}
             </p>
           </div>
         </div>
@@ -77,37 +103,37 @@ const Settings = () => {
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="general"
               >
-                General
+                {t("settings.tabs.general")}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="meeting"
               >
-                Meeting
+                {t("settings.tabs.meeting")}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="recording"
               >
-                Recording
+                {t("settings.tabs.recording")}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="audio"
               >
-                Audio Conference
+                {t("settings.tabs.audioConference")}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="whiteBoard"
               >
-                White Board
+                {t("settings.tabs.whiteBoard")}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="scheduling"
               >
-                Scheduling
+                {t("settings.tabs.scheduling")}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -118,17 +144,21 @@ const Settings = () => {
                 <CardHeader className="gap-4 p-5 sm:p-6">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
-                      <CardTitle className="text-xl">Appearance</CardTitle>
+                      <CardTitle className="text-xl">
+                        {t("settings.appearance.title")}
+                      </CardTitle>
                       <CardDescription className="max-w-2xl text-sm leading-6">
-                        Choose how the dashboard looks. Select light mode, dark
-                        mode, or sync with your system.
+                        {t("settings.appearance.description")}
                       </CardDescription>
                     </div>
                     <div className="inline-flex items-center rounded-full border border-border bg-muted/60 px-4 py-2 text-sm text-muted-foreground">
-                      Active theme:&nbsp;
+                      {t("settings.appearance.activeTheme")}
+                      :&nbsp;
                       <span className="font-medium text-foreground">
                         {theme === "system"
-                          ? `System (${systemModeLabel})`
+                          ? t("settings.appearance.systemTheme", {
+                              mode: systemModeLabel,
+                            })
                           : capitalize(theme)}
                       </span>
                     </div>
@@ -197,11 +227,9 @@ const Settings = () => {
                         </div>
                         {value === "system" && (
                           <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                            Currently following your device and resolving to{" "}
-                            <span className="font-medium text-foreground">
-                              {systemModeLabel.toLowerCase()} mode
-                            </span>
-                            .
+                            {t("settings.appearance.currentlyFollowing", {
+                              mode: systemModeLabel.toLowerCase(),
+                            })}
                           </p>
                         )}
                       </label>
@@ -210,11 +238,61 @@ const Settings = () => {
                 </CardContent>
               </Card>
 
+              {/*
+                <Card className="border-border/70 bg-card shadow-sm">
+                  <CardHeader className="gap-4 p-5 sm:p-6">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <CardTitle className="text-xl">
+                          {t("settings.language.title")}
+                        </CardTitle>
+                        <CardDescription className="max-w-2xl text-sm leading-6">
+                          {t("settings.language.description")}
+                        </CardDescription>
+                      </div>
+                      <div className="inline-flex items-center rounded-full border border-border bg-muted/60 px-4 py-2 text-sm text-muted-foreground">
+                        {t("settings.language.current")}
+                        :&nbsp;
+                        <span className="font-medium text-foreground">
+                          {currentLanguage.nativeLabel}
+                        </span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 p-5 pt-0 sm:p-6 sm:pt-0 lg:grid-cols-[minmax(0,320px)_1fr]">
+                    <div className="space-y-3">
+                      <Select
+                        value={currentLanguage.nativeLabel}
+                        onValueChange={handleLanguageChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={t("settings.language.placeholder")}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SUPPORTED_LANGUAGES.map((language) => (
+                            <SelectItem
+                              key={language.code}
+                              value={language.code}
+                            >
+                              {language.nativeLabel}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        {t("settings.language.helper")}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              */}
+
               <Card className="border-dashed border-border/70 bg-muted/20 shadow-none">
                 <CardContent className="p-5 sm:p-6">
                   <p className="text-sm text-muted-foreground">
-                    Additional dashboard settings can expand here later without
-                    changing how theme state is stored or applied.
+                    {t("settings.additionalSettings")}
                   </p>
                 </CardContent>
               </Card>
@@ -225,8 +303,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description="Meeting-related controls will appear here in a future update."
-              title="Meeting"
+              description={t("settings.placeholders.meeting")}
+              title={t("settings.tabs.meeting")}
             />
           </TabsContent>
           <TabsContent
@@ -234,8 +312,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description="Recording preferences will appear here in a future update."
-              title="Recording"
+              description={t("settings.placeholders.recording")}
+              title={t("settings.tabs.recording")}
             />
           </TabsContent>
           <TabsContent
@@ -243,8 +321,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description="Audio conference preferences will appear here in a future update."
-              title="Audio Conference"
+              description={t("settings.placeholders.audioConference")}
+              title={t("settings.tabs.audioConference")}
             />
           </TabsContent>
           <TabsContent
@@ -252,8 +330,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description="White board preferences will appear here in a future update."
-              title="White Board"
+              description={t("settings.placeholders.whiteBoard")}
+              title={t("settings.tabs.whiteBoard")}
             />
           </TabsContent>
           <TabsContent
@@ -261,8 +339,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description="Scheduling preferences will appear here in a future update."
-              title="Scheduling"
+              description={t("settings.placeholders.scheduling")}
+              title={t("settings.tabs.scheduling")}
             />
           </TabsContent>
         </Tabs>

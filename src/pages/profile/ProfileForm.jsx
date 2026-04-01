@@ -15,28 +15,25 @@ import { Button } from "../../components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, updateProfile } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
-
-/* ---------------- SCHEMA ---------------- */
-const formSchema = z.object({
-  firstName: z
-    .string()
-    .min(2, "First name must be at least 2 characters")
-    .or(z.literal("")),
-
-  lastName: z
-    .string()
-    .min(2, "Last name must be at least 2 characters")
-    .or(z.literal("")),
-
-  phone: z
-    .string()
-    .min(10, "Phone number must be at least 10 digits")
-    .or(z.literal("")),
-
-  profileImage: z.any().optional(),
-});
+import { useTranslation } from "react-i18next";
 
 export function ProfileForm() {
+  const { t } = useTranslation();
+  const formSchema = z.object({
+    firstName: z
+      .string()
+      .min(2, t("auth.validation.firstNameMin2"))
+      .or(z.literal("")),
+    lastName: z
+      .string()
+      .min(2, t("auth.validation.lastNameMin2"))
+      .or(z.literal("")),
+    phone: z
+      .string()
+      .min(10, t("auth.validation.phoneMin10"))
+      .or(z.literal("")),
+    profileImage: z.any().optional(),
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [preview, setPreview] = useState(null);
@@ -63,7 +60,7 @@ export function ProfileForm() {
     mutationFn: updateProfile,
     onSuccess: (res) => {
       queryClient.invalidateQueries(["profile"]);
-      toast({ description: res.message || "Profile updated" });
+      toast({ description: res.message || t("profile.updateProfile") });
     },
   });
 
@@ -99,7 +96,7 @@ export function ProfileForm() {
   if (userQuery.isError) {
     return (
       <div className="text-sm text-muted-foreground">
-        Unable to load profile details right now.
+        {t("profile.loadProfileDetailsError")}
       </div>
     );
   }
@@ -139,7 +136,7 @@ export function ProfileForm() {
           name="firstName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>First Name</FormLabel>
+              <FormLabel>{t("auth.register.firstName")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
@@ -157,7 +154,7 @@ export function ProfileForm() {
           name="lastName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Last Name</FormLabel>
+              <FormLabel>{t("auth.register.lastName")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
@@ -175,7 +172,7 @@ export function ProfileForm() {
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Phone</FormLabel>
+              <FormLabel>{t("auth.register.phone")}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
@@ -193,7 +190,9 @@ export function ProfileForm() {
           className="w-full"
           disabled={profileMutation.isPending}
         >
-          {profileMutation.isPending ? "Updating..." : "Update Profile"}
+          {profileMutation.isPending
+            ? t("profile.updating")
+            : t("profile.updateProfile")}
         </Button>
       </form>
     </Form>
