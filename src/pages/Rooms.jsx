@@ -694,7 +694,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     mutationFn: createMeeting,
     onSuccess: (res) => {
       setOpenDialog(false);
-      if (res.succces) {
+      if (res?.success) {
         queryClient.invalidateQueries(["rooms"]);
         toast({ description: t("rooms.meetingCreatedSuccess") });
       } else {
