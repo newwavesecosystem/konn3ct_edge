@@ -13,7 +13,7 @@ import {
 import { Input } from "../../components/ui/input";
 import useAuth from "../../hooks/useAuth";
 import { Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "../../components/ui/card";
 import SideDetail from "./SideDetail";
 import logo from "../../assets/konn3ct_logo.png";
@@ -21,7 +21,7 @@ import facebook from "../../assets/icons/facebook.svg";
 import google from "../../assets/icons/google.svg";
 import apple from "../../assets/icons/apple.svg";
 import { Separator } from "../../components/ui/separator";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -29,6 +29,13 @@ import useFacebookSDK from "../../hooks/useFacebookSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
+import {
+  clearStoredReferralCode,
+  getReferralCodeFromSearchParams,
+  getStoredReferralCode,
+  normalizeReferralCode,
+  setStoredReferralCode,
+} from "../../lib/referral";
 
 export default function Register() {
   const { t } = useTranslation();
@@ -55,6 +62,12 @@ export default function Register() {
 
 export function RegisterForm() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const referralCodeFromUrl = useMemo(
+    () => getReferralCodeFromSearchParams(searchParams),
+    [searchParams]
+  );
+  const initialReferralCode = referralCodeFromUrl || getStoredReferralCode();
   const formSchema = z.object({
     email: z.string().email({ message: t("auth.validation.invalidEmail") }),
     password: z
@@ -81,6 +94,7 @@ export function RegisterForm() {
     phone: z
       .string()
       .min(10, { message: t("auth.validation.phoneMin10") }),
+    referral_code: z.string().optional(),
   });
 
   const form = useForm({
@@ -91,6 +105,7 @@ export function RegisterForm() {
       firstname: "",
       lastname: "",
       phone: "",
+      referral_code: initialReferralCode,
     },
   });
 
@@ -103,6 +118,7 @@ export function RegisterForm() {
     mutationFn: register,
     onSuccess: (res) => {
       if (res.success) {
+        clearStoredReferralCode();
         toast({ title: t("auth.signUpSuccessful"), description: res.message });
         navigate("/");
       } else {
@@ -126,6 +142,7 @@ export function RegisterForm() {
     mutationFn: login_social,
     onSuccess: (res) => {
       if (res.success) {
+        clearStoredReferralCode();
         toast({ title: t("auth.loginSuccessful"), description: res.message });
         navigate("/");
       } else {
@@ -145,8 +162,43 @@ export function RegisterForm() {
     },
   });
 
+  useEffect(() => {
+    if (referralCodeFromUrl) {
+      setStoredReferralCode(referralCodeFromUrl);
+    }
+
+    const nextReferralCode = referralCodeFromUrl || getStoredReferralCode();
+
+    if (nextReferralCode !== form.getValues("referral_code")) {
+      form.setValue("referral_code", nextReferralCode, { shouldDirty: false });
+    }
+  }, [form, referralCodeFromUrl]);
+
+  const getReferralPayload = (value = form.getValues("referral_code")) => {
+    const referralCode = normalizeReferralCode(value);
+
+    if (!referralCode) return {};
+
+    return {
+      referral_code: referralCode,
+      ref: referralCode,
+    };
+  };
+
   async function onSubmit(values) {
-    registerMutation.mutate(values);
+    const { referral_code, ...restValues } = values;
+    const referralPayload = getReferralPayload(referral_code);
+
+    if (referralPayload.referral_code) {
+      setStoredReferralCode(referralPayload.referral_code);
+    } else {
+      clearStoredReferralCode();
+    }
+
+    registerMutation.mutate({
+      ...restValues,
+      ...referralPayload,
+    });
   }
 
   const handleGoogleLogin = useGoogleLogin({
@@ -172,6 +224,7 @@ export function RegisterForm() {
           name: userInfoResponse.data.name,
           id: userInfoResponse.sub,
           avatar: userInfoResponse.data.picture,
+          ...getReferralPayload(),
         });
       } catch (error) {
         console.error(
@@ -207,6 +260,7 @@ export function RegisterForm() {
                 name: profile.name,
                 facebookId: profile.id,
                 avatar: profile.picture?.data?.url,
+                ...getReferralPayload(),
               });
             }
           );
@@ -379,6 +433,26 @@ export function RegisterForm() {
                   <Input
                     type="tel"
                     placeholder={t("auth.register.phonePlaceholder")}
+                    className="w-full rounded-full px-4"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          /> 
+
+          <FormField
+            control={form.control}
+            name="referral_code"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="font-bold text-[#0A2540]">
+                  {t("profile.referralCode")}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={t("profile.referralCode")}
                     className="w-full rounded-full px-4"
                     {...field}
                   />

@@ -21,6 +21,10 @@ import { capitalize } from "../../lib/utils";
 import { useToast } from "../../hooks/use-toast";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useTranslation } from "react-i18next";
+import {
+  getReferralCodeFromRecord,
+  getReferralLinkFromRecord,
+} from "../../lib/referral";
 
 const Profile = () => {
   const { t } = useTranslation();
@@ -86,8 +90,8 @@ const ProfileInformation = () => {
 
   const user = userQuery.data?.user ?? {};
   const userPlan = userQuery.data?.user_plan ?? {};
-  const referralCode = user?.referral_code ?? "";
-  const referralLink = `${window.location.origin}/register?ref=${referralCode}`;
+  const referralCode = getReferralCodeFromRecord(user);
+  const referralLink = getReferralLinkFromRecord(user);
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -124,7 +128,7 @@ const ProfileInformation = () => {
               {t("profile.referralCode")}
             </CardTitle>
             <p className="font-mono text-sm lg:text-base">
-              {referralCode || "N/A"}
+              {referralCode || t("generic.notAvailable")}
             </p>
           </CardHeader>
 
@@ -132,6 +136,7 @@ const ProfileInformation = () => {
             variant="outline"
             className="mt-3 lg:mt-0 lg:ml-auto"
             onClick={() => handleCopy(referralCode)}
+            disabled={!referralCode}
           >
             Copy <Copy className="ml-2 h-4 w-4" />
           </Button>
@@ -150,6 +155,7 @@ const ProfileInformation = () => {
               type="text"
               value={referralLink}
               readOnly
+              placeholder={t("generic.notAvailable")}
               className="flex-1 px-3 py-2 text-sm border rounded-md bg-muted cursor-pointer"
               onClick={(e) => e.target.select()}
             />
@@ -157,6 +163,7 @@ const ProfileInformation = () => {
             <Button
               variant="outline"
               onClick={() => handleCopy(referralLink)}
+              disabled={!referralLink}
             >
               <Copy className="h-4 w-4" />
             </Button>
