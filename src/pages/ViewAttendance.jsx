@@ -9,6 +9,13 @@ import {
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "../components/ui/pagination";
 
 const NAVBAR_HEIGHT = 72;
 
@@ -253,6 +260,7 @@ const ViewAttendance = () => {
   const [error, setError] = useState(null);
 
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   // ✅ copy feedback
   const [copied, setCopied] = useState(false);
@@ -265,12 +273,12 @@ const ViewAttendance = () => {
 
   useEffect(() => {
     const fetchDetails = async () => {
-      try {
-        const data = await getAttendanceDetails(meeting_id, identifier);
+      setLoading(true);
+      setError(null);
 
-        if (Array.isArray(data)) setAttendanceData(data);
-        else if (typeof data === "object" && data) setAttendanceData([data]);
-        else setAttendanceData([]);
+      try {
+        const data = await getAttendanceDetails(meeting_id, identifier, page);
+        setAttendanceData(data);
       } catch (err) {
         console.error(err);
         setError(t("attendance.loadParticipantsError"));
@@ -286,7 +294,33 @@ const ViewAttendance = () => {
     }
 
     fetchDetails();
-  }, [meeting_id, identifier, t]);
+  }, [meeting_id, identifier, page, t]);
+
+  const attendanceRows = useMemo(
+    () => (Array.isArray(attendanceData?.data) ? attendanceData.data : []),
+    [attendanceData]
+  );
+  const currentPage =
+    Number.isFinite(Number(attendanceData?.current_page)) &&
+    Number(attendanceData.current_page) > 0
+      ? Number(attendanceData.current_page)
+      : page;
+  const lastPage =
+    Number.isFinite(Number(attendanceData?.last_page)) &&
+    Number(attendanceData.last_page) > 0
+      ? Number(attendanceData.last_page)
+      : 1;
+  const perPage =
+    Number.isFinite(Number(attendanceData?.per_page)) &&
+    Number(attendanceData.per_page) > 0
+      ? Number(attendanceData.per_page)
+      : attendanceRows.length || 30;
+  const rowStart =
+    Number.isFinite(Number(attendanceData?.from)) && Number(attendanceData.from) > 0
+      ? Number(attendanceData.from)
+      : attendanceRows.length > 0
+      ? (currentPage - 1) * perPage + 1
+      : 0;
 
   const openPanel = async (type) => {
     setPanelOpen(true);
@@ -325,8 +359,8 @@ const ViewAttendance = () => {
 
   // Normalize rows for export + filtering
   const exportRows = useMemo(() => {
-    return (attendanceData || []).map((row, i) => ({
-      [serialHeader]: i + 1,
+    return attendanceRows.map((row, i) => ({
+      [serialHeader]: rowStart + i,
       [nameHeader]: row.name || row.attendee_name || t("generic.notAvailable"),
       [emailHeader]:
         row.email || row.attendee_email || t("generic.notAvailable"),
@@ -344,10 +378,11 @@ const ViewAttendance = () => {
         : t("generic.notAvailable"),
     }));
   }, [
-    attendanceData,
+    attendanceRows,
     dateTimeHeader,
     emailHeader,
     nameHeader,
+    rowStart,
     serialHeader,
     statusHeader,
     t,
@@ -532,7 +567,7 @@ const ViewAttendance = () => {
                 ) : (
                   filteredRows.map((r, index) => (
                     <div
-                      key={index}
+                      key={`${r[serialHeader]}-${index}`}
                       className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100 dark:bg-background/40 dark:text-foreground dark:hover:bg-muted/70"
                     >
                       <span>{r[serialHeader]}</span>
@@ -562,6 +597,32 @@ const ViewAttendance = () => {
               </div>
             </div>
           </div>
+
+          {(attendanceRows.length > 0 || lastPage > 1) && (
+            <div className="mt-6 flex items-center justify-center border-t pt-4 dark:border-border">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      disabled={attendanceData?.prev_page_url === null || currentPage <= 1}
+                      onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <span className="px-2 text-sm text-gray-700 dark:text-muted-foreground">
+                      {currentPage} / {lastPage}
+                    </span>
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationNext
+                      disabled={attendanceData?.next_page_url == null || currentPage >= lastPage}
+                      onClick={() => setPage((prev) => Math.min(lastPage, prev + 1))}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </div>
       </div>
 

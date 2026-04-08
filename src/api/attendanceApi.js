@@ -30,21 +30,59 @@ export const getMeetings = async () => {
   }
 };
 
-export const getAttendanceDetails = async (meeting_id, identifier) => {
+const buildAttendancePage = (payload) => {
+  if (payload && typeof payload === "object" && Array.isArray(payload.data)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload)) {
+    return {
+      data: payload,
+      current_page: 1,
+      last_page: 1,
+      next_page_url: null,
+      prev_page_url: null,
+      from: payload.length > 0 ? 1 : null,
+      per_page: payload.length,
+      total: payload.length,
+    };
+  }
+
+  if (payload && typeof payload === "object") {
+    return {
+      data: [payload],
+      current_page: 1,
+      last_page: 1,
+      next_page_url: null,
+      prev_page_url: null,
+      from: 1,
+      per_page: 1,
+      total: 1,
+    };
+  }
+
+  return {
+    data: [],
+    current_page: 1,
+    last_page: 1,
+    next_page_url: null,
+    prev_page_url: null,
+    from: null,
+    per_page: 0,
+    total: 0,
+  };
+};
+
+export const getAttendanceDetails = async (meeting_id, identifier, page = 1) => {
   if (!meeting_id || !identifier)
     throw new Error("Missing meeting_id or identifier");
 
   try {
-    const response = await API.get(
-      `/attendance-details/${meeting_id}/${identifier}`
-    );
+    const response = await API.get(`/attendance-details/${meeting_id}/${identifier}`, {
+      params: { page },
+    });
 
-    const payload = response.data?.data?.data;
-
-    if (Array.isArray(payload)) return payload;
-    if (payload && typeof payload === "object") return [payload];
-
-    return [];
+    return buildAttendancePage(response.data?.data);
   } catch (error) {
     console.error("Error fetching attendance details:", error);
     throw error;
