@@ -396,6 +396,160 @@
     "participant": "Participant",
     "printFooter": "Ce document a été généré électroniquement."
   },
+  "addonsPage": {
+    "title": "Liste des modules",
+    "loadErrorTitle": "Impossible de charger les modules pour le moment.",
+    "loadErrorDescription": "Veuillez réessayer dans un instant.",
+    "purchaseSuccessful": "Achat du module réussi",
+    "columns": {
+      "service": "Service",
+      "description": "Description du service",
+      "status": "Statut",
+      "amount": "Montant",
+      "action": "Action"
+    }
+  },
+  "refereesPage": {
+    "title": "Liste des arbitres",
+    "showEntries": "Afficher les entrées",
+    "searchLabel": "Rechercher",
+    "searchPlaceholder": "Rechercher des arbitres",
+    "loadErrorTitle": "Impossible de charger les arbitres.",
+    "loadErrorDescription": "Veuillez réessayer lorsque votre connexion est stable.",
+    "columns": {
+      "name": "Nom",
+      "email": "Adresse e-mail",
+      "plan": "Offre",
+      "dateRegistered": "Date d'inscription"
+    }
+  },
+  "joinRoom": {
+    "title": "Rejoindre une réunion",
+    "termsNotice": "En vous connectant, vous comprenez et acceptez les conditions d'utilisation de l'écosystème Newwaves. Pour plus d'informations sur la confidentialité des données, consultez les fiches de confidentialité Newwaves.",
+    "meetingLinkUnavailable": "Le lien de réunion n'est pas configuré.",
+    "unexpectedError": "Une erreur s'est produite.",
+    "roomNamePlaceholder": "Entrez le nom ou l'identifiant de la salle",
+    "namePlaceholder": "Entrez votre nom",
+    "emailPlaceholder": "Entrez votre adresse e-mail",
+    "submitButton": "Konn3ct",
+    "validation": {
+      "roomNameMin": "Le nom de la salle doit comporter au moins 2 caractères.",
+      "roomNameRequired": "Le nom de la salle ne peut pas être vide ni contenir uniquement des espaces.",
+      "nameMin": "Le nom d'utilisateur doit comporter au moins 2 caractères.",
+      "nameRequired": "Le nom d'utilisateur ne peut pas être vide ni contenir uniquement des espaces."
+    }
+  },
+  "events": {
+    "list": {
+      "totalEvents": "Événements totaux",
+      "totalParticipants": "Participants totaux",
+      "copyEventLinkSuccess": "Lien de l'événement copié !",
+      "participantsButton": "Participants",
+      "eventLinkButton": "Lien de l'événement",
+      "noEvents": "Aucun événement trouvé.",
+      "untitled": "Sans titre",
+      "noRoom": "Aucune salle",
+      "columns": {
+        "title": "Titre",
+        "host": "Hôte",
+        "room": "Salle",
+        "date": "Date",
+        "time": "Heure",
+        "timezone": "Fuseau horaire",
+        "action": "Action"
+      }
+    },
+    "create": {
+      "title": "Créer un événement",
+      "description": "Remplissez le formulaire pour créer un événement instantanément",
+      "loadingRooms": "Chargement des salles...",
+      "roomFallback": "Salle {{id}}",
+      "logoRequired": "Le logo est requis.",
+      "success": "Événement créé avec succès !",
+      "failure": "La création de l'événement a échoué. Veuillez vérifier vos informations.",
+      "failureRetry": "Impossible de créer l'événement. Veuillez réessayer.",
+      "submitting": "Envoi...",
+      "fields": {
+        "title": "Titre de l'événement",
+        "host": "Nom de l'hôte",
+        "room": "Sélectionner une salle",
+        "date": "Date de l'événement",
+        "time": "Heure de l'événement",
+        "type": "Type d'événement",
+        "currency": "Devise",
+        "amount": "Montant",
+        "timezone": "Fuseau horaire",
+        "about": "À propos de l'événement",
+        "reminder": "Définir un rappel",
+        "logo": "Téléverser un logo"
+      },
+      "placeholders": {
+        "title": "Entrez le titre de votre événement",
+        "host": "Entrez le nom de l'hôte",
+        "room": "Sélectionner une salle",
+        "amount": "6000",
+        "timezone": "Sélectionner un fuseau horaire",
+        "about": "Rédigez une brève description de votre événement",
+        "reminder": "Sélectionner un rappel"
+      },
+      "typeOptions": {
+        "free": "Gratuit",
+        "paid": "Payant"
+      },
+      "reminder": {
+        "twoDays": "2 jours avant",
+        "oneDay": "1 jour avant",
+        "twelveHours": "12 heures avant"
+      },
+      "reminderOptions": [
+        {
+          "value": "2",
+          "label": "2 jours avant"
+        },
+        {
+          "value": "1",
+          "label": "1 jour avant"
+        },
+        {
+          "value": "0.5",
+          "label": "12 heures avant"
+        }
+      ],
+      "fileUpload": {
+        "selectOrDrop": "Sélectionnez un fichier ou déposez-le ici",
+        "supportedFormats": "JPG, PNG ou PDF (max 10 Mo)",
+        "selectedFile": "Sélectionné : {{name}}",
+        "recommended": "Recommandé : 80px par 80px, format PNG"
+      }
+    },
+    "participants": {
+      "title": "Utilisateurs préinscrits ({{count}})",
+      "exportTitle": "Utilisateurs préinscrits ({{count}})",
+      "sendReminderNow": "Envoyer le rappel maintenant",
+      "reminderSent": "Rappel envoyé.",
+      "reminderFailed": "Échec de l'envoi du rappel.",
+      "copySuccess": "Copié dans le presse-papiers.",
+      "copyFailed": "La copie a échoué (le navigateur a bloqué le presse-papiers).",
+      "csvDownloaded": "CSV téléchargé.",
+      "excelDownloaded": "Excel téléchargé.",
+      "noParticipants": "Aucun participant trouvé.",
+      "showing": "Affichage de {{from}} à {{to}} sur {{total}}",
+      "columns": {
+        "serialNumber": "N°",
+        "name": "Nom",
+        "email": "E-mail",
+        "phone": "Téléphone",
+        "dateTime": "Date et heure"
+      },
+      "exportHeaders": [
+        "N°",
+        "Nom",
+        "E-mail",
+        "Téléphone",
+        "Date et heure"
+      ]
+    }
+  },
   "fallback": {
     "routeErrorTitle": "Une erreur s'est produite sur cette route",
     "routeErrorDescription": "Cette page a rencontré un problème inattendu. Vous pouvez réessayer ou revenir en arrière en toute sécurité.",

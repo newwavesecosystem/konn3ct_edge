@@ -16,18 +16,6 @@ import {
   TabsList,
   TabsContent,
 } from "../components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import {
-  getLanguageOption,
-  LANGUAGE_STORAGE_KEY,
-  SUPPORTED_LANGUAGES,
-} from "../constants/languages";
 import useTheme from "../hooks/useTheme";
 import { capitalize, cn } from "../lib/utils";
 
@@ -43,10 +31,9 @@ const SettingsPlaceholder = ({ title, description }) => {
 };
 
 const Settings = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const systemModeLabel = capitalize(resolvedTheme);
-  const currentLanguage = getLanguageOption(i18n.resolvedLanguage || i18n.language);
 
   const themeOptions = [
     {
@@ -68,21 +55,6 @@ const Settings = () => {
       description: t("themes.system.description"),
     },
   ];
-
-  const handleLanguageChange = (language) => {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-    i18n.changeLanguage(language);
-  };
-
-  // Keep the language selector logic wired for later while its UI stays commented out.
-  void Select;
-  void SelectContent;
-  void SelectItem;
-  void SelectTrigger;
-  void SelectValue;
-  void SUPPORTED_LANGUAGES;
-  void currentLanguage;
-  void handleLanguageChange;
 
   return (
     <section className="container mx-auto page">
@@ -250,37 +222,10 @@ const Settings = () => {
                           {t("settings.language.description")}
                         </CardDescription>
                       </div>
-                      <div className="inline-flex items-center rounded-full border border-border bg-muted/60 px-4 py-2 text-sm text-muted-foreground">
-                        {t("settings.language.current")}
-                        :&nbsp;
-                        <span className="font-medium text-foreground">
-                          {currentLanguage.nativeLabel}
-                        </span>
-                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="grid gap-4 p-5 pt-0 sm:p-6 sm:pt-0 lg:grid-cols-[minmax(0,320px)_1fr]">
                     <div className="space-y-3">
-                      <Select
-                        value={currentLanguage.nativeLabel}
-                        onValueChange={handleLanguageChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={t("settings.language.placeholder")}
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SUPPORTED_LANGUAGES.map((language) => (
-                            <SelectItem
-                              key={language.code}
-                              value={language.code}
-                            >
-                              {language.nativeLabel}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                       <p className="text-xs leading-5 text-muted-foreground">
                         {t("settings.language.helper")}
                       </p>

@@ -640,6 +640,160 @@
     "participant": "Participant",
     "printFooter": "This printout was generated electronically."
   },
+  "addonsPage": {
+    "title": "Addon List",
+    "loadErrorTitle": "Unable to load addons right now.",
+    "loadErrorDescription": "Please retry in a moment.",
+    "purchaseSuccessful": "Addon purchase successful",
+    "columns": {
+      "service": "Service",
+      "description": "Service Description",
+      "status": "Status",
+      "amount": "Amount",
+      "action": "Action"
+    }
+  },
+  "refereesPage": {
+    "title": "Referee List",
+    "showEntries": "Show entries",
+    "searchLabel": "Search",
+    "searchPlaceholder": "Search referees",
+    "loadErrorTitle": "Unable to load referees.",
+    "loadErrorDescription": "Please try again when your network is stable.",
+    "columns": {
+      "name": "Name",
+      "email": "Email Address",
+      "plan": "Plan",
+      "dateRegistered": "Date Registered"
+    }
+  },
+  "joinRoom": {
+    "title": "Join a Meeting",
+    "termsNotice": "By signing in you understand and agree to the Newwaves ecosystem Terms of Use. For more information about Privacy Data visit the Newwaves Privacy Data Sheets.",
+    "meetingLinkUnavailable": "Meeting link is not configured.",
+    "unexpectedError": "An error occurred.",
+    "roomNamePlaceholder": "Enter meeting room name or ID",
+    "namePlaceholder": "Enter your name",
+    "emailPlaceholder": "Enter your email address",
+    "submitButton": "Konn3ct",
+    "validation": {
+      "roomNameMin": "Room name must be at least 2 characters long.",
+      "roomNameRequired": "Room name cannot be empty or whitespace.",
+      "nameMin": "Username must be at least 2 characters long.",
+      "nameRequired": "Username cannot be empty or whitespace."
+    }
+  },
+  "events": {
+    "list": {
+      "totalEvents": "Total Events",
+      "totalParticipants": "Total Participants",
+      "copyEventLinkSuccess": "Event link copied!",
+      "participantsButton": "Participants",
+      "eventLinkButton": "Event Link",
+      "noEvents": "No events found.",
+      "untitled": "Untitled",
+      "noRoom": "No Room",
+      "columns": {
+        "title": "Title",
+        "host": "Host",
+        "room": "Room",
+        "date": "Date",
+        "time": "Time",
+        "timezone": "Time Zone",
+        "action": "Action"
+      }
+    },
+    "create": {
+      "title": "Create Event",
+      "description": "Fill the form to create an event instantly",
+      "loadingRooms": "Loading rooms...",
+      "roomFallback": "Room {{id}}",
+      "logoRequired": "Logo upload is required.",
+      "success": "Event created successfully!",
+      "failure": "Event creation failed. Please check your inputs.",
+      "failureRetry": "Failed to create event. Please try again.",
+      "submitting": "Submitting...",
+      "fields": {
+        "title": "Event Title",
+        "host": "Host Name",
+        "room": "Select Room",
+        "date": "Event Date",
+        "time": "Event Time",
+        "type": "Event Type",
+        "currency": "Currency",
+        "amount": "Amount",
+        "timezone": "Time Zone",
+        "about": "About the event",
+        "reminder": "Set Reminder",
+        "logo": "Upload a logo"
+      },
+      "placeholders": {
+        "title": "Enter your event title",
+        "host": "Enter host name",
+        "room": "Select Room",
+        "amount": "6000",
+        "timezone": "Select timezone",
+        "about": "Write a short description about your event",
+        "reminder": "Select reminder"
+      },
+      "typeOptions": {
+        "free": "Free",
+        "paid": "Paid"
+      },
+      "reminder": {
+        "twoDays": "2 days before",
+        "oneDay": "1 day before",
+        "twelveHours": "12 hours before"
+      },
+      "reminderOptions": [
+        {
+          "value": "2",
+          "label": "2 days before"
+        },
+        {
+          "value": "1",
+          "label": "1 day before"
+        },
+        {
+          "value": "0.5",
+          "label": "12 hours before"
+        }
+      ],
+      "fileUpload": {
+        "selectOrDrop": "Select a file or drop here",
+        "supportedFormats": "JPG, PNG, or PDF (max 10MB)",
+        "selectedFile": "Selected: {{name}}",
+        "recommended": "Recommended: 80px by 80px, PNG format"
+      }
+    },
+    "participants": {
+      "title": "Pre-Registered Users ({{count}})",
+      "exportTitle": "Pre-Registered Users ({{count}})",
+      "sendReminderNow": "Send Reminder Now",
+      "reminderSent": "Reminder sent.",
+      "reminderFailed": "Failed to send reminder.",
+      "copySuccess": "Copied to clipboard.",
+      "copyFailed": "Copy failed (browser blocked clipboard).",
+      "csvDownloaded": "CSV downloaded.",
+      "excelDownloaded": "Excel downloaded.",
+      "noParticipants": "No participants found.",
+      "showing": "Showing {{from}}-{{to}} of {{total}}",
+      "columns": {
+        "serialNumber": "S/N",
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "dateTime": "Date & Time"
+      },
+      "exportHeaders": [
+        "S/N",
+        "Name",
+        "Email",
+        "Phone",
+        "Date & Time"
+      ]
+    }
+  },
   "fallback": {
     "routeErrorTitle": "Something went wrong on this route",
     "routeErrorDescription": "This page encountered an unexpected problem. You can retry or go back safely.",

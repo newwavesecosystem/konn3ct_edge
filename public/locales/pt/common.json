@@ -322,6 +322,160 @@
     "participant": "Participante",
     "printFooter": "Este documento foi gerado eletronicamente."
   },
+  "addonsPage": {
+    "title": "Lista de complementos",
+    "loadErrorTitle": "Nao foi possivel carregar os complementos agora.",
+    "loadErrorDescription": "Tente novamente em instantes.",
+    "purchaseSuccessful": "Compra do complemento concluida com sucesso",
+    "columns": {
+      "service": "Servico",
+      "description": "Descricao do servico",
+      "status": "Status",
+      "amount": "Valor",
+      "action": "Acao"
+    }
+  },
+  "refereesPage": {
+    "title": "Lista de arbitros",
+    "showEntries": "Mostrar registros",
+    "searchLabel": "Pesquisar",
+    "searchPlaceholder": "Pesquisar arbitros",
+    "loadErrorTitle": "Nao foi possivel carregar os arbitros.",
+    "loadErrorDescription": "Tente novamente quando sua conexao estiver estavel.",
+    "columns": {
+      "name": "Nome",
+      "email": "Endereco de e-mail",
+      "plan": "Plano",
+      "dateRegistered": "Data de registro"
+    }
+  },
+  "joinRoom": {
+    "title": "Entrar em uma reuniao",
+    "termsNotice": "Ao entrar, voce entende e concorda com os Termos de Uso do ecossistema Newwaves. Para mais informacoes sobre Privacidade de Dados, visite as folhas de Privacidade de Dados da Newwaves.",
+    "meetingLinkUnavailable": "O link da reuniao nao esta configurado.",
+    "unexpectedError": "Ocorreu um erro.",
+    "roomNamePlaceholder": "Digite o nome ou ID da sala da reuniao",
+    "namePlaceholder": "Digite seu nome",
+    "emailPlaceholder": "Digite seu endereco de e-mail",
+    "submitButton": "Konn3ct",
+    "validation": {
+      "roomNameMin": "O nome da sala deve ter pelo menos 2 caracteres.",
+      "roomNameRequired": "O nome da sala nao pode estar vazio nem conter apenas espacos.",
+      "nameMin": "O nome de usuario deve ter pelo menos 2 caracteres.",
+      "nameRequired": "O nome de usuario nao pode estar vazio nem conter apenas espacos."
+    }
+  },
+  "events": {
+    "list": {
+      "totalEvents": "Total de eventos",
+      "totalParticipants": "Total de participantes",
+      "copyEventLinkSuccess": "Link do evento copiado!",
+      "participantsButton": "Participantes",
+      "eventLinkButton": "Link do evento",
+      "noEvents": "Nenhum evento encontrado.",
+      "untitled": "Sem titulo",
+      "noRoom": "Sem sala",
+      "columns": {
+        "title": "Titulo",
+        "host": "Anfitriao",
+        "room": "Sala",
+        "date": "Data",
+        "time": "Hora",
+        "timezone": "Fuso horario",
+        "action": "Acao"
+      }
+    },
+    "create": {
+      "title": "Criar evento",
+      "description": "Preencha o formulario para criar um evento instantaneamente",
+      "loadingRooms": "Carregando salas...",
+      "roomFallback": "Sala {{id}}",
+      "logoRequired": "O envio do logotipo e obrigatorio.",
+      "success": "Evento criado com sucesso!",
+      "failure": "A criacao do evento falhou. Verifique os dados informados.",
+      "failureRetry": "Nao foi possivel criar o evento. Tente novamente.",
+      "submitting": "Enviando...",
+      "fields": {
+        "title": "Titulo do evento",
+        "host": "Nome do anfitriao",
+        "room": "Selecionar sala",
+        "date": "Data do evento",
+        "time": "Hora do evento",
+        "type": "Tipo de evento",
+        "currency": "Moeda",
+        "amount": "Valor",
+        "timezone": "Fuso horario",
+        "about": "Sobre o evento",
+        "reminder": "Definir lembrete",
+        "logo": "Enviar um logotipo"
+      },
+      "placeholders": {
+        "title": "Digite o titulo do seu evento",
+        "host": "Digite o nome do anfitriao",
+        "room": "Selecionar sala",
+        "amount": "6000",
+        "timezone": "Selecionar fuso horario",
+        "about": "Escreva uma breve descricao sobre o seu evento",
+        "reminder": "Selecionar lembrete"
+      },
+      "typeOptions": {
+        "free": "Gratis",
+        "paid": "Pago"
+      },
+      "reminder": {
+        "twoDays": "2 dias antes",
+        "oneDay": "1 dia antes",
+        "twelveHours": "12 horas antes"
+      },
+      "reminderOptions": [
+        {
+          "value": "2",
+          "label": "2 dias antes"
+        },
+        {
+          "value": "1",
+          "label": "1 dia antes"
+        },
+        {
+          "value": "0.5",
+          "label": "12 horas antes"
+        }
+      ],
+      "fileUpload": {
+        "selectOrDrop": "Selecione um arquivo ou solte aqui",
+        "supportedFormats": "JPG, PNG ou PDF (maximo de 10MB)",
+        "selectedFile": "Selecionado: {{name}}",
+        "recommended": "Recomendado: 80px por 80px, formato PNG"
+      }
+    },
+    "participants": {
+      "title": "Usuarios pre-registrados ({{count}})",
+      "exportTitle": "Usuarios pre-registrados ({{count}})",
+      "sendReminderNow": "Enviar lembrete agora",
+      "reminderSent": "Lembrete enviado.",
+      "reminderFailed": "Falha ao enviar lembrete.",
+      "copySuccess": "Copiado para a area de transferencia.",
+      "copyFailed": "Falha ao copiar (o navegador bloqueou a area de transferencia).",
+      "csvDownloaded": "CSV baixado.",
+      "excelDownloaded": "Excel baixado.",
+      "noParticipants": "Nenhum participante encontrado.",
+      "showing": "Mostrando {{from}}-{{to}} de {{total}}",
+      "columns": {
+        "serialNumber": "N.º",
+        "name": "Nome",
+        "email": "E-mail",
+        "phone": "Telefone",
+        "dateTime": "Data e hora"
+      },
+      "exportHeaders": [
+        "N.º",
+        "Nome",
+        "E-mail",
+        "Telefone",
+        "Data e hora"
+      ]
+    }
+  },
   "fallback": {
     "routeErrorTitle": "Algo deu errado nesta rota",
     "routeErrorDescription": "Esta página encontrou um problema inesperado. Você pode tentar novamente ou voltar com segurança.",

@@ -1,7 +1,16 @@
 import React from "react";
-import SideDetail from "./auth/SideDetail";
-import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+
+import SideDetail from "./auth/SideDetail";
+import { joinRoom } from "../api/roomsApi";
+import logo from "src/assets/konn3ct_logo.png";
+import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
 import {
   Form,
   FormControl,
@@ -10,26 +19,19 @@ import {
   FormMessage,
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
-import { Card } from "../components/ui/card";
-import logo from "src/assets/konn3ct_logo.png";
-import { Button } from "../components/ui/button";
-import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
-import { joinRoom } from "../api/roomsApi";
-import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
 import { buildJoinMeetingUrl } from "../lib/externalLinks";
 
 const JoinRoom = () => {
+  const { t } = useTranslation();
+
   return (
     <div className="container page mx-auto flex justify-center">
       <SideDetail className="md:hidden lg:flex" />
-      <Card className="max-w-[560px] flex-1 ">
+      <Card className="max-w-[560px] flex-1">
         <JoinForm />
-        <p className="text-[#0A2540] text-center text-sm">
-          By signing in you understand and agree to the Newwaves ecosystem Terms
-          of Use. For more information about Privacy Data visit the Newwaves
-          Privacy Data Sheets.
+        <p className="text-center text-sm text-[#0A2540]">
+          {t("joinRoom.termsNotice")}
         </p>
       </Card>
     </div>
@@ -39,6 +41,7 @@ const JoinRoom = () => {
 export default JoinRoom;
 
 const JoinForm = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -53,7 +56,7 @@ const JoinForm = () => {
           navigate("/");
         } else {
           toast({
-            description: "Meeting link is not configured.",
+            description: t("joinRoom.meetingLinkUnavailable"),
             variant: "destructive",
           });
         }
@@ -61,23 +64,23 @@ const JoinForm = () => {
       toast({ description: res.message });
     },
     onError: () => {
-      toast({ description: "An error occured" });
+      toast({ description: t("joinRoom.unexpectedError") });
     },
   });
 
   const formSchema = z.object({
-    email: z.string().email({ message: "Invalid email address." }),
+    email: z.string().email({ message: t("auth.validation.invalidEmail") }),
     roomName: z
       .string()
-      .min(2, { message: "Room name must be at least 2 characters long." })
+      .min(2, { message: t("joinRoom.validation.roomNameMin") })
       .refine((value) => value.trim().length > 0, {
-        message: "Room name cannot be empty or whitespace.",
+        message: t("joinRoom.validation.roomNameRequired"),
       }),
     name: z
       .string()
-      .min(2, { message: "Username must be at least 2 characters long." })
+      .min(2, { message: t("joinRoom.validation.nameMin") })
       .refine((value) => value.trim().length > 0, {
-        message: "Username cannot be empty or whitespace.",
+        message: t("joinRoom.validation.nameRequired"),
       }),
   });
 
@@ -96,10 +99,12 @@ const JoinForm = () => {
 
   return (
     <div className="px-20 md:px-10 lg:px-20">
-      <div className="flex justify-center mb-16">
+      <div className="mb-16 flex justify-center">
         <img src={logo} alt="konn3ct" />
       </div>
-      <h3 className="text-xl font-medium mb-10 text-center">Join a Meeting</h3>
+      <h3 className="mb-10 text-center text-xl font-medium">
+        {t("joinRoom.title")}
+      </h3>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
@@ -110,7 +115,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="text"
-                    placeholder="Enter meeting room name or ID"
+                    placeholder={t("joinRoom.roomNamePlaceholder")}
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -127,7 +132,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="text"
-                    placeholder="Enter your name"
+                    placeholder={t("joinRoom.namePlaceholder")}
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -144,7 +149,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="Enter your email address"
+                    placeholder={t("joinRoom.emailPlaceholder")}
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -155,10 +160,10 @@ const JoinForm = () => {
           />
           <Button
             type="submit"
-            className="w-full bg-[#012E89] shadow-md !my-10"
+            className="!my-10 w-full bg-[#012E89] shadow-md"
             disabled={joinMutation.isPending}
           >
-            Konn3ct
+            {t("joinRoom.submitButton")}
           </Button>
         </form>
       </Form>
