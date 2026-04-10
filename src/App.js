@@ -5,7 +5,6 @@ import {
   Outlet,
 } from "react-router-dom";
 import { LogOut } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import {
   Sidebar,
@@ -54,42 +53,40 @@ import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { RouteErrorFallback } from "./components/ui/resilience";
 
 export function AppSidebar() {
-  const { t } = useTranslation();
-
   const items = [
-    { title: t("navigation.home"), url: "/", icon: HomeIcon },
-    { title: t("navigation.profile"), url: "/profile", icon: UserIcon },
-    { title: t("navigation.rooms"), url: "/rooms", icon: VideoIcon },
-    { title: t("navigation.streaming"), url: "/streams", icon: StreamIcon },
+    { title: "Home", url: "/", icon: HomeIcon },
+    { title: "Profile", url: "/profile", icon: UserIcon },
+    { title: "Meeting Room(s)", url: "/rooms", icon: VideoIcon },
+    { title: "Streaming", url: "/streams", icon: StreamIcon },
     {
-      title: t("navigation.recordings"),
+      title: "Recordings",
       url: "/recordings",
       icon: RecordIcon,
     },
-    { title: t("navigation.payments"), url: "/payments", icon: CardIcon },
-    { title: t("navigation.addons"), url: "/addons", icon: AddonIcon },
-    { title: t("navigation.referees"), url: "/referees", icon: RefereeIcon },
+    { title: "Plans & Payments", url: "/payments", icon: CardIcon },
+    { title: "Addons", url: "/addons", icon: AddonIcon },
+    { title: "Referee(s)", url: "/referees", icon: RefereeIcon },
     {
-      title: t("navigation.donations"),
+      title: "Donations",
       url: "/donations",
       icon: DonationIcon,
     },
     {
-      title: t("navigation.attendance"),
+      title: "Attendance",
       url: "/attendance",
       icon: AttendanceIcon,
     },
-    { title: t("navigation.events"), url: "/events", icon: EventIcon },
-    { title: t("navigation.history"), url: "/history", icon: HistoryIcon },
-    { title: t("navigation.settings"), url: "/settings", icon: SettingsIcon },
-    { title: t("navigation.logout"), url: "/login", icon: LogOut },
+    { title: "Events", url: "/events", icon: EventIcon },
+    { title: "Invite History", url: "/history", icon: HistoryIcon },
+    { title: "Settings", url: "/settings", icon: SettingsIcon },
+    { title: "Logout", url: "/login", icon: LogOut },
   ];
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>{t("navigation.personal")}</SidebarGroupLabel>
+          <SidebarGroupLabel>Personal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (

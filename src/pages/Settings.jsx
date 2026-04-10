@@ -210,34 +210,15 @@ const Settings = () => {
                 </CardContent>
               </Card>
 
-              {/*
-                <Card className="border-border/70 bg-card shadow-sm">
-                  <CardHeader className="gap-4 p-5 sm:p-6">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-2">
-                        <CardTitle className="text-xl">
-                          {t("settings.language.title")}
-                        </CardTitle>
-                        <CardDescription className="max-w-2xl text-sm leading-6">
-                          {t("settings.language.description")}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 p-5 pt-0 sm:p-6 sm:pt-0 lg:grid-cols-[minmax(0,320px)_1fr]">
-                    <div className="space-y-3">
-                      <p className="text-xs leading-5 text-muted-foreground">
-                        {t("settings.language.helper")}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              */}
-
               <Card className="border-dashed border-border/70 bg-muted/20 shadow-none">
-                <CardContent className="p-5 sm:p-6">
+                <CardContent className="space-y-2 p-5 sm:p-6">
                   <p className="text-sm text-muted-foreground">
                     {t("settings.additionalSettings")}
+                  </p>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    The app stays in English. Use your browser&apos;s built-in
+                    page translation if you want to view it in another
+                    language.
                   </p>
                 </CardContent>
               </Card>

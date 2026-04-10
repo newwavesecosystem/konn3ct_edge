@@ -16,10 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 import { getUser } from "../api/userApi";
 import { Button } from "./ui/button";
 import { Menu, X } from "lucide-react"; // icons for mobile toggle
-import { useTranslation } from "react-i18next";
 
 const Navbar = () => {
-  const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
   const userQuery = useQuery({
     queryKey: ["profile"],
@@ -45,7 +43,7 @@ const Navbar = () => {
                 className={navigationMenuTriggerStyle()}
                 to={`${process.env.REACT_APP_LANDING_URL}/Features`}
               >
-                {t("navigation.solutions")}
+                Solutions
               </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
@@ -53,12 +51,12 @@ const Navbar = () => {
                 className={navigationMenuTriggerStyle()}
                 to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}
               >
-                {t("navigation.plansPricing")}
+                Plans & Pricing
               </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <Link className={navigationMenuTriggerStyle()} to="/">
-                {t("navigation.dashboard")}
+                Dashboard
               </Link>
             </NavigationMenuItem>
           </NavigationMenuList>
@@ -69,16 +67,16 @@ const Navbar = () => {
           {isAuthenticated ? (
             <>
               <Link className={navigationMenuTriggerStyle()} to="/rooms">
-                {t("navigation.schedule")}
+                Schedule
               </Link>
               <Link className={navigationMenuTriggerStyle()} to="/join">
-                {t("navigation.join")}
+                Join
               </Link>
               <NavigationMenu>
                 <NavigationMenuList>
                   <NavigationMenuItem>
                     <NavigationMenuTrigger>
-                      {t("navigation.host")}
+                      Host
                     </NavigationMenuTrigger>
                     <NavigationMenuContent className="!w-[200px] rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-md">
                       <div className="flex flex-col gap-y-5">
@@ -86,14 +84,14 @@ const Navbar = () => {
                           to="/rooms"
                           className="text-xs text-[#2D8CFF] cursor-pointer"
                         >
-                          {t("navigation.createMeeting")}
+                          Create new meeting
                         </Link>
                         <Separator />
                         <Link
                           to="/streams"
                           className="text-xs text-[#2D8CFF] cursor-pointer"
                         >
-                          {t("navigation.startStreaming")}
+                          Start streaming
                         </Link>
                       </div>
                     </NavigationMenuContent>
@@ -113,14 +111,14 @@ const Navbar = () => {
           ) : (
             <>
               <Link to="/join" className={navigationMenuTriggerStyle()}>
-                {t("navigation.joinMeetingRoom")}
+                Join a Meeting Room
               </Link>
               <Link to="/login" className={navigationMenuTriggerStyle()}>
-                {t("navigation.signIn")}
+                Sign in
               </Link>
               <Link to="/register">
                 <Button className="bg-[#012E89] text-white rounded-full">
-                  {t("navigation.signUpFree")}
+                  Sign up, It&apos;s Free
                 </Button>
               </Link>
             </>
@@ -140,41 +138,41 @@ const Navbar = () => {
       {mobileOpen && (
         <div className="space-y-4 border-t border-border bg-background px-5 py-4 text-foreground shadow-md transition-colors duration-300 lg:hidden">
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Features`}>
-            {t("navigation.solutions")}
+            Solutions
           </Link>
           <Link className="block" to={`${process.env.REACT_APP_LANDING_URL}/Pricing`}>
-            {t("navigation.plansPricing")}
+            Plans & Pricing
           </Link>
           <Link className="block" to="/">
-            {t("navigation.dashboard")}
+            Dashboard
           </Link>
           <Separator />
           {isAuthenticated ? (
             <>
               <Link className="block" to="/rooms">
-                {t("navigation.schedule")}
+                Schedule
               </Link>
               <Link className="block" to="/join">
-                {t("navigation.join")}
+                Join
               </Link>
               <Link className="block" to="/rooms">
-                {t("navigation.createMeeting")}
+                Create new meeting
               </Link>
               <Link className="block" to="/streams">
-                {t("navigation.startStreaming")}
+                Start streaming
               </Link>
             </>
           ) : (
             <>
               <Link className="block" to="/join">
-                {t("navigation.joinMeetingRoom")}
+                Join a Meeting Room
               </Link>
               <Link className="block" to="/login">
-                {t("navigation.signIn")}
+                Sign in
               </Link>
               <Link className="block" to="/register">
                 <Button className="w-full bg-[#012E89] text-white rounded-full">
-                  {t("navigation.signUpFree")}
+                  Sign up, It&apos;s Free
                 </Button>
               </Link>
             </>

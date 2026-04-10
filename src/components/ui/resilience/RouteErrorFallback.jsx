@@ -1,5 +1,4 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
 import {
   isRouteErrorResponse,
   useNavigate,
@@ -10,7 +9,6 @@ import OfflineFallbackScreen from "./OfflineFallbackScreen";
 import useNetworkStatus from "./useNetworkStatus";
 
 const RouteErrorFallback = () => {
-  const { t } = useTranslation();
   const error = useRouteError();
   const navigate = useNavigate();
   const { isOnline } = useNetworkStatus();
@@ -26,13 +24,15 @@ const RouteErrorFallback = () => {
     );
   }
 
-  let title = t("fallback.routeErrorTitle");
-  let description = t("fallback.routeErrorDescription");
+  let title = "Something went wrong on this route";
+  let description =
+    "This page encountered an unexpected problem. You can retry or go back safely.";
 
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {
-      title = t("fallback.pageNotFoundTitle");
-      description = t("fallback.pageNotFoundDescription");
+      title = "Page not found";
+      description =
+        "The page you tried to open does not exist or was moved to a different route.";
     } else {
       title = `Route error (${error.status})`;
       description = error.statusText || description;

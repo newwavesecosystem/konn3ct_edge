@@ -29,7 +29,6 @@ import useFacebookSDK from "../../hooks/useFacebookSDK";
 import useAppleSDK from "../../hooks/useAppleSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
-import { useTranslation } from "react-i18next";
 import {
   clearStoredReferralCode,
   getReferralCodeFromSearchParams,
@@ -42,8 +41,16 @@ import {
   privacyPolicyUrl,
 } from "../../lib/externalLinks";
 
+const TERMS_PREFIX =
+  "By signing up you understand and agree to the Konn3ct Terms of Use. For more information about Privacy Data visit the";
+const PRIVACY_LINK_LABEL = "Konn3ct Privacy Data Sheets.";
+const SIGN_UP_SUCCESSFUL_TITLE = "Sign-up Successful";
+const SIGN_UP_UNSUCCESSFUL_TITLE = "Sign-up Unsuccessful";
+const LOGIN_SUCCESSFUL_TITLE = "Login Successful";
+const LOGIN_UNSUCCESSFUL_TITLE = "Login Unsuccessful";
+const APPLE_LOGIN_FAILED_TITLE = "Apple login failed";
+
 export default function Register() {
-  const { t } = useTranslation();
   useFacebookSDK();
 
   return (
@@ -52,14 +59,14 @@ export default function Register() {
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <RegisterForm />
         <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
-          {t("auth.termsPrefix")}{" "}
+          {TERMS_PREFIX}{" "}
           <a
             href={privacyPolicyUrl}
             className="text-blue-500"
             rel="noreferrer"
             target="_blank"
           >
-            {t("auth.privacyLinkLabel")}
+            {PRIVACY_LINK_LABEL}
           </a>
         </p>
       </Card>
@@ -68,7 +75,6 @@ export default function Register() {
 }
 
 export function RegisterForm() {
-  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const referralCodeFromUrl = useMemo(
     () => getReferralCodeFromSearchParams(searchParams),
@@ -76,31 +82,38 @@ export function RegisterForm() {
   );
   const initialReferralCode = referralCodeFromUrl || getStoredReferralCode();
   const formSchema = z.object({
-    email: z.string().email({ message: t("auth.validation.invalidEmail") }),
+    email: z.string().email({ message: "Invalid email address." }),
     password: z
       .string()
-      .min(8, { message: t("auth.validation.passwordMin8") })
-      .regex(/[A-Z]/, { message: t("auth.validation.passwordUppercase") })
-      .regex(/[a-z]/, { message: t("auth.validation.passwordLowercase") })
-      .regex(/[0-9]/, { message: t("auth.validation.passwordNumber") })
+      .min(8, { message: "Password must be at least 8 characters." })
+      .regex(/[A-Z]/, {
+        message: "Password must contain at least one uppercase letter.",
+      })
+      .regex(/[a-z]/, {
+        message: "Password must contain at least one lowercase letter.",
+      })
+      .regex(/[0-9]/, {
+        message: "Password must contain at least one number.",
+      })
       .regex(/[@$!%*?&]/, {
-        message: t("auth.validation.passwordSpecial"),
+        message:
+          "Password must contain at least one special character (@$!%*?&).",
       }),
     firstname: z
       .string()
-      .min(2, { message: t("auth.validation.firstNameRequired") })
+      .min(2, { message: "First name is required." })
       .refine((value) => value.trim().length > 0, {
-        message: t("auth.validation.firstNameWhitespace"),
+        message: "First name is required and cannot be empty or whitespace.",
       }),
     lastname: z
       .string()
-      .min(2, { message: t("auth.validation.lastNameRequired") })
+      .min(2, { message: "Last name is required." })
       .refine((value) => value.trim().length > 0, {
-        message: t("auth.validation.lastNameWhitespace"),
+        message: "Last name is required and cannot be empty or whitespace.",
       }),
     phone: z
       .string()
-      .min(10, { message: t("auth.validation.phoneMin10") }),
+      .min(10, { message: "Phone number must be at least 10 digits." }),
     referral_code: z.string().optional(),
   });
 
@@ -127,11 +140,11 @@ export function RegisterForm() {
     onSuccess: (res) => {
       if (res.success) {
         clearStoredReferralCode();
-        toast({ title: t("auth.signUpSuccessful"), description: res.message });
+        toast({ title: SIGN_UP_SUCCESSFUL_TITLE, description: res.message });
         navigate("/");
       } else {
         toast({
-          title: t("auth.signUpUnsuccessful"),
+          title: SIGN_UP_UNSUCCESSFUL_TITLE,
           description: res.message,
           variant: "destructive",
         });
@@ -139,7 +152,7 @@ export function RegisterForm() {
     },
     onError: (error) => {
       toast({
-        title: t("auth.signUpUnsuccessful"),
+        title: SIGN_UP_UNSUCCESSFUL_TITLE,
         description: error.message,
         variant: "destructive",
       });
@@ -151,11 +164,11 @@ export function RegisterForm() {
     onSuccess: (res) => {
       if (res.success) {
         clearStoredReferralCode();
-        toast({ title: t("auth.loginSuccessful"), description: res.message });
+        toast({ title: LOGIN_SUCCESSFUL_TITLE, description: res.message });
         navigate("/");
       } else {
         toast({
-          title: t("auth.loginUnsuccessful"),
+          title: LOGIN_UNSUCCESSFUL_TITLE,
           description: res.message,
           variant: "destructive",
         });
@@ -163,7 +176,7 @@ export function RegisterForm() {
     },
     onError: (error) => {
       toast({
-        title: t("auth.loginUnsuccessful"),
+        title: LOGIN_UNSUCCESSFUL_TITLE,
         description: error.message,
         variant: "destructive",
       });
@@ -217,7 +230,7 @@ export function RegisterForm() {
       try {
         if (!googleUserInfoUrl) {
           toast({
-            title: t("auth.loginUnsuccessful"),
+            title: LOGIN_UNSUCCESSFUL_TITLE,
             description: "Google user info URL is not configured.",
             variant: "destructive",
           });
@@ -289,7 +302,7 @@ export function RegisterForm() {
 
   const handleAppleUnavailable = () => {
     toast({
-      title: t("auth.appleLoginFailed"),
+      title: APPLE_LOGIN_FAILED_TITLE,
       description: appleSdkError
         ? "Apple sign-in is temporarily unavailable."
         : "Apple sign-in is still loading. Please try again.",
@@ -303,10 +316,10 @@ export function RegisterForm() {
         <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
       <h3 className="mb-6 text-center text-lg font-bold sm:text-xl">
-        {t("auth.registerTitle")}
+        Sign Up
       </h3>
       <p className="mb-8 text-center text-base font-medium sm:text-xl">
-        {t("auth.continueWith")}
+        Continue with:
       </p>
 
       <div className="flex flex-wrap justify-center gap-6 sm:justify-evenly sm:gap-0 md:gap-4 lg:gap-0">
@@ -359,7 +372,7 @@ export function RegisterForm() {
 
       <div className="my-8 flex items-center justify-center">
         <Separator className="h-[1px] flex-1 bg-black" />
-        <p className="mx-2 text-sm font-medium sm:text-base">{t("auth.or")}</p>
+        <p className="mx-2 text-sm font-medium sm:text-base">OR</p>
         <Separator className="h-[1px] flex-1 bg-black" />
       </div>
 
@@ -371,12 +384,12 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540]">
-                  {t("auth.email")}
+                  Email
                 </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder={t("auth.emailPlaceholder")}
+                    placeholder="you@example.com"
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -392,13 +405,13 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540]">
-                  {t("auth.password")}
+                  Password
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder={t("auth.passwordPlaceholder")}
+                      placeholder="Enter your password"
                       className="w-full rounded-full px-4"
                       {...field}
                     />
@@ -422,11 +435,11 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540]">
-                  {t("auth.register.firstName")}
+                  First Name
                 </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={t("auth.register.firstNamePlaceholder")}
+                    placeholder="Samuel"
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -442,11 +455,11 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540]">
-                  {t("auth.register.lastName")}
+                  Last Name
                 </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={t("auth.register.lastNamePlaceholder")}
+                    placeholder="Odejinmi"
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -462,12 +475,12 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540]">
-                  {t("auth.register.phone")}
+                  Phone
                 </FormLabel>
                 <FormControl>
                   <Input
                     type="tel"
-                    placeholder={t("auth.register.phonePlaceholder")}
+                    placeholder="08166390205"
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -483,18 +496,18 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540]">
-                  {t("profile.referralCode")}
+                  Referral Code
                 </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder={t("profile.referralCode")}
+                    placeholder="Referral Code"
                     className="w-full rounded-full px-4"
                     {...field}
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
-            )}
+            )} 
           />
 
           <Button
@@ -502,15 +515,15 @@ export function RegisterForm() {
             className="w-full bg-[#012E89] shadow-md"
             disabled={registerMutation.isPending}
           >
-            {t("auth.signUp")}
+            Sign up
           </Button>
         </form>
       </Form>
 
       <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
-        <p>{t("auth.haveAccount")}</p>
+        <p>Already have an account?</p>
         <Link to="/login" className="text-[#012E89]">
-          {t("auth.signIn")}
+          Sign in
         </Link>
       </div>
     </div>
