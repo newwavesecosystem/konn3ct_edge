@@ -22,7 +22,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getReferee } from "../api/refereeApi";
 import { Skeleton } from "../components/ui/skeleton";
 import { capitalize, formatDate } from "../lib/utils";
-import { getReferralLinkFromRecord } from "../lib/referral";
 
 const Referee = () => {
   const [page, setPage] = useState(1);
@@ -90,16 +89,13 @@ const Referee = () => {
               <TableHead className="">#</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email Address</TableHead>
-              <TableHead>Referral Link</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>Date Registered</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {refereeRows.map(
-              ({ lastname, firstname, email, plan, created_at, ...record }, id) => {
-                const link = getReferralLinkFromRecord(record);
-
+              ({ lastname, firstname, email, plan, created_at }, id) => {
                 return (
                 <TableRow key={email + lastname}>
                   <TableCell>{id + 1}</TableCell>
@@ -107,9 +103,6 @@ const Referee = () => {
                     {lastname} {firstname}
                   </TableCell>
                   <TableCell className="">{email}</TableCell>
-                  <TableCell className="truncate md:max-w-[320px] lg:max-w-[240px]">
-                    {link || "N/A"}
-                  </TableCell>
                   <TableCell>{capitalize(plan?.name ?? "N/A")}</TableCell>
                   <TableCell>{formatDate(created_at)}</TableCell>
                 </TableRow>
