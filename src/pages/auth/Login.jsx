@@ -26,6 +26,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useToast } from "../../hooks/use-toast";
 import { useGoogleLogin } from "@react-oauth/google";
 import useFacebookSDK from "../../hooks/useFacebookSDK";
+import useAppleSDK from "../../hooks/useAppleSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
@@ -87,6 +88,7 @@ export function LoginForm() {
   const navigate = useNavigate();
   const { login, login_social } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const { ready: appleSdkReady, error: appleSdkError } = useAppleSDK();
 
   const loginMutation = useMutation({
     mutationFn: login,
@@ -235,6 +237,16 @@ export function LoginForm() {
     }
   };
 
+  const handleAppleUnavailable = () => {
+    toast({
+      title: t("auth.appleLoginFailed"),
+      description: appleSdkError
+        ? "Apple sign-in is temporarily unavailable."
+        : "Apple sign-in is still loading. Please try again.",
+      variant: "destructive",
+    });
+  };
+
   return (
     <div className="px-4 sm:px-20 md:px-8 lg:px-20">
       <div className="mb-6 flex justify-center">
@@ -264,23 +276,33 @@ export function LoginForm() {
           <p className="text-[10px] font-medium">Google</p>
         </div>
 
-        <AppleLogin
-          clientId={process.env.REACT_APP_APPLE_CLIENT_ID}
-          redirectURI={process.env.REACT_APP_APPLE_REDIRECT_URI}
-          responseType="code"
-          responseMode="query"
-          usePopup={true}
-          render={(renderProps) => (
-            <div
-              onClick={renderProps.onClick}
-              className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
-            >
-              <img className="h-8" src={apple} alt="Apple" />
-              <p className="text-[10px] font-medium">Apple</p>
-            </div>
-          )}
-          callback={handleAppleResponse}
-        />
+        {appleSdkReady ? (
+          <AppleLogin
+            clientId={process.env.REACT_APP_APPLE_CLIENT_ID}
+            redirectURI={process.env.REACT_APP_APPLE_REDIRECT_URI}
+            responseType="code"
+            responseMode="query"
+            usePopup={true}
+            render={(renderProps) => (
+              <div
+                onClick={renderProps.onClick}
+                className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
+              >
+                <img className="h-8" src={apple} alt="Apple" />
+                <p className="text-[10px] font-medium">Apple</p>
+              </div>
+            )}
+            callback={handleAppleResponse}
+          />
+        ) : (
+          <div
+            onClick={handleAppleUnavailable}
+            className="flex cursor-pointer flex-col items-center justify-center gap-y-1 opacity-60"
+          >
+            <img className="h-8" src={apple} alt="Apple" />
+            <p className="text-[10px] font-medium">Apple</p>
+          </div>
+        )}
 
         <div
           onClick={() =>

@@ -7,25 +7,25 @@
     <meta name="description" content="Host your virtual events on konn3ct! It's Free!! Register Now!!!">
     <meta name="author" content="Newwaves Ecosystem Limited">
 
-    <meta name="og:url" content="https://konn3ct.com">
+    <meta name="og:url" content="%REACT_APP_SITE_URL%">
     <meta name="og:description" content="Host your virtual events on konn3ct! It's Free!! Register Now!!!">
     <meta name="og:type" content="website">
     <meta name="og:title" content="konn3ct">
-    <meta name="og:image" content="https://dashboard.konn3ct.com/whiteboard.jpg">
+    <meta name="og:image" content="%REACT_APP_OG_IMAGE_URL%">
     <meta name="og:locale" content="en_US">
     <meta name="twitter:card" content="summary_large_image">
 
     <meta property="og:title" content="konn3ct"/>
     <meta property="og:type" content="website"/>
-    <meta property="og:url" content="https://konn3ct.com"/>
-    <meta property="og:image" content="https://dashboard.konn3ct.com/whiteboard.jpg"/>
+    <meta property="og:url" content="%REACT_APP_SITE_URL%"/>
+    <meta property="og:image" content="%REACT_APP_OG_IMAGE_URL%"/>
 
     <meta name="facebook-domain-verification" content="vc0h3gs5jtphygh7xftaydys9d3jjo"/>
 
 
-    <link rel="icon" type="image/x-icon" href="https://dashboard.konn3ct.com/konn3cticon.ico" />
-    <link rel="shortcut icon" type="image/x-icon" href="https://dashboard.konn3ct.com/konn3cticon.ico">
-    <link rel="apple-touch-icon" href="https://dashboard.konn3ct.com/konn3cticon.ico" />
+    <link rel="icon" type="image/x-icon" href="%REACT_APP_FAVICON_URL%" />
+    <link rel="shortcut icon" type="image/x-icon" href="%REACT_APP_FAVICON_URL%">
+    <link rel="apple-touch-icon" href="%REACT_APP_FAVICON_URL%" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#042c69" />
@@ -70,15 +70,15 @@
       })();
     </script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="%REACT_APP_GOOGLE_FONTS_PRECONNECT_URL%" />
+    <link rel="preconnect" href="%REACT_APP_GOOGLE_FONTS_STATIC_URL%" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+      href="%REACT_APP_GOOGLE_FONTS_STYLESHEET_URL%"
       rel="stylesheet"
     />
 
     <!-- Global site tag (gtag.js) - Google Analytics -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-196433825-2"></script>
+    <script async src="%REACT_APP_GOOGLE_ANALYTICS_SCRIPT_URL%?id=%REACT_APP_GOOGLE_ANALYTICS_ID%"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
 
@@ -88,13 +88,13 @@
 
       gtag('js', new Date());
 
-      gtag('config', 'UA-196433825-2');
+      gtag('config', '%REACT_APP_GOOGLE_ANALYTICS_ID%');
     </script>
 
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
-    <script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js"></script>
+    <script type="text/javascript" src="%REACT_APP_APPLE_SIGNIN_SDK_URL%"></script>
   </body>
 </html>
