@@ -180,17 +180,18 @@ export function RegisterForm() {
     if (!referralCode) return {};
 
     return {
-      referral_code: referralCode,
+      referral: referralCode,
       ref: referralCode,
     };
   };
 
   async function onSubmit(values) {
     const { referral_code, ...restValues } = values;
+    const normalizedReferralCode = normalizeReferralCode(referral_code);
     const referralPayload = getReferralPayload(referral_code);
 
-    if (referralPayload.referral_code) {
-      setStoredReferralCode(referralPayload.referral_code);
+    if (normalizedReferralCode) {
+      setStoredReferralCode(normalizedReferralCode);
     } else {
       clearStoredReferralCode();
     }
