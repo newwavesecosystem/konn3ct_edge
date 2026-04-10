@@ -1,12 +1,13 @@
 import { useEffect } from "react";
+import { facebookSdkUrl } from "../lib/externalLinks";
 
 export default function useFacebookSDK() {
   useEffect(() => {
-    if (document.getElementById("facebook-jssdk")) return;
+    if (document.getElementById("facebook-jssdk") || !facebookSdkUrl) return;
 
     const script = document.createElement("script");
     script.id = "facebook-jssdk";
-    script.src = "https://connect.facebook.net/en_US/sdk.js";
+    script.src = facebookSdkUrl;
     document.body.appendChild(script);
 
     window.fbAsyncInit = function () {

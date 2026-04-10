@@ -28,6 +28,7 @@ import { useToast } from "../hooks/use-toast";
 import { PaystackButton } from "react-paystack";
 import { format } from "date-fns";
 import { useTranslation } from "react-i18next";
+import { contactSalesUrl } from "../lib/externalLinks";
 
 const generateReceipt = (payment, user, toast, t, language) => {
   const userLastName = user?.lastname ?? user?.lastName ?? "";
@@ -516,7 +517,8 @@ const PlanCard = ({
         ) : (
           <Button
             onClick={() =>
-              window.open("https://www.newwavesecosystem.com/contactus", "_blank")
+              contactSalesUrl &&
+              window.open(contactSalesUrl, "_blank", "noopener,noreferrer")
             }
           >
             {cta}

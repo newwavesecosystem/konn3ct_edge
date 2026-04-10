@@ -18,6 +18,7 @@ import { useMutation } from "@tanstack/react-query";
 import { joinRoom } from "../api/roomsApi";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../hooks/use-toast";
+import { buildJoinMeetingUrl } from "../lib/externalLinks";
 
 const JoinRoom = () => {
   return (
@@ -45,14 +46,17 @@ const JoinForm = () => {
     mutationFn: joinRoom,
     onSuccess: (res) => {
       if (res.success) {
-        let meeting_url = "";
-        if (res.sessionToken) {
-          meeting_url = `https://k4.konn3ct.ng/?sessionToken=${res.sessionToken}`;
+        const meetingUrl = buildJoinMeetingUrl(res.sessionToken || res.data);
+
+        if (meetingUrl) {
+          window.open(meetingUrl, "_blank");
+          navigate("/");
         } else {
-          meeting_url = `https://k4.konn3ct.ng/?sessionToken=${res.data}`;
+          toast({
+            description: "Meeting link is not configured.",
+            variant: "destructive",
+          });
         }
-        window.open(meeting_url, "_blank");
-        navigate("/");
       }
       toast({ description: res.message });
     },

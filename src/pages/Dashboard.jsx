@@ -23,6 +23,7 @@ import { DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Separator } from "../components/ui/separator";
 import { Skeleton } from "../components/ui/skeleton";
 import StatCard from "../components/StatCard";
+import { gettingStartedVideoUrl } from "../lib/externalLinks";
 import { MeetingForm } from "./InviteHistory";
 import activeIcon from "../assets/icons/active.svg";
 import calendar from "../assets/icons/calendar.svg";
@@ -149,7 +150,7 @@ const Dashboard = () => {
               className="rounded-xl"
               width="100%"
               height="100%"
-              src="https://www.youtube.com/embed/eTFcF4cgNn0"
+              src={gettingStartedVideoUrl}
               title="YouTube video player"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; web-share"
               referrerPolicy="strict-origin-when-cross-origin"

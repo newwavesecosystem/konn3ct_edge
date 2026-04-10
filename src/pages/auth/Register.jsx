@@ -36,6 +36,10 @@ import {
   normalizeReferralCode,
   setStoredReferralCode,
 } from "../../lib/referral";
+import {
+  googleUserInfoUrl,
+  privacyPolicyUrl,
+} from "../../lib/externalLinks";
 
 export default function Register() {
   const { t } = useTranslation();
@@ -49,8 +53,10 @@ export default function Register() {
         <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
           {t("auth.termsPrefix")}{" "}
           <a
-            href="https://konn3ct.com/docs/DATAPRIVACY.pdf"
+            href={privacyPolicyUrl}
             className="text-blue-500"
+            rel="noreferrer"
+            target="_blank"
           >
             {t("auth.privacyLinkLabel")}
           </a>
@@ -207,14 +213,20 @@ export function RegisterForm() {
       console.log("Google Login Success:", tokenResponse);
 
       try {
-        const userInfoResponse = await axios.get(
-          "https://www.googleapis.com/oauth2/v3/userinfo",
-          {
-            headers: {
-              Authorization: `Bearer ${tokenResponse.access_token}`,
-            },
-          }
-        );
+        if (!googleUserInfoUrl) {
+          toast({
+            title: t("auth.loginUnsuccessful"),
+            description: "Google user info URL is not configured.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const userInfoResponse = await axios.get(googleUserInfoUrl, {
+          headers: {
+            Authorization: `Bearer ${tokenResponse.access_token}`,
+          },
+        });
 
         console.log("User Info:", userInfoResponse.data);
 
