@@ -20,11 +20,11 @@ import { useTranslation } from "react-i18next";
 export function ProfileForm() {
   const { t } = useTranslation();
   const formSchema = z.object({
-    firstName: z
+    firstname: z
       .string()
       .min(2, t("auth.validation.firstNameMin2"))
       .or(z.literal("")),
-    lastName: z
+    lastname: z
       .string()
       .min(2, t("auth.validation.lastNameMin2"))
       .or(z.literal("")),
@@ -43,13 +43,14 @@ export function ProfileForm() {
     queryKey: ["profile"],
     queryFn: getUser,
   });
+  const profileUser = userQuery.data?.user ?? {};
 
   /* ---------------- FORM ---------------- */
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      firstName: "",
-      lastName: "",
+      firstname: "",
+      lastname: "",
       phone: "",
       profileImage: null,
     },
@@ -58,24 +59,53 @@ export function ProfileForm() {
   /* ---------------- MUTATION ---------------- */
   const profileMutation = useMutation({
     mutationFn: updateProfile,
-    onSuccess: (res) => {
-      queryClient.invalidateQueries(["profile"]);
-      toast({ description: res.message || t("profile.updateProfile") });
+    onSuccess: async (res) => {
+      if (res?.success === false) {
+        toast({
+          description: res.message || "Unable to update profile.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setPreview(null);
+      await queryClient.invalidateQueries({ queryKey: ["profile"] });
+      form.reset({
+        firstname: "",
+        lastname: "",
+        phone: "",
+        profileImage: null,
+      });
+      toast({
+        description: res?.message || "Profile updated successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        description:
+          error.response?.data?.message ||
+          error.message ||
+          "Unable to update profile.",
+        variant: "destructive",
+      });
     },
   });
 
   /* ---------------- SUBMIT ---------------- */
   const onSubmit = (data) => {
     const formData = new FormData();
+    const firstname = data.firstname.trim();
+    const lastname = data.lastname.trim();
+    const phone = data.phone.trim();
 
-    if (data.firstName.trim())
-      formData.append("firstName", data.firstName);
+    if (firstname && firstname !== (profileUser.firstname ?? ""))
+      formData.append("firstname", firstname);
 
-    if (data.lastName.trim())
-      formData.append("lastName", data.lastName);
+    if (lastname && lastname !== (profileUser.lastname ?? ""))
+      formData.append("lastname", lastname);
 
-    if (data.phone.trim())
-      formData.append("phone", data.phone);
+    if (phone && phone !== (profileUser.phone ?? ""))
+      formData.append("phone", phone);
 
     if (data.profileImage)
       formData.append("image", data.profileImage);
@@ -100,8 +130,6 @@ export function ProfileForm() {
       </div>
     );
   }
-
-  const profileUser = userQuery.data?.user ?? {};
 
   return (
     <Form {...form}>
@@ -133,7 +161,7 @@ export function ProfileForm() {
         {/* ---------------- FIRST NAME ---------------- */}
         <FormField
           control={form.control}
-          name="firstName"
+          name="firstname"
           render={({ field }) => (
             <FormItem>
               <FormLabel>{t("auth.register.firstName")}</FormLabel>
@@ -151,7 +179,7 @@ export function ProfileForm() {
         {/* ---------------- LAST NAME ---------------- */}
         <FormField
           control={form.control}
-          name="lastName"
+          name="lastname"
           render={({ field }) => (
             <FormItem>
               <FormLabel>{t("auth.register.lastName")}</FormLabel>
