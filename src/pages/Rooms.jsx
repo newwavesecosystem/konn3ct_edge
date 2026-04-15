@@ -15,7 +15,7 @@ import inactiveIcon from "../assets/icons/inactive.svg";
 import scheduledIcon from "../assets/icons/scheduled.svg";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
 import { Separator } from "../components/ui/separator";
-import { Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createMeeting,
@@ -64,6 +64,8 @@ import {
   SheetTitle,
 } from "../components/ui/sheet";
 import { useTranslation } from "react-i18next";
+
+const SCHEDULE_PANEL_TOP_OFFSET = "80px";
 
 const Rooms = () => {
   const { t } = useTranslation();
@@ -457,14 +459,22 @@ const Rooms = () => {
 
       {/* Scheduled Rooms */}
       <Sheet open={openScheduledSide} onOpenChange={setOpenScheduleSide}>
-        <SheetContent side="right">
+        <SheetContent
+          side="right"
+          className="flex w-full max-w-[min(32rem,100vw)] flex-col overflow-hidden px-4 sm:px-6"
+          style={{
+            top: SCHEDULE_PANEL_TOP_OFFSET,
+            bottom: "auto",
+            height: `calc(100svh - ${SCHEDULE_PANEL_TOP_OFFSET})`,
+          }}
+        >
           <SheetHeader>
             <SheetTitle>{t("rooms.scheduledMeetings")}</SheetTitle>
             <SheetDescription>
               {t("rooms.scheduledMeetingsDescription")}
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-5 pb-12 flex flex-col gap-y-2 overflow-y-scroll h-[90vh] pr-3">
+          <div className="mt-5 flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto overflow-x-hidden pb-12 pr-1 sm:pr-2">
             {scheduledMeetings.map(({ date, time, roomname, guest }) => (
               <ScheduleMeetingCard
                 key={roomname + date}
@@ -804,6 +814,18 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
 
 const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
   const { t, i18n } = useTranslation();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const guestList = String(guest ?? "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+  const previewGuests =
+    guestList.length > 0
+      ? `${guestList[0]}${
+          guestList.length > 1 ? `, +${guestList.length - 1} more` : ""
+        }`
+      : t("generic.notAvailable");
+
   const formatDate = (dateString) => {
     const dateObj = new Date(dateString);
     return dateObj.toLocaleDateString(i18n.language, {
@@ -814,12 +836,64 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
   };
 
   return (
-    <Card className="p-4 flex flex-col gap-y-2">
-      <p className="font-bold">{roomname}</p>
-      <p>
-        {t("rooms.scheduledAt", { date: formatDate(date), time })}
-      </p>
-      <p>{t("rooms.guests", { guest })}</p>
+    <Card
+      className="min-w-0 cursor-pointer overflow-hidden p-0 transition-colors hover:border-border/80"
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      onClick={() => setIsExpanded((prev) => !prev)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setIsExpanded((prev) => !prev);
+        }
+      }}
+    >
+      <div className="flex min-w-0 items-start gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-col gap-y-2">
+            <p className="break-words font-bold">{roomname}</p>
+            <p className="break-words text-sm text-muted-foreground">
+              {t("rooms.scheduledAt", { date: formatDate(date), time })}
+            </p>
+            <p className="break-all text-sm text-muted-foreground">
+              {t("rooms.guests", { guest: previewGuests })}
+            </p>
+          </div>
+
+          {isExpanded && (
+            <div className="mt-4 border-t border-border/70 pt-3">
+              <p className="text-sm font-medium text-foreground">
+                {t("rooms.guests", { guest: guestList.length })}
+              </p>
+              <div className="mt-2 flex flex-col gap-y-2">
+                {guestList.length > 0 ? (
+                  guestList.map((email, index) => (
+                    <p
+                      key={`${email}-${index}`}
+                      className="break-all text-sm text-muted-foreground"
+                    >
+                      {email}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t("generic.notAvailable")}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-0.5 shrink-0 text-muted-foreground">
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </div>
+      </div>
     </Card>
   );
 };
