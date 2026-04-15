@@ -266,6 +266,8 @@ const Rooms = () => {
               value={scheduledMeetings.length}
               name={t("rooms.scheduledRoom")}
               icon={scheduledIcon}
+              onIconClick={() => setOpenScheduleSide(true)}
+              iconButtonLabel={t("rooms.scheduledMeetings")}
               className="w-full min-w-0 lg:w-[240px]"
             />
 

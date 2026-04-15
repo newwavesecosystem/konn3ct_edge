@@ -60,6 +60,39 @@ import { Skeleton } from "../components/ui/skeleton";
 import { getRooms } from "../api/roomsApi";
 import { useTranslation } from "react-i18next";
 
+const formatInviteDate = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const normalizeGuestEmails = (value = "") =>
+  value
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean)
+    .join(",");
+
+const hasValidGuestEmails = (value = "") => {
+  const emails = normalizeGuestEmails(value)
+    .split(",")
+    .filter(Boolean);
+
+  return (
+    emails.length > 0 &&
+    emails.every((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+  );
+};
+
+const getInviteErrorMessage = (source, fallbackMessage) =>
+  source?.response?.data?.message || source?.message || fallbackMessage;
+
 const InviteHistory = () => {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
@@ -76,7 +109,7 @@ const InviteHistory = () => {
   const resendInviteMutation = useMutation({
     mutationFn: resendInvite,
     onSuccess: (res) => {
-      queryClient.invalidateQueries(["invite"]);
+      queryClient.invalidateQueries({ queryKey: ["invite"] });
       toast({ description: res.message });
     },
   });
@@ -215,6 +248,7 @@ export default InviteHistory;
 export const MeetingForm = ({ setOpenDialog }) => {
   const { t, i18n } = useTranslation();
   const [timezoneOpen, setTimezoneOpen] = useState(false);
+  const [roomOpen, setRoomOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -223,57 +257,47 @@ export const MeetingForm = ({ setOpenDialog }) => {
     queryFn: getRooms,
   });
 
-  const sendInviteMutation = useMutation({
-    mutationFn: sendInvite,
-    onSuccess: (res) => {
-      queryClient.invalidateQueries(["invite"]);
-      toast({ description: res.message });
-    },
-  });
-
   const formSchema = z.object({
-    room_id: z.string().nonempty({ message: t("inviteHistory.validation.roomRequired") }),
+    room_id: z
+      .string()
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.roomRequired") }),
     hostname: z
       .string()
-      .nonempty({ message: t("inviteHistory.validation.hostnameRequired") }),
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.hostnameRequired") }),
     title: z
       .string()
-      .nonempty({ message: t("inviteHistory.validation.titleRequired") }),
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.titleRequired") }),
     date: z
       .date({ required_error: t("inviteHistory.validation.dateRequired") })
-      .nullable(),
-    time: z.string().nonempty({ message: t("inviteHistory.validation.timeRequired") }),
-    timezone: z
-      .string()
-      .nonempty({ message: t("inviteHistory.validation.timezoneRequired") }),
-    additional: z
-      .string()
-      .nonempty({ message: t("inviteHistory.validation.additionalRequired") }),
-    guest: z
-      .string()
-      .nonempty({ message: t("inviteHistory.validation.guestEmailsRequired") })
+      .nullable()
       .refine(
-        (value) => value.split(",").every((email) => email.includes("@")),
+        (value) => value instanceof Date && !Number.isNaN(value.getTime()),
         {
-          message: t("inviteHistory.validation.guestEmailsInvalid"),
+          message: t("inviteHistory.validation.dateRequired"),
         }
       ),
-  });
-
-  const timezones = Intl.supportedValuesOf("timeZone").map((tz) => {
-    const date = new Date();
-    const formatter = new Intl.DateTimeFormat(i18n.language, {
-      timeZone: tz,
-      timeZoneName: "short",
-    });
-    const parts = formatter.formatToParts(date);
-    const timezoneOffset =
-      parts.find((part) => part.type === "timeZoneName")?.value ?? "";
-
-    return {
-      label: `${tz} ${timezoneOffset}`,
-      value: `${tz} ${timezoneOffset}`,
-    };
+    time: z
+      .string()
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.timeRequired") }),
+    timezone: z
+      .string()
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.timezoneRequired") }),
+    additional: z
+      .string()
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.additionalRequired") }),
+    guest: z
+      .string()
+      .trim()
+      .min(1, { message: t("inviteHistory.validation.guestEmailsRequired") })
+      .refine((value) => hasValidGuestEmails(value), {
+        message: t("inviteHistory.validation.guestEmailsInvalid"),
+      }),
   });
 
   const form = useForm({
@@ -290,11 +314,66 @@ export const MeetingForm = ({ setOpenDialog }) => {
     },
   });
 
-  const [roomOpen, setRoomOpen] = useState(false);
+  const timezones = Intl.supportedValuesOf("timeZone").map((tz) => {
+    const date = new Date();
+    const formatter = new Intl.DateTimeFormat(i18n.language, {
+      timeZone: tz,
+      timeZoneName: "short",
+    });
+    const parts = formatter.formatToParts(date);
+    const timezoneOffset =
+      parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+
+    return {
+      label: timezoneOffset ? `${tz} (${timezoneOffset})` : tz,
+      value: tz,
+    };
+  });
+
+  const sendInviteMutation = useMutation({
+    mutationFn: sendInvite,
+    onSuccess: (res) => {
+      if (res?.success === false) {
+        toast({
+          variant: "destructive",
+          title: t("rooms.errorTitle"),
+          description: getInviteErrorMessage(
+            res,
+            t("inviteHistory.loadErrorDescription")
+          ),
+        });
+        return;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["invite"] });
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      toast({ description: res?.message || t("inviteHistory.sendInvite") });
+      form.reset();
+      setOpenDialog(false);
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: t("rooms.errorTitle"),
+        description: getInviteErrorMessage(
+          error,
+          t("inviteHistory.loadErrorDescription")
+        ),
+      });
+    },
+  });
 
   const onSubmit = (data) => {
-    sendInviteMutation.mutate(data);
-    setOpenDialog(false);
+    sendInviteMutation.mutate({
+      room_id: data.room_id.trim(),
+      hostname: data.hostname.trim(),
+      title: data.title.trim(),
+      date: formatInviteDate(data.date),
+      time: data.time.trim(),
+      timezone: data.timezone.trim(),
+      additional: data.additional.trim(),
+      guest: normalizeGuestEmails(data.guest),
+    });
   };
 
   if (!roomQuery.isSuccess) return <></>;
@@ -435,8 +514,8 @@ export const MeetingForm = ({ setOpenDialog }) => {
                     <PopoverContent className="w-auto p-0">
                       <Calendar
                         mode="single"
-                        selected={field.value}
-                        onSelect={(date) => field.onChange(date)}
+                        selected={field.value ?? undefined}
+                        onSelect={(date) => field.onChange(date ?? null)}
                       />
                     </PopoverContent>
                   </Popover>
