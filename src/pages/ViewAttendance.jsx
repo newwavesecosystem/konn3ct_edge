@@ -8,7 +8,6 @@ import {
 } from "../api/attendanceApi";
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
-import { useTranslation } from "react-i18next";
 import {
   Pagination,
   PaginationContent,
@@ -18,10 +17,44 @@ import {
 } from "../components/ui/pagination";
 
 const NAVBAR_HEIGHT = 72;
+const ATTENDANCE_TEXT = {
+  loadParticipantsError: "Unable to load participant details.",
+  missingMeetingIdentifier: "Missing meeting_id or identifier.",
+  minutesOfMeeting: "Minutes of Meeting",
+  meetingHighlights: "Meeting Highlights",
+  meetingSummary: "Meeting Summary",
+  noDataReturned: "No data returned.",
+  failedToLoadContent: "Failed to load content.",
+  serialNumber: "S/N",
+  name: "Name",
+  email: "Email",
+  status: "Status",
+  dateTime: "Date & Time",
+  notAvailable: "N/A",
+  moderator: "Moderator",
+  participant: "Participant",
+  copyFailed: "Copy failed. Please allow clipboard permission or use HTTPS.",
+  meetingAttendance: "Meeting Attendance",
+  printFooter: "This printout was generated electronically.",
+  printBlocked: "Please allow popups to print",
+  loadingParticipants: "Loading participant data...",
+  copied: "Copied",
+  copy: "Copy",
+  csv: "CSV",
+  excel: "Excel",
+  print: "Print",
+  sendMinutes: "Send Minutes of Meeting",
+  sendHighlights: "Send Meeting Highlight",
+  sendSummary: "Send Meeting Summary",
+  searchPlaceholder: "Search",
+  backToAttendance: "Back to Attendance",
+  noParticipants: "No participants found for this meeting.",
+  loadingContent: "Loading...",
+};
 
-/* ======================================
-   HELPERS (COPY / CSV / EXCEL / PRINT)
-====================================== */
+const getMeetingAttendanceTitle = (count) =>
+  `${ATTENDANCE_TEXT.meetingAttendance} (${count})`;
+
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -33,45 +66,49 @@ function escapeHtml(str = "") {
 
 function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
   URL.revokeObjectURL(url);
 }
 
 function rowsToTSV(headers, rows) {
   const headerLine = headers.join("\t");
-  const lines = rows.map((r) => headers.map((h) => (r[h] ?? "")).join("\t"));
+  const lines = rows.map((row) =>
+    headers.map((header) => row[header] ?? "").join("\t")
+  );
   return [headerLine, ...lines].join("\n");
 }
 
 function rowsToCSV(headers, rows) {
-  const esc = (v) => {
-    const s = String(v ?? "");
-    const needsQuotes = /[",\n\r]/.test(s);
-    const safe = s.replaceAll('"', '""');
-    return needsQuotes ? `"${safe}"` : safe;
+  const escapeValue = (value) => {
+    const stringValue = String(value ?? "");
+    const needsQuotes = /[",\n\r]/.test(stringValue);
+    const safeValue = stringValue.replaceAll('"', '""');
+    return needsQuotes ? `"${safeValue}"` : safeValue;
   };
 
-  const headerLine = headers.map(esc).join(",");
-  const lines = rows.map((r) => headers.map((h) => esc(r[h])).join(","));
+  const headerLine = headers.map(escapeValue).join(",");
+  const lines = rows.map((row) =>
+    headers.map((header) => escapeValue(row[header])).join(",")
+  );
+
   return [headerLine, ...lines].join("\n");
 }
 
-// Excel: save HTML table as .xls (Excel opens it fine)
 function rowsToExcelHTML(title, headers, rows) {
   const thead = `<tr>${headers
-    .map((h) => `<th>${escapeHtml(h)}</th>`)
+    .map((header) => `<th>${escapeHtml(header)}</th>`)
     .join("")}</tr>`;
 
   const tbody = rows
     .map(
-      (r) =>
+      (row) =>
         `<tr>${headers
-          .map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`)
+          .map((header) => `<td>${escapeHtml(row[header] ?? "")}</td>`)
           .join("")}</tr>`
     )
     .join("");
@@ -92,12 +129,6 @@ function rowsToExcelHTML(title, headers, rows) {
 </html>`;
 }
 
-/**
- * ✅ PRINT (same method as Payments.jsx):
- * - open popup
- * - write HTML
- * - in popup: window.onload => window.print()
- */
 function printTableLikePayments(
   title,
   headers,
@@ -113,14 +144,14 @@ function printTableLikePayments(
   }
 
   const thead = `<tr>${headers
-    .map((h) => `<th>${escapeHtml(h)}</th>`)
+    .map((header) => `<th>${escapeHtml(header)}</th>`)
     .join("")}</tr>`;
 
   const tbody = rows
     .map(
-      (r) =>
+      (row) =>
         `<tr>${headers
-          .map((h) => `<td>${escapeHtml(r[h] ?? "")}</td>`)
+          .map((header) => `<td>${escapeHtml(row[header] ?? "")}</td>`)
           .join("")}</tr>`
     )
     .join("");
@@ -190,21 +221,16 @@ function printTableLikePayments(
   win.document.close();
 }
 
-/**
- * ✅ COPY with fallback (works if navigator.clipboard fails)
- */
 async function copyToClipboard(text) {
-  // modern clipboard (needs secure context)
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
       return true;
     }
-  } catch (e) {
-    // continue to fallback
+  } catch (error) {
+    // Continue to fallback.
   }
 
-  // fallback method
   try {
     const textarea = document.createElement("textarea");
     textarea.value = text;
@@ -214,43 +240,36 @@ async function copyToClipboard(text) {
     textarea.style.left = "-9999px";
     document.body.appendChild(textarea);
     textarea.select();
-    const ok = document.execCommand("copy");
+    const wasCopied = document.execCommand("copy");
     document.body.removeChild(textarea);
-    return ok;
-  } catch (e) {
+    return wasCopied;
+  } catch (error) {
     return false;
   }
 }
 
-/* ======================================
-   ✅ STATUS NORMALIZER (moderator/participant only)
-====================================== */
 const normalizeStatus = (status) => {
   if (!status) return "participant";
 
-  const s = String(status ?? "").trim().toLowerCase();
+  const normalizedStatus = String(status ?? "").trim().toLowerCase();
 
-  // Treat these as moderator-like roles (optional, safe mapping)
   if (
-    s === "moderator" ||
-    s === "host" ||
-    s === "admin" ||
-    s === "start meeting"
-  )
+    normalizedStatus === "moderator" ||
+    normalizedStatus === "host" ||
+    normalizedStatus === "admin" ||
+    normalizedStatus === "start meeting"
+  ) {
     return "moderator";
+  }
 
-  // Backend "joined" => participant
-  if (s === "joined") return "participant";
+  if (normalizedStatus === "joined") {
+    return "participant";
+  }
 
-  // Everything else becomes participant
   return "participant";
 };
 
-/* ======================================
-   VIEW ATTENDANCE COMPONENT
-====================================== */
 const ViewAttendance = () => {
-  const { t } = useTranslation();
   const { meeting_id, identifier } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -261,11 +280,8 @@ const ViewAttendance = () => {
 
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-
-  // ✅ copy feedback
   const [copied, setCopied] = useState(false);
 
-  // Side panel
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTitle, setPanelTitle] = useState("");
   const [panelContent, setPanelContent] = useState("");
@@ -279,48 +295,53 @@ const ViewAttendance = () => {
       try {
         const data = await getAttendanceDetails(meeting_id, identifier, page);
         setAttendanceData(data);
-      } catch (err) {
-        console.error(err);
-        setError(t("attendance.loadParticipantsError"));
+      } catch (fetchError) {
+        console.error(fetchError);
+        setError(ATTENDANCE_TEXT.loadParticipantsError);
       } finally {
         setLoading(false);
       }
     };
 
     if (!meeting_id || !identifier) {
-      setError(t("attendance.missingMeetingIdentifier"));
+      setError(ATTENDANCE_TEXT.missingMeetingIdentifier);
       setLoading(false);
       return;
     }
 
     fetchDetails();
-  }, [meeting_id, identifier, page, t]);
+  }, [meeting_id, identifier, page]);
 
   const attendanceRows = useMemo(
     () => (Array.isArray(attendanceData?.data) ? attendanceData.data : []),
     [attendanceData]
   );
+
   const currentPage =
     Number.isFinite(Number(attendanceData?.current_page)) &&
     Number(attendanceData.current_page) > 0
       ? Number(attendanceData.current_page)
       : page;
+
   const lastPage =
     Number.isFinite(Number(attendanceData?.last_page)) &&
     Number(attendanceData.last_page) > 0
       ? Number(attendanceData.last_page)
       : 1;
+
   const perPage =
     Number.isFinite(Number(attendanceData?.per_page)) &&
     Number(attendanceData.per_page) > 0
       ? Number(attendanceData.per_page)
       : attendanceRows.length || 30;
+
   const rowStart =
-    Number.isFinite(Number(attendanceData?.from)) && Number(attendanceData.from) > 0
+    Number.isFinite(Number(attendanceData?.from)) &&
+    Number(attendanceData.from) > 0
       ? Number(attendanceData.from)
       : attendanceRows.length > 0
-      ? (currentPage - 1) * perPage + 1
-      : 0;
+        ? (currentPage - 1) * perPage + 1
+        : 0;
 
   const openPanel = async (type) => {
     setPanelOpen(true);
@@ -329,64 +350,65 @@ const ViewAttendance = () => {
 
     try {
       let result = "";
+
       if (type === "minutes") {
-        setPanelTitle(t("attendance.minutesOfMeeting"));
+        setPanelTitle(ATTENDANCE_TEXT.minutesOfMeeting);
         result = await getMeetingMinutes(meeting_id);
       }
+
       if (type === "highlights") {
-        setPanelTitle(t("attendance.meetingHighlights"));
+        setPanelTitle(ATTENDANCE_TEXT.meetingHighlights);
         result = await getMeetingHighlights(meeting_id);
       }
+
       if (type === "summary") {
-        setPanelTitle(t("attendance.meetingSummary"));
+        setPanelTitle(ATTENDANCE_TEXT.meetingSummary);
         result = await getMeetingSummary(meeting_id);
       }
 
-      setPanelContent(result || t("attendance.noDataReturned"));
-    } catch (err) {
-      console.error(err);
-      setPanelContent(t("attendance.failedToLoadContent"));
+      setPanelContent(result || ATTENDANCE_TEXT.noDataReturned);
+    } catch (panelError) {
+      console.error(panelError);
+      setPanelContent(ATTENDANCE_TEXT.failedToLoadContent);
     } finally {
       setPanelLoading(false);
     }
   };
 
-  const serialHeader = t("attendance.serialNumber");
-  const nameHeader = t("attendance.name");
-  const emailHeader = t("attendance.email");
-  const statusHeader = t("attendance.status");
-  const dateTimeHeader = t("attendance.dateTime");
+  const serialHeader = ATTENDANCE_TEXT.serialNumber;
+  const nameHeader = ATTENDANCE_TEXT.name;
+  const emailHeader = ATTENDANCE_TEXT.email;
+  const statusHeader = ATTENDANCE_TEXT.status;
+  const dateTimeHeader = ATTENDANCE_TEXT.dateTime;
 
-  // Normalize rows for export + filtering
-  const exportRows = useMemo(() => {
-    return attendanceRows.map((row, i) => ({
-      [serialHeader]: rowStart + i,
-      [nameHeader]: row.name || row.attendee_name || t("generic.notAvailable"),
-      [emailHeader]:
-        row.email || row.attendee_email || t("generic.notAvailable"),
-
-      // ✅ CHANGED: only moderator/participant
-      [statusHeader]:
-        normalizeStatus(row.status) === "moderator"
-          ? t("attendance.moderator")
-          : t("attendance.participant"),
-
-      [dateTimeHeader]: row.created_at
-        ? new Date(row.created_at).toLocaleString()
-        : row.date
-        ? row.date + (row.time ? ` | ${row.time}` : "")
-        : t("generic.notAvailable"),
-    }));
-  }, [
-    attendanceRows,
-    dateTimeHeader,
-    emailHeader,
-    nameHeader,
-    rowStart,
-    serialHeader,
-    statusHeader,
-    t,
-  ]);
+  const exportRows = useMemo(
+    () =>
+      attendanceRows.map((row, index) => ({
+        [serialHeader]: rowStart + index,
+        [nameHeader]:
+          row.name || row.attendee_name || ATTENDANCE_TEXT.notAvailable,
+        [emailHeader]:
+          row.email || row.attendee_email || ATTENDANCE_TEXT.notAvailable,
+        [statusHeader]:
+          normalizeStatus(row.status) === "moderator"
+            ? ATTENDANCE_TEXT.moderator
+            : ATTENDANCE_TEXT.participant,
+        [dateTimeHeader]: row.created_at
+          ? new Date(row.created_at).toLocaleString("en-US")
+          : row.date
+            ? row.date + (row.time ? ` | ${row.time}` : "")
+            : ATTENDANCE_TEXT.notAvailable,
+      })),
+    [
+      attendanceRows,
+      dateTimeHeader,
+      emailHeader,
+      nameHeader,
+      rowStart,
+      serialHeader,
+      statusHeader,
+    ]
+  );
 
   const headers = useMemo(
     () => [serialHeader, nameHeader, emailHeader, statusHeader, dateTimeHeader],
@@ -394,27 +416,33 @@ const ViewAttendance = () => {
   );
 
   const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return exportRows;
-    return exportRows.filter((r) =>
-      Object.values(r).some((v) => String(v).toLowerCase().includes(q))
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return exportRows;
+    }
+
+    return exportRows.filter((row) =>
+      Object.values(row).some((value) =>
+        String(value).toLowerCase().includes(query)
+      )
     );
   }, [exportRows, search]);
 
-  // Actions
   const handleCopy = async () => {
     const tsv = rowsToTSV(headers, filteredRows);
-    const ok = await copyToClipboard(tsv);
+    const wasCopied = await copyToClipboard(tsv);
 
-    if (ok) {
+    if (wasCopied) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } else {
-      toast({
-        description: t("attendance.copyFailed"),
-        variant: "destructive",
-      });
+      return;
     }
+
+    toast({
+      description: ATTENDANCE_TEXT.copyFailed,
+      variant: "destructive",
+    });
   };
 
   const handleCSV = () => {
@@ -427,10 +455,11 @@ const ViewAttendance = () => {
 
   const handleExcel = () => {
     const html = rowsToExcelHTML(
-      `${t("attendance.meetingAttendance")} (${filteredRows.length})`,
+      getMeetingAttendanceTitle(filteredRows.length),
       headers,
       filteredRows
     );
+
     downloadBlob(
       `attendance-${meeting_id || "export"}.xls`,
       new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" })
@@ -439,40 +468,40 @@ const ViewAttendance = () => {
 
   const handlePrint = () => {
     printTableLikePayments(
-      `${t("attendance.meetingAttendance")} (${filteredRows.length})`,
+      getMeetingAttendanceTitle(filteredRows.length),
       headers,
       filteredRows,
-      t("attendance.printFooter"),
+      ATTENDANCE_TEXT.printFooter,
       () =>
         toast({
-          description: t("attendance.printBlocked"),
+          description: ATTENDANCE_TEXT.printBlocked,
           variant: "destructive",
         })
     );
   };
 
-  if (loading)
+  if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <p className="text-sm text-gray-600 dark:text-muted-foreground">
-          {t("generic.loadingParticipants")}
+          {ATTENDANCE_TEXT.loadingParticipants}
         </p>
       </div>
     );
+  }
 
-  if (error)
+  if (error) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <p className="text-red-500 text-sm">{error}</p>
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-sm text-red-500">{error}</p>
       </div>
     );
+  }
 
   return (
     <>
-      {/* MAIN CONTENT */}
       <div className="m-auto flex min-h-screen items-center justify-center px-4 py-20 md:px-6 lg:px-4">
         <div className="w-full max-w-6xl rounded-2xl border bg-white p-8 shadow-sm dark:border-border dark:bg-card">
-          {/* TOP ACTIONS */}
           <div className="mb-6 flex items-center justify-between md:flex-col md:items-stretch md:gap-4 lg:flex-row lg:items-center">
             <div>
               <div className="mb-3 flex gap-3 md:flex-wrap lg:flex-nowrap">
@@ -480,25 +509,25 @@ const ViewAttendance = () => {
                   onClick={handleCopy}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {copied ? t("actions.copied") : t("attendance.copy")}
+                  {copied ? ATTENDANCE_TEXT.copied : ATTENDANCE_TEXT.copy}
                 </button>
                 <button
                   onClick={handleCSV}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {t("attendance.csv")}
+                  {ATTENDANCE_TEXT.csv}
                 </button>
                 <button
                   onClick={handleExcel}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {t("attendance.excel")}
+                  {ATTENDANCE_TEXT.excel}
                 </button>
                 <button
                   onClick={handlePrint}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {t("attendance.print")}
+                  {ATTENDANCE_TEXT.print}
                 </button>
               </div>
 
@@ -507,47 +536,45 @@ const ViewAttendance = () => {
                   onClick={() => openPanel("minutes")}
                   className="rounded-md bg-blue-100 px-4 py-2 text-xs text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                 >
-                  {t("attendance.sendMinutes")}
+                  {ATTENDANCE_TEXT.sendMinutes}
                 </button>
                 <button
                   onClick={() => openPanel("highlights")}
                   className="rounded-md bg-yellow-100 px-4 py-2 text-xs text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
                 >
-                  {t("attendance.sendHighlights")}
+                  {ATTENDANCE_TEXT.sendHighlights}
                 </button>
                 <button
                   onClick={() => openPanel("summary")}
                   className="rounded-md bg-purple-100 px-4 py-2 text-xs text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                 >
-                  {t("attendance.sendSummary")}
+                  {ATTENDANCE_TEXT.sendSummary}
                 </button>
               </div>
             </div>
 
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
               type="text"
-              placeholder={t("attendance.searchPlaceholder")}
+              placeholder={ATTENDANCE_TEXT.searchPlaceholder}
               className="w-64 rounded-full border border-input bg-white px-4 py-2 text-sm shadow-sm dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground md:w-full lg:w-64"
             />
           </div>
 
-          {/* TITLE */}
           <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
             <h2 className="text-base font-semibold">
-              {t("attendance.meetingAttendance")}
+              {ATTENDANCE_TEXT.meetingAttendance}
             </h2>
             <button
               onClick={() => navigate("/attendance")}
               className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
             >
               <ArrowLeft size={16} />
-              {t("attendance.backToAttendance")}
+              {ATTENDANCE_TEXT.backToAttendance}
             </button>
           </div>
 
-          {/* TABLE HEADER */}
           <div className="md:overflow-x-auto lg:overflow-visible">
             <div className="md:min-w-[760px] lg:min-w-0">
               <div className="mb-2 grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm font-medium text-gray-500 dark:text-muted-foreground">
@@ -558,39 +585,35 @@ const ViewAttendance = () => {
                 <span>{dateTimeHeader}</span>
               </div>
 
-              {/* TABLE ROWS */}
               <div className="space-y-3">
                 {filteredRows.length === 0 ? (
                   <div className="py-10 text-center text-sm text-gray-500 dark:text-muted-foreground">
-                    {t("attendance.noParticipants")}
+                    {ATTENDANCE_TEXT.noParticipants}
                   </div>
                 ) : (
-                  filteredRows.map((r, index) => (
+                  filteredRows.map((row, index) => (
                     <div
-                      key={`${r[serialHeader]}-${index}`}
+                      key={`${row[serialHeader]}-${index}`}
                       className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100 dark:bg-background/40 dark:text-foreground dark:hover:bg-muted/70"
                     >
-                      <span>{r[serialHeader]}</span>
-                      <span>{r[nameHeader]}</span>
-
-                      <span className="truncate" title={r[emailHeader]}>
-                        {r[emailHeader]}
+                      <span>{row[serialHeader]}</span>
+                      <span>{row[nameHeader]}</span>
+                      <span className="truncate" title={row[emailHeader]}>
+                        {row[emailHeader]}
                       </span>
-
                       <span>
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                            String(r[statusHeader]).toLowerCase() ===
-                            t("attendance.moderator").toLowerCase()
+                          className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
+                            String(row[statusHeader]).toLowerCase() ===
+                            ATTENDANCE_TEXT.moderator.toLowerCase()
                               ? "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                               : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                           }`}
                         >
-                          {r[statusHeader]}
+                          {row[statusHeader]}
                         </span>
                       </span>
-
-                      <span>{r[dateTimeHeader]}</span>
+                      <span>{row[dateTimeHeader]}</span>
                     </div>
                   ))
                 )}
@@ -604,7 +627,9 @@ const ViewAttendance = () => {
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious
-                      disabled={attendanceData?.prev_page_url === null || currentPage <= 1}
+                      disabled={
+                        attendanceData?.prev_page_url === null || currentPage <= 1
+                      }
                       onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                     />
                   </PaginationItem>
@@ -615,8 +640,13 @@ const ViewAttendance = () => {
                   </PaginationItem>
                   <PaginationItem>
                     <PaginationNext
-                      disabled={attendanceData?.next_page_url == null || currentPage >= lastPage}
-                      onClick={() => setPage((prev) => Math.min(lastPage, prev + 1))}
+                      disabled={
+                        attendanceData?.next_page_url == null ||
+                        currentPage >= lastPage
+                      }
+                      onClick={() =>
+                        setPage((prev) => Math.min(lastPage, prev + 1))
+                      }
                     />
                   </PaginationItem>
                 </PaginationContent>
@@ -626,15 +656,13 @@ const ViewAttendance = () => {
         </div>
       </div>
 
-      {/* OVERLAY */}
       {panelOpen && (
         <div
           onClick={() => setPanelOpen(false)}
-          className="fixed inset-0 bg-black/20 z-40"
+          className="fixed inset-0 z-40 bg-black/20"
         />
       )}
 
-      {/* SIDE PANEL */}
       <div
         className={`fixed right-0 z-50 border-l bg-white shadow-xl transition-transform duration-300 dark:border-border dark:bg-popover
         w-full md:w-[420px] lg:w-[360px]
@@ -644,25 +672,23 @@ const ViewAttendance = () => {
           height: `calc(100vh - ${NAVBAR_HEIGHT}px)`,
         }}
       >
-        {/* HEADER */}
         <div className="flex items-center justify-between border-b px-4 py-3 dark:border-border">
           <h3 className="text-sm font-semibold">{panelTitle}</h3>
           <button
             onClick={() => setPanelOpen(false)}
             className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-accent"
           >
-            ✕
+            X
           </button>
         </div>
 
-        {/* CONTENT */}
-        <div className="p-4 overflow-y-auto h-[calc(100%-56px)]">
+        <div className="h-[calc(100%-56px)] overflow-y-auto p-4">
           {panelLoading ? (
             <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              {t("generic.loadingContent")}
+              {ATTENDANCE_TEXT.loadingContent}
             </p>
           ) : (
-            <div className="rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed whitespace-pre-wrap text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">
+            <div className="whitespace-pre-wrap rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">
               {panelContent}
             </div>
           )}

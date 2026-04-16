@@ -18,24 +18,38 @@ import { updatePassword } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { useTranslation } from "react-i18next";
+
+const PASSWORD_FORM_TEXT = {
+  validation: {
+    currentPasswordMin: "Current password must be at least 6 characters.",
+    newPasswordMin: "New password must be at least 6 characters.",
+    confirmPasswordMin: "Confirm password must be at least 6 characters.",
+    passwordsMustMatch: "Passwords must match.",
+  },
+  currentPassword: "Current Password",
+  enterCurrentPassword: "Enter current password",
+  newPassword: "New Password",
+  enterNewPassword: "Enter new password",
+  confirmNewPassword: "Confirm New Password",
+  confirmNewPasswordPlaceholder: "Confirm new password",
+  save: "Save",
+};
 
 export function PasswordForm() {
-  const { t } = useTranslation();
   const formSchema = z
     .object({
       currentPassword: z.string().min(6, {
-        message: t("auth.validation.currentPasswordMin"),
+        message: PASSWORD_FORM_TEXT.validation.currentPasswordMin,
       }),
       newPassword: z.string().min(6, {
-        message: t("auth.validation.newPasswordMin"),
+        message: PASSWORD_FORM_TEXT.validation.newPasswordMin,
       }),
       confirmPassword: z.string().min(6, {
-        message: t("auth.validation.confirmPasswordMin"),
+        message: PASSWORD_FORM_TEXT.validation.confirmPasswordMin,
       }),
     })
     .refine((data) => data.newPassword === data.confirmPassword, {
-      message: t("auth.validation.passwordsMustMatch"),
+      message: PASSWORD_FORM_TEXT.validation.passwordsMustMatch,
       path: ["confirmPassword"],
     });
   const form = useForm({
@@ -50,7 +64,6 @@ export function PasswordForm() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Visibility states
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -77,18 +90,17 @@ export function PasswordForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        {/* Current Password */}
         <FormField
           control={form.control}
           name="currentPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("profile.currentPassword")}</FormLabel>
+              <FormLabel>{PASSWORD_FORM_TEXT.currentPassword}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showCurrent ? "text" : "password"}
-                    placeholder={t("profile.enterCurrentPassword")}
+                    placeholder={PASSWORD_FORM_TEXT.enterCurrentPassword}
                     {...field}
                   />
                   <button
@@ -105,18 +117,17 @@ export function PasswordForm() {
           )}
         />
 
-        {/* New Password */}
         <FormField
           control={form.control}
           name="newPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("profile.newPassword")}</FormLabel>
+              <FormLabel>{PASSWORD_FORM_TEXT.newPassword}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showNew ? "text" : "password"}
-                    placeholder={t("profile.enterNewPassword")}
+                    placeholder={PASSWORD_FORM_TEXT.enterNewPassword}
                     {...field}
                   />
                   <button
@@ -133,18 +144,19 @@ export function PasswordForm() {
           )}
         />
 
-        {/* Confirm Password */}
         <FormField
           control={form.control}
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("profile.confirmNewPassword")}</FormLabel>
+              <FormLabel>{PASSWORD_FORM_TEXT.confirmNewPassword}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showConfirm ? "text" : "password"}
-                    placeholder={t("profile.confirmNewPasswordPlaceholder")}
+                    placeholder={
+                      PASSWORD_FORM_TEXT.confirmNewPasswordPlaceholder
+                    }
                     {...field}
                   />
                   <button
@@ -162,7 +174,7 @@ export function PasswordForm() {
         />
 
         <Button type="submit" size="lg">
-          {t("actions.save")}
+          {PASSWORD_FORM_TEXT.save}
         </Button>
       </form>
     </Form>

@@ -17,7 +17,6 @@ This repo is frontend-only. It depends on external Konn3ct APIs and related thir
 - Manages pre-registration events and participant exports/reminders.
 - Provides profile editing, password change, and browser session management.
 - Supports light, dark, and system theme preferences from the Settings screen.
-- Supports multilingual UI with locale files for English, French, Spanish, Arabic, and Portuguese.
 
 ## Stack and architecture
 
@@ -28,7 +27,6 @@ This repo is frontend-only. It depends on external Konn3ct APIs and related thir
 - UI: Tailwind CSS, Radix UI primitives, and shadcn-style component scaffolding.
 - Forms/validation: `react-hook-form` and `zod`.
 - Theme system: `ThemeProvider` + `useTheme`, persisted in `localStorage` and resolved against system color-scheme preferences.
-- Localization: `i18next`, `react-i18next`, `i18next-http-backend`, and `i18next-browser-languagedetector`.
 - Integrations:
   - Google OAuth
   - Facebook SDK login
@@ -41,7 +39,6 @@ This repo is frontend-only. It depends on external Konn3ct APIs and related thir
 
 At startup, `src/index.js` wires together:
 
-- the i18n bootstrap in `src/i18n`
 - `ThemeProvider`
 - `GoogleOAuthProvider`
 - `QueryClientProvider`
@@ -76,22 +73,19 @@ The authenticated portion of the app is gated by `IsAuthenticated`, which checks
 - `/events/*`: manage pre-registration events and participant lists.
 - `/history`: invite history plus resend/send invite flows.
 - `/profile`: profile information, password update, and browser sessions.
-- `/settings`: working appearance controls for light/dark/system theme selection, language selection, and placeholder tabs for other future settings sections.
+- `/settings`: working appearance controls for light/dark/system theme selection and placeholder tabs for other future settings sections.
 
 ## Project structure
 
 ```text
 .
-|- public/                  Static HTML, public assets, and locale JSON bundles
-|  `- locales/              Translation files grouped by language
+|- public/                  Static HTML and public assets
 |- src/
 |  |- api/                  API client and feature-specific request modules
 |  |- assets/               Logos, icons, and React icon components
 |  |- components/           Shared app components and UI primitives
 |  |  `- ui/                shadcn/Radix-based UI layer + resilience helpers
-|  |- constants/            Shared configuration constants such as supported languages
 |  |- hooks/                Auth, toast, mobile, and Facebook SDK hooks
-|  |- i18n/                 i18next initialization and document language handling
 |  |- lib/                  Route guard and small utility helpers
 |  |- providers/            Cross-cutting React providers such as theming
 |  `- pages/                Route screens and feature flows
@@ -217,16 +211,12 @@ You can also deploy the compiled `build/` directory behind any static host or re
 - Successful login stores both `user` and `token` in `localStorage`.
 - Protected pages rely on that stored state and the shared API interceptor.
 
-### Theme, localization, and settings flow
+### Theme and settings flow
 
 - Theme state is provided globally by `src/providers/ThemeProvider.jsx`.
 - The selected theme is stored in `localStorage` under `theme`.
 - `system` mode follows `prefers-color-scheme`, and the resolved theme updates the document class and browser theme color.
-- Localization is initialized in `src/i18n/index.js` and loads translation files from `public/locales/<language>/common.json`.
-- Supported languages are defined in `src/constants/languages.js`: English, French, Spanish, Arabic, and Portuguese.
-- Language choice is stored in `localStorage` under `konn3ct-language`, and changing language updates `document.documentElement.lang` and `dir`.
-- Arabic is treated as an RTL language through the shared language constants.
-- The Settings screen currently exposes both appearance and language controls; the other settings tabs are still scaffolding for future work.
+- The Settings screen currently exposes appearance controls; the other settings tabs are still scaffolding for future work.
 
 ### Room and invite flow
 
@@ -261,7 +251,6 @@ You can also deploy the compiled `build/` directory behind any static host or re
 - Event participant routing is partially inconsistent: one route path uses `:reference`, while the nested events route defines `:id`, but `EventParticipants` reads `reference`.
 - The repository currently tracks `.env`, including sensitive-looking values. Those values should be removed from version control and rotated if they are real.
 - Social login is only partially symmetrical across providers. For example, the SSO option is a UI placeholder that only shows an error toast.
-- Localization is now wired into many major screens, but it is not universal yet. For example, `JoinRoom.jsx`, `Referee.jsx`, `Addon.jsx`, and `CreateEvents.jsx` still contain hard-coded English copy.
 - `public/index.html` includes a legacy Google Analytics UA snippet, the Apple sign-in script, and a pre-hydration theme bootstrap script directly in the document.
 
 ## Summary

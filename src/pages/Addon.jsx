@@ -1,7 +1,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PaystackButton } from "react-paystack";
-import { useTranslation } from "react-i18next";
 
 import { getAddons } from "../api/addonsApi";
 import { getUser } from "../api/userApi";
@@ -19,8 +18,20 @@ import {
 } from "../components/ui/table";
 import { useToast } from "../hooks/use-toast";
 
+const STATUS_LABELS = {
+  active: "Active",
+  inactive: "Inactive",
+  running: "Running",
+  ended: "Ended",
+  verified: "Verified",
+  pending: "Pending",
+  success: "Successful",
+  failed: "Failed",
+  inprogress: "In Progress",
+  loading: "Loading...",
+};
+
 const Addon = () => {
-  const { t } = useTranslation();
   const { toast } = useToast();
   const { data, isSuccess, isError } = useQuery({
     queryFn: getAddons,
@@ -41,9 +52,9 @@ const Addon = () => {
     return (
       <section className="page container mx-auto">
         <Card className="p-6">
-          <p className="font-medium">{t("addonsPage.loadErrorTitle")}</p>
+          <p className="font-medium">Unable to load addons right now.</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {t("addonsPage.loadErrorDescription")}
+            Please retry in a moment.
           </p>
         </Card>
       </section>
@@ -69,20 +80,18 @@ const Addon = () => {
     <section className="page container mx-auto">
       <Card className="min-h-full w-full">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
-          <h3 className="text-xl font-medium">{t("addonsPage.title")}</h3>
+          <h3 className="text-xl font-medium">Addon List</h3>
         </div>
         <Separator />
         <Table className="min-w-[760px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead>#</TableHead>
-              <TableHead>{t("addonsPage.columns.service")}</TableHead>
-              <TableHead>{t("addonsPage.columns.description")}</TableHead>
-              <TableHead className="text-center">
-                {t("addonsPage.columns.status")}
-              </TableHead>
-              <TableHead>{t("addonsPage.columns.amount")}</TableHead>
-              <TableHead>{t("addonsPage.columns.action")}</TableHead>
+              <TableHead>Service</TableHead>
+              <TableHead>Service Description</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -123,11 +132,11 @@ const Addon = () => {
                   ],
                 },
                 publicKey,
-                text: t("payments.payNow"),
+                text: "Pay Now",
                 onSuccess: () =>
-                  toast({ description: t("addonsPage.purchaseSuccessful") }),
+                  toast({ description: "Addon purchase successful" }),
                 onClose: () =>
-                  toast({ description: t("payments.paymentCancelled") }),
+                  toast({ description: "Payment Cancelled" }),
               };
 
               return (
@@ -140,9 +149,7 @@ const Addon = () => {
                       variant={statusValue === "active" ? "" : "destructive"}
                     >
                       {statusValue
-                        ? t(`status.${normalizedStatus}`, {
-                            defaultValue: statusValue,
-                          })
+                        ? STATUS_LABELS[normalizedStatus] ?? statusValue
                         : "..."}
                     </Badge>
                   </TableCell>
@@ -158,7 +165,7 @@ const Addon = () => {
             })}
           </TableBody>
         </Table>
-        {addons.length === 0 && <p>{t("generic.tableEmpty")}</p>}
+        {addons.length === 0 && <p>No data available for this table</p>}
       </Card>
     </section>
   );

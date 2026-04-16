@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Copy } from "lucide-react";
-import { useTranslation } from "react-i18next";
 
 import { getUser } from "../api/userApi";
 import { getMeetings, getRooms } from "../api/roomsApi";
@@ -33,8 +32,31 @@ import privateIcon from "../assets/icons/privateIcon.svg";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
 import video from "../assets/icons/video-01.svg";
 
+const DASHBOARD_TEXT = {
+  copied: "Copied to clipboard",
+  noMeetingIdFound: "No Meeting ID found",
+  managePlan: "Manage Plan",
+  totalRoom: "Total room",
+  activeRoom: "Active room",
+  inactiveRoom: "Inactive room",
+  privateRoom: "Private room",
+  gettingStarted: "Let's get you started",
+  schedule: "Schedule",
+  join: "Join",
+  host: "Host",
+  personalMeetingId: "Personal Meeting ID",
+  noMeetingId: "No ID available",
+  meetings: "Meetings",
+  visitMeeting: "Visit Meeting",
+  noUpcomingMeetings: "No upcoming Meetings",
+  roomLabel: (room) => `Room: ${room}`,
+  hostLabel: (host) => `Host: ${host}`,
+  testAudioVideo: "Test Audio and Video",
+  sendInviteTitle: "Send a new Invite",
+  sendInviteDescription: "Send an invite for a scheduled meeting",
+};
+
 const Dashboard = () => {
-  const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [openSchedule, setOpenSchedule] = useState(false);
@@ -63,15 +85,17 @@ const Dashboard = () => {
   const handleCopy = (text) => {
     if (text) {
       navigator.clipboard.writeText(text);
-      toast({ description: t("dashboard.copied") });
+      toast({ description: DASHBOARD_TEXT.copied });
     } else {
-      toast({ description: t("dashboard.noMeetingIdFound") });
+      toast({ description: DASHBOARD_TEXT.noMeetingIdFound });
     }
   };
 
   if (!userQuery.every((query) => query.isSuccess)) {
     return null;
   }
+
+  const currentPlanName = capitalize(userQuery[0]?.data?.user_plan?.name || "");
 
   return (
     <div className="container mx-auto page grid grid-cols-1 gap-5 px-4 sm:px-0 lg:grid-cols-3">
@@ -88,16 +112,14 @@ const Dashboard = () => {
                 {userQuery[0]?.data?.user?.firstname}
               </CardTitle>
               <CardDescription className="text-center font-medium sm:text-left">
-                {t("dashboard.currentPlan", {
-                  plan: capitalize(userQuery[0]?.data?.user_plan?.name || ""),
-                })}
+                {`Your current plan: Konn3ct ${currentPlanName}`}
               </CardDescription>
             </CardHeader>
           </div>
           <CardContent className="mt-6 self-center sm:mt-10">
             <Link to="/payments">
               <Button className="w-full sm:w-auto">
-                {t("dashboard.managePlan")}
+                {DASHBOARD_TEXT.managePlan}
               </Button>
             </Link>
           </CardContent>
@@ -108,12 +130,12 @@ const Dashboard = () => {
             <div className="flex flex-col gap-y-6 sm:gap-y-10">
               <StatCard
                 value={userQuery[1]?.data?.total_rooms ?? 0}
-                name={t("dashboard.totalRoom")}
+                name={DASHBOARD_TEXT.totalRoom}
                 icon={roomsIcon}
               />
               <StatCard
                 value={userQuery[1]?.data?.active_rooms ?? 0}
-                name={t("dashboard.activeRoom")}
+                name={DASHBOARD_TEXT.activeRoom}
                 icon={activeIcon}
               />
             </div>
@@ -127,12 +149,12 @@ const Dashboard = () => {
                   (userQuery[1]?.data?.total_rooms ?? 0) -
                   (userQuery[1]?.data?.active_rooms ?? 0)
                 }
-                name={t("dashboard.inactiveRoom")}
+                name={DASHBOARD_TEXT.inactiveRoom}
                 icon={inactiveIcon}
               />
               <StatCard
                 value={userQuery[1]?.data?.private_rooms ?? 0}
-                name={t("dashboard.privateRoom")}
+                name={DASHBOARD_TEXT.privateRoom}
                 icon={privateIcon}
               />
             </div>
@@ -143,7 +165,7 @@ const Dashboard = () => {
       <div className="flex flex-col gap-10">
         <div className="max-w-full p-1 lg:max-w-[355px]">
           <h2 className="mb-3 text-center font-semibold text-muted-foreground lg:text-left">
-            {t("dashboard.gettingStarted")}
+            {DASHBOARD_TEXT.gettingStarted}
           </h2>
           <div className="h-[200px] rounded-xl border border-border/70 p-1 shadow-sm transition-colors duration-300 sm:h-[188px]">
             <iframe
@@ -178,7 +200,7 @@ const Dashboard = () => {
                   <img src={calendar} alt="schedule" />
                 </div>
               </div>
-              {t("dashboard.schedule")}
+              {DASHBOARD_TEXT.schedule}
             </div>
             <div className="flex flex-col items-center gap-y-4">
               <Link to="/join">
@@ -186,7 +208,7 @@ const Dashboard = () => {
                   <img src={join} alt="join" />
                 </div>
               </Link>
-              {t("dashboard.join")}
+              {DASHBOARD_TEXT.join}
             </div>
             <div className="flex flex-col items-center gap-y-4">
               <Link to="/rooms">
@@ -194,14 +216,15 @@ const Dashboard = () => {
                   <img src={video} alt="host" />
                 </div>
               </Link>
-              {t("dashboard.host")}
+              {DASHBOARD_TEXT.host}
             </div>
           </div>
 
-          <p className="mb-1 font-semibold">{t("dashboard.personalMeetingId")}</p>
+          <p className="mb-1 font-semibold">{DASHBOARD_TEXT.personalMeetingId}</p>
           <div className="flex items-center gap-x-2">
             <p className="max-w-[200px] truncate text-base text-muted-foreground">
-              {userQuery[1]?.data?.personal_room?.id ?? t("dashboard.noMeetingId")}
+              {userQuery[1]?.data?.personal_room?.id ??
+                DASHBOARD_TEXT.noMeetingId}
             </p>
             <Copy
               className="h-5 w-5 cursor-pointer"
@@ -212,15 +235,13 @@ const Dashboard = () => {
 
         <Card>
           <div className="flex flex-col items-start justify-between space-y-2 sm:flex-row sm:items-end sm:space-y-0">
-            <div className="text-2xl font-semibold">
-              {t("dashboard.meetings")}
-            </div>
+            <div className="text-2xl font-semibold">{DASHBOARD_TEXT.meetings}</div>
             <div>
               <Link
                 to="/rooms"
                 className="text-sm font-semibold leading-7 text-[#2D8CFF]"
               >
-                {t("dashboard.visitMeeting")}
+                {DASHBOARD_TEXT.visitMeeting}
               </Link>
             </div>
           </div>
@@ -228,7 +249,7 @@ const Dashboard = () => {
             <div className="my-6 w-full space-y-3 rounded-lg border border-border/70 bg-muted/50 p-3 text-foreground transition-colors duration-300 sm:my-10">
               {userQuery[2]?.data?.data?.length === 0 ? (
                 <p className="text-center font-semibold">
-                  {t("dashboard.noUpcomingMeetings")}
+                  {DASHBOARD_TEXT.noUpcomingMeetings}
                 </p>
               ) : (
                 userQuery[2]?.data?.data?.map((meeting) => (
@@ -238,10 +259,10 @@ const Dashboard = () => {
                   >
                     <p className="text-base font-semibold">{meeting.title}</p>
                     <p className="text-sm text-muted-foreground">
-                      {t("dashboard.roomLabel", { room: meeting.roomname })}
+                      {DASHBOARD_TEXT.roomLabel(meeting.roomname)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {t("dashboard.hostLabel", { host: meeting.hostname })}
+                      {DASHBOARD_TEXT.hostLabel(meeting.hostname)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {meeting.date} {" \u2022 "} {meeting.time}
@@ -252,7 +273,7 @@ const Dashboard = () => {
             </div>
 
             <Button variant="outline" className="w-full sm:w-auto">
-              {t("dashboard.testAudioVideo")}
+              {DASHBOARD_TEXT.testAudioVideo}
             </Button>
           </div>
         </Card>
@@ -260,8 +281,10 @@ const Dashboard = () => {
 
       <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
         <DialogContent className="top-[50%] h-[90%] w-[90%] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-3xl lg:w-[50%]">
-          <DialogTitle>{t("dashboard.sendInviteTitle")}</DialogTitle>
-          <DialogDescription>{t("dashboard.sendInviteDescription")}</DialogDescription>
+          <DialogTitle>{DASHBOARD_TEXT.sendInviteTitle}</DialogTitle>
+          <DialogDescription>
+            {DASHBOARD_TEXT.sendInviteDescription}
+          </DialogDescription>
           <MeetingForm setOpenDialog={setOpenSchedule} />
         </DialogContent>
       </Dialog>

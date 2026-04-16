@@ -1,31 +1,67 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 
 import { createPreRegEvent, getRooms } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
 
-const getTimezones = () => {
-  return Intl.supportedValuesOf("timeZone").map((tz) => tz);
+const EVENT_CREATE_TEXT = {
+  title: "Create Event",
+  description: "Fill the form to create an event instantly",
+  loadingRooms: "Loading rooms...",
+  logoRequired: "Logo upload is required.",
+  success: "Event created successfully!",
+  failure: "Event creation failed. Please check your inputs.",
+  failureRetry: "Failed to create event. Please try again.",
+  submitting: "Submitting...",
+  cancel: "Cancel",
+  submit: "Submit",
+  fields: {
+    title: "Event Title",
+    host: "Host Name",
+    room: "Select Room",
+    date: "Event Date",
+    time: "Event Time",
+    type: "Event Type",
+    currency: "Currency",
+    amount: "Amount",
+    timezone: "Time Zone",
+    about: "About the event",
+    reminder: "Set Reminder",
+    logo: "Upload a logo",
+  },
+  placeholders: {
+    title: "Enter your event title",
+    host: "Enter host name",
+    room: "Select Room",
+    amount: "6000",
+    timezone: "Select timezone",
+    about: "Write a short description about your event",
+    reminder: "Select reminder",
+  },
+  typeOptions: {
+    free: "Free",
+    paid: "Paid",
+  },
+  reminderOptions: [
+    { value: "2", label: "2 days before" },
+    { value: "1", label: "1 day before" },
+    { value: "0.5", label: "12 hours before" },
+  ],
+  fileUpload: {
+    selectOrDrop: "Select a file or drop here",
+    supportedFormats: "JPG, PNG, or PDF (max 10MB)",
+    recommended: "Recommended: 80px by 80px, PNG format",
+  },
 };
 
+const getTimezones = () =>
+  Intl.supportedValuesOf("timeZone").map((timezone) => timezone);
+const getRoomFallbackLabel = (id) => `Room ${id}`;
+const getSelectedFileLabel = (name) => `Selected: ${name}`;
+
 const CreateEvents = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  const defaultReminderOptions = [
-    { value: "2", label: t("events.create.reminder.twoDays") },
-    { value: "1", label: t("events.create.reminder.oneDay") },
-    { value: "0.5", label: t("events.create.reminder.twelveHours") },
-  ];
-  const rawReminderOptions = t("events.create.reminderOptions", {
-    returnObjects: true,
-    defaultValue: defaultReminderOptions,
-  });
-  const reminderOptions = Array.isArray(rawReminderOptions)
-    ? rawReminderOptions
-    : defaultReminderOptions;
 
   const [formData, setFormData] = useState({
     title: "",
@@ -57,15 +93,19 @@ const CreateEvents = () => {
 
     const loadRooms = async () => {
       try {
-        const res = await getRooms();
-        let list = res;
+        const response = await getRooms();
+        let list = response;
 
         if (!Array.isArray(list)) {
           if (list && typeof list === "object") {
-            if (Array.isArray(list.data)) list = list.data;
-            else if (Array.isArray(list.rooms)) list = list.rooms;
-            else {
-              const values = Object.values(list).filter((v) => Array.isArray(v));
+            if (Array.isArray(list.data)) {
+              list = list.data;
+            } else if (Array.isArray(list.rooms)) {
+              list = list.rooms;
+            } else {
+              const values = Object.values(list).filter((value) =>
+                Array.isArray(value)
+              );
               list = values.length > 0 ? values[0] : [];
             }
           } else {
@@ -73,12 +113,16 @@ const CreateEvents = () => {
           }
         }
 
-        if (!cancelled) setRooms(list);
-      } catch (err) {
-        console.error("Failed to load rooms:", err);
+        if (!cancelled) {
+          setRooms(list);
+        }
+      } catch (error) {
+        console.error("Failed to load rooms:", error);
         setRooms([]);
       } finally {
-        if (!cancelled) setRoomLoading(false);
+        if (!cancelled) {
+          setRoomLoading(false);
+        }
       }
     };
 
@@ -89,36 +133,37 @@ const CreateEvents = () => {
     };
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((previousData) => ({ ...previousData, [name]: value }));
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+  const handleFileChange = (event) => {
+    const file =
+      event.target.files && event.target.files[0] ? event.target.files[0] : null;
     setLogoError("");
-    setFormData((prev) => ({ ...prev, logo: file }));
+    setFormData((previousData) => ({ ...previousData, logo: file }));
   };
 
-  const handleFileDragOver = (e) => {
-    e.preventDefault();
+  const handleFileDragOver = (event) => {
+    event.preventDefault();
   };
 
-  const handleFileDrop = (e) => {
-    e.preventDefault();
-    const file = e.dataTransfer?.files?.[0] || null;
+  const handleFileDrop = (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer?.files?.[0] || null;
 
     if (file) {
       setLogoError("");
-      setFormData((prev) => ({ ...prev, logo: file }));
+      setFormData((previousData) => ({ ...previousData, logo: file }));
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
     if (!formData.logo) {
-      setLogoError(t("events.create.logoRequired"));
+      setLogoError(EVENT_CREATE_TEXT.logoRequired);
       return;
     }
 
@@ -141,21 +186,21 @@ const CreateEvents = () => {
       data.append("currency", formData.currency);
       data.append("amount", formData.free === "1" ? 0 : formData.amount);
 
-      const res = await createPreRegEvent(data);
+      const response = await createPreRegEvent(data);
 
-      if (res?.success) {
-        toast({ description: t("events.create.success") });
+      if (response?.success) {
+        toast({ description: EVENT_CREATE_TEXT.success });
         navigate("/events");
       } else {
         toast({
-          description: res?.message || t("events.create.failure"),
+          description: response?.message || EVENT_CREATE_TEXT.failure,
           variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Error creating event:", error);
       toast({
-        description: t("events.create.failureRetry"),
+        description: EVENT_CREATE_TEXT.failureRetry,
         variant: "destructive",
       });
     } finally {
@@ -185,10 +230,10 @@ const CreateEvents = () => {
           </div>
           <div>
             <h2 className="text-2xl font-semibold text-gray-800 dark:text-foreground">
-              {t("events.create.title")}
+              {EVENT_CREATE_TEXT.title}
             </h2>
             <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              {t("events.create.description")}
+              {EVENT_CREATE_TEXT.description}
             </p>
           </div>
         </div>
@@ -197,28 +242,28 @@ const CreateEvents = () => {
           <div className="max-w-5xl">
             <div>
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.title")}
+                {EVENT_CREATE_TEXT.fields.title}
               </label>
               <input
                 type="text"
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                placeholder={t("events.create.placeholders.title")}
+                placeholder={EVENT_CREATE_TEXT.placeholders.title}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="mt-4">
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.host")}
+                {EVENT_CREATE_TEXT.fields.host}
               </label>
               <input
                 type="text"
                 name="host"
                 value={formData.host}
                 onChange={handleChange}
-                placeholder={t("events.create.placeholders.host")}
+                placeholder={EVENT_CREATE_TEXT.placeholders.host}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
@@ -226,7 +271,7 @@ const CreateEvents = () => {
             <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.room")}
+                  {EVENT_CREATE_TEXT.fields.room}
                 </label>
                 <select
                   name="room"
@@ -237,8 +282,8 @@ const CreateEvents = () => {
                 >
                   <option value="">
                     {roomLoading
-                      ? t("events.create.loadingRooms")
-                      : t("events.create.placeholders.room")}
+                      ? EVENT_CREATE_TEXT.loadingRooms
+                      : EVENT_CREATE_TEXT.placeholders.room}
                   </option>
                   {Array.isArray(rooms) &&
                     rooms.map((room) => (
@@ -246,7 +291,7 @@ const CreateEvents = () => {
                         {room.room_name ||
                           room.name ||
                           room.label ||
-                          t("events.create.roomFallback", { id: room.id })}
+                          getRoomFallbackLabel(room.id)}
                       </option>
                     ))}
                 </select>
@@ -254,7 +299,7 @@ const CreateEvents = () => {
 
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.date")}
+                  {EVENT_CREATE_TEXT.fields.date}
                 </label>
                 <input
                   type="date"
@@ -269,7 +314,7 @@ const CreateEvents = () => {
             <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.time")}
+                  {EVENT_CREATE_TEXT.fields.time}
                 </label>
                 <input
                   type="time"
@@ -283,7 +328,7 @@ const CreateEvents = () => {
               <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {t("events.create.fields.type")}
+                    {EVENT_CREATE_TEXT.fields.type}
                   </label>
                   <select
                     name="free"
@@ -291,14 +336,18 @@ const CreateEvents = () => {
                     onChange={handleChange}
                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground"
                   >
-                    <option value="1">{t("events.create.typeOptions.free")}</option>
-                    <option value="0">{t("events.create.typeOptions.paid")}</option>
+                    <option value="1">
+                      {EVENT_CREATE_TEXT.typeOptions.free}
+                    </option>
+                    <option value="0">
+                      {EVENT_CREATE_TEXT.typeOptions.paid}
+                    </option>
                   </select>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {t("events.create.fields.currency")}
+                    {EVENT_CREATE_TEXT.fields.currency}
                   </label>
                   <select
                     name="currency"
@@ -314,7 +363,7 @@ const CreateEvents = () => {
 
                 <div>
                   <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {t("events.create.fields.amount")}
+                    {EVENT_CREATE_TEXT.fields.amount}
                   </label>
                   <input
                     type="number"
@@ -322,7 +371,7 @@ const CreateEvents = () => {
                     value={formData.amount}
                     onChange={handleChange}
                     disabled={formData.free === "1"}
-                    placeholder={t("events.create.placeholders.amount")}
+                    placeholder={EVENT_CREATE_TEXT.placeholders.amount}
                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
@@ -330,7 +379,7 @@ const CreateEvents = () => {
 
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.timezone")}
+                  {EVENT_CREATE_TEXT.fields.timezone}
                 </label>
                 <select
                   name="timezone"
@@ -339,11 +388,11 @@ const CreateEvents = () => {
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 >
                   <option value="">
-                    {t("events.create.placeholders.timezone")}
+                    {EVENT_CREATE_TEXT.placeholders.timezone}
                   </option>
-                  {timezones.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz}
+                  {timezones.map((timezone) => (
+                    <option key={timezone} value={timezone}>
+                      {timezone}
                     </option>
                   ))}
                 </select>
@@ -352,21 +401,21 @@ const CreateEvents = () => {
 
             <div className="mt-4">
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.about")}
+                {EVENT_CREATE_TEXT.fields.about}
               </label>
               <textarea
                 name="about"
                 rows="4"
                 value={formData.about}
                 onChange={handleChange}
-                placeholder={t("events.create.placeholders.about")}
+                placeholder={EVENT_CREATE_TEXT.placeholders.about}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="mt-4">
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.reminder")}
+                {EVENT_CREATE_TEXT.fields.reminder}
               </label>
               <select
                 name="reminder"
@@ -374,8 +423,10 @@ const CreateEvents = () => {
                 onChange={handleChange}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
               >
-                <option value="">{t("events.create.placeholders.reminder")}</option>
-                {reminderOptions.map((option) => (
+                <option value="">
+                  {EVENT_CREATE_TEXT.placeholders.reminder}
+                </option>
+                {EVENT_CREATE_TEXT.reminderOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -385,7 +436,7 @@ const CreateEvents = () => {
 
             <div className="mt-4">
               <label className="mb-2 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.logo")} *
+                {EVENT_CREATE_TEXT.fields.logo} *
               </label>
               <div
                 className={`rounded-lg border-2 border-dashed p-6 text-center ${
@@ -409,25 +460,23 @@ const CreateEvents = () => {
                   className="cursor-pointer text-sm text-gray-500 dark:text-muted-foreground"
                 >
                   <span className="mb-1 block">
-                    {t("events.create.fileUpload.selectOrDrop")}
+                    {EVENT_CREATE_TEXT.fileUpload.selectOrDrop}
                   </span>
                   <span className="text-xs text-gray-400 dark:text-muted-foreground/80">
-                    {t("events.create.fileUpload.supportedFormats")}
+                    {EVENT_CREATE_TEXT.fileUpload.supportedFormats}
                   </span>
                 </label>
               </div>
               {formData.logo ? (
                 <p className="mt-2 text-xs text-gray-500 dark:text-muted-foreground">
-                  {t("events.create.fileUpload.selectedFile", {
-                    name: formData.logo.name,
-                  })}
+                  {getSelectedFileLabel(formData.logo.name)}
                 </p>
               ) : null}
               {logoError ? (
                 <p className="mt-2 text-xs text-red-500">{logoError}</p>
               ) : null}
               <p className="mt-1 text-xs text-gray-400 dark:text-muted-foreground/80">
-                {t("events.create.fileUpload.recommended")}
+                {EVENT_CREATE_TEXT.fileUpload.recommended}
               </p>
             </div>
 
@@ -437,7 +486,7 @@ const CreateEvents = () => {
                 onClick={() => navigate("/events")}
                 className="rounded-lg bg-red-100 px-5 py-2 text-red-600 transition hover:bg-red-200 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
               >
-                {t("actions.cancel")}
+                {EVENT_CREATE_TEXT.cancel}
               </button>
               <button
                 type="submit"
@@ -446,7 +495,7 @@ const CreateEvents = () => {
                   loading ? "bg-green-400" : "bg-green-600 hover:bg-green-700"
                 }`}
               >
-                {loading ? t("events.create.submitting") : t("actions.submit")}
+                {loading ? EVENT_CREATE_TEXT.submitting : EVENT_CREATE_TEXT.submit}
               </button>
             </div>
           </div>

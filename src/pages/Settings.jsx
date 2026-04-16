@@ -1,6 +1,5 @@
 import React from "react";
 import { Monitor, Moon, SunMedium } from "lucide-react";
-import { useTranslation } from "react-i18next";
 
 import {
   Card,
@@ -19,6 +18,56 @@ import {
 import useTheme from "../hooks/useTheme";
 import { capitalize, cn } from "../lib/utils";
 
+const SETTINGS_TEXT = {
+  title: "Settings",
+  description:
+    "Manage your dashboard preferences and keep your workspace comfortable.",
+  tabs: {
+    general: "General",
+    meeting: "Meeting",
+    recording: "Recording",
+    audioConference: "Audio Conference",
+    whiteBoard: "White Board",
+    scheduling: "Scheduling",
+  },
+  appearance: {
+    title: "Appearance",
+    description:
+      "Choose how the dashboard looks. Select light mode, dark mode, or sync with your system.",
+    activeTheme: "Active theme",
+    systemTheme: (mode) => `System (${mode})`,
+    currentlyFollowing: (mode) =>
+      `Currently following your device and resolving to ${mode} mode.`,
+  },
+  additionalSettings:
+    "Additional dashboard settings can expand here later without changing how theme state is stored or applied.",
+  placeholders: {
+    meeting: "Meeting-related controls will appear here in a future update.",
+    recording: "Recording preferences will appear here in a future update.",
+    audioConference:
+      "Audio conference preferences will appear here in a future update.",
+    whiteBoard: "White board preferences will appear here in a future update.",
+    scheduling: "Scheduling preferences will appear here in a future update.",
+  },
+  themes: {
+    light: {
+      label: "Light",
+      description:
+        "Use a brighter interface with crisp surfaces and higher daylight visibility.",
+    },
+    dark: {
+      label: "Dark",
+      description:
+        "Reduce glare with deeper surfaces that are easier on the eyes at night.",
+    },
+    system: {
+      label: "System",
+      description:
+        "Sync automatically with your device preference and react to system changes.",
+    },
+  },
+};
+
 const SettingsPlaceholder = ({ title, description }) => {
   return (
     <Card className="border-dashed border-border/70 bg-muted/20 shadow-none">
@@ -31,28 +80,27 @@ const SettingsPlaceholder = ({ title, description }) => {
 };
 
 const Settings = () => {
-  const { t } = useTranslation();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const systemModeLabel = capitalize(resolvedTheme);
 
   const themeOptions = [
     {
       value: "light",
-      label: t("themes.light.label"),
+      label: SETTINGS_TEXT.themes.light.label,
       icon: SunMedium,
-      description: t("themes.light.description"),
+      description: SETTINGS_TEXT.themes.light.description,
     },
     {
       value: "dark",
-      label: t("themes.dark.label"),
+      label: SETTINGS_TEXT.themes.dark.label,
       icon: Moon,
-      description: t("themes.dark.description"),
+      description: SETTINGS_TEXT.themes.dark.description,
     },
     {
       value: "system",
-      label: t("themes.system.label"),
+      label: SETTINGS_TEXT.themes.system.label,
       icon: Monitor,
-      description: t("themes.system.description"),
+      description: SETTINGS_TEXT.themes.system.description,
     },
   ];
 
@@ -61,9 +109,9 @@ const Settings = () => {
       <Card className="h-full overflow-hidden border-border/70 bg-card/95 px-0 py-0 shadow-sm transition-colors duration-300">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:px-8 lg:pt-10">
           <div>
-            <h3 className="text-xl font-semibold">{t("settings.title")}</h3>
+            <h3 className="text-xl font-semibold">{SETTINGS_TEXT.title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t("settings.description")}
+              {SETTINGS_TEXT.description}
             </p>
           </div>
         </div>
@@ -75,37 +123,37 @@ const Settings = () => {
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="general"
               >
-                {t("settings.tabs.general")}
+                {SETTINGS_TEXT.tabs.general}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="meeting"
               >
-                {t("settings.tabs.meeting")}
+                {SETTINGS_TEXT.tabs.meeting}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="recording"
               >
-                {t("settings.tabs.recording")}
+                {SETTINGS_TEXT.tabs.recording}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="audio"
               >
-                {t("settings.tabs.audioConference")}
+                {SETTINGS_TEXT.tabs.audioConference}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="whiteBoard"
               >
-                {t("settings.tabs.whiteBoard")}
+                {SETTINGS_TEXT.tabs.whiteBoard}
               </TabsTrigger>
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="scheduling"
               >
-                {t("settings.tabs.scheduling")}
+                {SETTINGS_TEXT.tabs.scheduling}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -117,20 +165,20 @@ const Settings = () => {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <CardTitle className="text-xl">
-                        {t("settings.appearance.title")}
+                        {SETTINGS_TEXT.appearance.title}
                       </CardTitle>
                       <CardDescription className="max-w-2xl text-sm leading-6">
-                        {t("settings.appearance.description")}
+                        {SETTINGS_TEXT.appearance.description}
                       </CardDescription>
                     </div>
                     <div className="inline-flex items-center rounded-full border border-border bg-muted/60 px-4 py-2 text-sm text-muted-foreground">
-                      {t("settings.appearance.activeTheme")}
+                      {SETTINGS_TEXT.appearance.activeTheme}
                       :&nbsp;
                       <span className="font-medium text-foreground">
                         {theme === "system"
-                          ? t("settings.appearance.systemTheme", {
-                              mode: systemModeLabel,
-                            })
+                          ? SETTINGS_TEXT.appearance.systemTheme(
+                              systemModeLabel
+                            )
                           : capitalize(theme)}
                       </span>
                     </div>
@@ -199,9 +247,9 @@ const Settings = () => {
                         </div>
                         {value === "system" && (
                           <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                            {t("settings.appearance.currentlyFollowing", {
-                              mode: systemModeLabel.toLowerCase(),
-                            })}
+                            {SETTINGS_TEXT.appearance.currentlyFollowing(
+                              systemModeLabel.toLowerCase()
+                            )}
                           </p>
                         )}
                       </label>
@@ -213,12 +261,7 @@ const Settings = () => {
               <Card className="border-dashed border-border/70 bg-muted/20 shadow-none">
                 <CardContent className="space-y-2 p-5 sm:p-6">
                   <p className="text-sm text-muted-foreground">
-                    {t("settings.additionalSettings")}
-                  </p>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    The app stays in English. Use your browser&apos;s built-in
-                    page translation if you want to view it in another
-                    language.
+                    {SETTINGS_TEXT.additionalSettings}
                   </p>
                 </CardContent>
               </Card>
@@ -229,8 +272,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description={t("settings.placeholders.meeting")}
-              title={t("settings.tabs.meeting")}
+              description={SETTINGS_TEXT.placeholders.meeting}
+              title={SETTINGS_TEXT.tabs.meeting}
             />
           </TabsContent>
           <TabsContent
@@ -238,8 +281,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description={t("settings.placeholders.recording")}
-              title={t("settings.tabs.recording")}
+              description={SETTINGS_TEXT.placeholders.recording}
+              title={SETTINGS_TEXT.tabs.recording}
             />
           </TabsContent>
           <TabsContent
@@ -247,8 +290,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description={t("settings.placeholders.audioConference")}
-              title={t("settings.tabs.audioConference")}
+              description={SETTINGS_TEXT.placeholders.audioConference}
+              title={SETTINGS_TEXT.tabs.audioConference}
             />
           </TabsContent>
           <TabsContent
@@ -256,8 +299,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description={t("settings.placeholders.whiteBoard")}
-              title={t("settings.tabs.whiteBoard")}
+              description={SETTINGS_TEXT.placeholders.whiteBoard}
+              title={SETTINGS_TEXT.tabs.whiteBoard}
             />
           </TabsContent>
           <TabsContent
@@ -265,8 +308,8 @@ const Settings = () => {
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
           >
             <SettingsPlaceholder
-              description={t("settings.placeholders.scheduling")}
-              title={t("settings.tabs.scheduling")}
+              description={SETTINGS_TEXT.placeholders.scheduling}
+              title={SETTINGS_TEXT.tabs.scheduling}
             />
           </TabsContent>
         </Tabs>

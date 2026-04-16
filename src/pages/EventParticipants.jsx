@@ -1,9 +1,31 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 
 import { getPreRegParticipants, sendReminder } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
+
+const EVENT_PARTICIPANTS_TEXT = {
+  copy: "Copy",
+  print: "Print",
+  sendReminderNow: "Send Reminder Now",
+  reminderSent: "Reminder sent.",
+  reminderFailed: "Failed to send reminder.",
+  copySuccess: "Copied to clipboard.",
+  copyFailed: "Copy failed (browser blocked clipboard).",
+  csvDownloaded: "CSV downloaded.",
+  excelDownloaded: "Excel downloaded.",
+  searchPlaceholder: "Search",
+  loading: "Loading...",
+  noParticipants: "No participants found.",
+  back: "Back",
+  titlePrefix: "Pre-Registered Users",
+  headers: ["S/N", "Name", "Email", "Phone", "Date & Time"],
+};
+
+const getParticipantsTitle = (count) =>
+  `${EVENT_PARTICIPANTS_TEXT.titlePrefix} (${count})`;
+
+const getShowingText = (from, to, total) => `Showing ${from}-${to} of ${total}`;
 
 function escapeHtml(str = "") {
   return String(str)
@@ -27,7 +49,9 @@ function downloadBlob(filename, blob) {
 
 function rowsToTSV(headers, rows) {
   const headerLine = headers.join("\t");
-  const lines = rows.map((row) => headers.map((header) => row[header] ?? "").join("\t"));
+  const lines = rows.map((row) =>
+    headers.map((header) => row[header] ?? "").join("\t")
+  );
   return [headerLine, ...lines].join("\n");
 }
 
@@ -83,7 +107,9 @@ function printHTML(title, html) {
     "_blank",
     "noopener,noreferrer,width=900,height=700"
   );
-  if (!printWindow) return;
+  if (!printWindow) {
+    return;
+  }
 
   printWindow.document.open();
   printWindow.document.write(html);
@@ -97,7 +123,6 @@ function printHTML(title, html) {
 }
 
 const EventParticipants = () => {
-  const { t, i18n } = useTranslation();
   const { reference } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -107,34 +132,37 @@ const EventParticipants = () => {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
+  const headers = EVENT_PARTICIPANTS_TEXT.headers;
 
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
         setLoading(true);
-        const res = await getPreRegParticipants(reference);
-        setParticipants(res?.users || []);
-      } catch (err) {
-        console.error("Error fetching participants:", err);
+        const response = await getPreRegParticipants(reference);
+        setParticipants(response?.users || []);
+      } catch (error) {
+        console.error("Error fetching participants:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    if (reference) fetchParticipants();
+    if (reference) {
+      fetchParticipants();
+    }
   }, [reference]);
 
   const sendReminderNow = async () => {
     try {
       setLoading(true);
-      const res = await sendReminder(reference);
+      const response = await sendReminder(reference);
       toast({
-        description: res?.message || t("events.participants.reminderSent"),
+        description: response?.message || EVENT_PARTICIPANTS_TEXT.reminderSent,
       });
-    } catch (err) {
-      console.error("Error sending reminder:", err);
+    } catch (error) {
+      console.error("Error sending reminder:", error);
       toast({
-        description: t("events.participants.reminderFailed"),
+        description: EVENT_PARTICIPANTS_TEXT.reminderFailed,
         variant: "destructive",
       });
     } finally {
@@ -142,37 +170,25 @@ const EventParticipants = () => {
     }
   };
 
-  const defaultHeaders = [
-    t("events.participants.columns.serialNumber"),
-    t("events.participants.columns.name"),
-    t("events.participants.columns.email"),
-    t("events.participants.columns.phone"),
-    t("events.participants.columns.dateTime"),
-  ];
-  const rawHeaders = t("events.participants.exportHeaders", {
-    returnObjects: true,
-    defaultValue: defaultHeaders,
-  });
-  const headers =
-    Array.isArray(rawHeaders) && rawHeaders.length === defaultHeaders.length
-      ? rawHeaders
-      : defaultHeaders;
-
-  const exportRows = useMemo(() => {
-    return (participants || []).map((participant, index) => ({
-      [headers[0]]: index + 1,
-      [headers[1]]: participant?.name || "-",
-      [headers[2]]: participant?.email || "-",
-      [headers[3]]: participant?.phone || "-",
-      [headers[4]]: participant?.created_at
-        ? new Date(participant.created_at).toLocaleString(i18n.language)
-        : "-",
-    }));
-  }, [headers, i18n.language, participants]);
+  const exportRows = useMemo(
+    () =>
+      (participants || []).map((participant, index) => ({
+        [headers[0]]: index + 1,
+        [headers[1]]: participant?.name || "-",
+        [headers[2]]: participant?.email || "-",
+        [headers[3]]: participant?.phone || "-",
+        [headers[4]]: participant?.created_at
+          ? new Date(participant.created_at).toLocaleString("en-US")
+          : "-",
+      })),
+    [headers, participants]
+  );
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return exportRows;
+    if (!query) {
+      return exportRows;
+    }
 
     return exportRows.filter((row) =>
       Object.values(row).some((value) =>
@@ -196,11 +212,11 @@ const EventParticipants = () => {
     try {
       const tsv = rowsToTSV(headers, filteredRows);
       await navigator.clipboard.writeText(tsv);
-      toast({ description: t("events.participants.copySuccess") });
+      toast({ description: EVENT_PARTICIPANTS_TEXT.copySuccess });
     } catch (error) {
       console.error(error);
       toast({
-        description: t("events.participants.copyFailed"),
+        description: EVENT_PARTICIPANTS_TEXT.copyFailed,
         variant: "destructive",
       });
     }
@@ -212,12 +228,12 @@ const EventParticipants = () => {
       `participants-${reference || "export"}.csv`,
       new Blob([csv], { type: "text/csv;charset=utf-8" })
     );
-    toast({ description: t("events.participants.csvDownloaded") });
+    toast({ description: EVENT_PARTICIPANTS_TEXT.csvDownloaded });
   };
 
   const handleExcel = () => {
     const html = rowsToExcelHTML(
-      t("events.participants.exportTitle", { count: filteredRows.length }),
+      getParticipantsTitle(filteredRows.length),
       headers,
       filteredRows
     );
@@ -227,16 +243,16 @@ const EventParticipants = () => {
         type: "application/vnd.ms-excel;charset=utf-8",
       })
     );
-    toast({ description: t("events.participants.excelDownloaded") });
+    toast({ description: EVENT_PARTICIPANTS_TEXT.excelDownloaded });
   };
 
   const handlePrint = () => {
     const html = rowsToExcelHTML(
-      t("events.participants.exportTitle", { count: filteredRows.length }),
+      getParticipantsTitle(filteredRows.length),
       headers,
       filteredRows
     );
-    printHTML(t("actions.print"), html);
+    printHTML(EVENT_PARTICIPANTS_TEXT.print, html);
   };
 
   return (
@@ -247,7 +263,7 @@ const EventParticipants = () => {
             onClick={handleCopy}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
-            {t("actions.copy")}
+            {EVENT_PARTICIPANTS_TEXT.copy}
           </button>
           <button
             onClick={handleCSV}
@@ -265,7 +281,7 @@ const EventParticipants = () => {
             onClick={handlePrint}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
-            {t("actions.print")}
+            {EVENT_PARTICIPANTS_TEXT.print}
           </button>
         </div>
 
@@ -273,32 +289,32 @@ const EventParticipants = () => {
           onClick={sendReminderNow}
           className="rounded-full bg-[#227451] px-5 py-2 text-sm text-white transition-all hover:bg-green-700"
         >
-          {t("events.participants.sendReminderNow")}
+          {EVENT_PARTICIPANTS_TEXT.sendReminderNow}
         </button>
       </div>
 
       <div className="mb-5">
         <input
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+          onChange={(event) => {
+            setSearch(event.target.value);
             setCurrentPage(1);
           }}
           type="text"
-          placeholder={t("generic.search")}
+          placeholder={EVENT_PARTICIPANTS_TEXT.searchPlaceholder}
           className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring sm:w-64 md:w-full lg:w-64"
         />
       </div>
 
       <div className="mb-3 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
         <h2 className="text-md font-semibold text-gray-800 dark:text-foreground">
-          {t("events.participants.title", { count: filteredRows.length })}
+          {getParticipantsTitle(filteredRows.length)}
         </h2>
         <button
           onClick={() => navigate("/events")}
           className="rounded-full bg-[#227451] px-4 py-2 text-xs text-white transition-all hover:bg-green-700"
         >
-          {t("actions.back")}
+          {EVENT_PARTICIPANTS_TEXT.back}
         </button>
       </div>
 
@@ -306,21 +322,11 @@ const EventParticipants = () => {
         <table className="min-w-[720px] overflow-hidden rounded-xl border border-gray-100 dark:border-border lg:min-w-full">
           <thead className="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-muted/70 dark:text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 text-left font-medium">
-                {t("events.participants.columns.serialNumber")}
-              </th>
-              <th className="px-4 py-3 text-left font-medium">
-                {t("events.participants.columns.name")}
-              </th>
-              <th className="px-4 py-3 text-left font-medium">
-                {t("events.participants.columns.email")}
-              </th>
-              <th className="px-4 py-3 text-left font-medium">
-                {t("events.participants.columns.phone")}
-              </th>
-              <th className="px-4 py-3 text-left font-medium">
-                {t("events.participants.columns.dateTime")}
-              </th>
+              <th className="px-4 py-3 text-left font-medium">{headers[0]}</th>
+              <th className="px-4 py-3 text-left font-medium">{headers[1]}</th>
+              <th className="px-4 py-3 text-left font-medium">{headers[2]}</th>
+              <th className="px-4 py-3 text-left font-medium">{headers[3]}</th>
+              <th className="px-4 py-3 text-left font-medium">{headers[4]}</th>
             </tr>
           </thead>
 
@@ -331,7 +337,7 @@ const EventParticipants = () => {
                   colSpan="5"
                   className="py-6 text-center text-gray-500 dark:text-muted-foreground"
                 >
-                  {t("generic.loading")}
+                  {EVENT_PARTICIPANTS_TEXT.loading}
                 </td>
               </tr>
             ) : paginatedRows.length > 0 ? (
@@ -357,7 +363,7 @@ const EventParticipants = () => {
                   colSpan="5"
                   className="py-6 text-center text-gray-500 dark:text-muted-foreground"
                 >
-                  {t("events.participants.noParticipants")}
+                  {EVENT_PARTICIPANTS_TEXT.noParticipants}
                 </td>
               </tr>
             )}
@@ -366,13 +372,7 @@ const EventParticipants = () => {
       </div>
 
       <div className="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-muted-foreground md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-        <span>
-          {t("events.participants.showing", {
-            from: showingFrom,
-            to: showingTo,
-            total: filteredRows.length,
-          })}
-        </span>
+        <span>{getShowingText(showingFrom, showingTo, filteredRows.length)}</span>
         <div className="flex space-x-1">
           <button
             type="button"

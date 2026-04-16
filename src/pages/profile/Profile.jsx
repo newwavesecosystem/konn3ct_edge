@@ -5,11 +5,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "../../components/ui/tabs";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
+import { Card, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { ProfileForm } from "./ProfileForm";
 import { PasswordForm } from "./PasswordForm";
@@ -20,28 +16,53 @@ import { getSessions, getUser, logoutSession } from "../../api/userApi";
 import { capitalize } from "../../lib/utils";
 import { useToast } from "../../hooks/use-toast";
 import { Skeleton } from "../../components/ui/skeleton";
-import { useTranslation } from "react-i18next";
 import {
   getReferralCodeFromRecord,
   getReferralLinkFromRecord,
 } from "../../lib/referral";
 
+const PROFILE_TEXT = {
+  tabs: {
+    profileInformation: "Profile Information",
+    updatePassword: "Update Password",
+    browserSessions: "Browser Sessions",
+  },
+  copied: "Copied to clipboard",
+  loadProfileErrorTitle: "Unable to load profile information.",
+  loadProfileErrorDescription: "Please refresh and try again.",
+  loadSessionsErrorTitle: "Unable to load browser sessions.",
+  loadSessionsErrorDescription: "Please refresh and try again.",
+  photo: "Photo",
+  activePlan: "Active plan",
+  referralCode: "Referral Code",
+  referralLink: "Referral Link",
+  notAvailable: "N/A",
+  updatePasswordDescription:
+    "Ensure your account is using a long random password to stay secure.",
+  browserSessionsDescription:
+    "If necessary, you may logout of all of your other browser sessions across all of your devices.",
+  logoutOtherSessions: "Logout Other Browser Sessions",
+  unknownBrowser: "Unknown browser",
+  unknownLocation: "Unknown location",
+  thisDevice: "This device",
+  otherDevices: "Other devices",
+};
+
 const Profile = () => {
-  const { t } = useTranslation();
   return (
     <section className="page">
       <Tabs defaultValue="info" className="w-full h-full">
         <TabsList className="mb-20 w-full flex flex-wrap gap-2 md:grid md:grid-cols-2 lg:flex lg:flex-wrap">
           <TabsTrigger value="info" className="text-base lg:text-lg">
-            {t("profile.tabs.profileInformation")}
+            {PROFILE_TEXT.tabs.profileInformation}
           </TabsTrigger>
           <Separator orientation="vertical" className="hidden lg:block" />
           <TabsTrigger value="password" className="text-base lg:text-lg">
-            {t("profile.tabs.updatePassword")}
+            {PROFILE_TEXT.tabs.updatePassword}
           </TabsTrigger>
           <Separator orientation="vertical" className="hidden lg:block" />
           <TabsTrigger value="sessions" className="text-base lg:text-lg">
-            {t("profile.tabs.browserSessions")}
+            {PROFILE_TEXT.tabs.browserSessions}
           </TabsTrigger>
         </TabsList>
 
@@ -63,26 +84,23 @@ const Profile = () => {
 
 export default Profile;
 
-/* ================= PROFILE INFORMATION ================= */
-
 const ProfileInformation = () => {
-  const { t } = useTranslation();
   const userQuery = useQuery({ queryKey: ["profile"], queryFn: getUser });
   const { toast } = useToast();
 
   const handleCopy = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    toast({ description: t("dashboard.copied") });
+    toast({ description: PROFILE_TEXT.copied });
   };
 
   if (userQuery.isLoading) return null;
   if (userQuery.isError) {
     return (
       <Card className="p-4">
-        <p className="font-medium">{t("profile.loadProfileErrorTitle")}</p>
+        <p className="font-medium">{PROFILE_TEXT.loadProfileErrorTitle}</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("profile.loadProfileErrorDescription")}
+          {PROFILE_TEXT.loadProfileErrorDescription}
         </p>
       </Card>
     );
@@ -95,46 +113,42 @@ const ProfileInformation = () => {
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {/* LEFT COLUMN */}
       <Card className="p-4">
         <CardTitle className="mb-4 text-lg lg:text-xl">
-          {t("profile.photo")}
+          {PROFILE_TEXT.photo}
         </CardTitle>
         <ProfileForm />
       </Card>
 
-      {/* RIGHT COLUMN */}
-      <div className="flex flex-col gap-6 col-span-2">
-        {/* ACTIVE PLAN */}
+      <div className="col-span-2 flex flex-col gap-6">
         <Card className="flex flex-col items-start p-4 lg:flex-row lg:items-center">
           <CardHeader className="p-0">
             <CardTitle className="text-base lg:text-lg">
-              {t("profile.activePlan")}
+              {PROFILE_TEXT.activePlan}
             </CardTitle>
             <p className="text-sm lg:text-base">
               {capitalize(userPlan?.name ?? "basic")}
             </p>
           </CardHeader>
 
-          <Button className="mt-3 lg:mt-0 lg:ml-auto">
+          <Button className="mt-3 lg:ml-auto lg:mt-0">
             {capitalize(userPlan?.status ?? "active")}
           </Button>
         </Card>
 
-        {/* REFERRAL CODE CARD */}
         <Card className="flex flex-col items-start p-4 lg:flex-row lg:items-center">
           <CardHeader className="p-0">
             <CardTitle className="text-base lg:text-lg">
-              {t("profile.referralCode")}
+              {PROFILE_TEXT.referralCode}
             </CardTitle>
             <p className="font-mono text-sm lg:text-base">
-              {referralCode || t("generic.notAvailable")}
+              {referralCode || PROFILE_TEXT.notAvailable}
             </p>
           </CardHeader>
 
           <Button
             variant="outline"
-            className="mt-3 lg:mt-0 lg:ml-auto"
+            className="mt-3 lg:ml-auto lg:mt-0"
             onClick={() => handleCopy(referralCode)}
             disabled={!referralCode}
           >
@@ -142,11 +156,10 @@ const ProfileInformation = () => {
           </Button>
         </Card>
 
-        {/* REFERRAL LINK CARD (SEPARATE) */}
         <Card className="p-4">
-          <CardHeader className="p-0 mb-2">
+          <CardHeader className="mb-2 p-0">
             <CardTitle className="text-base lg:text-lg">
-              {t("profile.referralLink")}
+              {PROFILE_TEXT.referralLink}
             </CardTitle>
           </CardHeader>
 
@@ -155,8 +168,8 @@ const ProfileInformation = () => {
               type="text"
               value={referralLink}
               readOnly
-              placeholder={t("generic.notAvailable")}
-              className="flex-1 px-3 py-2 text-sm border rounded-md bg-muted cursor-pointer"
+              placeholder={PROFILE_TEXT.notAvailable}
+              className="flex-1 cursor-pointer rounded-md border bg-muted px-3 py-2 text-sm"
               onClick={(e) => e.target.select()}
             />
 
@@ -174,15 +187,12 @@ const ProfileInformation = () => {
   );
 };
 
-/* ================= UPDATE PASSWORD ================= */
-
 const UpdatePassword = () => {
-  const { t } = useTranslation();
   return (
     <Card className="min-h-full flex justify-center p-6">
-      <div className="w-full max-w-md flex flex-col">
+      <div className="flex w-full max-w-md flex-col">
         <p className="mb-6 text-sm lg:text-base">
-          {t("profile.updatePasswordDescription")}
+          {PROFILE_TEXT.updatePasswordDescription}
         </p>
         <PasswordForm />
       </div>
@@ -190,10 +200,7 @@ const UpdatePassword = () => {
   );
 };
 
-/* ================= BROWSER SESSIONS ================= */
-
 const BrowserSessions = () => {
-  const { t } = useTranslation();
   const sessionQuery = useQuery({
     queryKey: ["sessions"],
     queryFn: getSessions,
@@ -211,16 +218,16 @@ const BrowserSessions = () => {
   if (sessionQuery.isLoading)
     return (
       <Card className="min-h-full">
-        <Skeleton className="w-full min-h-full" />
+        <Skeleton className="min-h-full w-full" />
       </Card>
     );
 
   if (sessionQuery.isError) {
     return (
       <Card className="min-h-full p-6">
-        <p className="font-medium">{t("profile.loadSessionsErrorTitle")}</p>
+        <p className="font-medium">{PROFILE_TEXT.loadSessionsErrorTitle}</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("profile.loadSessionsErrorDescription")}
+          {PROFILE_TEXT.loadSessionsErrorDescription}
         </p>
       </Card>
     );
@@ -229,8 +236,8 @@ const BrowserSessions = () => {
   const sessionName = String(sessionQuery.data?.currentToken?.name ?? "").split(
     "||"
   );
-  const browserInfo = sessionName[0] || t("generic.unknownBrowser");
-  const locationInfo = sessionName[1] || t("generic.unknownLocation");
+  const browserInfo = sessionName[0] || PROFILE_TEXT.unknownBrowser;
+  const locationInfo = sessionName[1] || PROFILE_TEXT.unknownLocation;
   const currentUserAgent = navigator.userAgent;
   const thisUser = browserInfo === currentUserAgent;
 
@@ -238,7 +245,7 @@ const BrowserSessions = () => {
     <Card className="min-h-full flex items-center justify-center p-6">
       <div className="w-full max-w-2xl">
         <p className="text-sm lg:text-base">
-          {t("profile.browserSessionsDescription")}
+          {PROFILE_TEXT.browserSessionsDescription}
         </p>
 
         <div className="my-6 flex flex-col items-start gap-4 font-medium lg:flex-row lg:items-center">
@@ -248,9 +255,7 @@ const BrowserSessions = () => {
             <p className="text-sm lg:text-base">
               {locationInfo}.
               <span className="ml-1 text-accent">
-                {thisUser
-                  ? t("status.thisDevice")
-                  : t("status.otherDevices")}
+                {thisUser ? PROFILE_TEXT.thisDevice : PROFILE_TEXT.otherDevices}
               </span>
             </p>
           </div>
@@ -261,7 +266,7 @@ const BrowserSessions = () => {
           className="w-full lg:w-auto"
           onClick={() => sessionLogoutMutation.mutate()}
         >
-          {t("profile.logoutOtherSessions")}
+          {PROFILE_TEXT.logoutOtherSessions}
         </Button>
       </div>
     </Card>

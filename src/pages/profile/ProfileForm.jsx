@@ -15,22 +15,34 @@ import { Button } from "../../components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, updateProfile } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
-import { useTranslation } from "react-i18next";
+
+const PROFILE_FORM_TEXT = {
+  validation: {
+    firstNameMin2: "First name must be at least 2 characters",
+    lastNameMin2: "Last name must be at least 2 characters",
+    phoneMin10: "Phone number must be at least 10 digits.",
+  },
+  loadProfileDetailsError: "Unable to load profile details right now.",
+  firstName: "First Name",
+  lastName: "Last Name",
+  phone: "Phone",
+  updating: "Updating...",
+  updateProfile: "Update Profile",
+};
 
 export function ProfileForm() {
-  const { t } = useTranslation();
   const formSchema = z.object({
     firstname: z
       .string()
-      .min(2, t("auth.validation.firstNameMin2"))
+      .min(2, PROFILE_FORM_TEXT.validation.firstNameMin2)
       .or(z.literal("")),
     lastname: z
       .string()
-      .min(2, t("auth.validation.lastNameMin2"))
+      .min(2, PROFILE_FORM_TEXT.validation.lastNameMin2)
       .or(z.literal("")),
     phone: z
       .string()
-      .min(10, t("auth.validation.phoneMin10"))
+      .min(10, PROFILE_FORM_TEXT.validation.phoneMin10)
       .or(z.literal("")),
     profileImage: z.any().optional(),
   });
@@ -38,14 +50,12 @@ export function ProfileForm() {
   const queryClient = useQueryClient();
   const [preview, setPreview] = useState(null);
 
-  /* ---------------- FETCH USER ---------------- */
   const userQuery = useQuery({
     queryKey: ["profile"],
     queryFn: getUser,
   });
   const profileUser = userQuery.data?.user ?? {};
 
-  /* ---------------- FORM ---------------- */
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -56,7 +66,6 @@ export function ProfileForm() {
     },
   });
 
-  /* ---------------- MUTATION ---------------- */
   const profileMutation = useMutation({
     mutationFn: updateProfile,
     onSuccess: async (res) => {
@@ -91,29 +100,31 @@ export function ProfileForm() {
     },
   });
 
-  /* ---------------- SUBMIT ---------------- */
   const onSubmit = (data) => {
     const formData = new FormData();
     const firstname = data.firstname.trim();
     const lastname = data.lastname.trim();
     const phone = data.phone.trim();
 
-    if (firstname && firstname !== (profileUser.firstname ?? ""))
+    if (firstname && firstname !== (profileUser.firstname ?? "")) {
       formData.append("firstname", firstname);
+    }
 
-    if (lastname && lastname !== (profileUser.lastname ?? ""))
+    if (lastname && lastname !== (profileUser.lastname ?? "")) {
       formData.append("lastname", lastname);
+    }
 
-    if (phone && phone !== (profileUser.phone ?? ""))
+    if (phone && phone !== (profileUser.phone ?? "")) {
       formData.append("phone", phone);
+    }
 
-    if (data.profileImage)
+    if (data.profileImage) {
       formData.append("image", data.profileImage);
+    }
 
     profileMutation.mutate(formData);
   };
 
-  /* ---------------- IMAGE CHANGE ---------------- */
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -126,7 +137,7 @@ export function ProfileForm() {
   if (userQuery.isError) {
     return (
       <div className="text-sm text-muted-foreground">
-        {t("profile.loadProfileDetailsError")}
+        {PROFILE_FORM_TEXT.loadProfileDetailsError}
       </div>
     );
   }
@@ -138,89 +149,71 @@ export function ProfileForm() {
         className="space-y-6"
         encType="multipart/form-data"
       >
-        {/* ---------------- IMAGE ---------------- */}
         <div className="flex flex-col items-center gap-3">
           <img
-            src={
-              preview ||
-              profileUser.profile_photo_url ||
-              "/avatar.png"
-            }
+            src={preview || profileUser.profile_photo_url || "/avatar.png"}
             alt="Profile"
-            className="w-24 h-24 rounded-full object-cover"
+            className="h-24 w-24 rounded-full object-cover"
           />
 
           <input
             type="file"
             accept="image/*"
             onChange={handleImageChange}
-            className="text-xs file:px-4 file:py-1 file:rounded-full file:border file:cursor-pointer"
+            className="text-xs file:cursor-pointer file:rounded-full file:border file:px-4 file:py-1"
           />
         </div>
 
-        {/* ---------------- FIRST NAME ---------------- */}
         <FormField
           control={form.control}
           name="firstname"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("auth.register.firstName")}</FormLabel>
+              <FormLabel>{PROFILE_FORM_TEXT.firstName}</FormLabel>
               <FormControl>
-                <Input
-                  {...field}
-                  placeholder={profileUser.firstname ?? ""}
-                />
+                <Input {...field} placeholder={profileUser.firstname ?? ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* ---------------- LAST NAME ---------------- */}
         <FormField
           control={form.control}
           name="lastname"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("auth.register.lastName")}</FormLabel>
+              <FormLabel>{PROFILE_FORM_TEXT.lastName}</FormLabel>
               <FormControl>
-                <Input
-                  {...field}
-                  placeholder={profileUser.lastname ?? ""}
-                />
+                <Input {...field} placeholder={profileUser.lastname ?? ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* ---------------- PHONE ---------------- */}
         <FormField
           control={form.control}
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("auth.register.phone")}</FormLabel>
+              <FormLabel>{PROFILE_FORM_TEXT.phone}</FormLabel>
               <FormControl>
-                <Input
-                  {...field}
-                  placeholder={profileUser.phone ?? ""}
-                />
+                <Input {...field} placeholder={profileUser.phone ?? ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* ---------------- BUTTON ---------------- */}
         <Button
           type="submit"
           className="w-full"
           disabled={profileMutation.isPending}
         >
           {profileMutation.isPending
-            ? t("profile.updating")
-            : t("profile.updateProfile")}
+            ? PROFILE_FORM_TEXT.updating
+            : PROFILE_FORM_TEXT.updateProfile}
         </Button>
       </form>
     </Form>

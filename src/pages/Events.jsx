@@ -19,8 +19,11 @@ const Events = () => {
           element={<CreateEvents onClose={() => navigate("/events")} />}
         />
 
-        {/* Future participants route */}
-        <Route path="participants/:id" element={<EventParticipants />} />
+        {/* Participant route */}
+        <Route
+          path="participants/:reference"
+          element={<EventParticipants />}
+        />
       </Routes>
     </div>
   );

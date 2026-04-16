@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 
 import SideDetail from "./auth/SideDetail";
 import { joinRoom } from "../api/roomsApi";
@@ -23,15 +22,15 @@ import { useToast } from "../hooks/use-toast";
 import { buildJoinMeetingUrl } from "../lib/externalLinks";
 
 const JoinRoom = () => {
-  const { t } = useTranslation();
-
   return (
     <div className="container page mx-auto flex justify-center">
       <SideDetail className="md:hidden lg:flex" />
       <Card className="max-w-[560px] flex-1">
         <JoinForm />
         <p className="text-center text-sm text-[#0A2540]">
-          {t("joinRoom.termsNotice")}
+          By signing in you understand and agree to the Newwaves ecosystem
+          Terms of Use. For more information about Privacy Data visit the
+          Newwaves Privacy Data Sheets.
         </p>
       </Card>
     </div>
@@ -41,7 +40,6 @@ const JoinRoom = () => {
 export default JoinRoom;
 
 const JoinForm = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -56,7 +54,7 @@ const JoinForm = () => {
           navigate("/");
         } else {
           toast({
-            description: t("joinRoom.meetingLinkUnavailable"),
+            description: "Meeting link is not configured.",
             variant: "destructive",
           });
         }
@@ -64,23 +62,23 @@ const JoinForm = () => {
       toast({ description: res.message });
     },
     onError: () => {
-      toast({ description: t("joinRoom.unexpectedError") });
+      toast({ description: "An error occurred." });
     },
   });
 
   const formSchema = z.object({
-    email: z.string().email({ message: t("auth.validation.invalidEmail") }),
+    email: z.string().email({ message: "Invalid email address." }),
     roomName: z
       .string()
-      .min(2, { message: t("joinRoom.validation.roomNameMin") })
+      .min(2, { message: "Room name must be at least 2 characters long." })
       .refine((value) => value.trim().length > 0, {
-        message: t("joinRoom.validation.roomNameRequired"),
+        message: "Room name cannot be empty or whitespace.",
       }),
     name: z
       .string()
-      .min(2, { message: t("joinRoom.validation.nameMin") })
+      .min(2, { message: "Username must be at least 2 characters long." })
       .refine((value) => value.trim().length > 0, {
-        message: t("joinRoom.validation.nameRequired"),
+        message: "Username cannot be empty or whitespace.",
       }),
   });
 
@@ -102,9 +100,7 @@ const JoinForm = () => {
       <div className="mb-16 flex justify-center">
         <img src={logo} alt="konn3ct" />
       </div>
-      <h3 className="mb-10 text-center text-xl font-medium">
-        {t("joinRoom.title")}
-      </h3>
+      <h3 className="mb-10 text-center text-xl font-medium">Join a Meeting</h3>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
@@ -115,7 +111,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="text"
-                    placeholder={t("joinRoom.roomNamePlaceholder")}
+                    placeholder="Enter meeting room name or ID"
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -132,7 +128,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="text"
-                    placeholder={t("joinRoom.namePlaceholder")}
+                    placeholder="Enter your name"
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -149,7 +145,7 @@ const JoinForm = () => {
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder={t("joinRoom.emailPlaceholder")}
+                    placeholder="Enter your email address"
                     className="rounded-full px-4"
                     {...field}
                   />
@@ -163,7 +159,7 @@ const JoinForm = () => {
             className="!my-10 w-full bg-[#012E89] shadow-md"
             disabled={joinMutation.isPending}
           >
-            {t("joinRoom.submitButton")}
+            Konn3ct
           </Button>
         </form>
       </Form>

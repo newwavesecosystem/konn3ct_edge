@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
 
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -26,7 +25,6 @@ import { getReferee } from "../api/refereeApi";
 import { capitalize, formatDate } from "../lib/utils";
 
 const Referee = () => {
-  const { t } = useTranslation();
   const [page, setPage] = useState(1);
 
   const refereeQuery = useQuery({
@@ -47,9 +45,9 @@ const Referee = () => {
     return (
       <section className="page container mx-auto">
         <Card className="p-6">
-          <p className="font-medium">{t("refereesPage.loadErrorTitle")}</p>
+          <p className="font-medium">Unable to load referees.</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {t("refereesPage.loadErrorDescription")}
+            Please try again when your network is stable.
           </p>
         </Card>
       </section>
@@ -73,18 +71,18 @@ const Referee = () => {
     <section className="page container mx-auto">
       <Card className="relative flex min-h-full w-full flex-col pb-6 lg:pb-0">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
-          <h3 className="text-xl font-medium">{t("refereesPage.title")}</h3>
+          <h3 className="text-xl font-medium">Referee List</h3>
         </div>
         <Separator />
         <div className="flex items-center py-1 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
           <div className="flex">
-            <p className="text-sm font-medium">{t("refereesPage.showEntries")}</p>
+            <p className="text-sm font-medium">Show entries</p>
           </div>
           <div className="ml-auto flex items-center gap-x-5 text-sm font-medium md:ml-0 md:w-full lg:ml-auto lg:w-auto">
-            {t("refereesPage.searchLabel")}:
+            Search:
             <Input
               className="my-2 rounded-lg shadow md:w-full lg:w-auto"
-              placeholder={t("refereesPage.searchPlaceholder")}
+              placeholder="Search referees"
             />
           </div>
         </div>
@@ -94,10 +92,10 @@ const Referee = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>#</TableHead>
-                <TableHead>{t("refereesPage.columns.name")}</TableHead>
-                <TableHead>{t("refereesPage.columns.email")}</TableHead>
-                <TableHead>{t("refereesPage.columns.plan")}</TableHead>
-                <TableHead>{t("refereesPage.columns.dateRegistered")}</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Email Address</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead>Date Registered</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -110,7 +108,7 @@ const Referee = () => {
                     </TableCell>
                     <TableCell>{email}</TableCell>
                     <TableCell>
-                      {capitalize(plan?.name ?? t("generic.notAvailable"))}
+                      {capitalize(plan?.name ?? "N/A")}
                     </TableCell>
                     <TableCell>{formatDate(created_at)}</TableCell>
                   </TableRow>
@@ -120,7 +118,7 @@ const Referee = () => {
           </Table>
           {refereeRows.length === 0 && (
             <div className="flex min-h-[220px] items-center justify-center px-4 text-center">
-              <p>{t("generic.tableEmpty")}</p>
+              <p>No data available for this table</p>
             </div>
           )}
         </div>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { User } from "lucide-react";
-import { useTranslation } from "react-i18next";
 
 import { fetchKyc, getBankList, submitKyc, verifyBank } from "../api/donationApi";
 import { Button } from "../components/ui/button";
@@ -17,7 +16,6 @@ import {
 import { useToast } from "../hooks/use-toast";
 
 export default function IndividualDonation({ onComplete }) {
-  const { t } = useTranslation();
   const { toast } = useToast();
   const [step, setStep] = useState("card");
   const [banks, setBanks] = useState([]);
@@ -81,14 +79,14 @@ export default function IndividualDonation({ onComplete }) {
       if (res.success) onComplete();
       else {
         toast({
-          description: res.message || t("donations.kycFailed"),
+          description: res.message || "KYC failed",
           variant: "destructive",
         });
       }
     } catch (err) {
       console.error(err);
       toast({
-        description: t("donations.individualKycError"),
+        description: "Error submitting KYC",
         variant: "destructive",
       });
     }
@@ -103,18 +101,18 @@ export default function IndividualDonation({ onComplete }) {
               <User className="h-7 w-7 text-green-600 dark:text-green-300" />
             </div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">
-              {t("donations.individualAccount")}
+              Individual Account
             </h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-muted-foreground">
-              {t("donations.individualDescription")}
+              For personal fundraising and individual donors
             </p>
             <ul className="mt-3 space-y-1 text-sm text-gray-600 dark:text-muted-foreground">
-              <li>• {t("donations.steps.bvn.title")}</li>
-              <li>• {t("donations.steps.bank.title")}</li>
-              <li>• {t("donations.sections.uploadIdDocument")}</li>
+              <li>&bull; BVN Verification</li>
+              <li>&bull; Bank Account Verification</li>
+              <li>&bull; Upload ID Document</li>
             </ul>
             <Button className="mt-6" onClick={() => setStep("form")}>
-              {t("donations.startVerification")}
+              Start Verification
             </Button>
           </CardContent>
         </Card>
@@ -129,59 +127,59 @@ export default function IndividualDonation({ onComplete }) {
               </div>
               <div>
                 <CardTitle className="text-lg">
-                  {t("donations.individualVerificationTitle")}
+                  Individual KYC Verification
                 </CardTitle>
                 <p className="text-sm text-gray-500 dark:text-muted-foreground">
-                  {t("donations.completeVerificationDetails")}
+                  Complete your verification details
                 </p>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => setStep("card")}>
-              {t("actions.back")}
+              Back
             </Button>
           </CardHeader>
 
           <CardContent className="space-y-8 p-6">
             <section>
               <h3 className="mb-4 text-md font-semibold">
-                {t("donations.sections.personalInformation")}
+                Personal Information
               </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>{t("donations.firstName")}</Label>
+                  <Label>First Name</Label>
                   <Input
                     value={formData.first_name}
                     onChange={(e) => handleChange("first_name", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>{t("donations.lastName")}</Label>
+                  <Label>Last Name</Label>
                   <Input
                     value={formData.last_name}
                     onChange={(e) => handleChange("last_name", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>{t("donations.email")}</Label>
+                  <Label>Email</Label>
                   <Input
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <Label>{t("donations.address")}</Label>
+                  <Label>Address</Label>
                   <Input
                     value={formData.address}
                     onChange={(e) => handleChange("address", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>{t("donations.bvn")}</Label>
+                  <Label>BVN</Label>
                   <Input
                     value={formData.bvn}
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder={t("donations.enter10DigitBvn")}
+                    placeholder="Enter 10-digit BVN"
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, "");
                       handleChange("bvn", digits.slice(0, 10));
@@ -192,12 +190,10 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.sections.bankDetails")}
-              </h3>
+              <h3 className="mb-4 text-md font-semibold">Bank Details</h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>{t("donations.bank")}</Label>
+                  <Label>Bank</Label>
                   <Select
                     value={bankCode?.name}
                     onValueChange={(value) => {
@@ -206,12 +202,12 @@ export default function IndividualDonation({ onComplete }) {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t("donations.selectBank")} />
+                      <SelectValue placeholder="Select your bank" />
                     </SelectTrigger>
                     <SelectContent>
                       <div className="sticky top-0 z-10 bg-white p-2 dark:bg-popover">
                         <Input
-                          placeholder={t("donations.searchBank")}
+                          placeholder="Search bank..."
                           value={bankSearch}
                           onChange={(e) => setBankSearch(e.target.value)}
                         />
@@ -228,7 +224,7 @@ export default function IndividualDonation({ onComplete }) {
                           ))
                         ) : (
                           <p className="col-span-2 px-2 py-1 text-sm text-gray-500 dark:text-muted-foreground">
-                            {t("donations.noBankFound")}
+                            No bank found
                           </p>
                         )}
                       </div>
@@ -237,12 +233,12 @@ export default function IndividualDonation({ onComplete }) {
                 </div>
 
                 <div>
-                  <Label>{t("donations.accountNumber")}</Label>
+                  <Label>Account Number</Label>
                   <Input
                     value={formData.account_number}
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder={t("donations.enter10DigitAccountNumber")}
+                    placeholder="Enter 10-digit account number"
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, "");
                       handleChange("account_number", digits.slice(0, 10));
@@ -251,10 +247,10 @@ export default function IndividualDonation({ onComplete }) {
                 </div>
 
                 <div className="md:col-span-2">
-                  <Label>{t("donations.accountName")}</Label>
+                  <Label>Account Name</Label>
                   <Input
                     value={accountName}
-                    placeholder={t("donations.willBeAutofilled")}
+                    placeholder="Will Be Auto-filled"
                     disabled
                   />
                 </div>
@@ -262,18 +258,16 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.sections.governmentId")}
-              </h3>
+              <h3 className="mb-4 text-md font-semibold">Government ID</h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>{t("donations.idType")}</Label>
+                  <Label>ID Type</Label>
                   <Select
                     value={formData.id_type}
                     onValueChange={(value) => handleChange("id_type", value)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t("donations.selectIdType")} />
+                      <SelectValue placeholder="Select ID type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="NIN">NIN</SelectItem>
@@ -291,9 +285,7 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.sections.uploadIdDocument")}
-              </h3>
+              <h3 className="mb-4 text-md font-semibold">Upload ID Document</h3>
               <input
                 type="file"
                 className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-muted file:px-4 file:py-2 file:text-foreground hover:file:bg-accent"
@@ -304,9 +296,7 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <div className="flex justify-center">
-              <Button onClick={handleSubmit}>
-                {t("donations.completeVerification")}
-              </Button>
+              <Button onClick={handleSubmit}>Complete Verification</Button>
             </div>
           </CardContent>
         </Card>
