@@ -19,20 +19,6 @@ import {
   TableRow,
 } from "../components/ui/table";
 
-const ATTENDANCE_TEXT = {
-  loadError: "Unable to load meeting attendance data.",
-  loadingMeetings: "Loading meetings...",
-  title: "Meeting Attendance",
-  noMeetings: "No meeting attendance found.",
-  serialNumber: "S/N",
-  meetingHost: "Meeting Host",
-  dateTime: "Date & Time",
-  action: "Action",
-  notAvailable: "N/A",
-  noDate: "No Date",
-  viewParticipants: "View Participant(s)",
-};
-
 const AttendanceList = () => {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +36,7 @@ const AttendanceList = () => {
         setMeetings(data || []);
       } catch (err) {
         console.error("Failed to fetch meetings:", err);
-        setError(ATTENDANCE_TEXT.loadError);
+        setError("Unable to load meeting attendance data.");
       } finally {
         setLoading(false);
       }
@@ -74,9 +60,7 @@ const AttendanceList = () => {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <p className="text-sm text-muted-foreground">
-          {ATTENDANCE_TEXT.loadingMeetings}
-        </p>
+        <p className="text-sm text-muted-foreground">Loading meetings...</p>
       </div>
     );
   }
@@ -93,7 +77,7 @@ const AttendanceList = () => {
     <Card className="mt-16 flex w-full max-w-3xl flex-col rounded-xl border border-gray-200 shadow dark:border-border">
       <CardHeader className="px-4 pb-2">
         <CardTitle className="text-base font-medium text-gray-800 dark:text-foreground">
-          {ATTENDANCE_TEXT.title}
+          Meeting Attendance
         </CardTitle>
       </CardHeader>
 
@@ -101,23 +85,23 @@ const AttendanceList = () => {
         <div className="overflow-x-auto">
           {meetings.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-500 dark:text-muted-foreground">
-              {ATTENDANCE_TEXT.noMeetings}
+              No meeting attendance found.
             </p>
           ) : (
             <Table className="min-w-[640px] text-sm lg:min-w-0">
               <TableHeader>
                 <TableRow className="border-b">
                   <TableHead className="w-[40px] py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
-                    {ATTENDANCE_TEXT.serialNumber}
+                    S/N
                   </TableHead>
                   <TableHead className="py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
-                    {ATTENDANCE_TEXT.meetingHost}
+                    Meeting Host
                   </TableHead>
                   <TableHead className="py-1.5 font-medium text-gray-700 dark:text-muted-foreground">
-                    {ATTENDANCE_TEXT.dateTime}
+                    Date & Time
                   </TableHead>
                   <TableHead className="py-1.5 text-center font-medium text-gray-700 dark:text-muted-foreground">
-                    {ATTENDANCE_TEXT.action}
+                    Action
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -132,12 +116,12 @@ const AttendanceList = () => {
                       {pageStart + index + 1}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 text-sm">
-                      {meeting.host || ATTENDANCE_TEXT.notAvailable}
+                      {meeting.host || "N/A"}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 text-sm">
                       {meeting.date
                         ? `${meeting.date} | ${meeting.time || ""}`
-                        : ATTENDANCE_TEXT.noDate}
+                        : "No Date"}
                     </TableCell>
                     <TableCell className="px-2 py-1.5 text-center">
                       <Button
@@ -149,7 +133,7 @@ const AttendanceList = () => {
                         }
                         className="rounded-full bg-emerald-600 px-3 py-0.5 text-xs text-white hover:bg-emerald-700 md:h-auto md:whitespace-normal md:leading-snug lg:whitespace-nowrap"
                       >
-                        {ATTENDANCE_TEXT.viewParticipants}
+                        View Participant(s)
                       </Button>
                     </TableCell>
                   </TableRow>

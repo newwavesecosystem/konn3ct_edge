@@ -65,48 +65,6 @@ import {
 import { z } from "zod";
 import { Skeleton } from "../components/ui/skeleton";
 
-const STREAM_TEXT = {
-  loadErrorTitle: "Unable to load streams right now.",
-  loadErrorDescription: "Please retry after checking your connection.",
-  stream: "Stream",
-  totalStreams: "Total Streams",
-  activeStreams: "Active Streams",
-  number: "No",
-  roomName: "Room Name",
-  type: "Type",
-  status: "Status",
-  startedAt: "Started At",
-  endedAt: "Ended At",
-  action: "Action",
-  temporaryRoom: "Temporary room",
-  running: "Running",
-  ended: "Ended",
-  stopStreaming: "Stop Streaming",
-  tableEmpty: "No data available for this table",
-  createTitle: "Create a new stream",
-  createDescription: "Start streaming your meeting on various platforms",
-  streamingEndedSuccess: "Streaming successfully ended",
-  streamStarted: "Stream started",
-  comboStreamStarted: "Combo streaming started",
-  selectRoom: "Select Room",
-  loadingRooms: "Loading rooms...",
-  selectTypePlaceholder: "Select type...",
-  searchType: "Search type...",
-  noTypeFound: "No type found.",
-  youtubeKey: "YouTube Key",
-  facebookKey: "Facebook Key",
-  key: "Key",
-  youtubeKeyPlaceholder: "Enter YouTube Key",
-  facebookKeyPlaceholder: "Enter Facebook Key",
-  keyPlaceholder: "Enter Key",
-  roomRequired: "Room is required.",
-  invalidType: "Select a valid type.",
-  youtubeKeyRequired: "YouTube key is required for Combo.",
-  facebookKeyRequired: "Facebook key is required for Combo.",
-  keyRequired: "Key is required.",
-  submit: "Submit",
-};
-
 const Streaming = () => {
   const [page, setPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
@@ -133,7 +91,7 @@ const Streaming = () => {
     mutationFn: stopStreaming,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["streams"] });
-      toast({ description: STREAM_TEXT.streamingEndedSuccess });
+      toast({ description: "Streaming successfully ended" });
     },
   });
 
@@ -148,9 +106,9 @@ const Streaming = () => {
     return (
       <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
-          <p className="font-medium">{STREAM_TEXT.loadErrorTitle}</p>
+          <p className="font-medium">Unable to load streams right now.</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {STREAM_TEXT.loadErrorDescription}
+            Please retry after checking your connection.
           </p>
         </Card>
       </section>
@@ -175,12 +133,12 @@ const Streaming = () => {
       <Card className="relative w-full min-h-full pb-6 lg:pb-16">
         <div className="flex flex-col gap-4 p-4 pt-6 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
           <Button className="w-full sm:w-auto" onClick={() => setOpenDialog(true)}>
-            <Plus /> {STREAM_TEXT.stream}
+            <Plus /> Stream
           </Button>
 
           <StatCard
             value={streamData.total ?? streamRows.length}
-            name={STREAM_TEXT.totalStreams}
+            name="Total Streams"
             icon={roomsIcon}
           />
 
@@ -190,7 +148,7 @@ const Streaming = () => {
             value={
               streamRows.filter((stream) => stream.status === 1).length
             }
-            name={STREAM_TEXT.activeStreams}
+            name="Active Streams"
             icon={activeIcon}
           />
         </div>
@@ -200,13 +158,13 @@ const Streaming = () => {
         <Table className="min-w-[780px] lg:min-w-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="">{STREAM_TEXT.number}</TableHead>
-              <TableHead>{STREAM_TEXT.roomName}</TableHead>
-              <TableHead>{STREAM_TEXT.type}</TableHead>
-              <TableHead className="text-center">{STREAM_TEXT.status}</TableHead>
-              <TableHead>{STREAM_TEXT.startedAt}</TableHead>
-              <TableHead>{STREAM_TEXT.endedAt}</TableHead>
-              <TableHead>{STREAM_TEXT.action}</TableHead>
+              <TableHead className="">No</TableHead>
+              <TableHead>Room Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+              <TableHead>Started At</TableHead>
+              <TableHead>Ended At</TableHead>
+              <TableHead>Action</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -215,12 +173,12 @@ const Streaming = () => {
               ({ room, id, type, status, created_at, ended_at }) => (
                 <TableRow key={id + created_at}>
                   <TableCell>{id}</TableCell>
-                  <TableCell>{room?.name ?? STREAM_TEXT.temporaryRoom}</TableCell>
+                  <TableCell>{room?.name ?? "Temporary room"}</TableCell>
                   <TableCell>{type}</TableCell>
 
                   <TableCell className="text-center">
                     <Badge variant={status === 1 ? "" : "destructive"}>
-                      {status === 1 ? STREAM_TEXT.running : STREAM_TEXT.ended}
+                      {status === 1 ? "Running" : "Ended"}
                     </Badge>
                   </TableCell>
 
@@ -228,7 +186,7 @@ const Streaming = () => {
 
                   <TableCell>
                     {ended_at === null ? (
-                      <Badge>{STREAM_TEXT.running}</Badge>
+                      <Badge>Running</Badge>
                     ) : (
                       formatDate(ended_at)
                     )}
@@ -241,7 +199,7 @@ const Streaming = () => {
                         variant="destructive"
                         onClick={() => stopStreamMutation.mutate(id)}
                       >
-                        {STREAM_TEXT.stopStreaming}
+                        Stop Streaming
                       </Button>
                     </TableCell>
                   )}
@@ -253,7 +211,7 @@ const Streaming = () => {
 
         {streamRows.length === 0 && (
           <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center px-4 text-center">
-            <p>{STREAM_TEXT.tableEmpty}</p>
+            <p>No data available for this table</p>
           </div>
         )}
 
@@ -296,9 +254,9 @@ const Streaming = () => {
 
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-1/2">
-          <DialogTitle>{STREAM_TEXT.createTitle}</DialogTitle>
+          <DialogTitle>Create a new stream</DialogTitle>
           <DialogDescription>
-            {STREAM_TEXT.createDescription}
+            Start streaming your meeting on various platforms
           </DialogDescription>
           <StreamForm setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -360,7 +318,7 @@ const StreamForm = ({ setOpenDialog }) => {
   const startStreamMutation = useMutation({
     mutationFn: startStream,
     onSuccess: (res) => {
-      toast({ description: res.message || STREAM_TEXT.streamStarted });
+      toast({ description: res.message || "Stream started" });
       queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
   });
@@ -368,16 +326,16 @@ const StreamForm = ({ setOpenDialog }) => {
   const startComboMutation = useMutation({
     mutationFn: startComboStreaming,
     onSuccess: (res) => {
-      toast({ description: res.message || STREAM_TEXT.comboStreamStarted });
+      toast({ description: res.message || "Combo streaming started" });
       queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
   });
 
   const formSchema = z
     .object({
-      room_id: z.string().nonempty({ message: STREAM_TEXT.roomRequired }),
+      room_id: z.string().nonempty({ message: "Room is required." }),
       type: z.enum(["Youtube", "Facebook", "Combo"], {
-        message: STREAM_TEXT.invalidType,
+        message: "Select a valid type.",
       }),
 
       // single platform
@@ -392,14 +350,14 @@ const StreamForm = ({ setOpenDialog }) => {
         if (!values.youtube_key || values.youtube_key.trim() === "") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: STREAM_TEXT.youtubeKeyRequired,
+            message: "YouTube key is required for Combo.",
             path: ["youtube_key"],
           });
         }
         if (!values.facebook_key || values.facebook_key.trim() === "") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: STREAM_TEXT.facebookKeyRequired,
+            message: "Facebook key is required for Combo.",
             path: ["facebook_key"],
           });
         }
@@ -407,7 +365,7 @@ const StreamForm = ({ setOpenDialog }) => {
         if (!values.key || values.key.trim() === "") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: STREAM_TEXT.keyRequired,
+            message: "Key is required.",
             path: ["key"],
           });
         }
@@ -455,7 +413,7 @@ const StreamForm = ({ setOpenDialog }) => {
             render={({ field }) => (
               <FormItem>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {STREAM_TEXT.selectRoom}
+                  Select Room
                 </label>
                 <FormControl>
                   <select
@@ -464,9 +422,7 @@ const StreamForm = ({ setOpenDialog }) => {
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                   >
                     <option value="">
-                      {roomLoading
-                        ? STREAM_TEXT.loadingRooms
-                        : STREAM_TEXT.selectRoom}
+                      {roomLoading ? "Loading rooms..." : "Select Room"}
                     </option>
                     {Array.isArray(rooms) &&
                       rooms.map((room) => (
@@ -490,7 +446,7 @@ const StreamForm = ({ setOpenDialog }) => {
             render={({ field }) => (
               <FormItem>
                 <label htmlFor="type" className="block font-medium">
-                  {STREAM_TEXT.type}
+                  Type
                 </label>
                 <FormControl>
                   <Popover open={openPopover} onOpenChange={setOpenPopover}>
@@ -503,15 +459,15 @@ const StreamForm = ({ setOpenDialog }) => {
                       >
                         {field.value
                           ? types.find((t) => t.value === field.value)?.label
-                          : STREAM_TEXT.selectTypePlaceholder}
+                          : "Select type..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] lg:!w-[300px]">
                       <Command>
-                        <CommandInput placeholder={STREAM_TEXT.searchType} />
+                        <CommandInput placeholder="Search type..." />
                         <CommandList>
-                          <CommandEmpty>{STREAM_TEXT.noTypeFound}</CommandEmpty>
+                          <CommandEmpty>No type found.</CommandEmpty>
                           <CommandGroup>
                             {types.map((type) => (
                               <CommandItem
@@ -549,12 +505,12 @@ const StreamForm = ({ setOpenDialog }) => {
                 render={({ field }) => (
                   <FormItem>
                     <label htmlFor="youtube_key" className="block font-medium">
-                      {STREAM_TEXT.youtubeKey}
+                      YouTube Key
                     </label>
                     <FormControl>
                       <Input
                         id="youtube_key"
-                        placeholder={STREAM_TEXT.youtubeKeyPlaceholder}
+                        placeholder="Enter YouTube Key"
                         {...field}
                       />
                     </FormControl>
@@ -569,12 +525,12 @@ const StreamForm = ({ setOpenDialog }) => {
                 render={({ field }) => (
                   <FormItem>
                     <label htmlFor="facebook_key" className="block font-medium">
-                      {STREAM_TEXT.facebookKey}
+                      Facebook Key
                     </label>
                     <FormControl>
                       <Input
                         id="facebook_key"
-                        placeholder={STREAM_TEXT.facebookKeyPlaceholder}
+                        placeholder="Enter Facebook Key"
                         {...field}
                       />
                     </FormControl>
@@ -590,12 +546,12 @@ const StreamForm = ({ setOpenDialog }) => {
               render={({ field }) => (
               <FormItem>
                 <label htmlFor="key" className="block font-medium">
-                  {STREAM_TEXT.key}
+                  Key
                 </label>
                 <FormControl>
                     <Input
                       id="key"
-                      placeholder={STREAM_TEXT.keyPlaceholder}
+                      placeholder="Enter Key"
                       {...field}
                     />
                 </FormControl>
@@ -612,7 +568,7 @@ const StreamForm = ({ setOpenDialog }) => {
               size="lg"
               disabled={startStreamMutation.isPending || startComboMutation.isPending}
             >
-              {STREAM_TEXT.submit}
+              Submit
             </Button>
           </div>
         </form>

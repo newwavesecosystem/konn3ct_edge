@@ -17,43 +17,7 @@ import {
 } from "../components/ui/pagination";
 
 const NAVBAR_HEIGHT = 72;
-const ATTENDANCE_TEXT = {
-  loadParticipantsError: "Unable to load participant details.",
-  missingMeetingIdentifier: "Missing meeting_id or identifier.",
-  minutesOfMeeting: "Minutes of Meeting",
-  meetingHighlights: "Meeting Highlights",
-  meetingSummary: "Meeting Summary",
-  noDataReturned: "No data returned.",
-  failedToLoadContent: "Failed to load content.",
-  serialNumber: "S/N",
-  name: "Name",
-  email: "Email",
-  status: "Status",
-  dateTime: "Date & Time",
-  notAvailable: "N/A",
-  moderator: "Moderator",
-  participant: "Participant",
-  copyFailed: "Copy failed. Please allow clipboard permission or use HTTPS.",
-  meetingAttendance: "Meeting Attendance",
-  printFooter: "This printout was generated electronically.",
-  printBlocked: "Please allow popups to print",
-  loadingParticipants: "Loading participant data...",
-  copied: "Copied",
-  copy: "Copy",
-  csv: "CSV",
-  excel: "Excel",
-  print: "Print",
-  sendMinutes: "Send Minutes of Meeting",
-  sendHighlights: "Send Meeting Highlight",
-  sendSummary: "Send Meeting Summary",
-  searchPlaceholder: "Search",
-  backToAttendance: "Back to Attendance",
-  noParticipants: "No participants found for this meeting.",
-  loadingContent: "Loading...",
-};
-
-const getMeetingAttendanceTitle = (count) =>
-  `${ATTENDANCE_TEXT.meetingAttendance} (${count})`;
+const getMeetingAttendanceTitle = (count) => `Meeting Attendance (${count})`;
 
 function escapeHtml(str = "") {
   return String(str)
@@ -297,14 +261,14 @@ const ViewAttendance = () => {
         setAttendanceData(data);
       } catch (fetchError) {
         console.error(fetchError);
-        setError(ATTENDANCE_TEXT.loadParticipantsError);
+        setError("Unable to load participant details.");
       } finally {
         setLoading(false);
       }
     };
 
     if (!meeting_id || !identifier) {
-      setError(ATTENDANCE_TEXT.missingMeetingIdentifier);
+      setError("Missing meeting_id or identifier.");
       setLoading(false);
       return;
     }
@@ -352,52 +316,50 @@ const ViewAttendance = () => {
       let result = "";
 
       if (type === "minutes") {
-        setPanelTitle(ATTENDANCE_TEXT.minutesOfMeeting);
+        setPanelTitle("Minutes of Meeting");
         result = await getMeetingMinutes(meeting_id);
       }
 
       if (type === "highlights") {
-        setPanelTitle(ATTENDANCE_TEXT.meetingHighlights);
+        setPanelTitle("Meeting Highlights");
         result = await getMeetingHighlights(meeting_id);
       }
 
       if (type === "summary") {
-        setPanelTitle(ATTENDANCE_TEXT.meetingSummary);
+        setPanelTitle("Meeting Summary");
         result = await getMeetingSummary(meeting_id);
       }
 
-      setPanelContent(result || ATTENDANCE_TEXT.noDataReturned);
+      setPanelContent(result || "No data returned.");
     } catch (panelError) {
       console.error(panelError);
-      setPanelContent(ATTENDANCE_TEXT.failedToLoadContent);
+      setPanelContent("Failed to load content.");
     } finally {
       setPanelLoading(false);
     }
   };
 
-  const serialHeader = ATTENDANCE_TEXT.serialNumber;
-  const nameHeader = ATTENDANCE_TEXT.name;
-  const emailHeader = ATTENDANCE_TEXT.email;
-  const statusHeader = ATTENDANCE_TEXT.status;
-  const dateTimeHeader = ATTENDANCE_TEXT.dateTime;
+  const serialHeader = "S/N";
+  const nameHeader = "Name";
+  const emailHeader = "Email";
+  const statusHeader = "Status";
+  const dateTimeHeader = "Date & Time";
 
   const exportRows = useMemo(
     () =>
       attendanceRows.map((row, index) => ({
         [serialHeader]: rowStart + index,
-        [nameHeader]:
-          row.name || row.attendee_name || ATTENDANCE_TEXT.notAvailable,
-        [emailHeader]:
-          row.email || row.attendee_email || ATTENDANCE_TEXT.notAvailable,
+        [nameHeader]: row.name || row.attendee_name || "N/A",
+        [emailHeader]: row.email || row.attendee_email || "N/A",
         [statusHeader]:
           normalizeStatus(row.status) === "moderator"
-            ? ATTENDANCE_TEXT.moderator
-            : ATTENDANCE_TEXT.participant,
+            ? "Moderator"
+            : "Participant",
         [dateTimeHeader]: row.created_at
           ? new Date(row.created_at).toLocaleString("en-US")
           : row.date
             ? row.date + (row.time ? ` | ${row.time}` : "")
-            : ATTENDANCE_TEXT.notAvailable,
+            : "N/A",
       })),
     [
       attendanceRows,
@@ -440,7 +402,7 @@ const ViewAttendance = () => {
     }
 
     toast({
-      description: ATTENDANCE_TEXT.copyFailed,
+      description: "Copy failed. Please allow clipboard permission or use HTTPS.",
       variant: "destructive",
     });
   };
@@ -471,10 +433,10 @@ const ViewAttendance = () => {
       getMeetingAttendanceTitle(filteredRows.length),
       headers,
       filteredRows,
-      ATTENDANCE_TEXT.printFooter,
+      "This printout was generated electronically.",
       () =>
         toast({
-          description: ATTENDANCE_TEXT.printBlocked,
+          description: "Please allow popups to print",
           variant: "destructive",
         })
     );
@@ -484,7 +446,7 @@ const ViewAttendance = () => {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-sm text-gray-600 dark:text-muted-foreground">
-          {ATTENDANCE_TEXT.loadingParticipants}
+          Loading participant data...
         </p>
       </div>
     );
@@ -509,25 +471,25 @@ const ViewAttendance = () => {
                   onClick={handleCopy}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {copied ? ATTENDANCE_TEXT.copied : ATTENDANCE_TEXT.copy}
+                  {copied ? "Copied" : "Copy"}
                 </button>
                 <button
                   onClick={handleCSV}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {ATTENDANCE_TEXT.csv}
+                  CSV
                 </button>
                 <button
                   onClick={handleExcel}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {ATTENDANCE_TEXT.excel}
+                  Excel
                 </button>
                 <button
                   onClick={handlePrint}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {ATTENDANCE_TEXT.print}
+                  Print
                 </button>
               </div>
 
@@ -536,19 +498,19 @@ const ViewAttendance = () => {
                   onClick={() => openPanel("minutes")}
                   className="rounded-md bg-blue-100 px-4 py-2 text-xs text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                 >
-                  {ATTENDANCE_TEXT.sendMinutes}
+                  Send Minutes of Meeting
                 </button>
                 <button
                   onClick={() => openPanel("highlights")}
                   className="rounded-md bg-yellow-100 px-4 py-2 text-xs text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
                 >
-                  {ATTENDANCE_TEXT.sendHighlights}
+                  Send Meeting Highlight
                 </button>
                 <button
                   onClick={() => openPanel("summary")}
                   className="rounded-md bg-purple-100 px-4 py-2 text-xs text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                 >
-                  {ATTENDANCE_TEXT.sendSummary}
+                  Send Meeting Summary
                 </button>
               </div>
             </div>
@@ -557,21 +519,19 @@ const ViewAttendance = () => {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               type="text"
-              placeholder={ATTENDANCE_TEXT.searchPlaceholder}
+              placeholder="Search"
               className="w-64 rounded-full border border-input bg-white px-4 py-2 text-sm shadow-sm dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground md:w-full lg:w-64"
             />
           </div>
 
           <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-            <h2 className="text-base font-semibold">
-              {ATTENDANCE_TEXT.meetingAttendance}
-            </h2>
+            <h2 className="text-base font-semibold">Meeting Attendance</h2>
             <button
               onClick={() => navigate("/attendance")}
               className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
             >
               <ArrowLeft size={16} />
-              {ATTENDANCE_TEXT.backToAttendance}
+              Back to Attendance
             </button>
           </div>
 
@@ -588,7 +548,7 @@ const ViewAttendance = () => {
               <div className="space-y-3">
                 {filteredRows.length === 0 ? (
                   <div className="py-10 text-center text-sm text-gray-500 dark:text-muted-foreground">
-                    {ATTENDANCE_TEXT.noParticipants}
+                    No participants found for this meeting.
                   </div>
                 ) : (
                   filteredRows.map((row, index) => (
@@ -605,7 +565,7 @@ const ViewAttendance = () => {
                         <span
                           className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
                             String(row[statusHeader]).toLowerCase() ===
-                            ATTENDANCE_TEXT.moderator.toLowerCase()
+                            "moderator"
                               ? "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                               : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                           }`}
@@ -685,7 +645,7 @@ const ViewAttendance = () => {
         <div className="h-[calc(100%-56px)] overflow-y-auto p-4">
           {panelLoading ? (
             <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              {ATTENDANCE_TEXT.loadingContent}
+              Loading...
             </p>
           ) : (
             <div className="whitespace-pre-wrap rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">

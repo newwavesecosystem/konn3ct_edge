@@ -41,15 +41,6 @@ import {
   privacyPolicyUrl,
 } from "../../lib/externalLinks";
 
-const TERMS_PREFIX =
-  "By signing up you understand and agree to the Konn3ct Terms of Use. For more information about Privacy Data visit the";
-const PRIVACY_LINK_LABEL = "Konn3ct Privacy Data Sheets.";
-const SIGN_UP_SUCCESSFUL_TITLE = "Sign-up Successful";
-const SIGN_UP_UNSUCCESSFUL_TITLE = "Sign-up Unsuccessful";
-const LOGIN_SUCCESSFUL_TITLE = "Login Successful";
-const LOGIN_UNSUCCESSFUL_TITLE = "Login Unsuccessful";
-const APPLE_LOGIN_FAILED_TITLE = "Apple login failed";
-
 export default function Register() {
   useFacebookSDK();
 
@@ -59,14 +50,15 @@ export default function Register() {
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <RegisterForm />
         <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
-          {TERMS_PREFIX}{" "}
+          By signing up you understand and agree to the Konn3ct Terms of Use.
+          For more information about Privacy Data visit the{" "}
           <a
             href={privacyPolicyUrl}
             className="text-blue-500"
             rel="noreferrer"
             target="_blank"
           >
-            {PRIVACY_LINK_LABEL}
+            Konn3ct Privacy Data Sheets.
           </a>
         </p>
       </Card>
@@ -140,11 +132,11 @@ export function RegisterForm() {
     onSuccess: (res) => {
       if (res.success) {
         clearStoredReferralCode();
-        toast({ title: SIGN_UP_SUCCESSFUL_TITLE, description: res.message });
+        toast({ title: "Sign-up Successful", description: res.message });
         navigate("/");
       } else {
         toast({
-          title: SIGN_UP_UNSUCCESSFUL_TITLE,
+          title: "Sign-up Unsuccessful",
           description: res.message,
           variant: "destructive",
         });
@@ -152,7 +144,7 @@ export function RegisterForm() {
     },
     onError: (error) => {
       toast({
-        title: SIGN_UP_UNSUCCESSFUL_TITLE,
+        title: "Sign-up Unsuccessful",
         description: error.message,
         variant: "destructive",
       });
@@ -164,11 +156,11 @@ export function RegisterForm() {
     onSuccess: (res) => {
       if (res.success) {
         clearStoredReferralCode();
-        toast({ title: LOGIN_SUCCESSFUL_TITLE, description: res.message });
+        toast({ title: "Login Successful", description: res.message });
         navigate("/");
       } else {
         toast({
-          title: LOGIN_UNSUCCESSFUL_TITLE,
+          title: "Login Unsuccessful",
           description: res.message,
           variant: "destructive",
         });
@@ -176,7 +168,7 @@ export function RegisterForm() {
     },
     onError: (error) => {
       toast({
-        title: LOGIN_UNSUCCESSFUL_TITLE,
+        title: "Login Unsuccessful",
         description: error.message,
         variant: "destructive",
       });
@@ -230,7 +222,7 @@ export function RegisterForm() {
       try {
         if (!googleUserInfoUrl) {
           toast({
-            title: LOGIN_UNSUCCESSFUL_TITLE,
+            title: "Login Unsuccessful",
             description: "Google user info URL is not configured.",
             variant: "destructive",
           });
@@ -302,7 +294,7 @@ export function RegisterForm() {
 
   const handleAppleUnavailable = () => {
     toast({
-      title: APPLE_LOGIN_FAILED_TITLE,
+      title: "Apple login failed",
       description: appleSdkError
         ? "Apple sign-in is temporarily unavailable."
         : "Apple sign-in is still loading. Please try again.",

@@ -21,48 +21,21 @@ import {
   getReferralLinkFromRecord,
 } from "../../lib/referral";
 
-const PROFILE_TEXT = {
-  tabs: {
-    profileInformation: "Profile Information",
-    updatePassword: "Update Password",
-    browserSessions: "Browser Sessions",
-  },
-  copied: "Copied to clipboard",
-  loadProfileErrorTitle: "Unable to load profile information.",
-  loadProfileErrorDescription: "Please refresh and try again.",
-  loadSessionsErrorTitle: "Unable to load browser sessions.",
-  loadSessionsErrorDescription: "Please refresh and try again.",
-  photo: "Photo",
-  activePlan: "Active plan",
-  referralCode: "Referral Code",
-  referralLink: "Referral Link",
-  notAvailable: "N/A",
-  updatePasswordDescription:
-    "Ensure your account is using a long random password to stay secure.",
-  browserSessionsDescription:
-    "If necessary, you may logout of all of your other browser sessions across all of your devices.",
-  logoutOtherSessions: "Logout Other Browser Sessions",
-  unknownBrowser: "Unknown browser",
-  unknownLocation: "Unknown location",
-  thisDevice: "This device",
-  otherDevices: "Other devices",
-};
-
 const Profile = () => {
   return (
     <section className="page">
       <Tabs defaultValue="info" className="w-full h-full">
         <TabsList className="mb-20 w-full flex flex-wrap gap-2 md:grid md:grid-cols-2 lg:flex lg:flex-wrap">
           <TabsTrigger value="info" className="text-base lg:text-lg">
-            {PROFILE_TEXT.tabs.profileInformation}
+            Profile Information
           </TabsTrigger>
           <Separator orientation="vertical" className="hidden lg:block" />
           <TabsTrigger value="password" className="text-base lg:text-lg">
-            {PROFILE_TEXT.tabs.updatePassword}
+            Update Password
           </TabsTrigger>
           <Separator orientation="vertical" className="hidden lg:block" />
           <TabsTrigger value="sessions" className="text-base lg:text-lg">
-            {PROFILE_TEXT.tabs.browserSessions}
+            Browser Sessions
           </TabsTrigger>
         </TabsList>
 
@@ -91,16 +64,16 @@ const ProfileInformation = () => {
   const handleCopy = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    toast({ description: PROFILE_TEXT.copied });
+    toast({ description: "Copied to clipboard" });
   };
 
   if (userQuery.isLoading) return null;
   if (userQuery.isError) {
     return (
       <Card className="p-4">
-        <p className="font-medium">{PROFILE_TEXT.loadProfileErrorTitle}</p>
+        <p className="font-medium">Unable to load profile information.</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          {PROFILE_TEXT.loadProfileErrorDescription}
+          Please refresh and try again.
         </p>
       </Card>
     );
@@ -114,9 +87,7 @@ const ProfileInformation = () => {
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <Card className="p-4">
-        <CardTitle className="mb-4 text-lg lg:text-xl">
-          {PROFILE_TEXT.photo}
-        </CardTitle>
+        <CardTitle className="mb-4 text-lg lg:text-xl">Photo</CardTitle>
         <ProfileForm />
       </Card>
 
@@ -124,7 +95,7 @@ const ProfileInformation = () => {
         <Card className="flex flex-col items-start p-4 lg:flex-row lg:items-center">
           <CardHeader className="p-0">
             <CardTitle className="text-base lg:text-lg">
-              {PROFILE_TEXT.activePlan}
+              Active plan
             </CardTitle>
             <p className="text-sm lg:text-base">
               {capitalize(userPlan?.name ?? "basic")}
@@ -139,10 +110,10 @@ const ProfileInformation = () => {
         <Card className="flex flex-col items-start p-4 lg:flex-row lg:items-center">
           <CardHeader className="p-0">
             <CardTitle className="text-base lg:text-lg">
-              {PROFILE_TEXT.referralCode}
+              Referral Code
             </CardTitle>
             <p className="font-mono text-sm lg:text-base">
-              {referralCode || PROFILE_TEXT.notAvailable}
+              {referralCode || "N/A"}
             </p>
           </CardHeader>
 
@@ -159,7 +130,7 @@ const ProfileInformation = () => {
         <Card className="p-4">
           <CardHeader className="mb-2 p-0">
             <CardTitle className="text-base lg:text-lg">
-              {PROFILE_TEXT.referralLink}
+              Referral Link
             </CardTitle>
           </CardHeader>
 
@@ -168,7 +139,7 @@ const ProfileInformation = () => {
               type="text"
               value={referralLink}
               readOnly
-              placeholder={PROFILE_TEXT.notAvailable}
+              placeholder="N/A"
               className="flex-1 cursor-pointer rounded-md border bg-muted px-3 py-2 text-sm"
               onClick={(e) => e.target.select()}
             />
@@ -192,7 +163,7 @@ const UpdatePassword = () => {
     <Card className="min-h-full flex justify-center p-6">
       <div className="flex w-full max-w-md flex-col">
         <p className="mb-6 text-sm lg:text-base">
-          {PROFILE_TEXT.updatePasswordDescription}
+          Ensure your account is using a long random password to stay secure.
         </p>
         <PasswordForm />
       </div>
@@ -225,9 +196,9 @@ const BrowserSessions = () => {
   if (sessionQuery.isError) {
     return (
       <Card className="min-h-full p-6">
-        <p className="font-medium">{PROFILE_TEXT.loadSessionsErrorTitle}</p>
+        <p className="font-medium">Unable to load browser sessions.</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          {PROFILE_TEXT.loadSessionsErrorDescription}
+          Please refresh and try again.
         </p>
       </Card>
     );
@@ -236,8 +207,8 @@ const BrowserSessions = () => {
   const sessionName = String(sessionQuery.data?.currentToken?.name ?? "").split(
     "||"
   );
-  const browserInfo = sessionName[0] || PROFILE_TEXT.unknownBrowser;
-  const locationInfo = sessionName[1] || PROFILE_TEXT.unknownLocation;
+  const browserInfo = sessionName[0] || "Unknown browser";
+  const locationInfo = sessionName[1] || "Unknown location";
   const currentUserAgent = navigator.userAgent;
   const thisUser = browserInfo === currentUserAgent;
 
@@ -245,7 +216,7 @@ const BrowserSessions = () => {
     <Card className="min-h-full flex items-center justify-center p-6">
       <div className="w-full max-w-2xl">
         <p className="text-sm lg:text-base">
-          {PROFILE_TEXT.browserSessionsDescription}
+          If necessary, you may logout of all of your other browser sessions across all of your devices.
         </p>
 
         <div className="my-6 flex flex-col items-start gap-4 font-medium lg:flex-row lg:items-center">
@@ -255,7 +226,7 @@ const BrowserSessions = () => {
             <p className="text-sm lg:text-base">
               {locationInfo}.
               <span className="ml-1 text-accent">
-                {thisUser ? PROFILE_TEXT.thisDevice : PROFILE_TEXT.otherDevices}
+                {thisUser ? "This device" : "Other devices"}
               </span>
             </p>
           </div>
@@ -266,7 +237,7 @@ const BrowserSessions = () => {
           className="w-full lg:w-auto"
           onClick={() => sessionLogoutMutation.mutate()}
         >
-          {PROFILE_TEXT.logoutOtherSessions}
+          Logout Other Browser Sessions
         </Button>
       </div>
     </Card>

@@ -16,33 +16,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, updateProfile } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
 
-const PROFILE_FORM_TEXT = {
-  validation: {
-    firstNameMin2: "First name must be at least 2 characters",
-    lastNameMin2: "Last name must be at least 2 characters",
-    phoneMin10: "Phone number must be at least 10 digits.",
-  },
-  loadProfileDetailsError: "Unable to load profile details right now.",
-  firstName: "First Name",
-  lastName: "Last Name",
-  phone: "Phone",
-  updating: "Updating...",
-  updateProfile: "Update Profile",
-};
-
 export function ProfileForm() {
   const formSchema = z.object({
     firstname: z
       .string()
-      .min(2, PROFILE_FORM_TEXT.validation.firstNameMin2)
+      .min(2, "First name must be at least 2 characters")
       .or(z.literal("")),
     lastname: z
       .string()
-      .min(2, PROFILE_FORM_TEXT.validation.lastNameMin2)
+      .min(2, "Last name must be at least 2 characters")
       .or(z.literal("")),
     phone: z
       .string()
-      .min(10, PROFILE_FORM_TEXT.validation.phoneMin10)
+      .min(10, "Phone number must be at least 10 digits.")
       .or(z.literal("")),
     profileImage: z.any().optional(),
   });
@@ -137,7 +123,7 @@ export function ProfileForm() {
   if (userQuery.isError) {
     return (
       <div className="text-sm text-muted-foreground">
-        {PROFILE_FORM_TEXT.loadProfileDetailsError}
+        Unable to load profile details right now.
       </div>
     );
   }
@@ -169,7 +155,7 @@ export function ProfileForm() {
           name="firstname"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{PROFILE_FORM_TEXT.firstName}</FormLabel>
+              <FormLabel>First Name</FormLabel>
               <FormControl>
                 <Input {...field} placeholder={profileUser.firstname ?? ""} />
               </FormControl>
@@ -183,7 +169,7 @@ export function ProfileForm() {
           name="lastname"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{PROFILE_FORM_TEXT.lastName}</FormLabel>
+              <FormLabel>Last Name</FormLabel>
               <FormControl>
                 <Input {...field} placeholder={profileUser.lastname ?? ""} />
               </FormControl>
@@ -197,7 +183,7 @@ export function ProfileForm() {
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{PROFILE_FORM_TEXT.phone}</FormLabel>
+              <FormLabel>Phone</FormLabel>
               <FormControl>
                 <Input {...field} placeholder={profileUser.phone ?? ""} />
               </FormControl>
@@ -211,9 +197,7 @@ export function ProfileForm() {
           className="w-full"
           disabled={profileMutation.isPending}
         >
-          {profileMutation.isPending
-            ? PROFILE_FORM_TEXT.updating
-            : PROFILE_FORM_TEXT.updateProfile}
+          {profileMutation.isPending ? "Updating..." : "Update Profile"}
         </Button>
       </form>
     </Form>

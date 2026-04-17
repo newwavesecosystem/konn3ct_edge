@@ -18,17 +18,31 @@ import {
 } from "../components/ui/table";
 import { useToast } from "../hooks/use-toast";
 
-const STATUS_LABELS = {
-  active: "Active",
-  inactive: "Inactive",
-  running: "Running",
-  ended: "Ended",
-  verified: "Verified",
-  pending: "Pending",
-  success: "Successful",
-  failed: "Failed",
-  inprogress: "In Progress",
-  loading: "Loading...",
+const getStatusLabel = (status) => {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "inactive":
+      return "Inactive";
+    case "running":
+      return "Running";
+    case "ended":
+      return "Ended";
+    case "verified":
+      return "Verified";
+    case "pending":
+      return "Pending";
+    case "success":
+      return "Successful";
+    case "failed":
+      return "Failed";
+    case "inprogress":
+      return "In Progress";
+    case "loading":
+      return "Loading...";
+    default:
+      return status;
+  }
 };
 
 const Addon = () => {
@@ -149,7 +163,7 @@ const Addon = () => {
                       variant={statusValue === "active" ? "" : "destructive"}
                     >
                       {statusValue
-                        ? STATUS_LABELS[normalizedStatus] ?? statusValue
+                        ? getStatusLabel(normalizedStatus)
                         : "..."}
                     </Badge>
                   </TableCell>

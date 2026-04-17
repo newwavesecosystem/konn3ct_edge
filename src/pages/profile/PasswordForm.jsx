@@ -19,37 +19,21 @@ import { useToast } from "../../hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 
-const PASSWORD_FORM_TEXT = {
-  validation: {
-    currentPasswordMin: "Current password must be at least 6 characters.",
-    newPasswordMin: "New password must be at least 6 characters.",
-    confirmPasswordMin: "Confirm password must be at least 6 characters.",
-    passwordsMustMatch: "Passwords must match.",
-  },
-  currentPassword: "Current Password",
-  enterCurrentPassword: "Enter current password",
-  newPassword: "New Password",
-  enterNewPassword: "Enter new password",
-  confirmNewPassword: "Confirm New Password",
-  confirmNewPasswordPlaceholder: "Confirm new password",
-  save: "Save",
-};
-
 export function PasswordForm() {
   const formSchema = z
     .object({
       currentPassword: z.string().min(6, {
-        message: PASSWORD_FORM_TEXT.validation.currentPasswordMin,
+        message: "Current password must be at least 6 characters.",
       }),
       newPassword: z.string().min(6, {
-        message: PASSWORD_FORM_TEXT.validation.newPasswordMin,
+        message: "New password must be at least 6 characters.",
       }),
       confirmPassword: z.string().min(6, {
-        message: PASSWORD_FORM_TEXT.validation.confirmPasswordMin,
+        message: "Confirm password must be at least 6 characters.",
       }),
     })
     .refine((data) => data.newPassword === data.confirmPassword, {
-      message: PASSWORD_FORM_TEXT.validation.passwordsMustMatch,
+      message: "Passwords must match.",
       path: ["confirmPassword"],
     });
   const form = useForm({
@@ -95,12 +79,12 @@ export function PasswordForm() {
           name="currentPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{PASSWORD_FORM_TEXT.currentPassword}</FormLabel>
+              <FormLabel>Current Password</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showCurrent ? "text" : "password"}
-                    placeholder={PASSWORD_FORM_TEXT.enterCurrentPassword}
+                    placeholder="Enter current password"
                     {...field}
                   />
                   <button
@@ -122,12 +106,12 @@ export function PasswordForm() {
           name="newPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{PASSWORD_FORM_TEXT.newPassword}</FormLabel>
+              <FormLabel>New Password</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showNew ? "text" : "password"}
-                    placeholder={PASSWORD_FORM_TEXT.enterNewPassword}
+                    placeholder="Enter new password"
                     {...field}
                   />
                   <button
@@ -149,14 +133,12 @@ export function PasswordForm() {
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{PASSWORD_FORM_TEXT.confirmNewPassword}</FormLabel>
+              <FormLabel>Confirm New Password</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showConfirm ? "text" : "password"}
-                    placeholder={
-                      PASSWORD_FORM_TEXT.confirmNewPasswordPlaceholder
-                    }
+                    placeholder="Confirm new password"
                     {...field}
                   />
                   <button
@@ -174,7 +156,7 @@ export function PasswordForm() {
         />
 
         <Button type="submit" size="lg">
-          {PASSWORD_FORM_TEXT.save}
+          Save
         </Button>
       </form>
     </Form>

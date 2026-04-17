@@ -65,79 +65,6 @@ import {
 } from "../components/ui/sheet";
 
 const SCHEDULE_PANEL_TOP_OFFSET = "80px";
-const ROOM_TEXT = {
-  copied: "Copied to clipboard",
-  loadErrorTitle: "Unable to load rooms right now.",
-  loadErrorDescription: "Please check your connection and retry.",
-  createRoom: "Create Room",
-  scheduleMeeting: "Schedule a Meeting",
-  totalRoom: "Total room",
-  activeRoom: "Active room",
-  scheduledRoom: "Scheduled Room",
-  scheduledMeetings: "Scheduled Meetings",
-  scheduledMeetingsDescription: "Your upcoming meetings.",
-  inactiveRoom: "Inactive room",
-  name: "Name",
-  roomUrl: "Room URL",
-  actionsHeader: "Actions",
-  copyLink: "Copy Link",
-  manage: "Manage",
-  accessCode: "Access Code",
-  userLimit: "User Limit",
-  bannerUpload: "Meeting Room Banner Upload",
-  transferRoom: "Transfer Room",
-  startMeeting: "Start Meeting",
-  createRoomTitle: "Create a new Room",
-  createRoomDescription:
-    "You will create a new meeting room, accessible on the dashboard.",
-  deleteTitle: "Confirm Deletion",
-  deleteDescription:
-    "Are you sure you want to delete the room? This action cannot be undone.",
-  cancel: "Cancel",
-  delete: "Delete",
-  scheduleTitle: "Schedule a new meeting",
-  scheduleDescription: "Send an invite for a scheduled meeting",
-  manageAccessCodeTitle: "Manage Access Code",
-  typeLabel: "Type (auto / manual / remove)",
-  typePlaceholder: "auto / manual / remove",
-  accessCodeManualLabel: "Access Code (if manual)",
-  save: "Save",
-  limitUsersTitle: "Limit Users",
-  userLimitLabel: "User Limit",
-  required: "Required",
-  uploadRoomBannerTitle: "Upload Room Banner",
-  selectBanner: "Select Banner",
-  upload: "Upload",
-  transferRoomTitle: "Transfer Room",
-  invalidEmail: "Invalid email address.",
-  newOwnerEmail: "New Owner Email",
-  transfer: "Transfer",
-  meetingStartedNoUrl: "Meeting started but no launch URL was returned.",
-  meetingStartedSuccess: "Meeting started successfully",
-  accessCodeUpdatedSuccess: "Access code updated successfully",
-  userLimitUpdatedSuccess: "User limit updated successfully",
-  bannerUploadedSuccess: "Banner uploaded successfully",
-  roomTransferredSuccess: "Room transferred successfully",
-  meetingCreatedSuccess: "Meeting created successfully",
-  planLimitReached: "Plan Limit Reached",
-  planLimitDescription:
-    "You've reached the maximum number of rooms for your current plan. Please upgrade to create more meetings or visit Addons to buy more room bundles",
-  planLimitDescriptionShort:
-    "You've reached the maximum number of rooms for your current plan. Please upgrade to create more meetings.",
-  errorTitle: "Error",
-  createMeetingError: "Something went wrong while creating the meeting.",
-  roomName: "Room Name",
-  roomNameMin: "Room name must be at least 5 characters long.",
-  roomNameRequired:
-    "Room name is required and cannot be empty or whitespace.",
-  roomUrlField: "Room URL",
-  optional: "Optional",
-  creating: "Creating...",
-  tableEmpty: "No data available for this table",
-  notAvailable: "N/A",
-  guests: (guest) => `Guests: ${guest}`,
-  scheduledAt: (date, time) => `${date} at ${time}`,
-};
 
 const Rooms = () => {
   const roomQuery = useQuery({
@@ -195,7 +122,7 @@ const Rooms = () => {
     const meeting_url = `${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`;
     if (meeting_url) {
       navigator.clipboard.writeText(meeting_url);
-      toast({ description: ROOM_TEXT.copied });
+      toast({ description: "Copied to clipboard" });
     }
   };
 
@@ -214,12 +141,12 @@ const Rooms = () => {
       if (!meetingUrl) {
         toast({
           variant: "destructive",
-          description: ROOM_TEXT.meetingStartedNoUrl,
+          description: "Meeting started but no launch URL was returned.",
         });
         return;
       }
 
-      toast({ description: ROOM_TEXT.meetingStartedSuccess });
+      toast({ description: "Meeting started successfully" });
       window.open(meetingUrl, "_blank");
     },
   });
@@ -228,7 +155,7 @@ const Rooms = () => {
     mutationFn: manageAccessCode,
     onSuccess: () => {
       queryClient.invalidateQueries(["rooms"]);
-      toast({ description: ROOM_TEXT.accessCodeUpdatedSuccess });
+      toast({ description: "Access code updated successfully" });
     },
   });
 
@@ -236,7 +163,7 @@ const Rooms = () => {
     mutationFn: limitUser,
     onSuccess: () => {
       queryClient.invalidateQueries(["rooms"]);
-      toast({ description: ROOM_TEXT.userLimitUpdatedSuccess });
+      toast({ description: "User limit updated successfully" });
     },
   });
 
@@ -244,7 +171,7 @@ const Rooms = () => {
     mutationFn: bannerUpload,
     onSuccess: () => {
       queryClient.invalidateQueries(["rooms"]);
-      toast({ description: ROOM_TEXT.bannerUploadedSuccess });
+      toast({ description: "Banner uploaded successfully" });
     },
   });
 
@@ -252,7 +179,7 @@ const Rooms = () => {
     mutationFn: transferRoom,
     onSuccess: () => {
       queryClient.invalidateQueries(["rooms"]);
-      toast({ description: ROOM_TEXT.roomTransferredSuccess });
+      toast({ description: "Room transferred successfully" });
     },
   });
 
@@ -267,9 +194,9 @@ const Rooms = () => {
     return (
       <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
-          <p className="font-medium">{ROOM_TEXT.loadErrorTitle}</p>
+          <p className="font-medium">Unable to load rooms right now.</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {ROOM_TEXT.loadErrorDescription}
+            Please check your connection and retry.
           </p>
         </Card>
       </section>
@@ -301,7 +228,7 @@ const Rooms = () => {
           <div className="py-5 flex flex-col gap-3 sm:flex-row sm:gap-x-4">
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto">
-                <Plus /> {ROOM_TEXT.createRoom}
+                <Plus /> Create Room
               </Button>
             </DialogTrigger>
             <Button
@@ -310,14 +237,14 @@ const Rooms = () => {
                 setOpenScheduleDialog(true);
               }}
             >
-              <Plus /> {ROOM_TEXT.scheduleMeeting}
+              <Plus /> Schedule a Meeting
             </Button>
           </div>
           <Separator />
           <div className="grid grid-cols-2 gap-4 p-4 pt-6 lg:flex lg:items-center lg:justify-between lg:gap-x-4 lg:pt-10">
             <StatCard
               value={totalRooms}
-              name={ROOM_TEXT.totalRoom}
+              name="Total room"
               icon={roomsIcon}
               className="w-full min-w-0 lg:w-[240px]"
             />
@@ -327,7 +254,7 @@ const Rooms = () => {
             />
             <StatCard
               value={activeRooms}
-              name={ROOM_TEXT.activeRoom}
+              name="Active room"
               icon={activeIcon}
               className="w-full min-w-0 lg:w-[240px]"
             />
@@ -337,10 +264,10 @@ const Rooms = () => {
             />
             <StatCard
               value={scheduledMeetings.length}
-              name={ROOM_TEXT.scheduledRoom}
+              name="Scheduled Room"
               icon={scheduledIcon}
               onIconClick={() => setOpenScheduleSide(true)}
-              iconButtonLabel={ROOM_TEXT.scheduledMeetings}
+              iconButtonLabel="Scheduled Meetings"
               className="w-full min-w-0 lg:w-[240px]"
             />
 
@@ -350,7 +277,7 @@ const Rooms = () => {
             />
             <StatCard
               value={inactiveRooms}
-              name={ROOM_TEXT.inactiveRoom}
+              name="Inactive room"
               icon={inactiveIcon}
               className="w-full min-w-0 lg:w-[240px]"
             />
@@ -359,13 +286,13 @@ const Rooms = () => {
           <Table className="min-w-[980px] lg:min-w-0">
             <TableHeader>
             <TableRow>
-                <TableHead>{ROOM_TEXT.name.toUpperCase()}</TableHead>
+                <TableHead>NAME</TableHead>
                 <TableHead className="whitespace-nowrap">
-                  {ROOM_TEXT.roomUrl.toUpperCase()}
+                  ROOM URL
                 </TableHead>
                 <TableHead className="whitespace-nowrap">
                   <div className="flex justify-between">
-                    <p>{ROOM_TEXT.actionsHeader.toUpperCase()}</p>
+                    <p>ACTIONS</p>
                   </div>
                 </TableHead>
               </TableRow>
@@ -378,7 +305,7 @@ const Rooms = () => {
                   <TableCell className="whitespace-nowrap">
                     <div className="flex gap-2 md:flex-wrap lg:flex-nowrap">
                       <Button variant="outline" onClick={() => handleCopy(url)}>
-                        {ROOM_TEXT.copyLink}
+                        Copy Link
                       </Button>
                       {/*<Button*/}
                       {/*  variant="outline"*/}
@@ -395,7 +322,7 @@ const Rooms = () => {
                       {/*</Button>*/}
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex items-center justify-center px-4 border rounded-full whitespace-nowrap text-sm font-medium">
-                          {ROOM_TEXT.manage}
+                          Manage
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                           <DropdownMenuItem
@@ -404,7 +331,7 @@ const Rooms = () => {
                               setOpenAccessDialog(true);
                             }}
                           >
-                            {ROOM_TEXT.accessCode}
+                            Access Code
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -412,7 +339,7 @@ const Rooms = () => {
                               setOpenLimitDialog(true);
                             }}
                           >
-                            {ROOM_TEXT.userLimit}
+                            User Limit
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -420,7 +347,7 @@ const Rooms = () => {
                               setOpenBannerDialog(true);
                             }}
                           >
-                            {ROOM_TEXT.bannerUpload}
+                            Meeting Room Banner Upload
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -428,7 +355,7 @@ const Rooms = () => {
                               setOpenTransferDialog(true);
                             }}
                           >
-                            {ROOM_TEXT.transferRoom}
+                            Transfer Room
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -437,14 +364,14 @@ const Rooms = () => {
                         disabled={startMeetingMutation.isPending}
                         onClick={() => startMeetingMutation.mutate(id)}
                       >
-                        {ROOM_TEXT.startMeeting}
+                        Start Meeting
                       </Button>
                       <Button
                         disabled={deleteMeetingMutation.isPending}
                         variant="destructive"
                         onClick={() => handleDeleteClick(id)}
                       >
-                        {ROOM_TEXT.delete}
+                        Delete
                       </Button>
                     </div>
                   </TableCell>
@@ -454,14 +381,14 @@ const Rooms = () => {
           </Table>
         {rooms.length === 0 && (
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex justify-center items-center">
-              <p>{ROOM_TEXT.tableEmpty}</p>
+              <p>No data available for this table</p>
             </div>
         )}
       </Card>
         <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-1/2">
-          <DialogTitle>{ROOM_TEXT.createRoomTitle}</DialogTitle>
+          <DialogTitle>Create a new Room</DialogTitle>
           <DialogDescription>
-            {ROOM_TEXT.createRoomDescription}
+            You will create a new meeting room, accessible on the dashboard.
           </DialogDescription>
           <CreateMeetingDialog setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -496,13 +423,13 @@ const Rooms = () => {
       {/* Delete Prompt */}
       <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
         <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-xl lg:w-1/2">
-          <DialogTitle>{ROOM_TEXT.deleteTitle}</DialogTitle>
+          <DialogTitle>Confirm Deletion</DialogTitle>
           <DialogDescription>
-            {ROOM_TEXT.deleteDescription}
+            Are you sure you want to delete the room? This action cannot be undone.
           </DialogDescription>
           <div className="flex gap-x-4">
             <Button variant="outline" onClick={() => setOpenDeleteDialog(false)}>
-              {ROOM_TEXT.cancel}
+              Cancel
             </Button>
             <Button
               variant="destructive"
@@ -511,7 +438,7 @@ const Rooms = () => {
                 setOpenDeleteDialog(false);
               }}
             >
-              {ROOM_TEXT.delete}
+              Delete
             </Button>
           </div>
         </DialogContent>
@@ -520,9 +447,9 @@ const Rooms = () => {
       {/* Schedule */}
       <Dialog open={openScheduleDialog} onOpenChange={setOpenScheduleDialog}>
         <DialogContent className="top-[50%] h-[90%] w-[calc(100%-2rem)] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-3xl lg:w-[50%]">
-          <DialogTitle>{ROOM_TEXT.scheduleTitle}</DialogTitle>
+          <DialogTitle>Schedule a new meeting</DialogTitle>
           <DialogDescription>
-            {ROOM_TEXT.scheduleDescription}
+            Send an invite for a scheduled meeting
           </DialogDescription>
           <MeetingForm setOpenDialog={setOpenScheduleDialog} />
         </DialogContent>
@@ -540,9 +467,9 @@ const Rooms = () => {
           }}
         >
           <SheetHeader>
-            <SheetTitle>{ROOM_TEXT.scheduledMeetings}</SheetTitle>
+            <SheetTitle>Scheduled Meetings</SheetTitle>
             <SheetDescription>
-              {ROOM_TEXT.scheduledMeetingsDescription}
+              Your upcoming meetings.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-5 flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto overflow-x-hidden pb-12 pr-1 sm:pr-2">
@@ -585,7 +512,7 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-md lg:w-1/3">
-        <DialogTitle>{ROOM_TEXT.manageAccessCodeTitle}</DialogTitle>
+        <DialogTitle>Manage Access Code</DialogTitle>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
@@ -596,9 +523,9 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
               name="type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{ROOM_TEXT.typeLabel}</FormLabel>
+                  <FormLabel>Type (auto / manual / remove)</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder={ROOM_TEXT.typePlaceholder} />
+                    <Input {...field} placeholder="auto / manual / remove" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -609,7 +536,7 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
               name="accesscode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{ROOM_TEXT.accessCodeManualLabel}</FormLabel>
+                  <FormLabel>Access Code (if manual)</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
@@ -617,7 +544,7 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
                 </FormItem>
               )}
             />
-            <Button type="submit">{ROOM_TEXT.save}</Button>
+            <Button type="submit">Save</Button>
           </form>
         </Form>
       </DialogContent>
@@ -627,7 +554,7 @@ const AccessCodeDialog = ({ open, setOpen, roomId, mutation }) => {
 
 const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
   const formSchema = z.object({
-    users: z.string().min(1, ROOM_TEXT.required),
+    users: z.string().min(1, "Required"),
   });
 
   const form = useForm({
@@ -643,7 +570,7 @@ const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-md lg:w-1/3">
-        <DialogTitle>{ROOM_TEXT.limitUsersTitle}</DialogTitle>
+        <DialogTitle>Limit Users</DialogTitle>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
@@ -654,7 +581,7 @@ const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
               name="users"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{ROOM_TEXT.userLimitLabel}</FormLabel>
+                  <FormLabel>User Limit</FormLabel>
                   <FormControl>
                     <Input {...field} type="number" />
                   </FormControl>
@@ -662,7 +589,7 @@ const LimitUserDialog = ({ open, setOpen, roomId, mutation }) => {
                 </FormItem>
               )}
             />
-            <Button type="submit">{ROOM_TEXT.save}</Button>
+            <Button type="submit">Save</Button>
           </form>
         </Form>
       </DialogContent>
@@ -688,7 +615,7 @@ const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-md lg:w-1/3">
-        <DialogTitle>{ROOM_TEXT.uploadRoomBannerTitle}</DialogTitle>
+        <DialogTitle>Upload Room Banner</DialogTitle>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
@@ -699,7 +626,7 @@ const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
               name="banner"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{ROOM_TEXT.selectBanner}</FormLabel>
+                  <FormLabel>Select Banner</FormLabel>
                   <FormControl>
                     <Input
                       type="file"
@@ -711,7 +638,7 @@ const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
                 </FormItem>
               )}
             />
-            <Button type="submit">{ROOM_TEXT.upload}</Button>
+            <Button type="submit">Upload</Button>
           </form>
         </Form>
       </DialogContent>
@@ -721,7 +648,7 @@ const BannerUploadDialog = ({ open, setOpen, roomId, mutation }) => {
 
 const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
   const formSchema = z.object({
-    email: z.string().email(ROOM_TEXT.invalidEmail),
+    email: z.string().email("Invalid email address."),
   });
 
   const form = useForm({
@@ -735,7 +662,7 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-md lg:w-1/3">
-        <DialogTitle>{ROOM_TEXT.transferRoomTitle}</DialogTitle>
+        <DialogTitle>Transfer Room</DialogTitle>
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
@@ -746,7 +673,7 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{ROOM_TEXT.newOwnerEmail}</FormLabel>
+                  <FormLabel>New Owner Email</FormLabel>
                   <FormControl>
                     <Input {...field} />
                   </FormControl>
@@ -754,7 +681,7 @@ const TransferRoomDialog = ({ open, setOpen, roomId, mutation }) => {
                 </FormItem>
               )}
             />
-            <Button type="submit">{ROOM_TEXT.transfer}</Button>
+            <Button type="submit">Transfer</Button>
           </form>
         </Form>
       </DialogContent>
@@ -774,18 +701,19 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
       setOpenDialog(false);
       if (res?.success) {
         queryClient.invalidateQueries(["rooms"]);
-        toast({ description: ROOM_TEXT.meetingCreatedSuccess });
+        toast({ description: "Meeting created successfully" });
       } else {
         if (res.message?.includes("Maximum room")) {
           toast({
             variant: "destructive",
-            title: ROOM_TEXT.planLimitReached,
-            description: ROOM_TEXT.planLimitDescription,
+            title: "Plan Limit Reached",
+            description:
+              "You've reached the maximum number of rooms for your current plan. Please upgrade to create more meetings or visit Addons to buy more room bundles",
           });
         } else {
           toast({
             variant: "destructive",
-            title: ROOM_TEXT.errorTitle,
+            title: "Error",
             description: res?.message,
           });
         }
@@ -795,14 +723,15 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
       if (error.response?.data?.message?.includes("maximum room")) {
         toast({
           variant: "destructive",
-          title: ROOM_TEXT.planLimitReached,
-          description: ROOM_TEXT.planLimitDescriptionShort,
+          title: "Plan Limit Reached",
+          description:
+            "You've reached the maximum number of rooms for your current plan. Please upgrade to create more meetings.",
         });
       } else {
         toast({
           variant: "destructive",
-          title: ROOM_TEXT.errorTitle,
-          description: ROOM_TEXT.createMeetingError,
+          title: "Error",
+          description: "Something went wrong while creating the meeting.",
         });
       }
     },
@@ -812,10 +741,10 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     name: z
       .string()
       .min(5, {
-        message: ROOM_TEXT.roomNameMin,
+        message: "Room name must be at least 5 characters long.",
       })
       .refine((value) => value.trim().length > 0, {
-        message: ROOM_TEXT.roomNameRequired,
+        message: "Room name is required and cannot be empty or whitespace.",
       }),
     url: z.string().optional(),
   });
@@ -843,7 +772,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{ROOM_TEXT.roomName}</FormLabel>
+              <FormLabel>Room Name</FormLabel>
               <FormControl>
                 <Input {...field} />
               </FormControl>
@@ -856,9 +785,9 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           name="url"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{ROOM_TEXT.roomUrlField}</FormLabel>
+              <FormLabel>Room URL</FormLabel>
               <FormControl>
-                <Input {...field} placeholder={ROOM_TEXT.optional} />
+                <Input {...field} placeholder="Optional" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -869,9 +798,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
           className="self-center"
           disabled={createMeetingMutation.isPending}
         >
-          {createMeetingMutation.isPending
-            ? ROOM_TEXT.creating
-            : ROOM_TEXT.createRoom}
+          {createMeetingMutation.isPending ? "Creating..." : "Create Room"}
         </Button>
       </form>
     </Form>
@@ -889,7 +816,7 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
       ? `${guestList[0]}${
           guestList.length > 1 ? `, +${guestList.length - 1} more` : ""
         }`
-      : ROOM_TEXT.notAvailable;
+      : "N/A";
 
   const formatDate = (dateString) => {
     const dateObj = new Date(dateString);
@@ -919,17 +846,17 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
           <div className="flex min-w-0 flex-col gap-y-2">
             <p className="break-words font-bold">{roomname}</p>
             <p className="break-words text-sm text-muted-foreground">
-              {ROOM_TEXT.scheduledAt(formatDate(date), time)}
+              {`${formatDate(date)} at ${time}`}
             </p>
             <p className="break-all text-sm text-muted-foreground">
-              {ROOM_TEXT.guests(previewGuests)}
+              {`Guests: ${previewGuests}`}
             </p>
           </div>
 
           {isExpanded && (
             <div className="mt-4 border-t border-border/70 pt-3">
               <p className="text-sm font-medium text-foreground">
-                {ROOM_TEXT.guests(guestList.length)}
+                {`Guests: ${guestList.length}`}
               </p>
               <div className="mt-2 flex flex-col gap-y-2">
                 {guestList.length > 0 ? (
@@ -943,7 +870,7 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
                   ))
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    {ROOM_TEXT.notAvailable}
+                    N/A
                   </p>
                 )}
               </div>

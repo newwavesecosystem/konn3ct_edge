@@ -4,28 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { getPreRegList, getPreRegSummary } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
 
-const EVENT_LIST_TEXT = {
-  create: "Create",
-  totalEvents: "Total Events",
-  totalParticipants: "Total Participants",
-  copyEventLinkSuccess: "Event link copied!",
-  untitled: "Untitled",
-  notAvailable: "N/A",
-  noRoom: "No Room",
-  participantsButton: "Participants",
-  eventLinkButton: "Event Link",
-  noEvents: "No events found.",
-  columns: {
-    title: "Title",
-    host: "Host",
-    room: "Room",
-    date: "Date",
-    time: "Time",
-    timezone: "Time Zone",
-    action: "Action",
-  },
-};
-
 const EventList = () => {
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState({
@@ -76,7 +54,7 @@ const EventList = () => {
     }
 
     navigator.clipboard.writeText(url);
-    toast({ description: EVENT_LIST_TEXT.copyEventLinkSuccess });
+    toast({ description: "Event link copied!" });
   };
 
   return (
@@ -88,7 +66,7 @@ const EventList = () => {
             className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#227451] px-6 py-2 text-sm font-medium text-white transition-all hover:bg-emerald-700 lg:mt-0 lg:w-auto"
           >
             <span className="text-lg">+</span>
-            <span className="leading-none">{EVENT_LIST_TEXT.create}</span>
+            <span className="leading-none">Create</span>
           </button>
 
           <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center lg:gap-6">
@@ -136,7 +114,7 @@ const EventList = () => {
                   {summary.totalEvents}
                 </p>
                 <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-muted-foreground">
-                  {EVENT_LIST_TEXT.totalEvents}
+                  Total Events
                 </p>
               </div>
             </div>
@@ -202,7 +180,7 @@ const EventList = () => {
                   {summary.totalParticipants}
                 </p>
                 <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-muted-foreground">
-                  {EVENT_LIST_TEXT.totalParticipants}
+                  Total Participants
                 </p>
               </div>
             </div>
@@ -214,25 +192,25 @@ const EventList = () => {
             <thead className="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-muted/70 dark:text-muted-foreground">
               <tr>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.title}
+                  Title
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.host}
+                  Host
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.room}
+                  Room
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.date}
+                  Date
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.time}
+                  Time
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.timezone}
+                  Time Zone
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  {EVENT_LIST_TEXT.columns.action}
+                  Action
                 </th>
               </tr>
             </thead>
@@ -248,15 +226,15 @@ const EventList = () => {
                     }`}
                   >
                     <td className="whitespace-nowrap px-4 py-3">
-                      {event.title || EVENT_LIST_TEXT.untitled}
+                      {event.title || "Untitled"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {event.host_name ||
                         `${event.owner?.firstname || ""} ${event.owner?.lastname || ""}`.trim() ||
-                        EVENT_LIST_TEXT.notAvailable}
+                        "N/A"}
                     </td>
                     <td className="cursor-pointer whitespace-nowrap px-4 py-3 text-blue-600 underline">
-                      {event.room?.name || EVENT_LIST_TEXT.noRoom}
+                      {event.room?.name || "No Room"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {event.date || "-"}
@@ -274,14 +252,14 @@ const EventList = () => {
                         }
                         className="whitespace-nowrap rounded-full bg-[#227451] px-4 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-800"
                       >
-                        {EVENT_LIST_TEXT.participantsButton}
+                        Participants
                       </button>
 
                       <button
                         onClick={() => copyEventUrl(event.event_url)}
                         className="whitespace-nowrap rounded-full border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
                       >
-                        {EVENT_LIST_TEXT.eventLinkButton}
+                        Event Link
                       </button>
                     </td>
                   </tr>
@@ -292,7 +270,7 @@ const EventList = () => {
                     colSpan="7"
                     className="py-6 text-center text-gray-500 dark:text-muted-foreground"
                   >
-                    {EVENT_LIST_TEXT.noEvents}
+                    No events found.
                   </td>
                 </tr>
               )}

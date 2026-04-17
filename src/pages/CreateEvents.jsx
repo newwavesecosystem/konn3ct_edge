@@ -4,56 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { createPreRegEvent, getRooms } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
 
-const EVENT_CREATE_TEXT = {
-  title: "Create Event",
-  description: "Fill the form to create an event instantly",
-  loadingRooms: "Loading rooms...",
-  logoRequired: "Logo upload is required.",
-  success: "Event created successfully!",
-  failure: "Event creation failed. Please check your inputs.",
-  failureRetry: "Failed to create event. Please try again.",
-  submitting: "Submitting...",
-  cancel: "Cancel",
-  submit: "Submit",
-  fields: {
-    title: "Event Title",
-    host: "Host Name",
-    room: "Select Room",
-    date: "Event Date",
-    time: "Event Time",
-    type: "Event Type",
-    currency: "Currency",
-    amount: "Amount",
-    timezone: "Time Zone",
-    about: "About the event",
-    reminder: "Set Reminder",
-    logo: "Upload a logo",
-  },
-  placeholders: {
-    title: "Enter your event title",
-    host: "Enter host name",
-    room: "Select Room",
-    amount: "6000",
-    timezone: "Select timezone",
-    about: "Write a short description about your event",
-    reminder: "Select reminder",
-  },
-  typeOptions: {
-    free: "Free",
-    paid: "Paid",
-  },
-  reminderOptions: [
-    { value: "2", label: "2 days before" },
-    { value: "1", label: "1 day before" },
-    { value: "0.5", label: "12 hours before" },
-  ],
-  fileUpload: {
-    selectOrDrop: "Select a file or drop here",
-    supportedFormats: "JPG, PNG, or PDF (max 10MB)",
-    recommended: "Recommended: 80px by 80px, PNG format",
-  },
-};
-
 const getTimezones = () =>
   Intl.supportedValuesOf("timeZone").map((timezone) => timezone);
 const getRoomFallbackLabel = (id) => `Room ${id}`;
@@ -163,7 +113,7 @@ const CreateEvents = () => {
     event.preventDefault();
 
     if (!formData.logo) {
-      setLogoError(EVENT_CREATE_TEXT.logoRequired);
+      setLogoError("Logo upload is required.");
       return;
     }
 
@@ -189,18 +139,19 @@ const CreateEvents = () => {
       const response = await createPreRegEvent(data);
 
       if (response?.success) {
-        toast({ description: EVENT_CREATE_TEXT.success });
+        toast({ description: "Event created successfully!" });
         navigate("/events");
       } else {
         toast({
-          description: response?.message || EVENT_CREATE_TEXT.failure,
+          description:
+            response?.message || "Event creation failed. Please check your inputs.",
           variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Error creating event:", error);
       toast({
-        description: EVENT_CREATE_TEXT.failureRetry,
+        description: "Failed to create event. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -230,10 +181,10 @@ const CreateEvents = () => {
           </div>
           <div>
             <h2 className="text-2xl font-semibold text-gray-800 dark:text-foreground">
-              {EVENT_CREATE_TEXT.title}
+              Create Event
             </h2>
             <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              {EVENT_CREATE_TEXT.description}
+              Fill the form to create an event instantly
             </p>
           </div>
         </div>
@@ -242,28 +193,28 @@ const CreateEvents = () => {
           <div className="max-w-5xl">
             <div>
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {EVENT_CREATE_TEXT.fields.title}
+                Event Title
               </label>
               <input
                 type="text"
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                placeholder={EVENT_CREATE_TEXT.placeholders.title}
+                placeholder="Enter your event title"
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="mt-4">
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {EVENT_CREATE_TEXT.fields.host}
+                Host Name
               </label>
               <input
                 type="text"
                 name="host"
                 value={formData.host}
                 onChange={handleChange}
-                placeholder={EVENT_CREATE_TEXT.placeholders.host}
+                placeholder="Enter host name"
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
@@ -271,7 +222,7 @@ const CreateEvents = () => {
             <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {EVENT_CREATE_TEXT.fields.room}
+                  Select Room
                 </label>
                 <select
                   name="room"
@@ -281,9 +232,7 @@ const CreateEvents = () => {
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 >
                   <option value="">
-                    {roomLoading
-                      ? EVENT_CREATE_TEXT.loadingRooms
-                      : EVENT_CREATE_TEXT.placeholders.room}
+                    {roomLoading ? "Loading rooms..." : "Select Room"}
                   </option>
                   {Array.isArray(rooms) &&
                     rooms.map((room) => (
@@ -299,7 +248,7 @@ const CreateEvents = () => {
 
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {EVENT_CREATE_TEXT.fields.date}
+                  Event Date
                 </label>
                 <input
                   type="date"
@@ -314,7 +263,7 @@ const CreateEvents = () => {
             <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {EVENT_CREATE_TEXT.fields.time}
+                  Event Time
                 </label>
                 <input
                   type="time"
@@ -328,7 +277,7 @@ const CreateEvents = () => {
               <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {EVENT_CREATE_TEXT.fields.type}
+                    Event Type
                   </label>
                   <select
                     name="free"
@@ -336,18 +285,14 @@ const CreateEvents = () => {
                     onChange={handleChange}
                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground"
                   >
-                    <option value="1">
-                      {EVENT_CREATE_TEXT.typeOptions.free}
-                    </option>
-                    <option value="0">
-                      {EVENT_CREATE_TEXT.typeOptions.paid}
-                    </option>
+                    <option value="1">Free</option>
+                    <option value="0">Paid</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {EVENT_CREATE_TEXT.fields.currency}
+                    Currency
                   </label>
                   <select
                     name="currency"
@@ -363,7 +308,7 @@ const CreateEvents = () => {
 
                 <div>
                   <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {EVENT_CREATE_TEXT.fields.amount}
+                    Amount
                   </label>
                   <input
                     type="number"
@@ -371,7 +316,7 @@ const CreateEvents = () => {
                     value={formData.amount}
                     onChange={handleChange}
                     disabled={formData.free === "1"}
-                    placeholder={EVENT_CREATE_TEXT.placeholders.amount}
+                    placeholder="6000"
                     className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
@@ -379,7 +324,7 @@ const CreateEvents = () => {
 
               <div>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {EVENT_CREATE_TEXT.fields.timezone}
+                  Time Zone
                 </label>
                 <select
                   name="timezone"
@@ -387,9 +332,7 @@ const CreateEvents = () => {
                   onChange={handleChange}
                   className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                 >
-                  <option value="">
-                    {EVENT_CREATE_TEXT.placeholders.timezone}
-                  </option>
+                  <option value="">Select timezone</option>
                   {timezones.map((timezone) => (
                     <option key={timezone} value={timezone}>
                       {timezone}
@@ -401,21 +344,21 @@ const CreateEvents = () => {
 
             <div className="mt-4">
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {EVENT_CREATE_TEXT.fields.about}
+                About the event
               </label>
               <textarea
                 name="about"
                 rows="4"
                 value={formData.about}
                 onChange={handleChange}
-                placeholder={EVENT_CREATE_TEXT.placeholders.about}
+                placeholder="Write a short description about your event"
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
               />
             </div>
 
             <div className="mt-4">
               <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {EVENT_CREATE_TEXT.fields.reminder}
+                Set Reminder
               </label>
               <select
                 name="reminder"
@@ -423,10 +366,12 @@ const CreateEvents = () => {
                 onChange={handleChange}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
               >
-                <option value="">
-                  {EVENT_CREATE_TEXT.placeholders.reminder}
-                </option>
-                {EVENT_CREATE_TEXT.reminderOptions.map((option) => (
+                <option value="">Select reminder</option>
+                {[
+                  { value: "2", label: "2 days before" },
+                  { value: "1", label: "1 day before" },
+                  { value: "0.5", label: "12 hours before" },
+                ].map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -436,7 +381,7 @@ const CreateEvents = () => {
 
             <div className="mt-4">
               <label className="mb-2 block text-sm text-gray-700 dark:text-foreground">
-                {EVENT_CREATE_TEXT.fields.logo} *
+                Upload a logo *
               </label>
               <div
                 className={`rounded-lg border-2 border-dashed p-6 text-center ${
@@ -459,11 +404,9 @@ const CreateEvents = () => {
                   htmlFor="fileUpload"
                   className="cursor-pointer text-sm text-gray-500 dark:text-muted-foreground"
                 >
-                  <span className="mb-1 block">
-                    {EVENT_CREATE_TEXT.fileUpload.selectOrDrop}
-                  </span>
+                  <span className="mb-1 block">Select a file or drop here</span>
                   <span className="text-xs text-gray-400 dark:text-muted-foreground/80">
-                    {EVENT_CREATE_TEXT.fileUpload.supportedFormats}
+                    JPG, PNG, or PDF (max 10MB)
                   </span>
                 </label>
               </div>
@@ -476,7 +419,7 @@ const CreateEvents = () => {
                 <p className="mt-2 text-xs text-red-500">{logoError}</p>
               ) : null}
               <p className="mt-1 text-xs text-gray-400 dark:text-muted-foreground/80">
-                {EVENT_CREATE_TEXT.fileUpload.recommended}
+                Recommended: 80px by 80px, PNG format
               </p>
             </div>
 
@@ -486,7 +429,7 @@ const CreateEvents = () => {
                 onClick={() => navigate("/events")}
                 className="rounded-lg bg-red-100 px-5 py-2 text-red-600 transition hover:bg-red-200 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
               >
-                {EVENT_CREATE_TEXT.cancel}
+                Cancel
               </button>
               <button
                 type="submit"
@@ -495,7 +438,7 @@ const CreateEvents = () => {
                   loading ? "bg-green-400" : "bg-green-600 hover:bg-green-700"
                 }`}
               >
-                {loading ? EVENT_CREATE_TEXT.submitting : EVENT_CREATE_TEXT.submit}
+                {loading ? "Submitting..." : "Submit"}
               </button>
             </div>
           </div>
