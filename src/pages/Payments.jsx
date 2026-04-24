@@ -444,6 +444,31 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
                   : {
                       ...componentProps,
                       amount: Number(plan.price) * 100,
+                      metadata: {
+                        ...componentProps.metadata,
+                        custom_fields: [
+                          {
+                            display_name: "paymenttype",
+                            variable_name: "paymenttype",
+                            value: "subscription",
+                          },
+                          {
+                            display_name: "plantype",
+                            variable_name: "plantype",
+                            value: plan.category,
+                          },
+                          {
+                            display_name: "planname",
+                            variable_name: "planname",
+                            value: plan.name,
+                          },
+                          {
+                            display_name: "planprice",
+                            variable_name: "planprice",
+                            value: plan.price,
+                          },
+                        ],
+                      },
                     }
               }
             />
@@ -465,6 +490,31 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
                   : {
                       ...componentProps,
                       amount: Number(plan.price) * 100,
+                      metadata: {
+                        ...componentProps.metadata,
+                        custom_fields: [
+                          {
+                            display_name: "paymenttype",
+                            variable_name: "paymenttype",
+                            value: "subscription",
+                          },
+                          {
+                            display_name: "plantype",
+                            variable_name: "plantype",
+                            value: plan.category,
+                          },
+                          {
+                            display_name: "planname",
+                            variable_name: "planname",
+                            value: plan.name,
+                          },
+                          {
+                            display_name: "planprice",
+                            variable_name: "planprice",
+                            value: plan.price,
+                          },
+                        ],
+                      },
                     }
               }
             />
