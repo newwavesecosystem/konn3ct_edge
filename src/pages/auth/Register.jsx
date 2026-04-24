@@ -49,12 +49,12 @@ export default function Register() {
       <SideDetail className="md:hidden lg:flex" />
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <RegisterForm />
-        <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
+        <p className="px-2 text-center text-xs text-[#0A2540] dark:text-white sm:text-sm">
           By signing up you understand and agree to the Konn3ct Terms of Use.
           For more information about Privacy Data visit the{" "}
           <a
             href={privacyPolicyUrl}
-            className="text-blue-500"
+            className="text-blue-500 underline dark:text-blue-400"
             rel="noreferrer"
             target="_blank"
           >
@@ -375,7 +375,7 @@ export function RegisterForm() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Email
                 </FormLabel>
                 <FormControl>
@@ -396,7 +396,7 @@ export function RegisterForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Password
                 </FormLabel>
                 <FormControl>
@@ -426,7 +426,7 @@ export function RegisterForm() {
             name="firstname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   First Name
                 </FormLabel>
                 <FormControl>
@@ -446,7 +446,7 @@ export function RegisterForm() {
             name="lastname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Last Name
                 </FormLabel>
                 <FormControl>
@@ -466,7 +466,7 @@ export function RegisterForm() {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Phone
                 </FormLabel>
                 <FormControl>
@@ -487,7 +487,7 @@ export function RegisterForm() {
             name="referral_code"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Referral Code
                 </FormLabel>
                 <FormControl>
@@ -514,7 +514,7 @@ export function RegisterForm() {
 
       <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
         <p>Already have an account?</p>
-        <Link to="/login" className="text-[#012E89]">
+        <Link to="/login" className="text-[#012E89] underline dark:text-blue-400">
           Sign in
         </Link>
       </div>

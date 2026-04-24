@@ -47,12 +47,12 @@ export default function Login() {
       <SideDetail className="md:hidden lg:flex" />
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <LoginForm />
-        <p className="px-2 text-center text-xs text-[#0A2540] sm:text-sm">
+        <p className="px-2 text-center text-xs text-[#0A2540] dark:text-white sm:text-sm">
           By signing up you understand and agree to the Konn3ct Terms of Use.
           For more information about Privacy Data visit the{" "}
           <a
             href={privacyPolicyUrl}
-            className="text-blue-500"
+            className="text-blue-500 underline dark:text-blue-400"
             rel="noreferrer"
             target="_blank"
           >
@@ -331,7 +331,7 @@ export function LoginForm() {
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Email address
                 </FormLabel>
                 <FormControl>
@@ -352,7 +352,7 @@ export function LoginForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="font-bold text-[#0A2540]">
+                <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Password
                 </FormLabel>
                 <FormControl>
@@ -370,7 +370,7 @@ export function LoginForm() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="text-sm font-bold text-[#012E89] sm:text-[14px]"
+                    className="text-sm font-bold text-[#012E89] dark:text-white sm:text-[14px]"
                   >
                     {showPassword ? "Hide password" : "Show password"}
                   </button>
@@ -391,13 +391,13 @@ export function LoginForm() {
 
       <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
         <p>Don&apos;t have an account?</p>
-        <Link to="/register" className="text-[#012E89]">
+        <Link to="/register" className="text-[#012E89] underline dark:text-blue-400">
           Sign up
         </Link>
       </div>
       <Link
         to="/forgot-password"
-        className="mb-8 flex justify-center text-sm text-[#012E89] sm:text-base"
+        className="mb-8 flex justify-center text-sm text-[#012E89] underline dark:text-blue-400 sm:text-base"
       >
         Forgot password?
       </Link>
