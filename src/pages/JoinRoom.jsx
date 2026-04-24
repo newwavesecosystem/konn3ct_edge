@@ -19,7 +19,10 @@ import {
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { useToast } from "../hooks/use-toast";
-import { buildJoinMeetingUrl } from "../lib/externalLinks";
+import {
+  buildJoinMeetingUrl,
+  privacyPolicyUrl,
+} from "../lib/externalLinks";
 
 const JoinRoom = () => {
   return (
@@ -27,10 +30,17 @@ const JoinRoom = () => {
       <SideDetail className="md:hidden lg:flex" />
       <Card className="max-w-[560px] flex-1">
         <JoinForm />
-        <p className="text-center text-sm text-[#0A2540]">
+        <p className="text-center text-sm text-[#0A2540] dark:text-white">
           By signing in you understand and agree to the Newwaves ecosystem
-          Terms of Use. For more information about Privacy Data visit the
-          Newwaves Privacy Data Sheets.
+          Terms of Use. For more information about Privacy Data visit the{" "}
+          <a
+            href={privacyPolicyUrl}
+            className="text-blue-500 underline dark:text-blue-400"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Newwaves Privacy Data Sheets.
+          </a>
         </p>
       </Card>
     </div>
