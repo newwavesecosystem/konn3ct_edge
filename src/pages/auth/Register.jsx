@@ -12,7 +12,7 @@ import {
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import useAuth from "../../hooks/useAuth";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "../../components/ui/card";
 import SideDetail from "./SideDetail";
@@ -30,6 +30,13 @@ import useAppleSDK from "../../hooks/useAppleSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
 import {
+  getCountries,
+  getCountryCallingCode,
+  getExampleNumber,
+  validatePhoneNumberLength,
+} from "libphonenumber-js";
+import examples from "libphonenumber-js/mobile/examples";
+import {
   clearStoredReferralCode,
   getReferralCodeFromSearchParams,
   getStoredReferralCode,
@@ -40,6 +47,35 @@ import {
   googleUserInfoUrl,
   privacyPolicyUrl,
 } from "../../lib/externalLinks";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "../../components/ui/select";
+
+const regionNames =
+  typeof Intl !== "undefined" && Intl.DisplayNames
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+const getCountryLabel = (countryCode) => {
+  const countryName = regionNames?.of(countryCode) || countryCode;
+  return `${countryName} (+${getCountryCallingCode(countryCode)})`;
+};
+
+const getPhoneValidationMessage = (validationResult) => {
+  switch (validationResult) {
+    case "TOO_SHORT":
+      return "Phone number is too short for the selected country.";
+    case "TOO_LONG":
+      return "Phone number is too long for the selected country.";
+    case "INVALID_LENGTH":
+      return "Phone number length is invalid for the selected country.";
+    default:
+      return "Enter a valid phone number for the selected country.";
+  }
+};
 
 export default function Register() {
   useFacebookSDK();
@@ -73,6 +109,17 @@ export function RegisterForm() {
     [searchParams]
   );
   const initialReferralCode = referralCodeFromUrl || getStoredReferralCode();
+  const countryOptions = useMemo(
+    () =>
+      getCountries()
+        .map((countryCode) => ({
+          value: countryCode,
+          label: getCountryLabel(countryCode),
+        }))
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    []
+  );
+  const selectedCountryExample = getExampleNumber("NG", examples);
   const formSchema = z.object({
     email: z.string().email({ message: "Invalid email address." }),
     password: z
@@ -103,10 +150,24 @@ export function RegisterForm() {
       .refine((value) => value.trim().length > 0, {
         message: "Last name is required and cannot be empty or whitespace.",
       }),
-    phone: z
-      .string()
-      .min(10, { message: "Phone number must be at least 10 digits." }),
+    country_code: z.string().min(1, {
+      message: "Country code is required.",
+    }),
+    phone: z.string().transform((value) => value.replace(/\D/g, "")),
     referral_code: z.string().optional(),
+  }).superRefine((values, ctx) => {
+    const validationResult = validatePhoneNumberLength(
+      values.phone,
+      values.country_code
+    );
+
+    if (validationResult) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: getPhoneValidationMessage(validationResult),
+        path: ["phone"],
+      });
+    }
   });
 
   const form = useForm({
@@ -116,6 +177,7 @@ export function RegisterForm() {
       password: "",
       firstname: "",
       lastname: "",
+      country_code: "NG",
       phone: "",
       referral_code: initialReferralCode,
     },
@@ -125,7 +187,26 @@ export function RegisterForm() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const { ready: appleSdkReady, error: appleSdkError } = useAppleSDK();
+  const selectedCountryCode = form.watch("country_code");
+  const selectedCountryLabel =
+    countryOptions.find((option) => option.value === selectedCountryCode)
+      ?.label || "Select country";
+  const selectedPhoneExample =
+    getExampleNumber(selectedCountryCode, examples) || selectedCountryExample;
+  const phoneMaxLength = selectedPhoneExample?.nationalNumber?.length;
+  const filteredCountryOptions = useMemo(() => {
+    const normalizedQuery = countrySearch.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return countryOptions;
+    }
+
+    return countryOptions.filter((country) =>
+      country.label.toLowerCase().includes(normalizedQuery)
+    );
+  }, [countryOptions, countrySearch]);
 
   const registerMutation = useMutation({
     mutationFn: register,
@@ -199,9 +280,10 @@ export function RegisterForm() {
   };
 
   async function onSubmit(values) {
-    const { referral_code, ...restValues } = values;
+    const { referral_code, country_code, phone, ...restValues } = values;
     const normalizedReferralCode = normalizeReferralCode(referral_code);
     const referralPayload = getReferralPayload(referral_code);
+    const normalizedPhone = `+${getCountryCallingCode(country_code)}${phone}`;
 
     if (normalizedReferralCode) {
       setStoredReferralCode(normalizedReferralCode);
@@ -211,6 +293,7 @@ export function RegisterForm() {
 
     registerMutation.mutate({
       ...restValues,
+      phone: normalizedPhone,
       ...referralPayload,
     });
   }
@@ -463,24 +546,99 @@ export function RegisterForm() {
 
           <FormField
             control={form.control}
-            name="phone"
+            name="country_code"
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
                   Phone
                 </FormLabel>
-                <FormControl>
-                  <Input
-                    type="tel"
-                    placeholder="08166390205"
-                    className="w-full rounded-full px-4"
-                    {...field}
+                <div className="flex gap-3">
+                  <FormControl>
+                    <div className="w-[140px] shrink-0">
+                        <Select
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("phone", "");
+                          }}
+                        >
+                        <SelectTrigger className="rounded-2xl">
+                          <span className="truncate text-foreground">
+                            {selectedCountryLabel}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent className="left-0 w-[280px] max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl p-0">
+                          <div
+                            className="border-b border-border p-3"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <div className="flex items-center rounded-xl border border-input bg-background px-3">
+                              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <Input
+                                value={countrySearch}
+                                onChange={(event) =>
+                                  setCountrySearch(event.target.value)
+                                }
+                                placeholder="Search country or code"
+                                className="border-0 bg-transparent px-2 shadow-none focus-visible:ring-0"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto p-2">
+                            {filteredCountryOptions.length > 0 ? (
+                              filteredCountryOptions.map((countryCode) => (
+                                <SelectItem
+                                  key={countryCode.value}
+                                  value={countryCode.value}
+                                  className="whitespace-normal rounded-xl px-3 py-2.5"
+                                >
+                                  {countryCode.label}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <p className="px-3 py-4 text-sm text-muted-foreground">
+                                No country matches your search.
+                              </p>
+                            )}
+                          </div>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </FormControl>
+
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field: phoneField }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            placeholder={
+                              selectedPhoneExample?.nationalNumber ||
+                              "8166390205"
+                            }
+                            className="w-full rounded-full px-4"
+                            {...phoneField}
+                            onChange={(event) => {
+                              const digitsOnly = event.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, phoneMaxLength);
+                              phoneField.onChange(digitsOnly);
+                            }}
+                            maxLength={phoneMaxLength}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </FormControl>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
-          /> 
+          />
 
           <FormField
             control={form.control}
@@ -499,7 +657,7 @@ export function RegisterForm() {
                 </FormControl>
                 <FormMessage />
               </FormItem>
-            )} 
+            )}
           />
 
           <Button

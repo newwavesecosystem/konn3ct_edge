@@ -16,7 +16,7 @@ export function Select({ value, onValueChange, children }) {
   );
 }
 
-export function SelectTrigger({ children }) {
+export function SelectTrigger({ children, className }) {
   const { open, setOpen } = React.useContext(SelectContext);
 
   return (
@@ -24,7 +24,8 @@ export function SelectTrigger({ children }) {
       type="button"
       onClick={() => setOpen(!open)}
       className={cn(
-        "flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-foreground shadow-sm transition-colors duration-300 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        "flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-foreground shadow-sm transition-colors duration-300 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        className
       )}
     >
       {children}
@@ -48,24 +49,32 @@ export function SelectValue({ placeholder }) {
   );
 }
 
-export function SelectContent({ children }) {
+export function SelectContent({ children, className }) {
   const { open } = React.useContext(SelectContext);
 
   if (!open) return null;
 
   return (
-    <div className="absolute z-10 mt-1 w-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg">
+    <div
+      className={cn(
+        "absolute z-10 mt-1 w-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg",
+        className
+      )}
+    >
       {children}
     </div>
   );
 }
 
-export function SelectItem({ value, children }) {
+export function SelectItem({ value, children, className }) {
   const { onValueChange, setOpen } = React.useContext(SelectContext);
 
   return (
     <div
-      className="cursor-pointer rounded-sm px-3 py-2 text-sm transition-colors duration-300 hover:bg-accent hover:text-accent-foreground"
+      className={cn(
+        "cursor-pointer rounded-sm px-3 py-2 text-sm transition-colors duration-300 hover:bg-accent hover:text-accent-foreground",
+        className
+      )}
       onClick={() => {
         onValueChange(value);
         setOpen(false);
