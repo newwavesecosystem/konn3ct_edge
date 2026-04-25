@@ -9,12 +9,7 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
-import {
-  Tabs,
-  TabsTrigger,
-  TabsList,
-  TabsContent,
-} from "../components/ui/tabs";
+import { Tabs, TabsTrigger, TabsList, TabsContent } from "../components/ui/tabs";
 import useTheme from "../hooks/useTheme";
 import { capitalize, cn } from "../lib/utils";
 
@@ -79,6 +74,7 @@ const Settings = () => {
               >
                 General
               </TabsTrigger>
+              {/*
               <TabsTrigger
                 className="w-full rounded-xl px-4 py-2 text-sm md:w-full lg:w-auto"
                 value="meeting"
@@ -109,6 +105,7 @@ const Settings = () => {
               >
                 Scheduling
               </TabsTrigger>
+              */}
             </TabsList>
           </div>
           <Separator />
@@ -206,17 +203,9 @@ const Settings = () => {
                   })}
                 </CardContent>
               </Card>
-
-              <Card className="border-dashed border-border/70 bg-muted/20 shadow-none">
-                <CardContent className="space-y-2 p-5 sm:p-6">
-                  <p className="text-sm text-muted-foreground">
-                    Additional dashboard settings can expand here later without
-                    changing how theme state is stored or applied.
-                  </p>
-                </CardContent>
-              </Card>
             </div>
           </TabsContent>
+          {/*
           <TabsContent
             value="meeting"
             className="m-0 px-4 py-6 lg:px-8 lg:py-8"
@@ -262,6 +251,7 @@ const Settings = () => {
               title="Scheduling"
             />
           </TabsContent>
+          */}
         </Tabs>
       </Card>
     </section>
