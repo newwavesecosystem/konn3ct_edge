@@ -26,11 +26,11 @@ import {
 
 const JoinRoom = () => {
   return (
-    <div className="container page mx-auto flex justify-center">
+    <div className="page container mx-auto flex flex-col justify-center px-4 sm:flex-row md:flex-col lg:flex-row lg:px-0">
       <SideDetail className="md:hidden lg:flex" />
-      <Card className="max-w-[560px] flex-1">
+      <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <JoinForm />
-        <p className="text-center text-sm text-[#0A2540] dark:text-white">
+        <p className="px-2 text-center text-xs text-[#0A2540] dark:text-white sm:text-sm">
           By signing in you understand and agree to the Newwaves ecosystem
           Terms of Use. For more information about Privacy Data visit the{" "}
           <a
@@ -106,11 +106,13 @@ const JoinForm = () => {
   };
 
   return (
-    <div className="px-20 md:px-10 lg:px-20">
-      <div className="mb-16 flex justify-center">
-        <img src={logo} alt="konn3ct" />
+    <div className="px-4 sm:px-20 md:px-8 lg:px-20">
+      <div className="mb-6 flex justify-center">
+        <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
-      <h3 className="mb-10 text-center text-xl font-medium">Join a Meeting</h3>
+      <h3 className="mb-6 text-center text-lg font-bold sm:text-xl">
+        Join a Meeting
+      </h3>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
@@ -166,7 +168,7 @@ const JoinForm = () => {
           />
           <Button
             type="submit"
-            className="!my-10 w-full bg-[#012E89] shadow-md"
+            className="w-full bg-[#012E89] shadow-md"
             disabled={joinMutation.isPending}
           >
             Konn3ct
