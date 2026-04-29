@@ -15,7 +15,7 @@ import inactiveIcon from "../assets/icons/inactive.svg";
 import scheduledIcon from "../assets/icons/scheduled.svg";
 import roomsIcon from "../assets/icons/roomsIcon.svg";
 import { Separator } from "../components/ui/separator";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, LockKeyhole, Plus } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createMeeting,
@@ -63,8 +63,65 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../components/ui/sheet";
+import { Tooltip as ReactTooltip } from "react-tooltip";
 
 const SCHEDULE_PANEL_TOP_OFFSET = "80px";
+const ROOM_ACCESS_CODE_STORAGE_KEY = "room-access-code-map";
+const ROOM_LOCK_TOOLTIP_ID = "room-lock-tooltip";
+
+const readStoredRoomAccessCodes = () => {
+  try {
+    const raw = localStorage.getItem(ROOM_ACCESS_CODE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+};
+
+const writeStoredRoomAccessCodes = (value) => {
+  try {
+    localStorage.setItem(ROOM_ACCESS_CODE_STORAGE_KEY, JSON.stringify(value));
+  } catch (error) {
+    // Ignore storage failures and keep the UI functional.
+  }
+};
+
+const meetingHasAccessCode = (meeting) =>
+  Boolean(
+    meeting?.accesscode ??
+      meeting?.accessCode ??
+      meeting?.access_code ??
+      meeting?.room_accesscode ??
+      meeting?.roomAccessCode
+  );
+
+const getRoomAccessCodeValue = (room, storedAccessCodes = {}) =>
+  room?.accesscode ??
+  room?.accessCode ??
+  room?.access_code ??
+  storedAccessCodes[String(room?.id)] ??
+  "";
+
+const updateRoomAccessCodeCache = (queryClient, roomId, nextAccessCode) => {
+  queryClient.setQueryData(["rooms"], (previousData) => {
+    if (!previousData || !Array.isArray(previousData.rooms)) {
+      return previousData;
+    }
+
+    return {
+      ...previousData,
+      rooms: previousData.rooms.map((room) =>
+        String(room.id) === String(roomId)
+          ? {
+              ...room,
+              accesscode: nextAccessCode,
+            }
+          : room
+      ),
+    };
+  });
+};
 
 const Rooms = () => {
   const roomQuery = useQuery({
@@ -94,6 +151,9 @@ const Rooms = () => {
   const [openTransferDialog, setOpenTransferDialog] = useState(false);
 
   const [selectedRoomId, setSelectedRoomId] = useState(null);
+  const [storedRoomAccessCodes, setStoredRoomAccessCodes] = useState(() =>
+    readStoredRoomAccessCodes()
+  );
 
   useEffect(() => {
     if (!openDeleteDialog) setRoomIdToDelete(null);
@@ -153,8 +213,27 @@ const Rooms = () => {
 
   const manageAccessCodeMutation = useMutation({
     mutationFn: manageAccessCode,
-    onSuccess: () => {
-      queryClient.invalidateQueries(["rooms"]);
+    onSuccess: (_response, variables) => {
+      const roomId = String(variables.id);
+      const nextAccessCode =
+        variables.type === "remove" ? "" : variables.accesscode?.trim() || "__LOCKED__";
+
+      updateRoomAccessCodeCache(queryClient, roomId, nextAccessCode);
+
+      setStoredRoomAccessCodes((previousValue) => {
+        const nextValue = { ...previousValue };
+
+        if (variables.type === "remove") {
+          delete nextValue[roomId];
+        } else {
+          nextValue[roomId] = nextAccessCode;
+        }
+
+        writeStoredRoomAccessCodes(nextValue);
+        return nextValue;
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
       toast({ description: "Access code updated successfully" });
     },
   });
@@ -162,7 +241,7 @@ const Rooms = () => {
   const limitUserMutation = useMutation({
     mutationFn: limitUser,
     onSuccess: () => {
-      queryClient.invalidateQueries(["rooms"]);
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
       toast({ description: "User limit updated successfully" });
     },
   });
@@ -170,7 +249,7 @@ const Rooms = () => {
   const bannerUploadMutation = useMutation({
     mutationFn: bannerUpload,
     onSuccess: () => {
-      queryClient.invalidateQueries(["rooms"]);
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
       toast({ description: "Banner uploaded successfully" });
     },
   });
@@ -178,7 +257,7 @@ const Rooms = () => {
   const transferRoomMutation = useMutation({
     mutationFn: transferRoom,
     onSuccess: () => {
-      queryClient.invalidateQueries(["rooms"]);
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
       toast({ description: "Room transferred successfully" });
     },
   });
@@ -204,11 +283,9 @@ const Rooms = () => {
   }
 
   const roomsData = roomQuery.data ?? {};
-  const meetingData = meetingQuery.data ?? {};
+  const meetingData = meetingQuery.data ?? [];
   const rooms = Array.isArray(roomsData.rooms) ? roomsData.rooms : [];
-  const scheduledMeetings = Array.isArray(meetingData.data)
-    ? meetingData.data
-    : [];
+  const scheduledMeetings = Array.isArray(meetingData) ? meetingData : [];
   const totalRooms =
     Number.isFinite(Number(roomsData.total_rooms)) &&
     Number(roomsData.total_rooms) >= 0
@@ -298,9 +375,29 @@ const Rooms = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rooms.map(({ name, url, id }) => (
+              {rooms.map((room) => {
+                const { name, url, id } = room;
+                const roomAccessCode = getRoomAccessCodeValue(
+                  room,
+                  storedRoomAccessCodes
+                );
+
+                return (
                 <TableRow key={id}>
-                  <TableCell>{name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{name}</span>
+                      {Boolean(roomAccessCode) && (
+                        <LockKeyhole
+                          className="h-4 w-4 text-red-500"
+                          data-tooltip-id={ROOM_LOCK_TOOLTIP_ID}
+                          data-tooltip-content="Access code required"
+                          aria-label="Room has access code"
+                          title="Room has access code"
+                        />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{`${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     <div className="flex gap-2 md:flex-wrap lg:flex-nowrap">
@@ -376,7 +473,8 @@ const Rooms = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         {rooms.length === 0 && (
@@ -473,18 +571,20 @@ const Rooms = () => {
             </SheetDescription>
           </SheetHeader>
           <div className="mt-5 flex min-h-0 flex-1 flex-col gap-y-3 overflow-y-auto overflow-x-hidden pb-12 pr-1 sm:pr-2">
-            {scheduledMeetings.map(({ date, time, roomname, guest }) => (
+            {scheduledMeetings.map((meeting) => (
               <ScheduleMeetingCard
-                key={roomname + date}
-                date={date}
-                time={time}
-                roomname={roomname}
-                guest={guest}
+                key={meeting.id ?? `${meeting.roomname}-${meeting.date}-${meeting.time}`}
+                date={meeting.date}
+                time={meeting.time}
+                roomname={meeting.roomname}
+                guest={meeting.guest}
+                hasAccessCode={meetingHasAccessCode(meeting)}
               />
             ))}
           </div>
         </SheetContent>
       </Sheet>
+      <ReactTooltip id={ROOM_LOCK_TOOLTIP_ID} place="top" />
     </section>
   );
 };
@@ -700,7 +800,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
     onSuccess: (res) => {
       setOpenDialog(false);
       if (res?.success) {
-        queryClient.invalidateQueries(["rooms"]);
+        queryClient.invalidateQueries({ queryKey: ["rooms"] });
         toast({ description: "Meeting created successfully" });
       } else {
         if (res.message?.includes("Maximum room")) {
@@ -805,7 +905,7 @@ const CreateMeetingDialog = ({ setOpenDialog }) => {
   );
 };
 
-const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
+const ScheduleMeetingCard = ({ date, time, roomname, guest, hasAccessCode }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const guestList = String(guest ?? "")
     .split(",")
@@ -844,7 +944,19 @@ const ScheduleMeetingCard = ({ date, time, roomname, guest }) => {
       <div className="flex min-w-0 items-start gap-3 p-4">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-col gap-y-2">
-            <p className="break-words font-bold">{roomname}</p>
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <p className="break-words font-bold">{roomname}</p>
+              {hasAccessCode && (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-500/10 px-2 py-1 text-xs font-medium text-red-500"
+                  aria-label="Meeting has access code"
+                  title="Meeting has access code"
+                >
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                  Locked
+                </span>
+              )}
+            </div>
             <p className="break-words text-sm text-muted-foreground">
               {`${formatDate(date)} at ${time}`}
             </p>

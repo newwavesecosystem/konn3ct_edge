@@ -245,9 +245,11 @@ const Dashboard = () => {
               )}
             </div>
 
-            <Button variant="outline" className="w-full sm:w-auto">
-              Test Audio and Video
-            </Button>
+            <Link to="/rooms" className="w-full sm:w-auto">
+              <Button variant="outline" className="w-full sm:w-auto">
+                Test Audio and Video
+              </Button>
+            </Link>
           </div>
         </Card>
       </div>
