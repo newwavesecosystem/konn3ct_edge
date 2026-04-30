@@ -18,22 +18,24 @@ import { updatePassword } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export function PasswordForm() {
+  const { t } = useTranslation();
   const formSchema = z
     .object({
       currentPassword: z.string().min(6, {
-        message: "Current password must be at least 6 characters.",
+        message: t("profile.passwordForm.validation.currentPasswordMin"),
       }),
       newPassword: z.string().min(6, {
-        message: "New password must be at least 6 characters.",
+        message: t("profile.passwordForm.validation.newPasswordMin"),
       }),
       confirmPassword: z.string().min(6, {
-        message: "Confirm password must be at least 6 characters.",
+        message: t("profile.passwordForm.validation.confirmPasswordMin"),
       }),
     })
     .refine((data) => data.newPassword === data.confirmPassword, {
-      message: "Passwords must match.",
+      message: t("profile.passwordForm.validation.passwordsMustMatch"),
       path: ["confirmPassword"],
     });
   const form = useForm({
@@ -79,12 +81,12 @@ export function PasswordForm() {
           name="currentPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Current Password</FormLabel>
+              <FormLabel>{t("profile.passwordForm.currentPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showCurrent ? "text" : "password"}
-                    placeholder="Enter current password"
+                    placeholder={t("profile.passwordForm.currentPasswordPlaceholder")}
                     {...field}
                   />
                   <button
@@ -106,12 +108,12 @@ export function PasswordForm() {
           name="newPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>New Password</FormLabel>
+              <FormLabel>{t("profile.passwordForm.newPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showNew ? "text" : "password"}
-                    placeholder="Enter new password"
+                    placeholder={t("profile.passwordForm.newPasswordPlaceholder")}
                     {...field}
                   />
                   <button
@@ -133,12 +135,12 @@ export function PasswordForm() {
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Confirm New Password</FormLabel>
+              <FormLabel>{t("profile.passwordForm.confirmNewPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
                   <Input
                     type={showConfirm ? "text" : "password"}
-                    placeholder="Confirm new password"
+                    placeholder={t("profile.passwordForm.confirmNewPasswordPlaceholder")}
                     {...field}
                   />
                   <button
@@ -156,7 +158,7 @@ export function PasswordForm() {
         />
 
         <Button type="submit" size="lg">
-          Save
+          {t("profile.passwordForm.submit")}
         </Button>
       </form>
     </Form>

@@ -28,17 +28,18 @@ import { useToast } from "../hooks/use-toast";
 import { PaystackButton } from "react-paystack";
 import { format } from "date-fns";
 import { contactSalesUrl } from "../lib/externalLinks";
+import { useTranslation } from "react-i18next";
 
 const ENGLISH_LOCALE = "en-NG";
 
-const generateReceipt = (payment, user, toast) => {
+const generateReceipt = (payment, user, toast, t) => {
   const userLastName = user?.lastname ?? user?.lastName ?? "";
   const userFirstName = user?.firstname ?? user?.firstName ?? "";
   const win = window.open("", "_blank", "width=800,height=650");
 
   if (!win) {
     toast({
-      description: "Please allow popups to print receipt",
+      description: t("payments.toasts.allowPopups"),
       variant: "destructive",
     });
     return;
@@ -47,7 +48,7 @@ const generateReceipt = (payment, user, toast) => {
   win.document.write(`
     <html>
       <head>
-        <title>Payment Receipt</title>
+        <title>${t("payments.receipt.title")}</title>
         <style>
           body {
             font-family: Arial, sans-serif;
@@ -85,35 +86,35 @@ const generateReceipt = (payment, user, toast) => {
       </head>
       <body>
         <h1>Konn3ct</h1>
-        <p class="subtitle">Payment Receipt</p>
+        <p class="subtitle">${t("payments.receipt.title")}</p>
 
         <div class="box">
           <div class="row">
-            <span class="label">Issued To:</span>
+            <span class="label">${t("payments.receipt.issuedTo")}</span>
             <span>${userLastName} ${userFirstName}</span>
           </div>
           <div class="row">
-            <span class="label">Plan:</span>
+            <span class="label">${t("payments.receipt.plan")}</span>
             <span>${payment.plan}</span>
           </div>
           <div class="row">
-            <span class="label">Payment Type:</span>
+            <span class="label">${t("payments.receipt.paymentType")}</span>
             <span>${payment.type}</span>
           </div>
           <div class="row">
-            <span class="label">Payment Method:</span>
+            <span class="label">${t("payments.receipt.paymentMethod")}</span>
             <span>${payment.method}</span>
           </div>
           <div class="row">
-            <span class="label">Reference:</span>
+            <span class="label">${t("payments.receipt.reference")}</span>
             <span>${payment.reference}</span>
           </div>
           <div class="row">
-            <span class="label">Payment Date:</span>
+            <span class="label">${t("payments.receipt.paymentDate")}</span>
             <span>${payment.date}</span>
           </div>
           <div class="row">
-            <span class="label">Amount Paid:</span>
+            <span class="label">${t("payments.receipt.amountPaid")}</span>
             <span>${payment.currency} ${new Intl.NumberFormat(
     ENGLISH_LOCALE
   ).format(payment.amount)}</span>
@@ -121,7 +122,7 @@ const generateReceipt = (payment, user, toast) => {
         </div>
 
         <div class="footer">
-          <p>This receipt was generated electronically.</p>
+          <p>${t("payments.receipt.footer")}</p>
         </div>
 
         <script>
@@ -136,38 +137,52 @@ const generateReceipt = (payment, user, toast) => {
   win.document.close();
 };
 
-const transformPlans = (data) => {
+const transformPlans = (data, t) => {
   const planList = Array.isArray(data?.plan) ? data.plan : [];
-  const yes = "Yes";
-  const no = "No";
+  const yes = t("payments.features.yes");
+  const no = t("payments.features.no");
 
   const buildFeatures = (plan) => [
-    `Recording: ${plan.recording ? yes : no}`,
-    `Duration: ${plan.duration} minutes`,
-    `Participants: ${plan.participant}`,
-    `Rooms: ${plan.rooms}`,
-    `Customize Link: ${plan.customize_link ? yes : no}`,
-    `Breakout Rooms: ${plan.breakout_rooms ? yes : no}`,
-    `Access Code: ${plan.access_code ? yes : no}`,
-    `Dial-in: ${plan.dialin ? yes : no}`,
+    t("payments.features.recording", {
+      value: plan.recording ? yes : no,
+    }),
+    t("payments.features.duration", { value: plan.duration }),
+    t("payments.features.participants", { value: plan.participant }),
+    t("payments.features.rooms", { value: plan.rooms }),
+    t("payments.features.customizeLink", {
+      value: plan.customize_link ? yes : no,
+    }),
+    t("payments.features.breakoutRooms", {
+      value: plan.breakout_rooms ? yes : no,
+    }),
+    t("payments.features.accessCode", {
+      value: plan.access_code ? yes : no,
+    }),
+    t("payments.features.dialIn", { value: plan.dialin ? yes : no }),
   ];
 
   const monthlyPlans = planList.map((plan) => ({
     name: plan.name,
     price: String(plan?.monthly_cost ?? "0").split("/")[0],
-    target: "For individuals",
+    target: t("payments.planCard.targetIndividuals"),
     category: "monthly",
     features: buildFeatures(plan),
-    cta: plan.name === "basic" ? "Free" : "Upgrade",
+    cta:
+      plan.name === "basic"
+        ? t("payments.planCard.free")
+        : t("payments.planCard.upgrade"),
   }));
 
   const yearlyPlans = planList.map((plan) => ({
     name: plan.name,
     price: String(plan?.yearly_cost ?? "0").split("/")[0],
-    target: "For individuals",
+    target: t("payments.planCard.targetIndividuals"),
     category: "yearly",
     features: buildFeatures(plan),
-    cta: plan.name === "basic" ? "Free" : "Upgrade",
+    cta:
+      plan.name === "basic"
+        ? t("payments.planCard.free")
+        : t("payments.planCard.upgrade"),
   }));
 
   const hasEnterprise = (arr) =>
@@ -175,10 +190,10 @@ const transformPlans = (data) => {
 
   const enterprisePlan = {
     name: "enterprise",
-    price: "Custom",
-    target: "For Enterprise",
-    features: ["Custom Features"],
-    cta: "Contact Sales",
+    price: t("payments.planCard.customPrice"),
+    target: t("payments.planCard.targetEnterprise"),
+    features: [t("payments.planCard.customFeatures")],
+    cta: t("payments.actions.contactSales"),
   };
 
   if (!hasEnterprise(monthlyPlans)) {
@@ -193,17 +208,20 @@ const transformPlans = (data) => {
 
 const formatPaymentDate = (value) => {
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "N/A" : format(parsed, "PPP");
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : format(parsed, "PPP");
 };
 
 const Payments = () => {
+  const { t } = useTranslation();
   const [openDialog, setOpenDialog] = useState(false);
   const { toast } = useToast();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["plans"],
     queryFn: getPlans,
-    select: (response) => transformPlans(response.data),
+    select: (response) => transformPlans(response.data, t),
   });
 
   const {
@@ -228,15 +246,15 @@ const Payments = () => {
     ? paymentData.payments.data
     : [];
 
-  if (isLoading || userLoading) return <div>Loading plans...</div>;
+  if (isLoading || userLoading) return <div>{t("payments.loadingPlans")}</div>;
 
   if (isError || userError) {
     return (
       <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
-          <p className="font-medium">Unable to load payments and plans.</p>
+          <p className="font-medium">{t("payments.states.loadErrorTitle")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Please refresh and try again.
+            {t("payments.states.loadErrorDescription")}
           </p>
         </Card>
       </section>
@@ -252,7 +270,7 @@ const Payments = () => {
               variant="outline"
               className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 dark:border-border dark:bg-muted dark:text-muted-foreground dark:hover:bg-muted"
             >
-              Current Plan
+              {t("payments.currentPlan")}
             </Badge>
             <div className="flex h-full items-center justify-center">
               <p className="text-4xl font-medium text-slate-900 dark:text-foreground">
@@ -265,13 +283,13 @@ const Payments = () => {
             {currentPlan.toLowerCase() !== "basic" && (
               <DialogTrigger asChild>
                 <Button className="w-full bg-muted text-foreground hover:bg-muted/80 lg:w-auto">
-                  Renew Subscriptions
+                  {t("payments.actions.renewSubscriptions")}
                 </Button>
               </DialogTrigger>
             )}
             <DialogTrigger asChild>
               <Button variant="outline" className="w-full lg:w-auto">
-                Change Plan
+                {t("payments.actions.changePlan")}
               </Button>
             </DialogTrigger>
           </div>
@@ -279,7 +297,7 @@ const Payments = () => {
 
         <Card className="mb-20">
           <div className="p-4 pt-10">
-            <h3 className="font-medium text-xl">Payment List</h3>
+            <h3 className="font-medium text-xl">{t("payments.listTitle")}</h3>
           </div>
           <Separator />
 
@@ -288,14 +306,14 @@ const Payments = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Issued to</TableHead>
-                  <TableHead>Payment Method</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead>Payment Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead>{t("payments.table.type")}</TableHead>
+                  <TableHead>{t("payments.table.plan")}</TableHead>
+                  <TableHead>{t("payments.table.issuedTo")}</TableHead>
+                  <TableHead>{t("payments.table.paymentMethod")}</TableHead>
+                  <TableHead>{t("payments.table.reference")}</TableHead>
+                  <TableHead>{t("payments.table.paymentDate")}</TableHead>
+                  <TableHead>{t("payments.table.amount")}</TableHead>
+                  <TableHead>{t("payments.table.action")}</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -322,7 +340,9 @@ const Payments = () => {
                       </TableCell>
                       <TableCell>{gateway}</TableCell>
                       <TableCell>{reference}</TableCell>
-                      <TableCell>{formatPaymentDate(date)}</TableCell>
+                      <TableCell>
+                        {formatPaymentDate(date) || t("payments.states.notAvailable")}
+                      </TableCell>
                       <TableCell>
                         {currency}{" "}
                         {new Intl.NumberFormat(ENGLISH_LOCALE).format(amount)}
@@ -343,11 +363,12 @@ const Payments = () => {
                                 amount,
                               },
                               userData?.user ?? {},
-                              toast
+                              toast,
+                              t
                             )
                           }
                         >
-                          Receipt
+                          {t("payments.actions.receipt")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -357,7 +378,7 @@ const Payments = () => {
                 {!paymentsLoading && !paymentRows.length && (
                   <TableRow>
                     <TableCell colSpan={9} className="py-6 text-center">
-                      No payments found
+                      {t("payments.empty")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -367,7 +388,7 @@ const Payments = () => {
         </Card>
 
         <DialogContent className="w-[calc(100%-2rem)] py-6 md:w-[calc(100%-4rem)] md:max-w-5xl lg:max-w-[95%]">
-          <DialogTitle>Plans and Payments</DialogTitle>
+          <DialogTitle>{t("payments.dialogTitle")}</DialogTitle>
           <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
         </DialogContent>
       </Dialog>
@@ -378,6 +399,7 @@ const Payments = () => {
 export default Payments;
 
 const PaymentsDialog = ({ plans, setOpenDialog }) => {
+  const { t } = useTranslation();
   const { data, isSuccess, isLoading, isError } = useQuery({
     queryKey: ["profile"],
     queryFn: getUser,
@@ -388,13 +410,13 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   if (isError) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
-        Unable to load your profile details for checkout.
+        {t("payments.checkoutProfileError")}
       </div>
     );
   }
 
   if (isLoading || !isSuccess) {
-    return <div className="py-10 text-center">Loading user...</div>;
+    return <div className="py-10 text-center">{t("payments.loadingUser")}</div>;
   }
 
   const profileUser = data?.user ?? {};
@@ -412,9 +434,9 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
       phone,
     },
     publicKey,
-    text: "Pay Now",
-    onSuccess: () => toast({ description: "Purchase successful" }),
-    onClose: () => toast({ description: "Payment Cancelled" }),
+    text: t("payments.actions.payNow"),
+    onSuccess: () => toast({ description: t("payments.toasts.purchaseSuccessful") }),
+    onClose: () => toast({ description: t("payments.toasts.paymentCancelled") }),
   };
 
   return (
@@ -422,10 +444,10 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
       <Tabs defaultValue="monthly" className="flex flex-col">
         <TabsList className="mx-auto mb-6 grid w-[300px] grid-cols-2 rounded-full border-2 bg-muted p-0 shadow-md">
           <TabsTrigger className="rounded-full" value="monthly">
-            Monthly
+            {t("payments.billingCycle.monthly")}
           </TabsTrigger>
           <TabsTrigger className="rounded-full" value="yearly">
-            Yearly
+            {t("payments.billingCycle.yearly")}
           </TabsTrigger>
         </TabsList>
 

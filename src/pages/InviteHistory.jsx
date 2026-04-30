@@ -58,6 +58,7 @@ import {
 } from "../components/ui/command";
 import { Skeleton } from "../components/ui/skeleton";
 import { getRooms } from "../api/roomsApi";
+import { useTranslation } from "react-i18next";
 
 const formatInviteDate = (date) => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
@@ -110,6 +111,7 @@ const buildTimezoneOptions = () =>
   });
 
 const InviteHistory = () => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -141,9 +143,9 @@ const InviteHistory = () => {
     return (
       <section className="page container mx-auto">
         <Card className="p-6">
-          <p className="font-medium">Unable to load invite history.</p>
+          <p className="font-medium">{t("inviteHistory.states.loadErrorTitle")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Check your connection and try again.
+            {t("inviteHistory.states.loadErrorDescription")}
           </p>
         </Card>
       </section>
@@ -168,20 +170,20 @@ const InviteHistory = () => {
       <Card className="relative min-h-full w-full pb-6 lg:pb-16">
         <div className="flex items-center gap-5 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-5 lg:pt-10">
           <Button onClick={() => setOpenDialog(true)}>
-            <Send /> Send Invite
+            <Send /> {t("inviteHistory.actions.sendInvite")}
           </Button>
-          <h3 className="text-xl font-medium">Invite History</h3>
+          <h3 className="text-xl font-medium">{t("inviteHistory.title")}</h3>
         </div>
         <Separator />
         <Table className="min-w-[760px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead>#</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Room Name</TableHead>
-              <TableHead>Guest</TableHead>
-              <TableHead>Date Sent</TableHead>
-              <TableHead>Action</TableHead>
+              <TableHead>{t("inviteHistory.table.type")}</TableHead>
+              <TableHead>{t("inviteHistory.table.roomName")}</TableHead>
+              <TableHead>{t("inviteHistory.table.guest")}</TableHead>
+              <TableHead>{t("inviteHistory.table.dateSent")}</TableHead>
+              <TableHead>{t("inviteHistory.table.action")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -204,7 +206,7 @@ const InviteHistory = () => {
                     variant="outline"
                     onClick={() => resendInviteMutation.mutate(id)}
                   >
-                    Resend Invite
+                    {t("inviteHistory.actions.resendInvite")}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -213,7 +215,7 @@ const InviteHistory = () => {
         </Table>
         {inviteRows.length === 0 && (
           <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center">
-            <p>No data available for this table</p>
+            <p>{t("inviteHistory.states.noData")}</p>
           </div>
         )}
         <Pagination className="mt-4 flex items-center justify-center lg:absolute lg:bottom-0 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2">
@@ -249,9 +251,9 @@ const InviteHistory = () => {
       </Card>
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent className="top-[50%] h-[90%] w-[calc(100%-2rem)] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-[50%]">
-          <DialogTitle>Send a new Invite</DialogTitle>
+          <DialogTitle>{t("inviteHistory.dialog.title")}</DialogTitle>
           <DialogDescription>
-            Send an invite for a scheduled meeting
+            {t("inviteHistory.dialog.description")}
           </DialogDescription>
           <MeetingForm setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -263,6 +265,7 @@ const InviteHistory = () => {
 export default InviteHistory;
 
 export const MeetingForm = ({ setOpenDialog }) => {
+  const { t } = useTranslation();
   const [timezoneOpen, setTimezoneOpen] = useState(false);
   const [roomOpen, setRoomOpen] = useState(false);
   const { toast } = useToast();
@@ -277,39 +280,44 @@ export const MeetingForm = ({ setOpenDialog }) => {
     room_id: z
       .string()
       .trim()
-      .min(1, { message: "Room is required." }),
+      .min(1, { message: t("inviteHistory.meetingForm.validation.roomRequired") }),
     hostname: z
       .string()
       .trim()
-      .min(1, { message: "Hostname is required." }),
+      .min(1, { message: t("inviteHistory.meetingForm.validation.hostnameRequired") }),
     title: z
       .string()
       .trim()
-      .min(1, { message: "Title is required." }),
-    date: z.date({ required_error: "Date is required." }).nullable().refine(
+      .min(1, { message: t("inviteHistory.meetingForm.validation.titleRequired") }),
+    date: z
+      .date({ required_error: t("inviteHistory.meetingForm.validation.dateRequired") })
+      .nullable()
+      .refine(
       (value) => value instanceof Date && !Number.isNaN(value.getTime()),
       {
-        message: "Date is required.",
+        message: t("inviteHistory.meetingForm.validation.dateRequired"),
       }
     ),
     time: z
       .string()
       .trim()
-      .min(1, { message: "Time is required." }),
+      .min(1, { message: t("inviteHistory.meetingForm.validation.timeRequired") }),
     timezone: z
       .string()
       .trim()
-      .min(1, { message: "Timezone is required." }),
+      .min(1, { message: t("inviteHistory.meetingForm.validation.timezoneRequired") }),
     additional: z
       .string()
       .trim()
-      .min(1, { message: "Additional message is required" }),
+      .min(1, {
+        message: t("inviteHistory.meetingForm.validation.additionalRequired"),
+      }),
     guest: z
       .string()
       .trim()
-      .min(1, { message: "Guest emails are required." })
+      .min(1, { message: t("inviteHistory.meetingForm.validation.guestRequired") })
       .refine((value) => hasValidGuestEmails(value), {
-        message: "All guest emails must be valid.",
+        message: t("inviteHistory.meetingForm.validation.guestInvalid"),
       }),
   });
 
@@ -335,10 +343,10 @@ export const MeetingForm = ({ setOpenDialog }) => {
       if (response?.success === false) {
         toast({
           variant: "destructive",
-          title: "Error",
+          title: t("common.status.error"),
           description: getInviteErrorMessage(
             response,
-            "Check your connection and try again."
+            t("inviteHistory.meetingForm.toasts.retry")
           ),
         });
         return;
@@ -347,7 +355,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
       queryClient.invalidateQueries({ queryKey: ["invite"] });
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       toast({
-        description: response?.message || "Send Invite",
+        description: response?.message || t("inviteHistory.meetingForm.toasts.sent"),
       });
       form.reset();
       setOpenDialog(false);
@@ -355,10 +363,10 @@ export const MeetingForm = ({ setOpenDialog }) => {
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Error",
+        title: t("common.status.error"),
         description: getInviteErrorMessage(
           error,
-          "Check your connection and try again."
+          t("inviteHistory.meetingForm.toasts.retry")
         ),
       });
     },
@@ -392,7 +400,9 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="room_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="mt-5 block">Room Name</FormLabel>
+                <FormLabel className="mt-5 block">
+                  {t("inviteHistory.meetingForm.labels.roomName")}
+                </FormLabel>
                 <FormControl>
                   <Popover open={roomOpen} onOpenChange={setRoomOpen}>
                     <PopoverTrigger asChild>
@@ -405,18 +415,20 @@ export const MeetingForm = ({ setOpenDialog }) => {
                         {field.value
                           ? rooms.find((room) => room.id === Number(field.value))
                               ?.name
-                          : "Select a room..."}
+                          : t("inviteHistory.meetingForm.placeholders.selectRoom")}
                         <ChevronsUpDown className="ml-2 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] p-0">
                       <Command>
                         <CommandInput
-                          placeholder="Search room..."
+                          placeholder={t("inviteHistory.meetingForm.placeholders.searchRoom")}
                           className="h-9"
                         />
                         <CommandList>
-                          <CommandEmpty>No room found.</CommandEmpty>
+                          <CommandEmpty>
+                            {t("inviteHistory.meetingForm.placeholders.noRoomFound")}
+                          </CommandEmpty>
                           <CommandGroup>
                             {rooms.map((room) => (
                               <CommandItem
@@ -458,9 +470,12 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="hostname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Hostname</FormLabel>
+                <FormLabel>{t("inviteHistory.meetingForm.labels.hostname")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Hostname" {...field} />
+                  <Input
+                    placeholder={t("inviteHistory.meetingForm.placeholders.hostname")}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -472,9 +487,12 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="title"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Title</FormLabel>
+                <FormLabel>{t("inviteHistory.meetingForm.labels.title")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Title" {...field} />
+                  <Input
+                    placeholder={t("inviteHistory.meetingForm.placeholders.title")}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -486,7 +504,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="date"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Date</FormLabel>
+                <FormLabel>{t("inviteHistory.meetingForm.labels.date")}</FormLabel>
                 <FormControl>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -500,7 +518,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {field.value
                           ? field.value.toLocaleDateString("en-US")
-                          : "Pick a date"}
+                          : t("inviteHistory.meetingForm.placeholders.pickDate")}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
@@ -522,7 +540,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="time"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Time</FormLabel>
+                <FormLabel>{t("inviteHistory.meetingForm.labels.time")}</FormLabel>
                 <FormControl>
                   <Input type="time" {...field} />
                 </FormControl>
@@ -536,7 +554,9 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="timezone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="mt-5 block">Timezone</FormLabel>
+                <FormLabel className="mt-5 block">
+                  {t("inviteHistory.meetingForm.labels.timezone")}
+                </FormLabel>
                 <FormControl>
                   <Popover open={timezoneOpen} onOpenChange={setTimezoneOpen}>
                     <PopoverTrigger asChild>
@@ -550,7 +570,7 @@ export const MeetingForm = ({ setOpenDialog }) => {
                           ? timezones.find(
                               (timezone) => timezone.value === field.value
                             )?.label
-                          : "Select a timezone..."}
+                          : t("inviteHistory.meetingForm.placeholders.selectTimezone")}
                         <ChevronsUpDown className="ml-2 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -561,11 +581,15 @@ export const MeetingForm = ({ setOpenDialog }) => {
                     >
                       <Command>
                         <CommandInput
-                          placeholder="Search timezone..."
+                          placeholder={t(
+                            "inviteHistory.meetingForm.placeholders.searchTimezone"
+                          )}
                           className="h-9"
                         />
                         <CommandList>
-                          <CommandEmpty>No timezone found.</CommandEmpty>
+                          <CommandEmpty>
+                            {t("inviteHistory.meetingForm.placeholders.noTimezoneFound")}
+                          </CommandEmpty>
                           <CommandGroup>
                             {timezones.map((timezone) => (
                               <CommandItem
@@ -607,9 +631,16 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="additional"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Additional Information</FormLabel>
+                <FormLabel>
+                  {t("inviteHistory.meetingForm.labels.additionalInformation")}
+                </FormLabel>
                 <FormControl>
-                  <Textarea placeholder="Enter additional information" {...field} />
+                  <Textarea
+                    placeholder={t(
+                      "inviteHistory.meetingForm.placeholders.additionalInformation"
+                    )}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -621,9 +652,12 @@ export const MeetingForm = ({ setOpenDialog }) => {
             name="guest"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Guest Emails</FormLabel>
+                <FormLabel>{t("inviteHistory.meetingForm.labels.guestEmails")}</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter guest emails separated by commas" {...field} />
+                  <Input
+                    placeholder={t("inviteHistory.meetingForm.placeholders.guestEmails")}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -636,7 +670,9 @@ export const MeetingForm = ({ setOpenDialog }) => {
               type="submit"
               disabled={sendInviteMutation.isPending}
             >
-              {sendInviteMutation.isPending ? "Submitting..." : "Submit"}
+              {sendInviteMutation.isPending
+                ? t("inviteHistory.meetingForm.actions.submitting")
+                : t("common.actions.submit")}
             </Button>
           </div>
         </div>

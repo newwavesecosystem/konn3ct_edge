@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { getPreRegParticipants, sendReminder } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
-const getParticipantsTitle = (count) => `Pre-Registered Users (${count})`;
-
-const getShowingText = (from, to, total) => `Showing ${from}-${to} of ${total}`;
 
 function escapeHtml(str = "") {
   return String(str)
@@ -103,6 +101,7 @@ function printHTML(title, html) {
 }
 
 const EventParticipants = () => {
+  const { t } = useTranslation();
   const { reference } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -112,9 +111,20 @@ const EventParticipants = () => {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
+  const getParticipantsTitle = (count) =>
+    t("events.participants.title", { count });
+
+  const getShowingText = (from, to, total) =>
+    t("events.participants.showing", { from, to, total });
   const headers = useMemo(
-    () => ["S/N", "Name", "Email", "Phone", "Date & Time"],
-    []
+    () => [
+      t("events.participants.table.serial"),
+      t("events.participants.table.name"),
+      t("events.participants.table.email"),
+      t("events.participants.table.phone"),
+      t("events.participants.table.dateTime"),
+    ],
+    [t]
   );
 
   useEffect(() => {
@@ -140,12 +150,12 @@ const EventParticipants = () => {
       setLoading(true);
       const response = await sendReminder(reference);
       toast({
-        description: response?.message || "Reminder sent.",
+        description: response?.message || t("events.participants.toasts.reminderSent"),
       });
     } catch (error) {
       console.error("Error sending reminder:", error);
       toast({
-        description: "Failed to send reminder.",
+        description: t("events.participants.toasts.reminderFailed"),
         variant: "destructive",
       });
     } finally {
@@ -195,11 +205,11 @@ const EventParticipants = () => {
     try {
       const tsv = rowsToTSV(headers, filteredRows);
       await navigator.clipboard.writeText(tsv);
-      toast({ description: "Copied to clipboard." });
+      toast({ description: t("events.participants.toasts.copied") });
     } catch (error) {
       console.error(error);
       toast({
-        description: "Copy failed (browser blocked clipboard).",
+        description: t("events.participants.toasts.copyFailed"),
         variant: "destructive",
       });
     }
@@ -211,7 +221,7 @@ const EventParticipants = () => {
       `participants-${reference || "export"}.csv`,
       new Blob([csv], { type: "text/csv;charset=utf-8" })
     );
-    toast({ description: "CSV downloaded." });
+    toast({ description: t("events.participants.toasts.csvDownloaded") });
   };
 
   const handleExcel = () => {
@@ -226,7 +236,7 @@ const EventParticipants = () => {
         type: "application/vnd.ms-excel;charset=utf-8",
       })
     );
-    toast({ description: "Excel downloaded." });
+    toast({ description: t("events.participants.toasts.excelDownloaded") });
   };
 
   const handlePrint = () => {
@@ -235,7 +245,7 @@ const EventParticipants = () => {
       headers,
       filteredRows
     );
-    printHTML("Print", html);
+    printHTML(t("events.participants.actions.print"), html);
   };
 
   return (
@@ -246,25 +256,25 @@ const EventParticipants = () => {
             onClick={handleCopy}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
-            Copy
+            {t("events.participants.actions.copy")}
           </button>
           <button
             onClick={handleCSV}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
-            CSV
+            {t("events.participants.actions.csv")}
           </button>
           <button
             onClick={handleExcel}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
-            Excel
+            {t("events.participants.actions.excel")}
           </button>
           <button
             onClick={handlePrint}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
           >
-            Print
+            {t("events.participants.actions.print")}
           </button>
         </div>
 
@@ -272,7 +282,7 @@ const EventParticipants = () => {
           onClick={sendReminderNow}
           className="rounded-full bg-[#227451] px-5 py-2 text-sm text-white transition-all hover:bg-green-700"
         >
-          Send Reminder Now
+          {t("events.participants.actions.sendReminder")}
         </button>
       </div>
 
@@ -284,7 +294,7 @@ const EventParticipants = () => {
             setCurrentPage(1);
           }}
           type="text"
-          placeholder="Search"
+          placeholder={t("events.participants.filters.search")}
           className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring sm:w-64 md:w-full lg:w-64"
         />
       </div>
@@ -297,7 +307,7 @@ const EventParticipants = () => {
           onClick={() => navigate("/events")}
           className="rounded-full bg-[#227451] px-4 py-2 text-xs text-white transition-all hover:bg-green-700"
         >
-          Back
+          {t("common.actions.goBack")}
         </button>
       </div>
 
@@ -320,7 +330,7 @@ const EventParticipants = () => {
                   colSpan="5"
                   className="py-6 text-center text-gray-500 dark:text-muted-foreground"
                 >
-                  Loading...
+                  {t("events.participants.states.loading")}
                 </td>
               </tr>
             ) : paginatedRows.length > 0 ? (
@@ -346,7 +356,7 @@ const EventParticipants = () => {
                   colSpan="5"
                   className="py-6 text-center text-gray-500 dark:text-muted-foreground"
                 >
-                  No participants found.
+                  {t("events.participants.states.empty")}
                 </td>
               </tr>
             )}
@@ -361,6 +371,7 @@ const EventParticipants = () => {
             type="button"
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             disabled={loading || currentPage === 1}
+            aria-label={t("components.pagination.previousAriaLabel")}
             className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               loading || currentPage === 1
                 ? "cursor-not-allowed opacity-50"
@@ -378,6 +389,7 @@ const EventParticipants = () => {
               setCurrentPage((page) => Math.min(totalPages, page + 1))
             }
             disabled={loading || currentPage === totalPages}
+            aria-label={t("components.pagination.nextAriaLabel")}
             className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               loading || currentPage === totalPages
                 ? "cursor-not-allowed opacity-50"

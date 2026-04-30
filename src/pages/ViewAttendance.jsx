@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   getAttendanceDetails,
   getMeetingSummary,
@@ -17,7 +18,6 @@ import {
 } from "../components/ui/pagination";
 
 const NAVBAR_HEIGHT = 72;
-const getMeetingAttendanceTitle = (count) => `Meeting Attendance (${count})`;
 
 function escapeHtml(str = "") {
   return String(str)
@@ -234,6 +234,7 @@ const normalizeStatus = (status) => {
 };
 
 const ViewAttendance = () => {
+  const { t } = useTranslation();
   const { meeting_id, identifier } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -261,20 +262,20 @@ const ViewAttendance = () => {
         setAttendanceData(data);
       } catch (fetchError) {
         console.error(fetchError);
-        setError("Unable to load participant details.");
+        setError(t("attendance.details.states.loadError"));
       } finally {
         setLoading(false);
       }
     };
 
     if (!meeting_id || !identifier) {
-      setError("Missing meeting_id or identifier.");
+      setError(t("attendance.details.states.missingParams"));
       setLoading(false);
       return;
     }
 
     fetchDetails();
-  }, [meeting_id, identifier, page]);
+  }, [meeting_id, identifier, page, t]);
 
   const attendanceRows = useMemo(
     () => (Array.isArray(attendanceData?.data) ? attendanceData.data : []),
@@ -316,50 +317,55 @@ const ViewAttendance = () => {
       let result = "";
 
       if (type === "minutes") {
-        setPanelTitle("Minutes of Meeting");
+        setPanelTitle(t("attendance.details.panel.minutesTitle"));
         result = await getMeetingMinutes(meeting_id);
       }
 
       if (type === "highlights") {
-        setPanelTitle("Meeting Highlights");
+        setPanelTitle(t("attendance.details.panel.highlightsTitle"));
         result = await getMeetingHighlights(meeting_id);
       }
 
       if (type === "summary") {
-        setPanelTitle("Meeting Summary");
+        setPanelTitle(t("attendance.details.panel.summaryTitle"));
         result = await getMeetingSummary(meeting_id);
       }
 
-      setPanelContent(result || "No data returned.");
+      setPanelContent(result || t("attendance.details.panel.noDataReturned"));
     } catch (panelError) {
       console.error(panelError);
-      setPanelContent("Failed to load content.");
+      setPanelContent(t("attendance.details.panel.loadFailed"));
     } finally {
       setPanelLoading(false);
     }
   };
 
-  const serialHeader = "S/N";
-  const nameHeader = "Name";
-  const emailHeader = "Email";
-  const statusHeader = "Status";
-  const dateTimeHeader = "Date & Time";
+  const getMeetingAttendanceTitle = (count) =>
+    t("attendance.details.export.title", { count });
+
+  const serialHeader = t("attendance.details.table.serial");
+  const nameHeader = t("attendance.details.table.name");
+  const emailHeader = t("attendance.details.table.email");
+  const statusHeader = t("attendance.details.table.status");
+  const dateTimeHeader = t("attendance.details.table.dateTime");
 
   const exportRows = useMemo(
     () =>
       attendanceRows.map((row, index) => ({
         [serialHeader]: rowStart + index,
-        [nameHeader]: row.name || row.attendee_name || "N/A",
-        [emailHeader]: row.email || row.attendee_email || "N/A",
+        [nameHeader]:
+          row.name || row.attendee_name || t("attendance.common.notAvailable"),
+        [emailHeader]:
+          row.email || row.attendee_email || t("attendance.common.notAvailable"),
         [statusHeader]:
           normalizeStatus(row.status) === "moderator"
-            ? "Moderator"
-            : "Participant",
+            ? t("attendance.details.status.moderator")
+            : t("attendance.details.status.participant"),
         [dateTimeHeader]: row.created_at
           ? new Date(row.created_at).toLocaleString("en-US")
           : row.date
             ? row.date + (row.time ? ` | ${row.time}` : "")
-            : "N/A",
+            : t("attendance.common.notAvailable"),
       })),
     [
       attendanceRows,
@@ -369,6 +375,7 @@ const ViewAttendance = () => {
       rowStart,
       serialHeader,
       statusHeader,
+      t,
     ]
   );
 
@@ -402,7 +409,7 @@ const ViewAttendance = () => {
     }
 
     toast({
-      description: "Copy failed. Please allow clipboard permission or use HTTPS.",
+      description: t("attendance.details.toasts.copyFailed"),
       variant: "destructive",
     });
   };
@@ -433,10 +440,10 @@ const ViewAttendance = () => {
       getMeetingAttendanceTitle(filteredRows.length),
       headers,
       filteredRows,
-      "This printout was generated electronically.",
+      t("attendance.details.export.printFooter"),
       () =>
         toast({
-          description: "Please allow popups to print",
+          description: t("attendance.details.toasts.allowPopups"),
           variant: "destructive",
         })
     );
@@ -446,7 +453,7 @@ const ViewAttendance = () => {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-sm text-gray-600 dark:text-muted-foreground">
-          Loading participant data...
+          {t("attendance.details.states.loading")}
         </p>
       </div>
     );
@@ -471,25 +478,27 @@ const ViewAttendance = () => {
                   onClick={handleCopy}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  {copied ? "Copied" : "Copy"}
+                  {copied
+                    ? t("attendance.details.actions.copied")
+                    : t("attendance.details.actions.copy")}
                 </button>
                 <button
                   onClick={handleCSV}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  CSV
+                  {t("attendance.details.actions.csv")}
                 </button>
                 <button
                   onClick={handleExcel}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  Excel
+                  {t("attendance.details.actions.excel")}
                 </button>
                 <button
                   onClick={handlePrint}
                   className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
                 >
-                  Print
+                  {t("attendance.details.actions.print")}
                 </button>
               </div>
 
@@ -498,19 +507,19 @@ const ViewAttendance = () => {
                   onClick={() => openPanel("minutes")}
                   className="rounded-md bg-blue-100 px-4 py-2 text-xs text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
                 >
-                  Send Minutes of Meeting
+                  {t("attendance.details.actions.sendMinutes")}
                 </button>
                 <button
                   onClick={() => openPanel("highlights")}
                   className="rounded-md bg-yellow-100 px-4 py-2 text-xs text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
                 >
-                  Send Meeting Highlight
+                  {t("attendance.details.actions.sendHighlights")}
                 </button>
                 <button
                   onClick={() => openPanel("summary")}
                   className="rounded-md bg-purple-100 px-4 py-2 text-xs text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
                 >
-                  Send Meeting Summary
+                  {t("attendance.details.actions.sendSummary")}
                 </button>
               </div>
             </div>
@@ -519,19 +528,21 @@ const ViewAttendance = () => {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               type="text"
-              placeholder="Search"
+              placeholder={t("attendance.details.filters.search")}
               className="w-64 rounded-full border border-input bg-white px-4 py-2 text-sm shadow-sm dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground md:w-full lg:w-64"
             />
           </div>
 
           <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-            <h2 className="text-base font-semibold">Meeting Attendance</h2>
+            <h2 className="text-base font-semibold">
+              {t("attendance.details.title")}
+            </h2>
             <button
               onClick={() => navigate("/attendance")}
               className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
             >
               <ArrowLeft size={16} />
-              Back to Attendance
+              {t("attendance.details.actions.back")}
             </button>
           </div>
 
@@ -548,7 +559,7 @@ const ViewAttendance = () => {
               <div className="space-y-3">
                 {filteredRows.length === 0 ? (
                   <div className="py-10 text-center text-sm text-gray-500 dark:text-muted-foreground">
-                    No participants found for this meeting.
+                    {t("attendance.details.states.empty")}
                   </div>
                 ) : (
                   filteredRows.map((row, index) => (
@@ -637,6 +648,7 @@ const ViewAttendance = () => {
           <button
             onClick={() => setPanelOpen(false)}
             className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-accent"
+            aria-label={t("attendance.details.panel.close")}
           >
             X
           </button>
@@ -645,7 +657,7 @@ const ViewAttendance = () => {
         <div className="h-[calc(100%-56px)] overflow-y-auto p-4">
           {panelLoading ? (
             <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              Loading...
+              {t("attendance.details.panel.loading")}
             </p>
           ) : (
             <div className="whitespace-pre-wrap rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">

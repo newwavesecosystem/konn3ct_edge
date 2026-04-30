@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import FallbackActions from "./FallbackActions";
 import FullscreenFallbackShell from "./FullscreenFallbackShell";
 
@@ -8,18 +9,20 @@ const OfflineFallbackScreen = ({
   onGoBack,
   onGoHome,
 }) => {
+  const { t } = useTranslation();
+
   return (
     <FullscreenFallbackShell
       variant="offline"
-      title="No internet connection"
-      description="You are currently offline. Reconnect to continue using Konn3ct features and live updates."
+      title={t("components.fallbackScreens.offline.title")}
+      description={t("components.fallbackScreens.offline.description")}
       actions={
         <FallbackActions
           onRetry={onRetry}
           onRefresh={onRefresh}
           onGoBack={onGoBack}
           onGoHome={onGoHome}
-          homeLabel="Go to Home"
+          homeLabel={t("common.actions.goHome")}
         />
       }
     />

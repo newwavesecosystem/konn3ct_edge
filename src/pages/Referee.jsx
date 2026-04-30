@@ -23,8 +23,10 @@ import {
 } from "../components/ui/table";
 import { getReferee } from "../api/refereeApi";
 import { capitalize, formatDate } from "../lib/utils";
+import { useTranslation } from "react-i18next";
 
 const Referee = () => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
 
   const refereeQuery = useQuery({
@@ -45,9 +47,9 @@ const Referee = () => {
     return (
       <section className="page container mx-auto">
         <Card className="p-6">
-          <p className="font-medium">Unable to load referees.</p>
+          <p className="font-medium">{t("referees.states.loadErrorTitle")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Please try again when your network is stable.
+            {t("referees.states.loadErrorDescription")}
           </p>
         </Card>
       </section>
@@ -71,18 +73,18 @@ const Referee = () => {
     <section className="page container mx-auto">
       <Card className="relative flex min-h-full w-full flex-col pb-6 lg:pb-0">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
-          <h3 className="text-xl font-medium">Referee List</h3>
+          <h3 className="text-xl font-medium">{t("referees.title")}</h3>
         </div>
         <Separator />
         <div className="flex items-center py-1 md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
           <div className="flex">
-            <p className="text-sm font-medium">Show entries</p>
+            <p className="text-sm font-medium">{t("referees.controls.showEntries")}</p>
           </div>
           <div className="ml-auto flex items-center gap-x-5 text-sm font-medium md:ml-0 md:w-full lg:ml-auto lg:w-auto">
-            Search:
+            {t("referees.controls.search")}
             <Input
               className="my-2 rounded-lg shadow md:w-full lg:w-auto"
-              placeholder="Search referees"
+              placeholder={t("referees.controls.searchPlaceholder")}
             />
           </div>
         </div>
@@ -91,11 +93,11 @@ const Referee = () => {
           <Table className="min-w-[820px] lg:min-w-0">
             <TableHeader>
               <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Email Address</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Date Registered</TableHead>
+                <TableHead>{t("referees.table.serial")}</TableHead>
+                <TableHead>{t("referees.table.name")}</TableHead>
+                <TableHead>{t("referees.table.emailAddress")}</TableHead>
+                <TableHead>{t("referees.table.plan")}</TableHead>
+                <TableHead>{t("referees.table.dateRegistered")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -108,7 +110,7 @@ const Referee = () => {
                     </TableCell>
                     <TableCell>{email}</TableCell>
                     <TableCell>
-                      {capitalize(plan?.name ?? "N/A")}
+                      {capitalize(plan?.name ?? t("referees.states.notAvailable"))}
                     </TableCell>
                     <TableCell>{formatDate(created_at)}</TableCell>
                   </TableRow>
@@ -118,7 +120,7 @@ const Referee = () => {
           </Table>
           {refereeRows.length === 0 && (
             <div className="flex min-h-[220px] items-center justify-center px-4 text-center">
-              <p>No data available for this table</p>
+              <p>{t("referees.states.empty")}</p>
             </div>
           )}
         </div>

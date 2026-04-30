@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   Tabs,
   TabsList,
@@ -22,20 +23,22 @@ import {
 } from "../../lib/referral";
 
 const Profile = () => {
+  const { t } = useTranslation();
+
   return (
     <section className="page">
       <Tabs defaultValue="info" className="w-full h-full">
         <TabsList className="mb-20 w-full flex flex-wrap gap-2 md:grid md:grid-cols-2 lg:flex lg:flex-wrap">
           <TabsTrigger value="info" className="text-base lg:text-lg">
-            Profile Information
+            {t("profile.tabs.info")}
           </TabsTrigger>
           <Separator orientation="vertical" className="hidden lg:block" />
           <TabsTrigger value="password" className="text-base lg:text-lg">
-            Update Password
+            {t("profile.tabs.password")}
           </TabsTrigger>
           <Separator orientation="vertical" className="hidden lg:block" />
           <TabsTrigger value="sessions" className="text-base lg:text-lg">
-            Browser Sessions
+            {t("profile.tabs.sessions")}
           </TabsTrigger>
         </TabsList>
 
@@ -58,22 +61,23 @@ const Profile = () => {
 export default Profile;
 
 const ProfileInformation = () => {
+  const { t } = useTranslation();
   const userQuery = useQuery({ queryKey: ["profile"], queryFn: getUser });
   const { toast } = useToast();
 
   const handleCopy = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    toast({ description: "Copied to clipboard" });
+    toast({ description: t("profile.toasts.copied") });
   };
 
   if (userQuery.isLoading) return null;
   if (userQuery.isError) {
     return (
       <Card className="p-4">
-        <p className="font-medium">Unable to load profile information.</p>
+        <p className="font-medium">{t("profile.states.profileLoadErrorTitle")}</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Please refresh and try again.
+          {t("profile.states.profileLoadErrorDescription")}
         </p>
       </Card>
     );
@@ -87,7 +91,9 @@ const ProfileInformation = () => {
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <Card className="p-4">
-        <CardTitle className="mb-4 text-lg lg:text-xl">Photo</CardTitle>
+        <CardTitle className="mb-4 text-lg lg:text-xl">
+          {t("profile.info.photo")}
+        </CardTitle>
         <ProfileForm />
       </Card>
 
@@ -95,7 +101,7 @@ const ProfileInformation = () => {
         <Card className="flex flex-col items-start p-4 lg:flex-row lg:items-center">
           <CardHeader className="p-0">
             <CardTitle className="text-base lg:text-lg">
-              Active plan
+              {t("profile.info.activePlan")}
             </CardTitle>
             <p className="text-sm lg:text-base">
               {capitalize(userPlan?.name ?? "basic")}
@@ -110,10 +116,10 @@ const ProfileInformation = () => {
         <Card className="flex flex-col items-start p-4 lg:flex-row lg:items-center">
           <CardHeader className="p-0">
             <CardTitle className="text-base lg:text-lg">
-              Referral Code
+              {t("profile.info.referralCode")}
             </CardTitle>
             <p className="font-mono text-sm lg:text-base">
-              {referralCode || "N/A"}
+              {referralCode || t("profile.states.notAvailable")}
             </p>
           </CardHeader>
 
@@ -123,14 +129,14 @@ const ProfileInformation = () => {
             onClick={() => handleCopy(referralCode)}
             disabled={!referralCode}
           >
-            Copy <Copy className="ml-2 h-4 w-4" />
+            {t("profile.info.copy")} <Copy className="ml-2 h-4 w-4" />
           </Button>
         </Card>
 
         <Card className="p-4">
           <CardHeader className="mb-2 p-0">
             <CardTitle className="text-base lg:text-lg">
-              Referral Link
+              {t("profile.info.referralLink")}
             </CardTitle>
           </CardHeader>
 
@@ -139,7 +145,7 @@ const ProfileInformation = () => {
               type="text"
               value={referralLink}
               readOnly
-              placeholder="N/A"
+              placeholder={t("profile.states.notAvailable")}
               className="flex-1 cursor-pointer rounded-md border bg-muted px-3 py-2 text-sm"
               onClick={(e) => e.target.select()}
             />
@@ -159,11 +165,13 @@ const ProfileInformation = () => {
 };
 
 const UpdatePassword = () => {
+  const { t } = useTranslation();
+
   return (
     <Card className="min-h-full flex justify-center p-6">
       <div className="flex w-full max-w-md flex-col">
         <p className="mb-6 text-sm lg:text-base">
-          Ensure your account is using a long random password to stay secure.
+          {t("profile.password.helper")}
         </p>
         <PasswordForm />
       </div>
@@ -172,6 +180,7 @@ const UpdatePassword = () => {
 };
 
 const BrowserSessions = () => {
+  const { t } = useTranslation();
   const sessionQuery = useQuery({
     queryKey: ["sessions"],
     queryFn: getSessions,
@@ -196,9 +205,9 @@ const BrowserSessions = () => {
   if (sessionQuery.isError) {
     return (
       <Card className="min-h-full p-6">
-        <p className="font-medium">Unable to load browser sessions.</p>
+        <p className="font-medium">{t("profile.states.sessionsLoadErrorTitle")}</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Please refresh and try again.
+          {t("profile.states.sessionsLoadErrorDescription")}
         </p>
       </Card>
     );
@@ -207,8 +216,8 @@ const BrowserSessions = () => {
   const sessionName = String(sessionQuery.data?.currentToken?.name ?? "").split(
     "||"
   );
-  const browserInfo = sessionName[0] || "Unknown browser";
-  const locationInfo = sessionName[1] || "Unknown location";
+  const browserInfo = sessionName[0] || t("profile.states.unknownBrowser");
+  const locationInfo = sessionName[1] || t("profile.states.unknownLocation");
   const currentUserAgent = navigator.userAgent;
   const thisUser = browserInfo === currentUserAgent;
 
@@ -216,7 +225,7 @@ const BrowserSessions = () => {
     <Card className="min-h-full flex items-center justify-center p-6">
       <div className="w-full max-w-2xl">
         <p className="text-sm lg:text-base">
-          If necessary, you may logout of all of your other browser sessions across all of your devices.
+          {t("profile.sessions.helper")}
         </p>
 
         <div className="my-6 flex flex-col items-start gap-4 font-medium lg:flex-row lg:items-center">
@@ -226,7 +235,9 @@ const BrowserSessions = () => {
             <p className="text-sm lg:text-base">
               {locationInfo}.
               <span className="ml-1 text-accent">
-                {thisUser ? "This device" : "Other devices"}
+                {thisUser
+                  ? t("profile.sessions.thisDevice")
+                  : t("profile.sessions.otherDevices")}
               </span>
             </p>
           </div>
@@ -237,7 +248,7 @@ const BrowserSessions = () => {
           className="w-full lg:w-auto"
           onClick={() => sessionLogoutMutation.mutate()}
         >
-          Logout Other Browser Sessions
+          {t("profile.sessions.logoutOtherSessions")}
         </Button>
       </div>
     </Card>

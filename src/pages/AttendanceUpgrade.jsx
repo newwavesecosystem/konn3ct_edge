@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { MessageCircle, Mic, Video, Wifi } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const users = [
   {
@@ -72,31 +73,31 @@ const users = [
 
 const stats = [
   {
-    title: "Active User",
+    titleKey: "attendance.upgrade.stats.activeUser",
     value: 3,
     color:
       "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200",
   },
   {
-    title: "Activity Score",
+    titleKey: "attendance.upgrade.stats.activityScore",
     value: 2,
     color:
       "bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-200",
   },
   {
-    title: "Timeline",
+    titleKey: "attendance.upgrade.stats.timeline",
     value: 0,
     color:
       "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-200",
   },
   {
-    title: "Polls",
+    titleKey: "attendance.upgrade.stats.polls",
     value: 1,
     color:
       "bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200",
   },
   {
-    title: "Donation",
+    titleKey: "attendance.upgrade.stats.donation",
     value: 0,
     color:
       "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200",
@@ -104,6 +105,7 @@ const stats = [
 ];
 
 export default function AttendanceUpgrade() {
+  const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 4;
   const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
@@ -113,32 +115,36 @@ export default function AttendanceUpgrade() {
   return (
     <div className="flex min-h-screen flex-col items-center px-2 py-6">
       <div className="w-full max-w-6xl rounded-2xl bg-white p-4 shadow dark:border dark:border-border dark:bg-card">
-        <h2 className="mb-4 text-sm font-semibold">Odejimni Samuel Room</h2>
+        <h2 className="mb-4 text-sm font-semibold">
+          {t("attendance.upgrade.roomTitle", { room: "Odejimni Samuel" })}
+        </h2>
 
         <div className="mb-6 flex flex-wrap gap-2">
           {stats.map((item) => (
             <div
-              key={item.title}
+              key={item.titleKey}
               className={`flex min-w-[120px] flex-1 flex-col items-center justify-center rounded-lg p-2 ${item.color}`}
             >
               <p className="text-lg font-semibold">{item.value}</p>
-              <p className="text-xs font-medium">{item.title}</p>
+              <p className="text-xs font-medium">{t(item.titleKey)}</p>
             </div>
           ))}
         </div>
 
-        <h3 className="mb-2 text-sm font-semibold">Overview</h3>
+        <h3 className="mb-2 text-sm font-semibold">
+          {t("attendance.upgrade.overview")}
+        </h3>
 
         <div className="md:overflow-x-auto lg:overflow-visible">
           <div className="md:min-w-[720px] lg:min-w-0">
             <div className="mb-2 grid grid-cols-7 border-b pb-1 text-xs font-semibold text-gray-600 dark:border-border dark:text-muted-foreground">
-              <p>User</p>
-              <p>Online</p>
-              <p>Talk</p>
-              <p>Webcam</p>
-              <p>Msgs</p>
-              <p>React</p>
-              <p>Raise</p>
+              <p>{t("attendance.upgrade.table.user")}</p>
+              <p>{t("attendance.upgrade.table.online")}</p>
+              <p>{t("attendance.upgrade.table.talk")}</p>
+              <p>{t("attendance.upgrade.table.webcam")}</p>
+              <p>{t("attendance.upgrade.table.messages")}</p>
+              <p>{t("attendance.upgrade.table.reactions")}</p>
+              <p>{t("attendance.upgrade.table.raise")}</p>
             </div>
 
             <div className="space-y-2">
@@ -189,6 +195,7 @@ export default function AttendanceUpgrade() {
             type="button"
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             disabled={currentPage === 1}
+            aria-label={t("components.pagination.previousAriaLabel")}
             className="rounded-l-md border px-2 py-1 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-background dark:hover:bg-accent"
           >
             &lt;
@@ -202,6 +209,7 @@ export default function AttendanceUpgrade() {
               setCurrentPage((page) => Math.min(totalPages, page + 1))
             }
             disabled={currentPage === totalPages}
+            aria-label={t("components.pagination.nextAriaLabel")}
             className="rounded-r-md border px-2 py-1 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-background dark:hover:bg-accent"
           >
             &gt;

@@ -64,8 +64,10 @@ import {
 } from "../components/ui/popover";
 import { z } from "zod";
 import { Skeleton } from "../components/ui/skeleton";
+import { useTranslation } from "react-i18next";
 
 const Streaming = () => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
 
@@ -91,7 +93,7 @@ const Streaming = () => {
     mutationFn: stopStreaming,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["streams"] });
-      toast({ description: "Streaming successfully ended" });
+      toast({ description: t("streaming.toasts.ended") });
     },
   });
 
@@ -106,9 +108,9 @@ const Streaming = () => {
     return (
       <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
         <Card className="p-6">
-          <p className="font-medium">Unable to load streams right now.</p>
+          <p className="font-medium">{t("streaming.states.loadErrorTitle")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Please retry after checking your connection.
+            {t("streaming.states.loadErrorDescription")}
           </p>
         </Card>
       </section>
@@ -133,12 +135,12 @@ const Streaming = () => {
       <Card className="relative w-full min-h-full pb-6 lg:pb-16">
         <div className="flex flex-col gap-4 p-4 pt-6 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
           <Button className="w-full sm:w-auto" onClick={() => setOpenDialog(true)}>
-            <Plus /> Stream
+            <Plus /> {t("streaming.actions.stream")}
           </Button>
 
           <StatCard
             value={streamData.total ?? streamRows.length}
-            name="Total Streams"
+            name={t("streaming.stats.totalStreams")}
             icon={roomsIcon}
           />
 
@@ -148,7 +150,7 @@ const Streaming = () => {
             value={
               streamRows.filter((stream) => stream.status === 1).length
             }
-            name="Active Streams"
+            name={t("streaming.stats.activeStreams")}
             icon={activeIcon}
           />
         </div>
@@ -158,13 +160,13 @@ const Streaming = () => {
         <Table className="min-w-[780px] lg:min-w-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="">No</TableHead>
-              <TableHead>Room Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead>Started At</TableHead>
-              <TableHead>Ended At</TableHead>
-              <TableHead>Action</TableHead>
+              <TableHead className="">{t("streaming.table.number")}</TableHead>
+              <TableHead>{t("streaming.table.roomName")}</TableHead>
+              <TableHead>{t("streaming.table.type")}</TableHead>
+              <TableHead className="text-center">{t("streaming.table.status")}</TableHead>
+              <TableHead>{t("streaming.table.startedAt")}</TableHead>
+              <TableHead>{t("streaming.table.endedAt")}</TableHead>
+              <TableHead>{t("streaming.table.action")}</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -173,12 +175,14 @@ const Streaming = () => {
               ({ room, id, type, status, created_at, ended_at }) => (
                 <TableRow key={id + created_at}>
                   <TableCell>{id}</TableCell>
-                  <TableCell>{room?.name ?? "Temporary room"}</TableCell>
+                  <TableCell>{room?.name ?? t("streaming.states.temporaryRoom")}</TableCell>
                   <TableCell>{type}</TableCell>
 
                   <TableCell className="text-center">
                     <Badge variant={status === 1 ? "" : "destructive"}>
-                      {status === 1 ? "Running" : "Ended"}
+                      {status === 1
+                        ? t("streaming.status.running")
+                        : t("streaming.status.ended")}
                     </Badge>
                   </TableCell>
 
@@ -186,7 +190,7 @@ const Streaming = () => {
 
                   <TableCell>
                     {ended_at === null ? (
-                      <Badge>Running</Badge>
+                      <Badge>{t("streaming.status.running")}</Badge>
                     ) : (
                       formatDate(ended_at)
                     )}
@@ -199,7 +203,7 @@ const Streaming = () => {
                         variant="destructive"
                         onClick={() => stopStreamMutation.mutate(id)}
                       >
-                        Stop Streaming
+                        {t("streaming.actions.stopStreaming")}
                       </Button>
                     </TableCell>
                   )}
@@ -211,7 +215,7 @@ const Streaming = () => {
 
         {streamRows.length === 0 && (
           <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center px-4 text-center">
-            <p>No data available for this table</p>
+            <p>{t("streaming.states.noData")}</p>
           </div>
         )}
 
@@ -254,9 +258,9 @@ const Streaming = () => {
 
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent className="w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-1/2">
-          <DialogTitle>Create a new stream</DialogTitle>
+          <DialogTitle>{t("streaming.dialog.title")}</DialogTitle>
           <DialogDescription>
-            Start streaming your meeting on various platforms
+            {t("streaming.dialog.description")}
           </DialogDescription>
           <StreamForm setOpenDialog={setOpenDialog} />
         </DialogContent>
@@ -268,6 +272,7 @@ const Streaming = () => {
 export default Streaming;
 
 const StreamForm = ({ setOpenDialog }) => {
+  const { t } = useTranslation();
   const [openPopover, setOpenPopover] = useState(false);
   const { toast } = useToast();
   const [rooms, setRooms] = useState([]);
@@ -276,9 +281,9 @@ const StreamForm = ({ setOpenDialog }) => {
   const queryClient = useQueryClient();
 
   const types = [
-    { value: "Youtube", label: "Youtube" },
-    { value: "Facebook", label: "Facebook" },
-    { value: "Combo", label: "Combo (YouTube + Facebook)" }, // ✅ NEW
+    { value: "Youtube", label: t("streaming.form.types.youtube") },
+    { value: "Facebook", label: t("streaming.form.types.facebook") },
+    { value: "Combo", label: t("streaming.form.types.combo") },
   ];
 
   useEffect(() => {
@@ -318,7 +323,7 @@ const StreamForm = ({ setOpenDialog }) => {
   const startStreamMutation = useMutation({
     mutationFn: startStream,
     onSuccess: (res) => {
-      toast({ description: res.message || "Stream started" });
+      toast({ description: res.message || t("streaming.toasts.started") });
       queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
   });
@@ -326,16 +331,18 @@ const StreamForm = ({ setOpenDialog }) => {
   const startComboMutation = useMutation({
     mutationFn: startComboStreaming,
     onSuccess: (res) => {
-      toast({ description: res.message || "Combo streaming started" });
+      toast({ description: res.message || t("streaming.toasts.comboStarted") });
       queryClient.invalidateQueries({ queryKey: ["streams"] });
     },
   });
 
   const formSchema = z
     .object({
-      room_id: z.string().nonempty({ message: "Room is required." }),
+      room_id: z.string().nonempty({
+        message: t("streaming.form.validation.roomRequired"),
+      }),
       type: z.enum(["Youtube", "Facebook", "Combo"], {
-        message: "Select a valid type.",
+        message: t("streaming.form.validation.typeInvalid"),
       }),
 
       // single platform
@@ -350,14 +357,14 @@ const StreamForm = ({ setOpenDialog }) => {
         if (!values.youtube_key || values.youtube_key.trim() === "") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "YouTube key is required for Combo.",
+            message: t("streaming.form.validation.youtubeKeyRequired"),
             path: ["youtube_key"],
           });
         }
         if (!values.facebook_key || values.facebook_key.trim() === "") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "Facebook key is required for Combo.",
+            message: t("streaming.form.validation.facebookKeyRequired"),
             path: ["facebook_key"],
           });
         }
@@ -365,7 +372,7 @@ const StreamForm = ({ setOpenDialog }) => {
         if (!values.key || values.key.trim() === "") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: "Key is required.",
+            message: t("streaming.form.validation.keyRequired"),
             path: ["key"],
           });
         }
@@ -413,7 +420,7 @@ const StreamForm = ({ setOpenDialog }) => {
             render={({ field }) => (
               <FormItem>
                 <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  Select Room
+                  {t("streaming.form.selectRoom")}
                 </label>
                 <FormControl>
                   <select
@@ -422,7 +429,9 @@ const StreamForm = ({ setOpenDialog }) => {
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
                   >
                     <option value="">
-                      {roomLoading ? "Loading rooms..." : "Select Room"}
+                      {roomLoading
+                        ? t("streaming.form.loadingRooms")
+                        : t("streaming.form.selectRoom")}
                     </option>
                     {Array.isArray(rooms) &&
                       rooms.map((room) => (
@@ -446,7 +455,7 @@ const StreamForm = ({ setOpenDialog }) => {
             render={({ field }) => (
               <FormItem>
                 <label htmlFor="type" className="block font-medium">
-                  Type
+                  {t("streaming.form.type")}
                 </label>
                 <FormControl>
                   <Popover open={openPopover} onOpenChange={setOpenPopover}>
@@ -459,15 +468,15 @@ const StreamForm = ({ setOpenDialog }) => {
                       >
                         {field.value
                           ? types.find((t) => t.value === field.value)?.label
-                          : "Select type..."}
+                          : t("streaming.form.selectType")}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] lg:!w-[300px]">
                       <Command>
-                        <CommandInput placeholder="Search type..." />
+                        <CommandInput placeholder={t("streaming.form.searchType")} />
                         <CommandList>
-                          <CommandEmpty>No type found.</CommandEmpty>
+                          <CommandEmpty>{t("streaming.form.noTypeFound")}</CommandEmpty>
                           <CommandGroup>
                             {types.map((type) => (
                               <CommandItem
@@ -505,12 +514,12 @@ const StreamForm = ({ setOpenDialog }) => {
                 render={({ field }) => (
                   <FormItem>
                     <label htmlFor="youtube_key" className="block font-medium">
-                      YouTube Key
+                      {t("streaming.form.youtubeKey")}
                     </label>
                     <FormControl>
                       <Input
                         id="youtube_key"
-                        placeholder="Enter YouTube Key"
+                        placeholder={t("streaming.form.enterYouTubeKey")}
                         {...field}
                       />
                     </FormControl>
@@ -525,12 +534,12 @@ const StreamForm = ({ setOpenDialog }) => {
                 render={({ field }) => (
                   <FormItem>
                     <label htmlFor="facebook_key" className="block font-medium">
-                      Facebook Key
+                      {t("streaming.form.facebookKey")}
                     </label>
                     <FormControl>
                       <Input
                         id="facebook_key"
-                        placeholder="Enter Facebook Key"
+                        placeholder={t("streaming.form.enterFacebookKey")}
                         {...field}
                       />
                     </FormControl>
@@ -546,12 +555,12 @@ const StreamForm = ({ setOpenDialog }) => {
               render={({ field }) => (
               <FormItem>
                 <label htmlFor="key" className="block font-medium">
-                  Key
+                  {t("streaming.form.key")}
                 </label>
                 <FormControl>
                     <Input
                       id="key"
-                      placeholder="Enter Key"
+                      placeholder={t("streaming.form.enterKey")}
                       {...field}
                     />
                 </FormControl>
@@ -568,7 +577,7 @@ const StreamForm = ({ setOpenDialog }) => {
               size="lg"
               disabled={startStreamMutation.isPending || startComboMutation.isPending}
             >
-              Submit
+              {t("streaming.actions.submit")}
             </Button>
           </div>
         </form>

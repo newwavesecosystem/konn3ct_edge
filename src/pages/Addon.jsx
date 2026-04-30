@@ -1,6 +1,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PaystackButton } from "react-paystack";
+import { useTranslation } from "react-i18next";
 
 import { getAddons } from "../api/addonsApi";
 import { getUser } from "../api/userApi";
@@ -18,34 +19,35 @@ import {
 } from "../components/ui/table";
 import { useToast } from "../hooks/use-toast";
 
-const getStatusLabel = (status) => {
+const getStatusLabel = (status, t) => {
   switch (status) {
     case "active":
-      return "Active";
+      return t("addons.status.active");
     case "inactive":
-      return "Inactive";
+      return t("addons.status.inactive");
     case "running":
-      return "Running";
+      return t("addons.status.running");
     case "ended":
-      return "Ended";
+      return t("addons.status.ended");
     case "verified":
-      return "Verified";
+      return t("addons.status.verified");
     case "pending":
-      return "Pending";
+      return t("addons.status.pending");
     case "success":
-      return "Successful";
+      return t("addons.status.success");
     case "failed":
-      return "Failed";
+      return t("addons.status.failed");
     case "inprogress":
-      return "In Progress";
+      return t("addons.status.inProgress");
     case "loading":
-      return "Loading...";
+      return t("addons.status.loading");
     default:
       return status;
   }
 };
 
 const Addon = () => {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { data, isSuccess, isError } = useQuery({
     queryFn: getAddons,
@@ -66,9 +68,9 @@ const Addon = () => {
     return (
       <section className="page container mx-auto">
         <Card className="p-6">
-          <p className="font-medium">Unable to load addons right now.</p>
+          <p className="font-medium">{t("addons.states.loadErrorTitle")}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Please retry in a moment.
+            {t("addons.states.loadErrorDescription")}
           </p>
         </Card>
       </section>
@@ -94,18 +96,18 @@ const Addon = () => {
     <section className="page container mx-auto">
       <Card className="min-h-full w-full">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:pt-10">
-          <h3 className="text-xl font-medium">Addon List</h3>
+          <h3 className="text-xl font-medium">{t("addons.title")}</h3>
         </div>
         <Separator />
         <Table className="min-w-[760px] lg:min-w-0">
           <TableHeader>
             <TableRow>
               <TableHead>#</TableHead>
-              <TableHead>Service</TableHead>
-              <TableHead>Service Description</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Action</TableHead>
+              <TableHead>{t("addons.table.service")}</TableHead>
+              <TableHead>{t("addons.table.serviceDescription")}</TableHead>
+              <TableHead className="text-center">{t("addons.table.status")}</TableHead>
+              <TableHead>{t("addons.table.amount")}</TableHead>
+              <TableHead>{t("addons.table.action")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -146,11 +148,11 @@ const Addon = () => {
                   ],
                 },
                 publicKey,
-                text: "Pay Now",
+                text: t("addons.actions.payNow"),
                 onSuccess: () =>
-                  toast({ description: "Addon purchase successful" }),
+                  toast({ description: t("addons.toasts.purchaseSuccessful") }),
                 onClose: () =>
-                  toast({ description: "Payment Cancelled" }),
+                  toast({ description: t("addons.toasts.paymentCancelled") }),
               };
 
               return (
@@ -163,8 +165,8 @@ const Addon = () => {
                       variant={statusValue === "active" ? "" : "destructive"}
                     >
                       {statusValue
-                        ? getStatusLabel(normalizedStatus)
-                        : "..."}
+                        ? getStatusLabel(normalizedStatus, t)
+                        : t("addons.status.unknown")}
                     </Badge>
                   </TableCell>
                   <TableCell>{price}</TableCell>
@@ -179,7 +181,7 @@ const Addon = () => {
             })}
           </TableBody>
         </Table>
-        {addons.length === 0 && <p>No data available for this table</p>}
+        {addons.length === 0 && <p>{t("addons.states.noData")}</p>}
       </Card>
     </section>
   );

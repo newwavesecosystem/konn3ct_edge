@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Building2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   fetchKyc,
@@ -21,6 +22,7 @@ import {
 import { useToast } from "../hooks/use-toast";
 
 export default function BusinessVerificationFlow({ onComplete }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [step, setStep] = useState("card");
   const [banks, setBanks] = useState([]);
@@ -94,14 +96,14 @@ export default function BusinessVerificationFlow({ onComplete }) {
       if (res.success) onComplete();
       else {
         toast({
-          description: res.message || "KYC failed",
+          description: res.message || t("donations.business.toasts.kycFailed"),
           variant: "destructive",
         });
       }
     } catch (err) {
       console.error(err);
       toast({
-        description: "Error submitting business KYC",
+        description: t("donations.business.toasts.submitError"),
         variant: "destructive",
       });
     }
@@ -116,19 +118,19 @@ export default function BusinessVerificationFlow({ onComplete }) {
               <Building2 className="h-7 w-7 text-green-600 dark:text-green-300" />
             </div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">
-              Business Account
+              {t("donations.business.card.title")}
             </h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-muted-foreground">
-              For registered businesses and organizations
+              {t("donations.business.card.description")}
             </p>
             <ul className="mt-3 space-y-1 text-sm text-gray-600 dark:text-muted-foreground">
-              <li>&bull; Company Information</li>
-              <li>&bull; Director Information</li>
-              <li>&bull; Bank Account Verification</li>
-              <li>&bull; Upload Director&apos;s ID</li>
+              <li>&bull; {t("donations.business.card.features.companyInformation")}</li>
+              <li>&bull; {t("donations.business.card.features.directorInformation")}</li>
+              <li>&bull; {t("donations.business.card.features.bankVerification")}</li>
+              <li>&bull; {t("donations.business.card.features.uploadDirectorId")}</li>
             </ul>
             <Button className="mt-6" onClick={() => setStep("form")}>
-              Start Verification
+              {t("donations.actions.startVerification")}
             </Button>
           </CardContent>
         </Card>
@@ -143,33 +145,33 @@ export default function BusinessVerificationFlow({ onComplete }) {
               </div>
               <div>
                 <CardTitle className="text-lg">
-                  Business KYC Verification
+                  {t("donations.business.form.title")}
                 </CardTitle>
                 <p className="text-sm text-gray-500 dark:text-muted-foreground">
-                  Complete your company, director, and bank details
+                  {t("donations.business.form.description")}
                 </p>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => setStep("card")}>
-              Back
+              {t("common.actions.goBack")}
             </Button>
           </CardHeader>
 
           <CardContent className="space-y-8 p-6">
             <section>
               <h3 className="mb-4 text-md font-semibold">
-                Company Information
+                {t("donations.business.sections.companyInformation")}
               </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>Company Name</Label>
+                  <Label>{t("donations.business.fields.companyName")}</Label>
                   <Input
                     value={formData.companyName}
                     onChange={(e) => handleChange("companyName", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>Company Email</Label>
+                  <Label>{t("donations.business.fields.companyEmail")}</Label>
                   <Input
                     value={formData.companyEmail}
                     onChange={(e) =>
@@ -178,7 +180,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>Company Phone</Label>
+                  <Label>{t("donations.business.fields.companyPhone")}</Label>
                   <Input
                     value={formData.companyPhone}
                     onChange={(e) =>
@@ -187,7 +189,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <Label>Company Address</Label>
+                  <Label>{t("donations.business.fields.companyAddress")}</Label>
                   <Input
                     value={formData.companyAddress}
                     onChange={(e) =>
@@ -196,7 +198,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>Tax ID</Label>
+                  <Label>{t("donations.business.fields.taxId")}</Label>
                   <Input
                     value={formData.taxId}
                     onChange={(e) => handleChange("taxId", e.target.value)}
@@ -207,11 +209,11 @@ export default function BusinessVerificationFlow({ onComplete }) {
 
             <section>
               <h3 className="mb-4 text-md font-semibold">
-                Director Information
+                {t("donations.business.sections.directorInformation")}
               </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>First Name</Label>
+                  <Label>{t("common.forms.firstName")}</Label>
                   <Input
                     value={formData.directorFirstName}
                     onChange={(e) =>
@@ -220,7 +222,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>Last Name</Label>
+                  <Label>{t("common.forms.lastName")}</Label>
                   <Input
                     value={formData.directorLastName}
                     onChange={(e) =>
@@ -229,7 +231,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>Email</Label>
+                  <Label>{t("common.forms.email")}</Label>
                   <Input
                     value={formData.directorEmail}
                     onChange={(e) =>
@@ -238,7 +240,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>Phone</Label>
+                  <Label>{t("common.forms.phone")}</Label>
                   <Input
                     value={formData.directorPhone}
                     onChange={(e) =>
@@ -247,7 +249,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>BVN</Label>
+                  <Label>{t("donations.common.bvn")}</Label>
                   <Input
                     value={formData.directorBvn}
                     onChange={(e) =>
@@ -256,7 +258,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div>
-                  <Label>ID Type</Label>
+                  <Label>{t("donations.common.idType")}</Label>
                   <Select
                     value={formData.directorIdType}
                     onValueChange={(value) =>
@@ -264,16 +266,22 @@ export default function BusinessVerificationFlow({ onComplete }) {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select ID type" />
+                      <SelectValue
+                        placeholder={t("donations.common.placeholders.selectIdType")}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="NIN">NIN</SelectItem>
-                      <SelectItem value="Passport">Passport</SelectItem>
+                      <SelectItem value="NIN">
+                        {t("donations.common.idTypes.nin")}
+                      </SelectItem>
+                      <SelectItem value="Passport">
+                        {t("donations.common.idTypes.passport")}
+                      </SelectItem>
                       <SelectItem value="Driver's License">
-                        Driver&apos;s License
+                        {t("donations.common.idTypes.driversLicense")}
                       </SelectItem>
                       <SelectItem value="Voter's Card">
-                        Voter&apos;s Card
+                        {t("donations.common.idTypes.votersCard")}
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -282,16 +290,20 @@ export default function BusinessVerificationFlow({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">Bank Details</h3>
+              <h3 className="mb-4 text-md font-semibold">
+                {t("donations.common.sections.bankDetails")}
+              </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>Bank</Label>
+                  <Label>{t("donations.common.bank")}</Label>
                   <Select
                     value={bankCode?.name}
                     onValueChange={(value) => setBankCode(value)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select your bank" />
+                      <SelectValue
+                        placeholder={t("donations.common.placeholders.selectBank")}
+                      />
                     </SelectTrigger>
                     <SelectContent className="grid max-h-[300px] grid-cols-2 gap-2 overflow-y-auto p-2 lg:grid-cols-4">
                       <div className="grid max-h-[300px] grid-cols-1 gap-2 overflow-y-auto p-2 md:grid-cols-2">
@@ -307,7 +319,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   </Select>
                 </div>
                 <div>
-                  <Label>Account Number</Label>
+                  <Label>{t("donations.common.accountNumber")}</Label>
                   <Input
                     value={formData.bankAccountNumber}
                     onChange={(e) =>
@@ -316,10 +328,10 @@ export default function BusinessVerificationFlow({ onComplete }) {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <Label>Account Name</Label>
+                  <Label>{t("donations.common.accountName")}</Label>
                   <Input
                     value={accountName}
-                    placeholder="Will Be Auto-filled"
+                    placeholder={t("donations.common.placeholders.autoFilled")}
                     disabled
                   />
                 </div>
@@ -328,7 +340,7 @@ export default function BusinessVerificationFlow({ onComplete }) {
 
             <section>
               <h3 className="mb-4 text-md font-semibold">
-                Upload Director&apos;s ID
+                {t("donations.business.sections.uploadDirectorId")}
               </h3>
               <input
                 type="file"
@@ -340,7 +352,9 @@ export default function BusinessVerificationFlow({ onComplete }) {
             </section>
 
             <div className="flex justify-center">
-              <Button onClick={handleSubmit}>Complete Verification</Button>
+              <Button onClick={handleSubmit}>
+                {t("donations.actions.completeVerification")}
+              </Button>
             </div>
           </CardContent>
         </Card>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import AnimatedKonn3ctLogo from "./AnimatedKonn3ctLogo";
 
@@ -6,13 +7,13 @@ const variantStyles = {
   crash: {
     badgeClass:
       "border-red-300/60 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-100",
-    badgeText: "App Recovery",
+    badgeKey: "components.fallbackScreens.badge.crash",
     accentClass: "from-emerald-100 via-white to-red-100",
   },
   offline: {
     badgeClass:
       "border-amber-300/60 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-100",
-    badgeText: "Network State",
+    badgeKey: "components.fallbackScreens.badge.offline",
     accentClass: "from-emerald-100 via-white to-amber-100",
   },
 };
@@ -24,6 +25,7 @@ const FullscreenFallbackShell = ({
   details,
   actions,
 }) => {
+  const { t } = useTranslation();
   const style = variantStyles[variant] ?? variantStyles.crash;
 
   return (
@@ -45,7 +47,7 @@ const FullscreenFallbackShell = ({
               style.badgeClass
             )}
           >
-            {style.badgeText}
+            {t(style.badgeKey)}
           </div>
 
           <AnimatedKonn3ctLogo className="my-8" />

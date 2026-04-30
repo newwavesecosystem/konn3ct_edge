@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { getPreRegList, getPreRegSummary } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
 
 const EventList = () => {
+  const { t } = useTranslation();
   const [events, setEvents] = useState([]);
   const [summary, setSummary] = useState({
     totalEvents: 0,
@@ -54,7 +56,7 @@ const EventList = () => {
     }
 
     navigator.clipboard.writeText(url);
-    toast({ description: "Event link copied!" });
+    toast({ description: t("events.list.toasts.linkCopied") });
   };
 
   return (
@@ -66,7 +68,7 @@ const EventList = () => {
             className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#227451] px-6 py-2 text-sm font-medium text-white transition-all hover:bg-emerald-700 lg:mt-0 lg:w-auto"
           >
             <span className="text-lg">+</span>
-            <span className="leading-none">Create</span>
+            <span className="leading-none">{t("common.actions.create")}</span>
           </button>
 
           <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center lg:gap-6">
@@ -114,7 +116,7 @@ const EventList = () => {
                   {summary.totalEvents}
                 </p>
                 <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-muted-foreground">
-                  Total Events
+                  {t("events.list.summary.totalEvents")}
                 </p>
               </div>
             </div>
@@ -180,7 +182,7 @@ const EventList = () => {
                   {summary.totalParticipants}
                 </p>
                 <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-muted-foreground">
-                  Total Participants
+                  {t("events.list.summary.totalParticipants")}
                 </p>
               </div>
             </div>
@@ -192,25 +194,25 @@ const EventList = () => {
             <thead className="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-muted/70 dark:text-muted-foreground">
               <tr>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Title
+                  {t("events.list.table.title")}
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Host
+                  {t("events.list.table.host")}
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Room
+                  {t("events.list.table.room")}
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Date
+                  {t("events.list.table.date")}
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Time
+                  {t("events.list.table.time")}
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Time Zone
+                  {t("events.list.table.timeZone")}
                 </th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-medium">
-                  Action
+                  {t("events.list.table.action")}
                 </th>
               </tr>
             </thead>
@@ -226,24 +228,24 @@ const EventList = () => {
                     }`}
                   >
                     <td className="whitespace-nowrap px-4 py-3">
-                      {event.title || "Untitled"}
+                      {event.title || t("events.list.states.untitled")}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       {event.host_name ||
                         `${event.owner?.firstname || ""} ${event.owner?.lastname || ""}`.trim() ||
-                        "N/A"}
+                        t("events.list.states.notAvailable")}
                     </td>
                     <td className="cursor-pointer whitespace-nowrap px-4 py-3 text-blue-600 underline">
-                      {event.room?.name || "No Room"}
+                      {event.room?.name || t("events.list.states.noRoom")}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      {event.date || "-"}
+                      {event.date || t("events.list.states.emptyValue")}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      {event.time || "-"}
+                      {event.time || t("events.list.states.emptyValue")}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      {event.timezone || "-"}
+                      {event.timezone || t("events.list.states.emptyValue")}
                     </td>
                     <td className="flex flex-col items-end gap-2 px-4 py-3 text-right">
                       <button
@@ -252,14 +254,14 @@ const EventList = () => {
                         }
                         className="whitespace-nowrap rounded-full bg-[#227451] px-4 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-800"
                       >
-                        Participants
+                        {t("events.list.actions.participants")}
                       </button>
 
                       <button
                         onClick={() => copyEventUrl(event.event_url)}
                         className="whitespace-nowrap rounded-full border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
                       >
-                        Event Link
+                        {t("events.list.actions.eventLink")}
                       </button>
                     </td>
                   </tr>
@@ -270,7 +272,7 @@ const EventList = () => {
                     colSpan="7"
                     className="py-6 text-center text-gray-500 dark:text-muted-foreground"
                   >
-                    No events found.
+                    {t("events.list.states.empty")}
                   </td>
                 </tr>
               )}
@@ -283,6 +285,7 @@ const EventList = () => {
             type="button"
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             disabled={currentPage === 1}
+            aria-label={t("components.pagination.previousAriaLabel")}
             className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               currentPage === 1
                 ? "cursor-not-allowed opacity-50"
@@ -300,6 +303,7 @@ const EventList = () => {
               setCurrentPage((page) => Math.min(totalPages, page + 1))
             }
             disabled={currentPage === totalPages}
+            aria-label={t("components.pagination.nextAriaLabel")}
             className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
               currentPage === totalPages
                 ? "cursor-not-allowed opacity-50"

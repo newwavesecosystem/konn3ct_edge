@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import FallbackActions from "./FallbackActions";
 import FullscreenFallbackShell from "./FullscreenFallbackShell";
 
@@ -11,16 +12,16 @@ const CrashFallbackScreen = ({
   onGoBack,
   onGoHome,
 }) => {
+  const { t } = useTranslation();
   const showErrorDetails =
     process.env.NODE_ENV !== "production" ? error?.message : "";
 
   return (
     <FullscreenFallbackShell
       variant="crash"
-      title={title || "We hit an unexpected issue"}
+      title={title || t("components.fallbackScreens.crash.title")}
       description={
-        description ||
-        "Konn3ct could not render this screen safely. Please try again or return to your dashboard."
+        description || t("components.fallbackScreens.crash.description")
       }
       details={showErrorDetails}
       actions={
@@ -29,7 +30,7 @@ const CrashFallbackScreen = ({
           onRefresh={onRefresh}
           onGoBack={onGoBack}
           onGoHome={onGoHome}
-          homeLabel="Go to Dashboard"
+          homeLabel={t("common.actions.goToDashboard")}
         />
       }
     />

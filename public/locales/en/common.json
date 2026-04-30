@@ -10,7 +10,36 @@
     "sso": "SSO",
     "searchCountryOrCode": "Search country or code",
     "noCountryMatches": "No country matches your search.",
-    "selectCountry": "Select country"
+    "selectCountry": "Select country",
+    "actions": {
+      "cancel": "Cancel",
+      "create": "Create",
+      "delete": "Delete",
+      "managePlan": "Manage Plan",
+      "save": "Save",
+      "submit": "Submit",
+      "transfer": "Transfer",
+      "upload": "Upload",
+      "visitMeeting": "Visit Meeting",
+      "testAudioAndVideo": "Test Audio and Video",
+      "retry": "Retry",
+      "refresh": "Refresh",
+      "goBack": "Go Back",
+      "goHome": "Go to Home",
+      "goToDashboard": "Go to Dashboard"
+    },
+    "status": {
+      "copiedToClipboard": "Copied to clipboard",
+      "noMeetingId": "No Meeting ID found",
+      "error": "Error"
+    },
+    "forms": {
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address"
+    }
   },
   "app": {
     "sidebar": {
@@ -160,6 +189,966 @@
         "fillAllFields": "Please fill in all fields.",
         "passwordsMismatch": "Passwords do not match.",
         "resetFailed": "Failed to reset password."
+      }
+    }
+  },
+  "dashboard": {
+    "currentPlan": "Your current plan: Konn3ct {{plan}}",
+    "stats": {
+      "totalRoom": "Total room",
+      "activeRoom": "Active room",
+      "inactiveRoom": "Inactive room",
+      "privateRoom": "Private room"
+    },
+    "gettingStarted": "Let's get you started",
+    "videoTitle": "Getting started video",
+    "quickActions": {
+      "schedule": "Schedule",
+      "join": "Join",
+      "host": "Host",
+      "scheduleIconAlt": "schedule",
+      "joinIconAlt": "join",
+      "hostIconAlt": "host"
+    },
+    "personalMeetingId": "Personal Meeting ID",
+    "noIdAvailable": "No ID available",
+    "meetings": {
+      "title": "Meetings",
+      "empty": "No upcoming Meetings",
+      "room": "Room: {{room}}",
+      "host": "Host: {{host}}"
+    },
+    "scheduleDialog": {
+      "title": "Send a new Invite",
+      "description": "Send an invite for a scheduled meeting"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage your dashboard preferences and keep your workspace comfortable.",
+    "tabs": {
+      "general": "General"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Choose how the dashboard looks. Select light mode, dark mode, or sync with your system.",
+      "activeTheme": "Active theme",
+      "systemActiveTheme": "System ({{theme}})",
+      "systemModeDescription": "Currently following your device and resolving to {{theme}} mode.",
+      "options": {
+        "light": {
+          "label": "Light",
+          "description": "Use a brighter interface with crisp surfaces and higher daylight visibility."
+        },
+        "dark": {
+          "label": "Dark",
+          "description": "Reduce glare with deeper surfaces that are easier on the eyes at night."
+        },
+        "system": {
+          "label": "System",
+          "description": "Sync automatically with your device preference and react to system changes."
+        }
+      }
+    }
+  },
+  "payments": {
+    "loadingPlans": "Loading plans...",
+    "currentPlan": "Current Plan",
+    "actions": {
+      "renewSubscriptions": "Renew Subscriptions",
+      "changePlan": "Change Plan",
+      "receipt": "Receipt",
+      "payNow": "Pay Now",
+      "contactSales": "Contact Sales"
+    },
+    "listTitle": "Payment List",
+    "table": {
+      "type": "Type",
+      "plan": "Plan",
+      "issuedTo": "Issued to",
+      "paymentMethod": "Payment Method",
+      "reference": "Reference",
+      "paymentDate": "Payment Date",
+      "amount": "Amount",
+      "action": "Action"
+    },
+    "empty": "No payments found",
+    "dialogTitle": "Plans and Payments",
+    "checkoutProfileError": "Unable to load your profile details for checkout.",
+    "loadingUser": "Loading user...",
+    "billingCycle": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "planCard": {
+      "targetIndividuals": "For individuals",
+      "targetEnterprise": "For Enterprise",
+      "customPrice": "Custom",
+      "customFeatures": "Custom Features",
+      "free": "Free",
+      "upgrade": "Upgrade"
+    },
+    "features": {
+      "yes": "Yes",
+      "no": "No",
+      "recording": "Recording: {{value}}",
+      "duration": "Duration: {{value}} minutes",
+      "participants": "Participants: {{value}}",
+      "rooms": "Rooms: {{value}}",
+      "customizeLink": "Customize Link: {{value}}",
+      "breakoutRooms": "Breakout Rooms: {{value}}",
+      "accessCode": "Access Code: {{value}}",
+      "dialIn": "Dial-in: {{value}}"
+    },
+    "states": {
+      "loadErrorTitle": "Unable to load payments and plans.",
+      "loadErrorDescription": "Please refresh and try again.",
+      "notAvailable": "N/A"
+    },
+    "toasts": {
+      "allowPopups": "Please allow popups to print receipt",
+      "purchaseSuccessful": "Purchase successful",
+      "paymentCancelled": "Payment Cancelled"
+    },
+    "receipt": {
+      "title": "Payment Receipt",
+      "issuedTo": "Issued To:",
+      "plan": "Plan:",
+      "paymentType": "Payment Type:",
+      "paymentMethod": "Payment Method:",
+      "reference": "Reference:",
+      "paymentDate": "Payment Date:",
+      "amountPaid": "Amount Paid:",
+      "footer": "This receipt was generated electronically."
+    }
+  },
+  "rooms": {
+    "actions": {
+      "createRoom": "Create Room",
+      "scheduleMeeting": "Schedule a Meeting",
+      "copyLink": "Copy Link",
+      "manage": "Manage",
+      "startMeeting": "Start Meeting"
+    },
+    "stats": {
+      "totalRoom": "Total room",
+      "activeRoom": "Active room",
+      "scheduledRoom": "Scheduled Room",
+      "inactiveRoom": "Inactive room"
+    },
+    "table": {
+      "name": "NAME",
+      "roomUrl": "ROOM URL",
+      "actions": "ACTIONS"
+    },
+    "states": {
+      "loadErrorTitle": "Unable to load rooms right now.",
+      "loadErrorDescription": "Please check your connection and retry.",
+      "noData": "No data available for this table"
+    },
+    "toasts": {
+      "linkCopied": "Copied to clipboard",
+      "meetingStartedMissingUrl": "Meeting started but no launch URL was returned.",
+      "meetingStarted": "Meeting started successfully",
+      "accessCodeUpdated": "Access code updated successfully",
+      "userLimitUpdated": "User limit updated successfully",
+      "bannerUploaded": "Banner uploaded successfully",
+      "roomTransferred": "Room transferred successfully",
+      "meetingCreated": "Meeting created successfully",
+      "planLimitReachedTitle": "Plan Limit Reached",
+      "planLimitReachedDescription": "You've reached the maximum number of rooms for your current plan. Please upgrade to create more meetings.",
+      "planLimitReachedDescriptionWithAddons": "You've reached the maximum number of rooms for your current plan. Please upgrade to create more meetings or visit Addons to buy more room bundles",
+      "createError": "Something went wrong while creating the meeting."
+    },
+    "tooltips": {
+      "accessCodeRequired": "Access code required",
+      "roomHasAccessCode": "Room has access code",
+      "meetingHasAccessCode": "Meeting has access code"
+    },
+    "dialogs": {
+      "create": {
+        "title": "Create a new Room",
+        "description": "You will create a new meeting room, accessible on the dashboard."
+      },
+      "delete": {
+        "title": "Confirm Deletion",
+        "description": "Are you sure you want to delete the room? This action cannot be undone."
+      },
+      "schedule": {
+        "title": "Schedule a new meeting",
+        "description": "Send an invite for a scheduled meeting"
+      }
+    },
+    "manageMenu": {
+      "accessCode": "Access Code",
+      "userLimit": "User Limit",
+      "bannerUpload": "Meeting Room Banner Upload",
+      "transferRoom": "Transfer Room"
+    },
+    "accessDialog": {
+      "title": "Manage Access Code",
+      "typeLabel": "Type (auto / manual / remove)",
+      "typePlaceholder": "auto / manual / remove",
+      "accessCodeLabel": "Access Code (if manual)",
+      "accessCodePlaceholder": "Enter access code"
+    },
+    "limitDialog": {
+      "title": "Limit Users",
+      "userLimit": "User Limit",
+      "validation": {
+        "required": "Required"
+      }
+    },
+    "bannerDialog": {
+      "title": "Upload Room Banner",
+      "selectBanner": "Select Banner"
+    },
+    "transferDialog": {
+      "title": "Transfer Room",
+      "newOwnerEmail": "New Owner Email",
+      "newOwnerEmailPlaceholder": "Enter new owner email",
+      "validation": {
+        "email": "Invalid email address."
+      }
+    },
+    "createForm": {
+      "roomName": "Room Name",
+      "roomNamePlaceholder": "Enter room name",
+      "roomUrl": "Room URL",
+      "roomUrlPlaceholder": "Optional",
+      "creating": "Creating...",
+      "validation": {
+        "nameMin": "Room name must be at least 5 characters long.",
+        "nameWhitespace": "Room name is required and cannot be empty or whitespace."
+      }
+    },
+    "scheduledSheet": {
+      "title": "Scheduled Meetings",
+      "description": "Your upcoming meetings."
+    },
+    "scheduledCard": {
+      "locked": "Locked",
+      "dateTime": "{{date}} at {{time}}",
+      "guestsPreview": "Guests: {{guests}}",
+      "guestCount": "Guests: {{count}}",
+      "moreGuests": ", +{{count}} more",
+      "notAvailable": "N/A"
+    },
+    "join": {
+      "title": "Join a Meeting",
+      "termsPrefix": "By signing in you understand and agree to the Newwaves ecosystem Terms of Use. For more information about Privacy Data visit the",
+      "privacyLinkLabel": "Newwaves Privacy Data Sheets.",
+      "roomPlaceholder": "Enter meeting room name or ID",
+      "namePlaceholder": "Enter your name",
+      "emailPlaceholder": "Enter your email address",
+      "submit": "Konn3ct",
+      "toasts": {
+        "meetingLinkMissing": "Meeting link is not configured.",
+        "genericError": "An error occurred."
+      },
+      "validation": {
+        "email": "Invalid email address.",
+        "roomNameMin": "Room name must be at least 2 characters long.",
+        "roomNameWhitespace": "Room name cannot be empty or whitespace.",
+        "nameMin": "Username must be at least 2 characters long.",
+        "nameWhitespace": "Username cannot be empty or whitespace."
+      }
+    }
+  },
+  "attendance": {
+    "common": {
+      "notAvailable": "N/A"
+    },
+    "upgrade": {
+      "roomTitle": "{{room}} Room",
+      "overview": "Overview",
+      "stats": {
+        "activeUser": "Active User",
+        "activityScore": "Activity Score",
+        "timeline": "Timeline",
+        "polls": "Polls",
+        "donation": "Donation"
+      },
+      "table": {
+        "user": "User",
+        "online": "Online",
+        "talk": "Talk",
+        "webcam": "Webcam",
+        "messages": "Msgs",
+        "reactions": "React",
+        "raise": "Raise"
+      }
+    },
+    "list": {
+      "title": "Meeting Attendance",
+      "actions": {
+        "viewParticipants": "View Participant(s)"
+      },
+      "table": {
+        "serial": "S/N",
+        "meetingHost": "Meeting Host",
+        "dateTime": "Date & Time",
+        "action": "Action"
+      },
+      "states": {
+        "loading": "Loading meetings...",
+        "loadError": "Unable to load meeting attendance data.",
+        "empty": "No meeting attendance found.",
+        "noDate": "No Date"
+      }
+    },
+    "details": {
+      "title": "Meeting Attendance",
+      "actions": {
+        "copy": "Copy",
+        "copied": "Copied",
+        "csv": "CSV",
+        "excel": "Excel",
+        "print": "Print",
+        "sendMinutes": "Send Minutes of Meeting",
+        "sendHighlights": "Send Meeting Highlight",
+        "sendSummary": "Send Meeting Summary",
+        "back": "Back to Attendance"
+      },
+      "filters": {
+        "search": "Search"
+      },
+      "table": {
+        "serial": "S/N",
+        "name": "Name",
+        "email": "Email",
+        "status": "Status",
+        "dateTime": "Date & Time"
+      },
+      "status": {
+        "moderator": "Moderator",
+        "participant": "Participant"
+      },
+      "states": {
+        "loading": "Loading participant data...",
+        "loadError": "Unable to load participant details.",
+        "missingParams": "Missing meeting_id or identifier.",
+        "empty": "No participants found for this meeting."
+      },
+      "toasts": {
+        "copyFailed": "Copy failed. Please allow clipboard permission or use HTTPS.",
+        "allowPopups": "Please allow popups to print"
+      },
+      "export": {
+        "title": "Meeting Attendance ({{count}})",
+        "printFooter": "This printout was generated electronically."
+      },
+      "panel": {
+        "minutesTitle": "Minutes of Meeting",
+        "highlightsTitle": "Meeting Highlights",
+        "summaryTitle": "Meeting Summary",
+        "noDataReturned": "No data returned.",
+        "loadFailed": "Failed to load content.",
+        "loading": "Loading...",
+        "close": "Close panel"
+      }
+    }
+  },
+  "addons": {
+    "title": "Addon List",
+    "actions": {
+      "payNow": "Pay Now"
+    },
+    "table": {
+      "service": "Service",
+      "serviceDescription": "Service Description",
+      "status": "Status",
+      "amount": "Amount",
+      "action": "Action"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "running": "Running",
+      "ended": "Ended",
+      "verified": "Verified",
+      "pending": "Pending",
+      "success": "Successful",
+      "failed": "Failed",
+      "inProgress": "In Progress",
+      "loading": "Loading...",
+      "unknown": "..."
+    },
+    "states": {
+      "loadErrorTitle": "Unable to load addons right now.",
+      "loadErrorDescription": "Please retry in a moment.",
+      "noData": "No data available for this table"
+    },
+    "toasts": {
+      "purchaseSuccessful": "Addon purchase successful",
+      "paymentCancelled": "Payment Cancelled"
+    }
+  },
+  "donations": {
+    "actions": {
+      "startVerification": "Start Verification",
+      "completeVerification": "Complete Verification"
+    },
+    "status": {
+      "verified": "Verified",
+      "inProgress": "In Progress",
+      "pending": "Pending",
+      "successful": "Successful",
+      "failed": "Failed"
+    },
+    "common": {
+      "bvn": "BVN",
+      "bank": "Bank",
+      "accountNumber": "Account Number",
+      "accountName": "Account Name",
+      "idType": "ID Type",
+      "sections": {
+        "bankDetails": "Bank Details"
+      },
+      "states": {
+        "noBankFound": "No bank found"
+      },
+      "placeholders": {
+        "enterBvn": "Enter 10-digit BVN",
+        "selectBank": "Select your bank",
+        "searchBank": "Search bank...",
+        "enterAccountNumber": "Enter 10-digit account number",
+        "autoFilled": "Will Be Auto-filled",
+        "selectIdType": "Select ID type"
+      },
+      "idTypes": {
+        "nin": "NIN",
+        "passport": "Passport",
+        "driversLicense": "Driver's License",
+        "votersCard": "Voter's Card"
+      }
+    },
+    "success": {
+      "title": "Verification Complete!",
+      "description": "Your account has been successfully verified. You can now start accepting donations."
+    },
+    "individual": {
+      "toasts": {
+        "kycFailed": "KYC failed",
+        "submitError": "Error submitting KYC"
+      },
+      "card": {
+        "title": "Individual Account",
+        "description": "For personal fundraising and individual donors",
+        "features": {
+          "bvn": "BVN Verification",
+          "bank": "Bank Account Verification",
+          "idUpload": "Upload ID Document"
+        }
+      },
+      "form": {
+        "title": "Individual KYC Verification",
+        "description": "Complete your verification details"
+      },
+      "sections": {
+        "personalInformation": "Personal Information",
+        "governmentId": "Government ID",
+        "uploadIdDocument": "Upload ID Document"
+      }
+    },
+    "business": {
+      "toasts": {
+        "kycFailed": "KYC failed",
+        "submitError": "Error submitting business KYC"
+      },
+      "card": {
+        "title": "Business Account",
+        "description": "For registered businesses and organizations",
+        "features": {
+          "companyInformation": "Company Information",
+          "directorInformation": "Director Information",
+          "bankVerification": "Bank Account Verification",
+          "uploadDirectorId": "Upload Director's ID"
+        }
+      },
+      "form": {
+        "title": "Business KYC Verification",
+        "description": "Complete your company, director, and bank details"
+      },
+      "sections": {
+        "companyInformation": "Company Information",
+        "directorInformation": "Director Information",
+        "uploadDirectorId": "Upload Director's ID"
+      },
+      "fields": {
+        "companyName": "Company Name",
+        "companyEmail": "Company Email",
+        "companyPhone": "Company Phone",
+        "companyAddress": "Company Address",
+        "taxId": "Tax ID"
+      }
+    },
+    "verification": {
+      "userBadge": "User",
+      "title": "Verification Status",
+      "description": "Account verification progress",
+      "overallStatus": "Overall Verification Status",
+      "progressSummary": "{{completed}} of {{total}} verification levels completed",
+      "steps": {
+        "personal": {
+          "title": "Personal Information",
+          "description": "Basic personal details and contact info"
+        },
+        "identity": {
+          "title": "Identity Verification",
+          "description": "Government-issued ID verification"
+        },
+        "bvn": {
+          "title": "BVN Verification",
+          "description": "Bank Verification Number validation"
+        },
+        "bank": {
+          "title": "Bank Account Verification",
+          "description": "Bank account details for settlements"
+        }
+      }
+    },
+    "dashboard": {
+      "title": "Donations Dashboard",
+      "subtitle": "Individual Account • Verified",
+      "cards": {
+        "totalDonations": "Total Donations",
+        "donationsReceived": "{{count}} donations received",
+        "settlements": "Settlements",
+        "settlementsCompleted": "{{count}} settlements completed",
+        "transactionsPending": "{{count}} transaction(s) pending"
+      },
+      "history": {
+        "title": "Transaction History",
+        "description": "View all your donation and settlement transactions",
+        "export": "Export",
+        "loading": "Loading...",
+        "donationType": "Donation",
+        "empty": "No transactions yet",
+        "table": {
+          "reference": "Reference",
+          "profile": "Profile",
+          "type": "Type",
+          "donorDescription": "Donor/Description",
+          "purpose": "Purpose",
+          "amount": "Amount",
+          "date": "Date",
+          "status": "Status"
+        }
+      }
+    }
+  },
+  "inviteHistory": {
+    "title": "Invite History",
+    "actions": {
+      "sendInvite": "Send Invite",
+      "resendInvite": "Resend Invite"
+    },
+    "table": {
+      "type": "Type",
+      "roomName": "Room Name",
+      "guest": "Guest",
+      "dateSent": "Date Sent",
+      "action": "Action"
+    },
+    "states": {
+      "loadErrorTitle": "Unable to load invite history.",
+      "loadErrorDescription": "Check your connection and try again.",
+      "noData": "No data available for this table"
+    },
+    "dialog": {
+      "title": "Send a new Invite",
+      "description": "Send an invite for a scheduled meeting"
+    },
+    "meetingForm": {
+      "labels": {
+        "roomName": "Room Name",
+        "hostname": "Hostname",
+        "title": "Title",
+        "date": "Date",
+        "time": "Time",
+        "timezone": "Timezone",
+        "additionalInformation": "Additional Information",
+        "guestEmails": "Guest Emails"
+      },
+      "placeholders": {
+        "selectRoom": "Select a room...",
+        "searchRoom": "Search room...",
+        "noRoomFound": "No room found.",
+        "hostname": "Hostname",
+        "title": "Title",
+        "pickDate": "Pick a date",
+        "selectTimezone": "Select a timezone...",
+        "searchTimezone": "Search timezone...",
+        "noTimezoneFound": "No timezone found.",
+        "additionalInformation": "Enter additional information",
+        "guestEmails": "Enter guest emails separated by commas"
+      },
+      "actions": {
+        "submitting": "Submitting..."
+      },
+      "toasts": {
+        "sent": "Send Invite",
+        "retry": "Check your connection and try again."
+      },
+      "validation": {
+        "roomRequired": "Room is required.",
+        "hostnameRequired": "Hostname is required.",
+        "titleRequired": "Title is required.",
+        "dateRequired": "Date is required.",
+        "timeRequired": "Time is required.",
+        "timezoneRequired": "Timezone is required.",
+        "additionalRequired": "Additional message is required",
+        "guestRequired": "Guest emails are required.",
+        "guestInvalid": "All guest emails must be valid."
+      }
+    }
+  },
+  "events": {
+    "list": {
+      "actions": {
+        "participants": "Participants",
+        "eventLink": "Event Link"
+      },
+      "summary": {
+        "totalEvents": "Total Events",
+        "totalParticipants": "Total Participants"
+      },
+      "table": {
+        "title": "Title",
+        "host": "Host",
+        "room": "Room",
+        "date": "Date",
+        "time": "Time",
+        "timeZone": "Time Zone",
+        "action": "Action"
+      },
+      "states": {
+        "untitled": "Untitled",
+        "notAvailable": "N/A",
+        "noRoom": "No Room",
+        "emptyValue": "-",
+        "empty": "No events found."
+      },
+      "toasts": {
+        "linkCopied": "Event link copied!"
+      }
+    },
+    "create": {
+      "title": "Create Event",
+      "description": "Fill the form to create an event instantly",
+      "selectedFile": "Selected: {{name}}",
+      "logoRecommendation": "Recommended: 80px by 80px, PNG format",
+      "fileHelp": "JPG, PNG, or PDF (max 10MB)",
+      "fields": {
+        "eventTitle": "Event Title",
+        "hostName": "Host Name",
+        "selectRoom": "Select Room",
+        "eventDate": "Event Date",
+        "eventTime": "Event Time",
+        "eventType": "Event Type",
+        "currency": "Currency",
+        "amount": "Amount",
+        "timeZone": "Time Zone",
+        "aboutEvent": "About the event",
+        "setReminder": "Set Reminder",
+        "uploadLogo": "Upload a logo *"
+      },
+      "placeholders": {
+        "eventTitle": "Enter your event title",
+        "hostName": "Enter host name",
+        "amount": "6000",
+        "selectTimezone": "Select timezone",
+        "aboutEvent": "Write a short description about your event",
+        "selectReminder": "Select reminder",
+        "selectOrDropFile": "Select a file or drop here"
+      },
+      "eventTypes": {
+        "free": "Free",
+        "paid": "Paid"
+      },
+      "reminders": {
+        "twoDays": "2 days before",
+        "oneDay": "1 day before",
+        "twelveHours": "12 hours before"
+      },
+      "states": {
+        "loadingRooms": "Loading rooms..."
+      },
+      "actions": {
+        "submitting": "Submitting..."
+      },
+      "validation": {
+        "logoRequired": "Logo upload is required."
+      },
+      "toasts": {
+        "created": "Event created successfully!",
+        "createFailed": "Event creation failed. Please check your inputs.",
+        "createError": "Failed to create event. Please try again."
+      }
+    },
+    "participants": {
+      "title": "Pre-Registered Users ({{count}})",
+      "showing": "Showing {{from}}-{{to}} of {{total}}",
+      "actions": {
+        "copy": "Copy",
+        "csv": "CSV",
+        "excel": "Excel",
+        "print": "Print",
+        "sendReminder": "Send Reminder Now"
+      },
+      "filters": {
+        "search": "Search"
+      },
+      "table": {
+        "serial": "S/N",
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "dateTime": "Date & Time"
+      },
+      "states": {
+        "loading": "Loading...",
+        "empty": "No participants found."
+      },
+      "toasts": {
+        "reminderSent": "Reminder sent.",
+        "reminderFailed": "Failed to send reminder.",
+        "copied": "Copied to clipboard.",
+        "copyFailed": "Copy failed (browser blocked clipboard).",
+        "csvDownloaded": "CSV downloaded.",
+        "excelDownloaded": "Excel downloaded."
+      }
+    }
+  },
+  "streaming": {
+    "toasts": {
+      "ended": "Streaming successfully ended",
+      "started": "Stream started",
+      "comboStarted": "Combo streaming started"
+    },
+    "states": {
+      "loadErrorTitle": "Unable to load streams right now.",
+      "loadErrorDescription": "Please retry after checking your connection.",
+      "temporaryRoom": "Temporary room",
+      "noData": "No data available for this table"
+    },
+    "actions": {
+      "stream": "Stream",
+      "stopStreaming": "Stop Streaming",
+      "submit": "Submit"
+    },
+    "stats": {
+      "totalStreams": "Total Streams",
+      "activeStreams": "Active Streams"
+    },
+    "table": {
+      "number": "No",
+      "roomName": "Room Name",
+      "type": "Type",
+      "status": "Status",
+      "startedAt": "Started At",
+      "endedAt": "Ended At",
+      "action": "Action"
+    },
+    "status": {
+      "running": "Running",
+      "ended": "Ended"
+    },
+    "dialog": {
+      "title": "Create a new stream",
+      "description": "Start streaming your meeting on various platforms"
+    },
+    "form": {
+      "selectRoom": "Select Room",
+      "loadingRooms": "Loading rooms...",
+      "type": "Type",
+      "selectType": "Select type...",
+      "searchType": "Search type...",
+      "noTypeFound": "No type found.",
+      "youtubeKey": "YouTube Key",
+      "enterYouTubeKey": "Enter YouTube Key",
+      "facebookKey": "Facebook Key",
+      "enterFacebookKey": "Enter Facebook Key",
+      "key": "Key",
+      "enterKey": "Enter Key",
+      "validation": {
+        "roomRequired": "Room is required.",
+        "typeInvalid": "Select a valid type.",
+        "youtubeKeyRequired": "YouTube key is required for Combo.",
+        "facebookKeyRequired": "Facebook key is required for Combo.",
+        "keyRequired": "Key is required."
+      },
+      "types": {
+        "youtube": "Youtube",
+        "facebook": "Facebook",
+        "combo": "Combo (YouTube + Facebook)"
+      }
+    }
+  },
+  "recordings": {
+    "toasts": {
+      "deleted": "Recording successfully deleted",
+      "linkCopied": "Recording link copied to clipboard"
+    },
+    "stats": {
+      "totalRecordings": "Total recordings"
+    },
+    "filters": {
+      "searchPlaceholder": "Search by meeting name...",
+      "clear": "Clear Filters",
+      "noMatch": "No recordings match your filter"
+    },
+    "table": {
+      "meetingName": "Meeting Name",
+      "parameters": "Parameters",
+      "date": "Date",
+      "options": "Options",
+      "participants": "{{count}} participants",
+      "minutes": "{{count}} Minutes",
+      "megabytes": "{{count}} MB"
+    },
+    "actions": {
+      "playVideo": "Play video",
+      "copyLink": "Copy Link",
+      "download": "Download",
+      "video": "Video",
+      "screenshare": "Screenshare",
+      "chats": "Chats",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "deleteTitle": "Confirm Deletion",
+      "deleteDescription": "Are you sure you want to delete this recording? This action cannot be undone."
+    }
+  },
+  "profile": {
+    "tabs": {
+      "info": "Profile Information",
+      "password": "Update Password",
+      "sessions": "Browser Sessions"
+    },
+    "toasts": {
+      "copied": "Copied to clipboard"
+    },
+    "states": {
+      "profileLoadErrorTitle": "Unable to load profile information.",
+      "profileLoadErrorDescription": "Please refresh and try again.",
+      "sessionsLoadErrorTitle": "Unable to load browser sessions.",
+      "sessionsLoadErrorDescription": "Please refresh and try again.",
+      "notAvailable": "N/A",
+      "unknownBrowser": "Unknown browser",
+      "unknownLocation": "Unknown location"
+    },
+    "info": {
+      "photo": "Photo",
+      "activePlan": "Active plan",
+      "referralCode": "Referral Code",
+      "referralLink": "Referral Link",
+      "copy": "Copy"
+    },
+    "password": {
+      "helper": "Ensure your account is using a long random password to stay secure."
+    },
+    "sessions": {
+      "helper": "If necessary, you may logout of all of your other browser sessions across all of your devices.",
+      "thisDevice": "This device",
+      "otherDevices": "Other devices",
+      "logoutOtherSessions": "Logout Other Browser Sessions"
+    },
+    "form": {
+      "imageAlt": "Profile",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "phone": "Phone",
+      "updating": "Updating...",
+      "submit": "Update Profile",
+      "validation": {
+        "firstNameMin": "First name must be at least 2 characters",
+        "lastNameMin": "Last name must be at least 2 characters",
+        "phoneMin": "Phone number must be at least 10 digits."
+      },
+      "errors": {
+        "load": "Unable to load profile details right now.",
+        "updateFailed": "Unable to update profile.",
+        "updateSuccess": "Profile updated successfully."
+      }
+    },
+    "passwordForm": {
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "confirmNewPassword": "Confirm New Password",
+      "currentPasswordPlaceholder": "Enter current password",
+      "newPasswordPlaceholder": "Enter new password",
+      "confirmNewPasswordPlaceholder": "Confirm new password",
+      "submit": "Save",
+      "validation": {
+        "currentPasswordMin": "Current password must be at least 6 characters.",
+        "newPasswordMin": "New password must be at least 6 characters.",
+        "confirmPasswordMin": "Confirm password must be at least 6 characters.",
+        "passwordsMustMatch": "Passwords must match."
+      }
+    }
+  },
+  "referees": {
+    "title": "Referee List",
+    "controls": {
+      "showEntries": "Show entries",
+      "search": "Search:",
+      "searchPlaceholder": "Search referees"
+    },
+    "table": {
+      "serial": "#",
+      "name": "Name",
+      "emailAddress": "Email Address",
+      "plan": "Plan",
+      "dateRegistered": "Date Registered"
+    },
+    "states": {
+      "loadErrorTitle": "Unable to load referees.",
+      "loadErrorDescription": "Please try again when your network is stable.",
+      "empty": "No data available for this table",
+      "notAvailable": "N/A"
+    }
+  },
+  "components": {
+    "dialog": {
+      "close": "Close"
+    },
+    "pagination": {
+      "navigation": "pagination",
+      "previousAriaLabel": "Go to previous page",
+      "previous": "Previous",
+      "nextAriaLabel": "Go to next page",
+      "next": "Next",
+      "morePages": "More pages"
+    },
+    "sheet": {
+      "close": "Close"
+    },
+    "sidebar": {
+      "toggle": "Toggle Sidebar"
+    },
+    "fallbackScreens": {
+      "badge": {
+        "crash": "App Recovery",
+        "offline": "Network State"
+      },
+      "offline": {
+        "title": "No internet connection",
+        "description": "You are currently offline. Reconnect to continue using Konn3ct features and live updates."
+      },
+      "crash": {
+        "title": "We hit an unexpected issue",
+        "description": "Konn3ct could not render this screen safely. Please try again or return to your dashboard."
+      },
+      "route": {
+        "title": "Something went wrong on this route",
+        "description": "This page encountered an unexpected problem. You can retry or go back safely.",
+        "pageNotFoundTitle": "Page not found",
+        "pageNotFoundDescription": "The page you tried to open does not exist or was moved to a different route.",
+        "routeErrorTitle": "Route error ({{status}})"
       }
     }
   }

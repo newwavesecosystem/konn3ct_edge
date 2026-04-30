@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { User } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { fetchKyc, getBankList, submitKyc, verifyBank } from "../api/donationApi";
 import { Button } from "../components/ui/button";
@@ -16,6 +17,7 @@ import {
 import { useToast } from "../hooks/use-toast";
 
 export default function IndividualDonation({ onComplete }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [step, setStep] = useState("card");
   const [banks, setBanks] = useState([]);
@@ -79,14 +81,14 @@ export default function IndividualDonation({ onComplete }) {
       if (res.success) onComplete();
       else {
         toast({
-          description: res.message || "KYC failed",
+          description: res.message || t("donations.individual.toasts.kycFailed"),
           variant: "destructive",
         });
       }
     } catch (err) {
       console.error(err);
       toast({
-        description: "Error submitting KYC",
+        description: t("donations.individual.toasts.submitError"),
         variant: "destructive",
       });
     }
@@ -101,18 +103,18 @@ export default function IndividualDonation({ onComplete }) {
               <User className="h-7 w-7 text-green-600 dark:text-green-300" />
             </div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">
-              Individual Account
+              {t("donations.individual.card.title")}
             </h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-muted-foreground">
-              For personal fundraising and individual donors
+              {t("donations.individual.card.description")}
             </p>
             <ul className="mt-3 space-y-1 text-sm text-gray-600 dark:text-muted-foreground">
-              <li>&bull; BVN Verification</li>
-              <li>&bull; Bank Account Verification</li>
-              <li>&bull; Upload ID Document</li>
+              <li>&bull; {t("donations.individual.card.features.bvn")}</li>
+              <li>&bull; {t("donations.individual.card.features.bank")}</li>
+              <li>&bull; {t("donations.individual.card.features.idUpload")}</li>
             </ul>
             <Button className="mt-6" onClick={() => setStep("form")}>
-              Start Verification
+              {t("donations.actions.startVerification")}
             </Button>
           </CardContent>
         </Card>
@@ -127,59 +129,59 @@ export default function IndividualDonation({ onComplete }) {
               </div>
               <div>
                 <CardTitle className="text-lg">
-                  Individual KYC Verification
+                  {t("donations.individual.form.title")}
                 </CardTitle>
                 <p className="text-sm text-gray-500 dark:text-muted-foreground">
-                  Complete your verification details
+                  {t("donations.individual.form.description")}
                 </p>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={() => setStep("card")}>
-              Back
+              {t("common.actions.goBack")}
             </Button>
           </CardHeader>
 
           <CardContent className="space-y-8 p-6">
             <section>
               <h3 className="mb-4 text-md font-semibold">
-                Personal Information
+                {t("donations.individual.sections.personalInformation")}
               </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>First Name</Label>
+                  <Label>{t("common.forms.firstName")}</Label>
                   <Input
                     value={formData.first_name}
                     onChange={(e) => handleChange("first_name", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>Last Name</Label>
+                  <Label>{t("common.forms.lastName")}</Label>
                   <Input
                     value={formData.last_name}
                     onChange={(e) => handleChange("last_name", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>Email</Label>
+                  <Label>{t("common.forms.email")}</Label>
                   <Input
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <Label>Address</Label>
+                  <Label>{t("common.forms.address")}</Label>
                   <Input
                     value={formData.address}
                     onChange={(e) => handleChange("address", e.target.value)}
                   />
                 </div>
                 <div>
-                  <Label>BVN</Label>
+                  <Label>{t("donations.common.bvn")}</Label>
                   <Input
                     value={formData.bvn}
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder="Enter 10-digit BVN"
+                    placeholder={t("donations.common.placeholders.enterBvn")}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, "");
                       handleChange("bvn", digits.slice(0, 10));
@@ -190,10 +192,12 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">Bank Details</h3>
+              <h3 className="mb-4 text-md font-semibold">
+                {t("donations.common.sections.bankDetails")}
+              </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>Bank</Label>
+                  <Label>{t("donations.common.bank")}</Label>
                   <Select
                     value={bankCode?.name}
                     onValueChange={(value) => {
@@ -202,12 +206,14 @@ export default function IndividualDonation({ onComplete }) {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select your bank" />
+                      <SelectValue
+                        placeholder={t("donations.common.placeholders.selectBank")}
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       <div className="sticky top-0 z-10 bg-white p-2 dark:bg-popover">
                         <Input
-                          placeholder="Search bank..."
+                          placeholder={t("donations.common.placeholders.searchBank")}
                           value={bankSearch}
                           onChange={(e) => setBankSearch(e.target.value)}
                         />
@@ -224,7 +230,7 @@ export default function IndividualDonation({ onComplete }) {
                           ))
                         ) : (
                           <p className="col-span-2 px-2 py-1 text-sm text-gray-500 dark:text-muted-foreground">
-                            No bank found
+                            {t("donations.common.states.noBankFound")}
                           </p>
                         )}
                       </div>
@@ -233,12 +239,14 @@ export default function IndividualDonation({ onComplete }) {
                 </div>
 
                 <div>
-                  <Label>Account Number</Label>
+                  <Label>{t("donations.common.accountNumber")}</Label>
                   <Input
                     value={formData.account_number}
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder="Enter 10-digit account number"
+                    placeholder={t(
+                      "donations.common.placeholders.enterAccountNumber"
+                    )}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, "");
                       handleChange("account_number", digits.slice(0, 10));
@@ -247,10 +255,10 @@ export default function IndividualDonation({ onComplete }) {
                 </div>
 
                 <div className="md:col-span-2">
-                  <Label>Account Name</Label>
+                  <Label>{t("donations.common.accountName")}</Label>
                   <Input
                     value={accountName}
-                    placeholder="Will Be Auto-filled"
+                    placeholder={t("donations.common.placeholders.autoFilled")}
                     disabled
                   />
                 </div>
@@ -258,25 +266,33 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">Government ID</h3>
+              <h3 className="mb-4 text-md font-semibold">
+                {t("donations.individual.sections.governmentId")}
+              </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>ID Type</Label>
+                  <Label>{t("donations.common.idType")}</Label>
                   <Select
                     value={formData.id_type}
                     onValueChange={(value) => handleChange("id_type", value)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select ID type" />
+                      <SelectValue
+                        placeholder={t("donations.common.placeholders.selectIdType")}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="NIN">NIN</SelectItem>
-                      <SelectItem value="Passport">Passport</SelectItem>
+                      <SelectItem value="NIN">
+                        {t("donations.common.idTypes.nin")}
+                      </SelectItem>
+                      <SelectItem value="Passport">
+                        {t("donations.common.idTypes.passport")}
+                      </SelectItem>
                       <SelectItem value="Driver's License">
-                        Driver&apos;s License
+                        {t("donations.common.idTypes.driversLicense")}
                       </SelectItem>
                       <SelectItem value="Voter's Card">
-                        Voter&apos;s Card
+                        {t("donations.common.idTypes.votersCard")}
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -285,7 +301,9 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">Upload ID Document</h3>
+              <h3 className="mb-4 text-md font-semibold">
+                {t("donations.individual.sections.uploadIdDocument")}
+              </h3>
               <input
                 type="file"
                 className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-muted file:px-4 file:py-2 file:text-foreground hover:file:bg-accent"
@@ -296,7 +314,9 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <div className="flex justify-center">
-              <Button onClick={handleSubmit}>Complete Verification</Button>
+              <Button onClick={handleSubmit}>
+                {t("donations.actions.completeVerification")}
+              </Button>
             </div>
           </CardContent>
         </Card>
