@@ -1,0 +1,166 @@
+{
+  "common": {
+    "or": "OR",
+    "emailAddress": "Email address",
+    "password": "Password",
+    "continueWith": "Continue with:",
+    "facebook": "Facebook",
+    "google": "Google",
+    "apple": "Apple",
+    "sso": "SSO",
+    "searchCountryOrCode": "Search country or code",
+    "noCountryMatches": "No country matches your search.",
+    "selectCountry": "Select country"
+  },
+  "app": {
+    "sidebar": {
+      "groupLabel": "Personal",
+      "home": "Home",
+      "profile": "Profile",
+      "rooms": "Meeting Room(s)",
+      "streaming": "Streaming",
+      "recordings": "Recordings",
+      "payments": "Plans & Payments",
+      "addons": "Addons",
+      "referees": "Referee(s)",
+      "donations": "Donations",
+      "attendance": "Attendance",
+      "events": "Events",
+      "history": "Invite History",
+      "settings": "Settings",
+      "logout": "Logout"
+    },
+    "navbar": {
+      "logoAlt": "Konn3ct logo",
+      "solutions": "Solutions",
+      "plansAndPricing": "Plans & Pricing",
+      "dashboard": "Dashboard",
+      "schedule": "Schedule",
+      "join": "Join",
+      "host": "Host",
+      "createMeeting": "Create new meeting",
+      "startStreaming": "Start streaming",
+      "joinMeetingRoom": "Join a Meeting Room",
+      "signIn": "Sign in",
+      "signUpFree": "Sign up, It's Free",
+      "toggleMenu": "Toggle navigation menu"
+    }
+  },
+  "auth": {
+    "termsPrefix": "By signing up you understand and agree to the Konn3ct Terms of Use. For more information about Privacy Data visit the",
+    "privacyLinkLabel": "Konn3ct Privacy Data Sheets.",
+    "sideDetail": {
+      "features": [
+        "Meeting length up to 60 min for FREE",
+        "Transcription & Translation",
+        "Meeting Summary & Highlights",
+        "Auto Attendance",
+        "Share Youtube Videos(eCinema)",
+        "Livestream to Youtube & Facebook Concurrently",
+        "Receive Donations in your Meeting",
+        "Multi-User, Multi-Page and Friendly Whiteboard",
+        "Create Public & Private, Free & Paid Events"
+      ]
+    },
+    "login": {
+      "title": "Sign in",
+      "submit": "Sign in",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign up",
+      "forgotPassword": "Forgot password?",
+      "successTitle": "Login Successful",
+      "errorTitle": "Login Unsuccessful",
+      "googleUserInfoMissing": "Google user info URL is not configured.",
+      "appleFailedTitle": "Apple login failed",
+      "appleFailedDescription": "Could not complete Apple login",
+      "appleUnavailable": "Apple sign-in is temporarily unavailable.",
+      "appleLoading": "Apple sign-in is still loading. Please try again.",
+      "ssoFailedTitle": "SSO Login Failed",
+      "ssoFailedDescription": "Your device is not registered for this access. Please contact your system administrator.",
+      "validation": {
+        "email": "Invalid email address.",
+        "passwordMin": "Password must be at least 6 characters."
+      }
+    },
+    "register": {
+      "title": "Sign Up",
+      "submit": "Sign up",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Samuel",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Odejinmi",
+      "phone": "Phone",
+      "referralCode": "Referral Code",
+      "referralCodePlaceholder": "Referral Code",
+      "alreadyHaveAccount": "Already have an account?",
+      "signIn": "Sign in",
+      "successTitle": "Sign-up Successful",
+      "errorTitle": "Sign-up Unsuccessful",
+      "loginSuccessTitle": "Login Successful",
+      "loginErrorTitle": "Login Unsuccessful",
+      "googleUserInfoMissing": "Google user info URL is not configured.",
+      "appleUnavailable": "Apple sign-in is temporarily unavailable.",
+      "appleLoading": "Apple sign-in is still loading. Please try again.",
+      "validation": {
+        "email": "Invalid email address.",
+        "passwordMin": "Password must be at least 8 characters.",
+        "passwordUppercase": "Password must contain at least one uppercase letter.",
+        "passwordLowercase": "Password must contain at least one lowercase letter.",
+        "passwordNumber": "Password must contain at least one number.",
+        "passwordSpecialCharacter": "Password must contain at least one special character (@$!%*?&).",
+        "firstNameRequired": "First name is required.",
+        "firstNameWhitespace": "First name is required and cannot be empty or whitespace.",
+        "lastNameRequired": "Last name is required.",
+        "lastNameWhitespace": "Last name is required and cannot be empty or whitespace.",
+        "countryRequired": "Country code is required.",
+        "phoneTooShort": "Phone number is too short for the selected country.",
+        "phoneTooLong": "Phone number is too long for the selected country.",
+        "phoneInvalidLength": "Phone number length is invalid for the selected country.",
+        "phoneInvalid": "Enter a valid phone number for the selected country."
+      }
+    },
+    "forgotPassword": {
+      "step1": {
+        "title": "Forgot password",
+        "description": "Please enter your email to reset the password",
+        "emailPlaceholder": "Enter your email address",
+        "sending": "Sending...",
+        "submit": "Reset Password"
+      },
+      "step2": {
+        "title": "Check your email",
+        "description": "We sent a reset code to {{email}}. Enter the 4-digit code.",
+        "submit": "Continue"
+      },
+      "step3": {
+        "title": "Set a new password",
+        "description": "Create a new password. Ensure it differs from previous ones.",
+        "passwordPlaceholder": "Enter new password",
+        "confirmPasswordLabel": "Confirm Password",
+        "confirmPasswordPlaceholder": "Re-enter password",
+        "updating": "Updating...",
+        "submit": "Update Password"
+      },
+      "step4": {
+        "title": "Password Updated!",
+        "description": "Your password has been successfully reset. You can now sign in with your new password.",
+        "submit": "Go to Login"
+      },
+      "validation": {
+        "emailRequired": "Please enter your email address.",
+        "resetRequestFailed": "Failed to request reset.",
+        "codeInvalid": "Enter a valid 4-digit code.",
+        "fillAllFields": "Please fill in all fields.",
+        "passwordsMismatch": "Passwords do not match.",
+        "resetFailed": "Failed to reset password."
+      }
+    }
+  }
+}

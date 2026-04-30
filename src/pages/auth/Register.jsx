@@ -29,6 +29,7 @@ import useFacebookSDK from "../../hooks/useFacebookSDK";
 import useAppleSDK from "../../hooks/useAppleSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 import {
   getCountries,
   getCountryCallingCode,
@@ -45,7 +46,6 @@ import {
 } from "../../lib/referral";
 import {
   googleUserInfoUrl,
-  privacyPolicyUrl,
 } from "../../lib/externalLinks";
 import {
   Select,
@@ -53,6 +53,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "../../components/ui/select";
+import { privacyPolicyUrl } from "../../lib/externalLinks";
 
 const regionNames =
   typeof Intl !== "undefined" && Intl.DisplayNames
@@ -64,20 +65,21 @@ const getCountryLabel = (countryCode) => {
   return `${countryName} (+${getCountryCallingCode(countryCode)})`;
 };
 
-const getPhoneValidationMessage = (validationResult) => {
+const getPhoneValidationMessage = (validationResult, t) => {
   switch (validationResult) {
     case "TOO_SHORT":
-      return "Phone number is too short for the selected country.";
+      return t("auth.register.validation.phoneTooShort");
     case "TOO_LONG":
-      return "Phone number is too long for the selected country.";
+      return t("auth.register.validation.phoneTooLong");
     case "INVALID_LENGTH":
-      return "Phone number length is invalid for the selected country.";
+      return t("auth.register.validation.phoneInvalidLength");
     default:
-      return "Enter a valid phone number for the selected country.";
+      return t("auth.register.validation.phoneInvalid");
   }
 };
 
 export default function Register() {
+  const { t } = useTranslation();
   useFacebookSDK();
 
   return (
@@ -86,15 +88,14 @@ export default function Register() {
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <RegisterForm />
         <p className="px-2 text-center text-xs text-[#0A2540] dark:text-white sm:text-sm">
-          By signing up you understand and agree to the Konn3ct Terms of Use.
-          For more information about Privacy Data visit the{" "}
+          {t("auth.termsPrefix")}{" "}
           <a
             href={privacyPolicyUrl}
             className="text-blue-500 underline dark:text-blue-400"
             rel="noreferrer"
             target="_blank"
           >
-            Konn3ct Privacy Data Sheets.
+            {t("auth.privacyLinkLabel")}
           </a>
         </p>
       </Card>
@@ -103,6 +104,7 @@ export default function Register() {
 }
 
 export function RegisterForm() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const referralCodeFromUrl = useMemo(
     () => getReferralCodeFromSearchParams(searchParams),
@@ -121,37 +123,36 @@ export function RegisterForm() {
   );
   const selectedCountryExample = getExampleNumber("NG", examples);
   const formSchema = z.object({
-    email: z.string().email({ message: "Invalid email address." }),
+    email: z.string().email({ message: t("auth.register.validation.email") }),
     password: z
       .string()
-      .min(8, { message: "Password must be at least 8 characters." })
+      .min(8, { message: t("auth.register.validation.passwordMin") })
       .regex(/[A-Z]/, {
-        message: "Password must contain at least one uppercase letter.",
+        message: t("auth.register.validation.passwordUppercase"),
       })
       .regex(/[a-z]/, {
-        message: "Password must contain at least one lowercase letter.",
+        message: t("auth.register.validation.passwordLowercase"),
       })
       .regex(/[0-9]/, {
-        message: "Password must contain at least one number.",
+        message: t("auth.register.validation.passwordNumber"),
       })
       .regex(/[@$!%*?&]/, {
-        message:
-          "Password must contain at least one special character (@$!%*?&).",
+        message: t("auth.register.validation.passwordSpecialCharacter"),
       }),
     firstname: z
       .string()
-      .min(2, { message: "First name is required." })
+      .min(2, { message: t("auth.register.validation.firstNameRequired") })
       .refine((value) => value.trim().length > 0, {
-        message: "First name is required and cannot be empty or whitespace.",
+        message: t("auth.register.validation.firstNameWhitespace"),
       }),
     lastname: z
       .string()
-      .min(2, { message: "Last name is required." })
+      .min(2, { message: t("auth.register.validation.lastNameRequired") })
       .refine((value) => value.trim().length > 0, {
-        message: "Last name is required and cannot be empty or whitespace.",
+        message: t("auth.register.validation.lastNameWhitespace"),
       }),
     country_code: z.string().min(1, {
-      message: "Country code is required.",
+      message: t("auth.register.validation.countryRequired"),
     }),
     phone: z.string().transform((value) => value.replace(/\D/g, "")),
     referral_code: z.string().optional(),
@@ -164,7 +165,7 @@ export function RegisterForm() {
     if (validationResult) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: getPhoneValidationMessage(validationResult),
+        message: getPhoneValidationMessage(validationResult, t),
         path: ["phone"],
       });
     }
@@ -192,7 +193,7 @@ export function RegisterForm() {
   const selectedCountryCode = form.watch("country_code");
   const selectedCountryLabel =
     countryOptions.find((option) => option.value === selectedCountryCode)
-      ?.label || "Select country";
+      ?.label || t("common.selectCountry");
   const selectedPhoneExample =
     getExampleNumber(selectedCountryCode, examples) || selectedCountryExample;
   const phoneMaxLength = selectedPhoneExample?.nationalNumber?.length;
@@ -213,11 +214,11 @@ export function RegisterForm() {
     onSuccess: (res) => {
       if (res.success) {
         clearStoredReferralCode();
-        toast({ title: "Sign-up Successful", description: res.message });
+        toast({ title: t("auth.register.successTitle"), description: res.message });
         navigate("/");
       } else {
         toast({
-          title: "Sign-up Unsuccessful",
+          title: t("auth.register.errorTitle"),
           description: res.message,
           variant: "destructive",
         });
@@ -225,7 +226,7 @@ export function RegisterForm() {
     },
     onError: (error) => {
       toast({
-        title: "Sign-up Unsuccessful",
+        title: t("auth.register.errorTitle"),
         description: error.message,
         variant: "destructive",
       });
@@ -237,11 +238,14 @@ export function RegisterForm() {
     onSuccess: (res) => {
       if (res.success) {
         clearStoredReferralCode();
-        toast({ title: "Login Successful", description: res.message });
+        toast({
+          title: t("auth.register.loginSuccessTitle"),
+          description: res.message,
+        });
         navigate("/");
       } else {
         toast({
-          title: "Login Unsuccessful",
+          title: t("auth.register.loginErrorTitle"),
           description: res.message,
           variant: "destructive",
         });
@@ -249,7 +253,7 @@ export function RegisterForm() {
     },
     onError: (error) => {
       toast({
-        title: "Login Unsuccessful",
+        title: t("auth.register.loginErrorTitle"),
         description: error.message,
         variant: "destructive",
       });
@@ -305,8 +309,8 @@ export function RegisterForm() {
       try {
         if (!googleUserInfoUrl) {
           toast({
-            title: "Login Unsuccessful",
-            description: "Google user info URL is not configured.",
+            title: t("auth.register.loginErrorTitle"),
+            description: t("auth.register.googleUserInfoMissing"),
             variant: "destructive",
           });
           return;
@@ -377,10 +381,10 @@ export function RegisterForm() {
 
   const handleAppleUnavailable = () => {
     toast({
-      title: "Apple login failed",
+      title: t("auth.login.appleFailedTitle"),
       description: appleSdkError
-        ? "Apple sign-in is temporarily unavailable."
-        : "Apple sign-in is still loading. Please try again.",
+        ? t("auth.register.appleUnavailable")
+        : t("auth.register.appleLoading"),
       variant: "destructive",
     });
   };
@@ -391,10 +395,10 @@ export function RegisterForm() {
         <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
       <h3 className="mb-6 text-center text-lg font-bold sm:text-xl">
-        Sign Up
+        {t("auth.register.title")}
       </h3>
       <p className="mb-8 text-center text-base font-medium sm:text-xl">
-        Continue with:
+        {t("common.continueWith")}
       </p>
 
       <div className="flex flex-wrap justify-center gap-6 sm:justify-evenly sm:gap-0 md:gap-4 lg:gap-0">
@@ -402,16 +406,16 @@ export function RegisterForm() {
           className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
           onClick={handleFacebookLogin}
         >
-          <img className="h-8" src={facebook} alt="Facebook" />
-          <p className="text-[10px] font-medium">Facebook</p>
+          <img className="h-8" src={facebook} alt={t("common.facebook")} />
+          <p className="text-[10px] font-medium">{t("common.facebook")}</p>
         </div>
 
         <div
           className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
           onClick={() => handleGoogleLogin()}
         >
-          <img className="h-8" src={google} alt="Google" />
-          <p className="text-[10px] font-medium">Google</p>
+          <img className="h-8" src={google} alt={t("common.google")} />
+          <p className="text-[10px] font-medium">{t("common.google")}</p>
         </div>
 
         {appleSdkReady ? (
@@ -426,8 +430,8 @@ export function RegisterForm() {
                 onClick={renderProps.onClick}
                 className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
               >
-                <img className="h-8" src={apple} alt="Apple" />
-                <p className="text-[10px] font-medium">Apple</p>
+                <img className="h-8" src={apple} alt={t("common.apple")} />
+                <p className="text-[10px] font-medium">{t("common.apple")}</p>
               </div>
             )}
             callback={(res) => {
@@ -439,15 +443,15 @@ export function RegisterForm() {
             onClick={handleAppleUnavailable}
             className="flex cursor-pointer flex-col items-center justify-center gap-y-1 opacity-60"
           >
-            <img className="h-8" src={apple} alt="Apple" />
-            <p className="text-[10px] font-medium">Apple</p>
+            <img className="h-8" src={apple} alt={t("common.apple")} />
+            <p className="text-[10px] font-medium">{t("common.apple")}</p>
           </div>
         )}
       </div>
 
       <div className="my-8 flex items-center justify-center">
         <Separator className="h-[1px] flex-1 bg-black" />
-        <p className="mx-2 text-sm font-medium sm:text-base">OR</p>
+        <p className="mx-2 text-sm font-medium sm:text-base">{t("common.or")}</p>
         <Separator className="h-[1px] flex-1 bg-black" />
       </div>
 
@@ -459,12 +463,12 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Email
+                  {t("auth.register.emailLabel")}
                 </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("auth.register.emailPlaceholder")}
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -480,13 +484,13 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Password
+                  {t("common.password")}
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
+                      placeholder={t("auth.register.passwordPlaceholder")}
                       className="w-full rounded-full px-4"
                       {...field}
                     />
@@ -510,11 +514,11 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  First Name
+                  {t("auth.register.firstName")}
                 </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Samuel"
+                    placeholder={t("auth.register.firstNamePlaceholder")}
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -530,11 +534,11 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Last Name
+                  {t("auth.register.lastName")}
                 </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Odejinmi"
+                    placeholder={t("auth.register.lastNamePlaceholder")}
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -550,7 +554,7 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Phone
+                  {t("auth.register.phone")}
                 </FormLabel>
                 <div className="flex gap-3">
                   <FormControl>
@@ -579,7 +583,7 @@ export function RegisterForm() {
                                 onChange={(event) =>
                                   setCountrySearch(event.target.value)
                                 }
-                                placeholder="Search country or code"
+                                placeholder={t("common.searchCountryOrCode")}
                                 className="border-0 bg-transparent px-2 shadow-none focus-visible:ring-0"
                               />
                             </div>
@@ -597,7 +601,7 @@ export function RegisterForm() {
                               ))
                             ) : (
                               <p className="px-3 py-4 text-sm text-muted-foreground">
-                                No country matches your search.
+                                {t("common.noCountryMatches")}
                               </p>
                             )}
                           </div>
@@ -646,11 +650,11 @@ export function RegisterForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Referral Code
+                  {t("auth.register.referralCode")}
                 </FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Referral Code"
+                    placeholder={t("auth.register.referralCodePlaceholder")}
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -665,15 +669,15 @@ export function RegisterForm() {
             className="w-full bg-[#012E89] shadow-md"
             disabled={registerMutation.isPending}
           >
-            Sign up
+            {t("auth.register.submit")}
           </Button>
         </form>
       </Form>
 
       <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
-        <p>Already have an account?</p>
+        <p>{t("auth.register.alreadyHaveAccount")}</p>
         <Link to="/login" className="text-[#012E89] underline dark:text-blue-400">
-          Sign in
+          {t("auth.register.signIn")}
         </Link>
       </div>
     </div>

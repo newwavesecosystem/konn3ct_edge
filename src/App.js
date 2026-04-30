@@ -5,6 +5,7 @@ import {
   Outlet,
 } from "react-router-dom";
 import { LogOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import {
   Sidebar,
@@ -53,40 +54,41 @@ import { ForgotPassword } from "./pages/auth/ForgotPassword";
 import { RouteErrorFallback } from "./components/ui/resilience";
 
 export function AppSidebar() {
+  const { t } = useTranslation();
   const items = [
-    { title: "Home", url: "/", icon: HomeIcon },
-    { title: "Profile", url: "/profile", icon: UserIcon },
-    { title: "Meeting Room(s)", url: "/rooms", icon: VideoIcon },
-    { title: "Streaming", url: "/streams", icon: StreamIcon },
+    { titleKey: "app.sidebar.home", url: "/", icon: HomeIcon },
+    { titleKey: "app.sidebar.profile", url: "/profile", icon: UserIcon },
+    { titleKey: "app.sidebar.rooms", url: "/rooms", icon: VideoIcon },
+    { titleKey: "app.sidebar.streaming", url: "/streams", icon: StreamIcon },
     {
-      title: "Recordings",
+      titleKey: "app.sidebar.recordings",
       url: "/recordings",
       icon: RecordIcon,
     },
-    { title: "Plans & Payments", url: "/payments", icon: CardIcon },
-    { title: "Addons", url: "/addons", icon: AddonIcon },
-    { title: "Referee(s)", url: "/referees", icon: RefereeIcon },
+    { titleKey: "app.sidebar.payments", url: "/payments", icon: CardIcon },
+    { titleKey: "app.sidebar.addons", url: "/addons", icon: AddonIcon },
+    { titleKey: "app.sidebar.referees", url: "/referees", icon: RefereeIcon },
     {
-      title: "Donations",
+      titleKey: "app.sidebar.donations",
       url: "/donations",
       icon: DonationIcon,
     },
     {
-      title: "Attendance",
+      titleKey: "app.sidebar.attendance",
       url: "/attendance",
       icon: AttendanceIcon,
     },
-    { title: "Events", url: "/events", icon: EventIcon },
-    { title: "Invite History", url: "/history", icon: HistoryIcon },
-    { title: "Settings", url: "/settings", icon: SettingsIcon },
-    { title: "Logout", url: "/login", icon: LogOut },
+    { titleKey: "app.sidebar.events", url: "/events", icon: EventIcon },
+    { titleKey: "app.sidebar.history", url: "/history", icon: HistoryIcon },
+    { titleKey: "app.sidebar.settings", url: "/settings", icon: SettingsIcon },
+    { titleKey: "app.sidebar.logout", url: "/login", icon: LogOut },
   ];
 
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Personal</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("app.sidebar.groupLabel")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
@@ -94,7 +96,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <Link to={item.url}>
                       <item.icon className="!w-6 !h-6" />
-                      <span>{item.title}</span>
+                      <span>{t(item.titleKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

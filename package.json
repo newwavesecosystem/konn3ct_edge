@@ -26,6 +26,8 @@
     "cra-template": "1.2.0",
     "date-fns": "^3.6.0",
     "i18next": "^26.0.8",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "i18next-http-backend": "^3.0.6",
     "jwt-decode": "^4.0.0",
     "libphonenumber-js": "^1.12.42",
     "lucide-react": "^0.468.0",

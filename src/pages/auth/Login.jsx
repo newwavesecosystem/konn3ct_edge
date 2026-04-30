@@ -29,12 +29,14 @@ import useFacebookSDK from "../../hooks/useFacebookSDK";
 import useAppleSDK from "../../hooks/useAppleSDK";
 import AppleLogin from "react-apple-login";
 import axios from "axios";
+import { useTranslation } from "react-i18next";
 import {
   googleUserInfoUrl,
   privacyPolicyUrl,
 } from "../../lib/externalLinks";
 
 export default function Login() {
+  const { t } = useTranslation();
   useFacebookSDK();
   const { logout } = useAuth();
 
@@ -48,15 +50,14 @@ export default function Login() {
       <Card className="w-full max-w-md flex-1 sm:max-w-[560px] md:max-w-md lg:max-w-[560px]">
         <LoginForm />
         <p className="px-2 text-center text-xs text-[#0A2540] dark:text-white sm:text-sm">
-          By signing up you understand and agree to the Konn3ct Terms of Use.
-          For more information about Privacy Data visit the{" "}
+          {t("auth.termsPrefix")}{" "}
           <a
             href={privacyPolicyUrl}
             className="text-blue-500 underline dark:text-blue-400"
             rel="noreferrer"
             target="_blank"
           >
-            Konn3ct Privacy Data Sheets.
+            {t("auth.privacyLinkLabel")}
           </a>
         </p>
       </Card>
@@ -65,13 +66,14 @@ export default function Login() {
 }
 
 export function LoginForm() {
+  const { t } = useTranslation();
   const formSchema = z.object({
     username: z
       .string()
-      .email({ message: "Invalid email address." }),
+      .email({ message: t("auth.login.validation.email") }),
     password: z
       .string()
-      .min(6, { message: "Password must be at least 6 characters." }),
+      .min(6, { message: t("auth.login.validation.passwordMin") }),
   });
 
   const form = useForm({
@@ -92,11 +94,11 @@ export function LoginForm() {
     mutationFn: login,
     onSuccess: (res) => {
       if (res.success) {
-        toast({ title: "Login Successful", description: res.message });
+        toast({ title: t("auth.login.successTitle"), description: res.message });
         navigate("/");
       } else {
         toast({
-          title: "Login Unsuccessful",
+          title: t("auth.login.errorTitle"),
           description: res.message,
           variant: "destructive",
         });
@@ -104,7 +106,7 @@ export function LoginForm() {
     },
     onError: (error) => {
       toast({
-        title: "Login Unsuccessful",
+        title: t("auth.login.errorTitle"),
         description: error.message,
         variant: "destructive",
       });
@@ -115,11 +117,11 @@ export function LoginForm() {
     mutationFn: login_social,
     onSuccess: (res) => {
       if (res.success) {
-        toast({ title: "Login Successful", description: res.message });
+        toast({ title: t("auth.login.successTitle"), description: res.message });
         navigate("/");
       } else {
         toast({
-          title: "Login Unsuccessful",
+          title: t("auth.login.errorTitle"),
           description: res.message,
           variant: "destructive",
         });
@@ -127,7 +129,7 @@ export function LoginForm() {
     },
     onError: (error) => {
       toast({
-        title: "Login Unsuccessful",
+        title: t("auth.login.errorTitle"),
         description: error.message,
         variant: "destructive",
       });
@@ -145,8 +147,8 @@ export function LoginForm() {
       try {
         if (!googleUserInfoUrl) {
           toast({
-            title: "Login Unsuccessful",
-            description: "Google user info URL is not configured.",
+            title: t("auth.login.errorTitle"),
+            description: t("auth.login.googleUserInfoMissing"),
             variant: "destructive",
           });
           return;
@@ -228,8 +230,8 @@ export function LoginForm() {
       });
     } else {
       toast({
-        title: "Apple login failed",
-        description: "Could not complete Apple login",
+        title: t("auth.login.appleFailedTitle"),
+        description: t("auth.login.appleFailedDescription"),
         variant: "destructive",
       });
     }
@@ -237,10 +239,10 @@ export function LoginForm() {
 
   const handleAppleUnavailable = () => {
     toast({
-      title: "Apple login failed",
+      title: t("auth.login.appleFailedTitle"),
       description: appleSdkError
-        ? "Apple sign-in is temporarily unavailable."
-        : "Apple sign-in is still loading. Please try again.",
+        ? t("auth.login.appleUnavailable")
+        : t("auth.login.appleLoading"),
       variant: "destructive",
     });
   };
@@ -251,10 +253,10 @@ export function LoginForm() {
         <img src={logo} alt="konn3ct" className="h-10 sm:h-auto" />
       </div>
       <h3 className="mb-6 text-center text-lg font-bold sm:text-xl">
-        Sign in
+        {t("auth.login.title")}
       </h3>
       <p className="mb-8 text-center text-base font-medium sm:text-xl">
-        Continue with:
+        {t("common.continueWith")}
       </p>
 
       <div className="flex flex-wrap justify-center gap-6 sm:justify-evenly sm:gap-0 md:gap-4 lg:gap-0">
@@ -262,16 +264,16 @@ export function LoginForm() {
           className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
           onClick={handleFacebookLogin}
         >
-          <img className="h-8" src={facebook} alt="Facebook" />
-          <p className="text-[10px] font-medium">Facebook</p>
+          <img className="h-8" src={facebook} alt={t("common.facebook")} />
+          <p className="text-[10px] font-medium">{t("common.facebook")}</p>
         </div>
 
         <div
           className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
           onClick={() => handleGoogleLogin()}
         >
-          <img className="h-8" src={google} alt="Google" />
-          <p className="text-[10px] font-medium">Google</p>
+          <img className="h-8" src={google} alt={t("common.google")} />
+          <p className="text-[10px] font-medium">{t("common.google")}</p>
         </div>
 
         {appleSdkReady ? (
@@ -286,8 +288,8 @@ export function LoginForm() {
                 onClick={renderProps.onClick}
                 className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
               >
-                <img className="h-8" src={apple} alt="Apple" />
-                <p className="text-[10px] font-medium">Apple</p>
+                <img className="h-8" src={apple} alt={t("common.apple")} />
+                <p className="text-[10px] font-medium">{t("common.apple")}</p>
               </div>
             )}
             callback={handleAppleResponse}
@@ -297,30 +299,29 @@ export function LoginForm() {
             onClick={handleAppleUnavailable}
             className="flex cursor-pointer flex-col items-center justify-center gap-y-1 opacity-60"
           >
-            <img className="h-8" src={apple} alt="Apple" />
-            <p className="text-[10px] font-medium">Apple</p>
+            <img className="h-8" src={apple} alt={t("common.apple")} />
+            <p className="text-[10px] font-medium">{t("common.apple")}</p>
           </div>
         )}
 
         <div
           onClick={() =>
             toast({
-              title: "SSO Login Failed",
-              description:
-                "Your device is not registered for this access. Please contact your system administrator.",
+              title: t("auth.login.ssoFailedTitle"),
+              description: t("auth.login.ssoFailedDescription"),
               variant: "destructive",
             })
           }
           className="flex cursor-pointer flex-col items-center justify-center gap-y-1"
         >
-          <img className="h-8 grayscale" src={sso} alt="SSO" />
-          <p className="text-[10px] font-medium">SSO</p>
+          <img className="h-8 grayscale" src={sso} alt={t("common.sso")} />
+          <p className="text-[10px] font-medium">{t("common.sso")}</p>
         </div>
       </div>
 
       <div className="my-8 flex items-center justify-center">
         <Separator className="h-[1px] flex-1 bg-black" />
-        <p className="mx-2 text-sm font-medium sm:text-base">OR</p>
+        <p className="mx-2 text-sm font-medium sm:text-base">{t("common.or")}</p>
         <Separator className="h-[1px] flex-1 bg-black" />
       </div>
 
@@ -332,12 +333,12 @@ export function LoginForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Email address
+                  {t("common.emailAddress")}
                 </FormLabel>
                 <FormControl>
                   <Input
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder={t("auth.login.emailPlaceholder")}
                     className="w-full rounded-full px-4"
                     {...field}
                   />
@@ -353,13 +354,13 @@ export function LoginForm() {
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="font-bold text-[#0A2540] dark:text-white">
-                  Password
+                  {t("common.password")}
                 </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
+                      placeholder={t("auth.login.passwordPlaceholder")}
                       className="w-full rounded-full px-4"
                       {...field}
                     />
@@ -372,7 +373,9 @@ export function LoginForm() {
                     onClick={() => setShowPassword((prev) => !prev)}
                     className="text-sm font-bold text-[#012E89] dark:text-white sm:text-[14px]"
                   >
-                    {showPassword ? "Hide password" : "Show password"}
+                    {showPassword
+                      ? t("auth.login.hidePassword")
+                      : t("auth.login.showPassword")}
                   </button>
                 </div>
               </FormItem>
@@ -384,22 +387,22 @@ export function LoginForm() {
             className="w-full bg-[#012E89] shadow-md"
             disabled={loginMutation.isPending}
           >
-            Sign in
+            {t("auth.login.submit")}
           </Button>
         </form>
       </Form>
 
       <div className="my-4 flex justify-center gap-x-2 text-sm sm:text-base">
-        <p>Don&apos;t have an account?</p>
+        <p>{t("auth.login.noAccount")}</p>
         <Link to="/register" className="text-[#012E89] underline dark:text-blue-400">
-          Sign up
+          {t("auth.login.signUp")}
         </Link>
       </div>
       <Link
         to="/forgot-password"
         className="mb-8 flex justify-center text-sm text-[#012E89] underline dark:text-blue-400 sm:text-base"
       >
-        Forgot password?
+        {t("auth.login.forgotPassword")}
       </Link>
     </div>
   );
