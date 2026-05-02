@@ -9,26 +9,34 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "../components/ui/select";
 import { Separator } from "../components/ui/separator";
 import { Tabs, TabsTrigger, TabsList, TabsContent } from "../components/ui/tabs";
+import { SUPPORTED_LANGUAGES } from "../constants/languages";
 import useTheme from "../hooks/useTheme";
 import { capitalize, cn } from "../lib/utils";
 
-const SettingsPlaceholder = ({ title, description }) => {
-  return (
-    <Card className="border-dashed border-border/70 bg-muted/20 shadow-none">
-      <CardContent className="space-y-2 p-5 sm:p-6">
-        <h4 className="text-base font-semibold">{title}</h4>
-        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
-};
-
 const Settings = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const systemModeLabel = capitalize(resolvedTheme);
+  const normalizedResolvedLanguage = (i18n.resolvedLanguage || "").split("-")[0];
+  const normalizedLanguage = (i18n.language || "").split("-")[0];
+  const activeLanguageCode = SUPPORTED_LANGUAGES.some(
+    (language) => language.code === normalizedResolvedLanguage
+  )
+    ? normalizedResolvedLanguage
+    : SUPPORTED_LANGUAGES.some((language) => language.code === normalizedLanguage)
+      ? normalizedLanguage
+      : "en";
+  const activeLanguageLabel =
+    SUPPORTED_LANGUAGES.find((language) => language.code === activeLanguageCode)
+      ?.name || "English";
 
   const themeOptions = [
     {
@@ -109,6 +117,51 @@ const Settings = () => {
           <Separator />
           <TabsContent value="general" className="m-0">
             <div className="space-y-6 px-4 py-6 lg:px-8 lg:py-8">
+              <Card className="border-border/70 bg-card shadow-sm">
+                <CardHeader className="gap-4 p-5 sm:p-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                      <CardTitle className="text-xl">Language</CardTitle>
+                      <CardDescription className="max-w-2xl text-sm leading-6">
+                        Choose the language used across your dashboard.
+                      </CardDescription>
+                    </div>
+                    <div className="inline-flex items-center rounded-full border border-border bg-muted/60 px-4 py-2 text-sm text-muted-foreground">
+                      Current language:&nbsp;
+                      <span className="font-medium text-foreground">
+                        {activeLanguageLabel}
+                      </span>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-5 pt-0 sm:p-6 sm:pt-0">
+                  <div className="max-w-md">
+                    <Select
+                      value={activeLanguageCode}
+                      onValueChange={(languageCode) =>
+                        i18n.changeLanguage(languageCode)
+                      }
+                    >
+                      <SelectTrigger className="h-12 rounded-2xl border-border/70 bg-background px-4">
+                        <span className="truncate text-foreground">
+                          {activeLanguageLabel}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent className="rounded-2xl border-border/70 p-2">
+                        {SUPPORTED_LANGUAGES.map((language) => (
+                          <SelectItem
+                            key={language.code}
+                            value={language.code}
+                            className="rounded-xl px-3 py-2.5"
+                          >
+                            {language.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
               <Card className="border-border/70 bg-card shadow-sm">
                 <CardHeader className="gap-4 p-5 sm:p-6">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

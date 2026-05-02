@@ -1,0 +1,1155 @@
+{
+  "common": {
+    "or": "AU",
+    "emailAddress": "Anwani ya barua pepe",
+    "password": "Nenosiri",
+    "continueWith": "Endelea na:",
+    "facebook": "Facebook",
+    "google": "Google",
+    "apple": "Apple",
+    "sso": "SSO",
+    "searchCountryOrCode": "Tafuta nchi au msimbo",
+    "noCountryMatches": "Hakuna nchi inayolingana na utafutaji wako.",
+    "selectCountry": "Chagua nchi",
+    "actions": {
+      "cancel": "Futa",
+      "create": "Tengeneza",
+      "delete": "Futa",
+      "managePlan": "Dhibiti Mpango",
+      "save": "Hifadhi",
+      "submit": "Wasilisha",
+      "transfer": "Hamisha",
+      "upload": "Pakia",
+      "visitMeeting": "Tembelea Mkutano",
+      "testAudioAndVideo": "Jaribu Sauti na Video",
+      "retry": "Jaribu tena",
+      "refresh": "Boresha",
+      "goBack": "Rudi Nyuma",
+      "goHome": "Rudi Nyumbani",
+      "goToDashboard": "Nenda kwenye Dashibodi"
+    },
+    "status": {
+      "copiedToClipboard": "Ime nakiliwa kwenye kibao cha kunakili",
+      "noMeetingId": "Hakuna Kitambulisho cha Mkutano kilichopatikana",
+      "error": "Kosa"
+    },
+    "forms": {
+      "firstName": "Jina la Kwanza",
+      "lastName": "Jina la mwisho",
+      "email": "Barua pepe",
+      "phone": "Simu",
+      "address": "Anwani"
+    }
+  },
+  "app": {
+    "sidebar": {
+      "groupLabel": "Binafsi",
+      "home": "Home",
+      "profile": "Wasifu",
+      "rooms": "Vyumba vya Mikutano",
+      "streaming": "Mtiririko",
+      "recordings": "Rekodi",
+      "payments": "Mipango na Malipo",
+      "addons": "Viongezeo",
+      "referees": "Marefa",
+      "donations": "Michango",
+      "attendance": "Uhudhuriaji",
+      "events": "Matukio",
+      "history": "Historia ya Mialiko",
+      "settings": "Mipangilio",
+      "logout": "Kutoka"
+    },
+    "navbar": {
+      "logoAlt": "Nembo ya Konn3ct",
+      "solutions": "Suluhisho",
+      "plansAndPricing": "Mipango na Bei",
+      "dashboard": "Dashibodi",
+      "schedule": "Ratiba",
+      "join": "Jiunge",
+      "host": "Mwenyeji",
+      "createMeeting": "Unda mkutano mpya",
+      "startStreaming": "Anza kutiririsha",
+      "joinMeetingRoom": "Jiunge na Chumba cha Mkutano",
+      "signIn": "Ingia",
+      "signUpFree": "Jisajili, ni bure",
+      "toggleMenu": "Badilisha menyu ya urambazaji"
+    }
+  },
+  "auth": {
+    "termsPrefix": "By signing up you understand and agree to the Konn3ct Terms of Use. For more information about Privacy Data visit the",
+    "privacyLinkLabel": "Konn3ct Privacy Data Sheets.",
+    "sideDetail": {
+      "features": [
+        "Meeting length up to 60 min for FREE",
+        "Transcription & Translation",
+        "Meeting Summary & Highlights",
+        "Auto Attendance",
+        "Share Youtube Videos(eCinema)",
+        "Livestream to Youtube & Facebook Concurrently",
+        "Receive Donations in your Meeting",
+        "Multi-User, Multi-Page and Friendly Whiteboard",
+        "Create Public & Private, Free & Paid Events"
+      ]
+    },
+    "login": {
+      "title": "Sign in",
+      "submit": "Sign in",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign up",
+      "forgotPassword": "Forgot password?",
+      "successTitle": "Login Successful",
+      "errorTitle": "Login Unsuccessful",
+      "googleUserInfoMissing": "Google user info URL is not configured.",
+      "appleFailedTitle": "Apple login failed",
+      "appleFailedDescription": "Could not complete Apple login",
+      "appleUnavailable": "Apple sign-in is temporarily unavailable.",
+      "appleLoading": "Apple sign-in is still loading. Please try again.",
+      "ssoFailedTitle": "SSO Login Failed",
+      "ssoFailedDescription": "Your device is not registered for this access. Please contact your system administrator.",
+      "validation": {
+        "email": "Invalid email address.",
+        "passwordMin": "Password must be at least 6 characters."
+      }
+    },
+    "register": {
+      "title": "Sign Up",
+      "submit": "Sign up",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Samuel",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Odejinmi",
+      "phone": "Phone",
+      "referralCode": "Referral Code",
+      "referralCodePlaceholder": "Referral Code",
+      "alreadyHaveAccount": "Already have an account?",
+      "signIn": "Sign in",
+      "successTitle": "Sign-up Successful",
+      "errorTitle": "Sign-up Unsuccessful",
+      "loginSuccessTitle": "Login Successful",
+      "loginErrorTitle": "Login Unsuccessful",
+      "googleUserInfoMissing": "Google user info URL is not configured.",
+      "appleUnavailable": "Apple sign-in is temporarily unavailable.",
+      "appleLoading": "Apple sign-in is still loading. Please try again.",
+      "validation": {
+        "email": "Invalid email address.",
+        "passwordMin": "Password must be at least 8 characters.",
+        "passwordUppercase": "Password must contain at least one uppercase letter.",
+        "passwordLowercase": "Password must contain at least one lowercase letter.",
+        "passwordNumber": "Password must contain at least one number.",
+        "passwordSpecialCharacter": "Password must contain at least one special character (@$!%*?&).",
+        "firstNameRequired": "First name is required.",
+        "firstNameWhitespace": "First name is required and cannot be empty or whitespace.",
+        "lastNameRequired": "Last name is required.",
+        "lastNameWhitespace": "Last name is required and cannot be empty or whitespace.",
+        "countryRequired": "Country code is required.",
+        "phoneTooShort": "Phone number is too short for the selected country.",
+        "phoneTooLong": "Phone number is too long for the selected country.",
+        "phoneInvalidLength": "Phone number length is invalid for the selected country.",
+        "phoneInvalid": "Enter a valid phone number for the selected country."
+      }
+    },
+    "forgotPassword": {
+      "step1": {
+        "title": "Forgot password",
+        "description": "Please enter your email to reset the password",
+        "emailPlaceholder": "Enter your email address",
+        "sending": "Sending...",
+        "submit": "Reset Password"
+      },
+      "step2": {
+        "title": "Check your email",
+        "description": "We sent a reset code to {{email}}. Enter the 4-digit code.",
+        "submit": "Continue"
+      },
+      "step3": {
+        "title": "Set a new password",
+        "description": "Create a new password. Ensure it differs from previous ones.",
+        "passwordPlaceholder": "Enter new password",
+        "confirmPasswordLabel": "Confirm Password",
+        "confirmPasswordPlaceholder": "Re-enter password",
+        "updating": "Updating...",
+        "submit": "Update Password"
+      },
+      "step4": {
+        "title": "Password Updated!",
+        "description": "Your password has been successfully reset. You can now sign in with your new password.",
+        "submit": "Go to Login"
+      },
+      "validation": {
+        "emailRequired": "Please enter your email address.",
+        "resetRequestFailed": "Failed to request reset.",
+        "codeInvalid": "Enter a valid 4-digit code.",
+        "fillAllFields": "Please fill in all fields.",
+        "passwordsMismatch": "Passwords do not match.",
+        "resetFailed": "Failed to reset password."
+      }
+    }
+  },
+  "dashboard": {
+    "currentPlan": "Mpango wako wa sasa: Konn3ct {{plan}}",
+    "stats": {
+      "totalRoom": "Chumba cha jumla",
+      "activeRoom": "Chumba kilicho hai",
+      "inactiveRoom": "Chumba kisicho hai",
+      "privateRoom": "Chumba cha faragha"
+    },
+    "gettingStarted": "Tukusaidie kuanza",
+    "videoTitle": "Video ya kuanza",
+    "quickActions": {
+      "schedule": "Panga",
+      "join": "Jiunge",
+      "host": "Mwenyeji",
+      "scheduleIconAlt": "schedule",
+      "joinIconAlt": "join",
+      "hostIconAlt": "host"
+    },
+    "personalMeetingId": "Kitambulisho cha Mkutano Binafsi",
+    "noIdAvailable": "Hakuna kitambulisho kinachopatikana",
+    "meetings": {
+      "title": "Mikutano",
+      "empty": "Hakuna mikutano ijayo",
+      "room": "Chumba: {{room}}",
+      "host": "Mwenyeji: {{host}}"
+    },
+    "scheduleDialog": {
+      "title": "Tuma Mwaliko Mpya",
+      "description": "Tuma mwaliko wa mkutano uliopangwa"
+    }
+  },
+  "settings": {
+    "title": "Mipangilio",
+    "description": "Dhibiti mapendeleo ya dashibodi yako na uweke eneo lako la kazi likiwa la kustarehesha.",
+    "tabs": {
+      "general": "Jumla"
+    },
+    "appearance": {
+      "title": "Mwonekano",
+      "description": "Chagua jinsi dashibodi inavyoonekana. Chagua modi ya mwanga, modi ya giza, au sawazisha na mfumo wako.",
+      "activeTheme": "Mandhari hai",
+      "systemActiveTheme": "Mfumo ({{theme}})",
+      "systemModeDescription": "Kwa sasa inafuata mfumo wa kifaa chako na kubadilisha hadi hali ya {{theme}}.",
+      "options": {
+        "light": {
+          "label": "Mwangaza",
+          "description": "Tumia kiolesura angavu zaidi chenye nyuso safi na mwonekano bora zaidi wakati wa mchana."
+        },
+        "dark": {
+          "label": "Giza",
+          "description": "Punguza mng'ao kwa nyuso zenye kina zaidi ambazo ni rahisi kwa macho usiku."
+        },
+        "system": {
+          "label": "Mfumo",
+          "description": "Sawazisha kiotomatiki na upendeleo wa kifaa chako na ujibu kwa mabadiliko ya mfumo."
+        }
+      }
+    }
+  },
+  "payments": {
+    "loadingPlans": "Inapakia mipango...",
+    "currentPlan": "Mpango wa Sasa",
+    "actions": {
+      "renewSubscriptions": "Renew Subscriptions",
+      "changePlan": "Badilisha Mpango",
+      "receipt": "Risiti",
+      "payNow": "Lipa Sasa",
+      "contactSales": "Wasiliana na Wauzaji"
+    },
+    "listTitle": "Orodha ya Malipo",
+    "table": {
+      "type": "Aina",
+      "plan": "Mpango",
+      "issuedTo": "Imetolewa kwa",
+      "paymentMethod": "Njia ya Malipo",
+      "reference": "Rejea",
+      "paymentDate": "Tarehe ya Malipo",
+      "amount": "Kiasi",
+      "action": "Kitendo"
+    },
+    "empty": "Hakuna malipo yaliyopatikana",
+    "dialogTitle": "Mipango na Malipo",
+    "checkoutProfileError": "Hatuwezi kupakia maelezo ya wasifu wako kwa ajili ya malipo.",
+    "loadingUser": "Inapakia mtumiaji...",
+    "billingCycle": {
+      "monthly": "Kwa mwezi",
+      "yearly": "Kwa mwaka"
+    },
+    "planCard": {
+      "targetIndividuals": "Kwa watu binafsi",
+      "targetEnterprise": "Kwa Biashara Kubwa",
+      "customPrice": "Binafsi",
+      "customFeatures": "Sifa Maalum",
+      "free": "Bure",
+      "upgrade": "Sasisha"
+    },
+    "features": {
+      "yes": "Ndiyo",
+      "no": "Hapana",
+      "recording": "Rekodi: {{value}}",
+      "duration": "Muda: {{value}} dakika",
+      "participants": "Washiriki: {{value}}",
+      "rooms": "Vyumba: {{value}}",
+      "customizeLink": "Binafsisha Kiungo: {{value}}",
+      "breakoutRooms": "Vyumba vya Ziada: {{value}}",
+      "accessCode": "Nambari ya Ufikiaji: {{value}}",
+      "dialIn": "Nambari ya kupiga: {{value}}"
+    },
+    "states": {
+      "loadErrorTitle": "Haiwezekani kupakia malipo na mipango.",
+      "loadErrorDescription": "Tafadhali sasisha na ujaribu tena.",
+      "notAvailable": "Hakipatikani"
+    },
+    "toasts": {
+      "allowPopups": "Tafadhali ruhusu popups ili kuchapisha risiti",
+      "purchaseSuccessful": "Ununuzi umefanikiwa",
+      "paymentCancelled": "Malipo Yamefutwa"
+    },
+    "receipt": {
+      "title": "Stakabadhi ya Malipo",
+      "issuedTo": "Imetolewa kwa:",
+      "plan": "Mpango:",
+      "paymentType": "Aina ya Malipo:",
+      "paymentMethod": "Njia ya Malipo:",
+      "reference": "Rejea:",
+      "paymentDate": "Tarehe ya Malipo:",
+      "amountPaid": "Kiasi kilicholipwa:",
+      "footer": "Stakabadhi hii imetengenezwa kielektroniki."
+    }
+  },
+  "rooms": {
+    "actions": {
+      "createRoom": "Tengeneza Chumba",
+      "scheduleMeeting": "Panga Mkutano",
+      "copyLink": "Nakili Kiungo",
+      "manage": "Dhibiti",
+      "startMeeting": "Anza Mkutano"
+    },
+    "stats": {
+      "totalRoom": "Chumba cha jumla",
+      "activeRoom": "Chumba cha kazi",
+      "scheduledRoom": "Chumba kilichopangwa",
+      "inactiveRoom": "Chumba kisicho hai"
+    },
+    "table": {
+      "name": "JINA",
+      "roomUrl": "URL YA CHUMBA",
+      "actions": "ACTIONS"
+    },
+    "states": {
+      "loadErrorTitle": "Haikuwezekana kupakia vyumba kwa sasa.",
+      "loadErrorDescription": "Tafadhali angalia muunganisho wako na ujaribu tena.",
+      "noData": "Hakuna data inayopatikana kwa jedwali hili"
+    },
+    "toasts": {
+      "linkCopied": "Kiungo kime nakiliwa kwenye kibao cha kunakili",
+      "meetingStartedMissingUrl": "Mkutano umeanza lakini URL ya kuanzisha haijarudishwa.",
+      "meetingStarted": "Mkutano umeanza kwa mafanikio",
+      "accessCodeUpdated": "Nambari ya ufikiaji imesasishwa kwa mafanikio",
+      "userLimitUpdated": "Kipimo cha watumiaji kimesasishwa kwa mafanikio",
+      "bannerUploaded": "Bango limepakuliwa kwa mafanikio",
+      "roomTransferred": "Chumba kimehamishwa kwa mafanikio",
+      "meetingCreated": "Mkutano umeundwa kwa mafanikio",
+      "planLimitReachedTitle": "Umefikia kikomo cha mpango",
+      "planLimitReachedDescription": "Umefikia idadi kubwa zaidi ya vyumba kwa mpango wako wa sasa. Tafadhali sasisha ili kuunda mikutano zaidi.",
+      "planLimitReachedDescriptionWithAddons": "Umefikia idadi kubwa zaidi ya vyumba kwa mpango wako wa sasa. Tafadhali sasisha ili kuunda mikutano zaidi au tembelea Addons kununua vifurushi zaidi vya vyumba",
+      "createError": "Kuna tatizo limetokea wakati wa kuunda mkutano."
+    },
+    "tooltips": {
+      "accessCodeRequired": "Nambari ya ufikiaji inahitajika",
+      "roomHasAccessCode": "Chumba kina nambari ya ufikiaji",
+      "meetingHasAccessCode": "Mkutano una nambari ya ufikiaji"
+    },
+    "dialogs": {
+      "create": {
+        "title": "Tengeneza Chumba kipya",
+        "description": "Utaunda chumba kipya cha mkutano, kinachopatikana kwenye dashibodi."
+      },
+      "delete": {
+        "title": "Futa Chumba kipya",
+        "description": "Thibitisha Ufutaji"
+      },
+      "schedule": {
+        "title": "Hatua hii haiwezi kurejeshwa.",
+        "description": "Panga mkutano mpya"
+      }
+    },
+    "manageMenu": {
+      "accessCode": "Tuma mwaliko wa mkutano uliopangwa",
+      "userLimit": "Msimbo wa Ufikiaji",
+      "bannerUpload": "Kipimo cha Watumiaji",
+      "transferRoom": "Upakia bango la chumba cha mkutano"
+    },
+    "accessDialog": {
+      "title": "Chumba cha Uhamisho",
+      "typeLabel": "Dhibiti Nambari ya Ufikiaji",
+      "typePlaceholder": "Aina (kiotomatiki / kwa mkono / ondoa)",
+      "accessCodeLabel": "kiotomatiki / kwa mkono / ondoa",
+      "accessCodePlaceholder": "Nambari ya Ufikiaji (ikiwa ni kwa mkono)"
+    },
+    "limitDialog": {
+      "title": "Weka nambari ya ufikiaji",
+      "userLimit": "Weka kikomo kwa watumiaji",
+      "validation": {
+        "required": "Ukomo wa Watumiaji"
+      }
+    },
+    "bannerDialog": {
+      "title": "Inahitajika",
+      "selectBanner": "Pakia Bendera ya Chumba"
+    },
+    "transferDialog": {
+      "title": "Chagua Bango",
+      "newOwnerEmail": "Hamisha Chumba",
+      "newOwnerEmailPlaceholder": "Barua pepe ya mmiliki mpya",
+      "validation": {
+        "email": "Weka barua pepe ya mmiliki mpya"
+      }
+    },
+    "createForm": {
+      "roomName": "Anwani ya barua pepe si halali.",
+      "roomNamePlaceholder": "Jina la Chumba",
+      "roomUrl": "Weka jina la chumba",
+      "roomUrlPlaceholder": "URL ya chumba",
+      "creating": "Chaguo",
+      "validation": {
+        "nameMin": "Inatengeneza...",
+        "nameWhitespace": "Jina la chumba lazima liwe na angalau herufi 5."
+      }
+    },
+    "scheduledSheet": {
+      "title": "Jina la chumba linahitajika na haliwezi kuwa tupu au lenye nafasi tu.",
+      "description": "Mikutano Iliyopangwa"
+    },
+    "scheduledCard": {
+      "locked": "Mikutano yako ijayo.",
+      "dateTime": "{{date}} saa {{time}}",
+      "guestsPreview": "Wageni: {{guests}}",
+      "guestCount": "Wageni: {{count}}",
+      "moreGuests": ", +{{count}} more",
+      "notAvailable": ":"
+    },
+    "join": {
+      "title": "Hakipatikani",
+      "termsPrefix": "Jiunge na Mkutano",
+      "privacyLinkLabel": "Kwa kuingia unaelewa na unakubaliana na Masharti ya Matumizi ya mfumo wa Newwaves. Kwa maelezo zaidi kuhusu Data ya Faragha tembelea",
+      "roomPlaceholder": "Newwaves Privacy Data Sheets.",
+      "namePlaceholder": "Ingiza jina la chumba cha mkutano au ID",
+      "emailPlaceholder": "Ingiza jina lako",
+      "submit": "Weka anwani yako ya barua pepe",
+      "toasts": {
+        "meetingLinkMissing": "Konn3ct",
+        "genericError": "Kiungo cha mkutano hakijawekwa."
+      },
+      "validation": {
+        "email": "Kosa limetokea.",
+        "roomNameMin": "Anwani ya barua pepe si halali.",
+        "roomNameWhitespace": "Jina la chumba lazima liwe na angalau herufi 2.",
+        "nameMin": "Jina la chumba haliwezi kuwa tupu au kuwa na nafasi.",
+        "nameWhitespace": "Jina la mtumiaji lazima liwe na angalau herufi 2."
+      }
+    }
+  },
+  "attendance": {
+    "common": {
+      "notAvailable": "N/A"
+    },
+    "upgrade": {
+      "roomTitle": "{{room}} Chumba",
+      "overview": "Muhtasari",
+      "stats": {
+        "activeUser": "Mtumiaji hai",
+        "activityScore": "Alama ya Shughuli",
+        "timeline": "Ratiba",
+        "polls": "Polls",
+        "donation": "Mchango"
+      },
+      "table": {
+        "user": "Mtumiaji",
+        "online": "Mtandaoni",
+        "talk": "Talk",
+        "webcam": "Webcam",
+        "messages": "Jumbe",
+        "reactions": "Jibu",
+        "raise": "Inua"
+      }
+    },
+    "list": {
+      "title": "Uhudhuriaji wa Mkutano",
+      "actions": {
+        "viewParticipants": "Tazama Washiriki"
+      },
+      "table": {
+        "serial": "S/N",
+        "meetingHost": "Mwenyeji wa Mkutano",
+        "dateTime": "Tarehe na Muda",
+        "action": "Kitendo"
+      },
+      "states": {
+        "loading": "Inapakia mikutano...",
+        "loadError": "Haiwezekani kupakia data ya mahudhurio ya mikutano.",
+        "empty": "Hakuna mahudhurio ya mkutano yaliyopatikana.",
+        "noDate": "Hakuna Tarehe"
+      }
+    },
+    "details": {
+      "title": "Uhudhuriaji wa Mkutano",
+      "actions": {
+        "copy": "Nakili",
+        "copied": "Kimepakiwa",
+        "csv": "CSV",
+        "excel": "Excel",
+        "print": "Chapaisha",
+        "sendMinutes": "Tuma Maandishi ya Mkutano",
+        "sendHighlights": "Tuma Mambo Muhimu ya Mkutano",
+        "sendSummary": "Tuma Muhtasari wa Mkutano",
+        "back": "Rudi kwenye Mahudhurio"
+      },
+      "filters": {
+        "search": "Tafuta"
+      },
+      "table": {
+        "serial": "Tafuta",
+        "name": "S/N",
+        "email": "Jina",
+        "status": "Barua pepe",
+        "dateTime": "Hali"
+      },
+      "status": {
+        "moderator": "Tarehe na saa",
+        "participant": "Msimamizi"
+      },
+      "states": {
+        "loading": "Mshiriki",
+        "loadError": "Inapakia data za mshiriki...",
+        "missingParams": "Haiwezekani kupakia maelezo ya mshiriki.",
+        "empty": "Id ya mkutano au kitambulisho kinakosekana."
+      },
+      "toasts": {
+        "copyFailed": "Hakuna washiriki waliopatikana kwa mkutano huu.",
+        "allowPopups": "Unakili umeshindikana. Tafadhali ruhusu ruhusa ya kibao cha kunakili au tumia HTTPS."
+      },
+      "export": {
+        "title": "Uhudhuriaji wa Mkutano ({{count}})",
+        "printFooter": "Nakala hii ilichapishwa kielektroniki."
+      },
+      "panel": {
+        "minutesTitle": "Nakala hii ilichapishwa kielektroniki.",
+        "highlightsTitle": "Maelezo ya Kikao",
+        "summaryTitle": "Mambo Muhimu ya Mkutano",
+        "noDataReturned": "Muhtasari wa Mkutano",
+        "loadFailed": "Hakuna data iliyorejeshwa.",
+        "loading": "Kupakia maudhui kumeshindikana.",
+        "close": "Inapakia..."
+      }
+    }
+  },
+  "addons": {
+    "title": "Orodha ya Viongezeo",
+    "actions": {
+      "payNow": "Lipa Sasa"
+    },
+    "table": {
+      "service": "Huduma",
+      "serviceDescription": "Maelezo ya Huduma",
+      "status": "Hali",
+      "amount": "Kiasi",
+      "action": "Kitendo"
+    },
+    "status": {
+      "active": "Inafanya kazi",
+      "inactive": "Isiyo hai",
+      "running": "Inakimbia",
+      "ended": "Iliyokwisha",
+      "verified": "Imehakiwa",
+      "pending": "Inasubiriwa",
+      "success": "Imefanikiwa",
+      "failed": "Imeshindikana",
+      "inProgress": "Inakwenda",
+      "loading": "Inapakia...",
+      "unknown": "..."
+    },
+    "states": {
+      "loadErrorTitle": "Haiwezekani kupakia viendelezi kwa sasa.",
+      "loadErrorDescription": "Tafadhali jaribu tena baadaye.",
+      "noData": "Hakuna data inayopatikana kwa jedwali hili"
+    },
+    "toasts": {
+      "purchaseSuccessful": "Ununuzi wa nyongeza umefanikiwa",
+      "paymentCancelled": "Malipo yamefutwa"
+    }
+  },
+  "donations": {
+    "actions": {
+      "startVerification": "Anza Uthibitishaji",
+      "completeVerification": "Kamilisha Uthibitishaji"
+    },
+    "status": {
+      "verified": "Kamilisha Uthibitishaji",
+      "inProgress": "Imehakiwa",
+      "pending": "Inakwenda",
+      "successful": "Inasubiriwa",
+      "failed": "Successful"
+    },
+    "common": {
+      "bvn": "Imeshindikana",
+      "bank": "BVN",
+      "accountNumber": "Benki",
+      "accountName": "Nambari ya Akaunti",
+      "idType": "Jina la Akaunti",
+      "sections": {
+        "bankDetails": "Aina ya ID"
+      },
+      "states": {
+        "noBankFound": "Maelezo ya Benki"
+      },
+      "placeholders": {
+        "enterBvn": "Hakuna benki iliyopatikana",
+        "selectBank": "Ingiza nambari ya BVN yenye tarakimu 10",
+        "searchBank": "Chagua benki yako",
+        "enterAccountNumber": "Tafuta benki...",
+        "autoFilled": "Ingiza nambari ya akaunti yenye tarakimu 10",
+        "selectIdType": "Itajazwa Kiotomatiki"
+      },
+      "idTypes": {
+        "nin": "Chagua aina ya kitambulisho",
+        "passport": "NIN",
+        "driversLicense": "Pasipoti",
+        "votersCard": "Leseni ya Udereva"
+      }
+    },
+    "success": {
+      "title": "Kadi ya Mpiga Kura",
+      "description": "Uthibitishaji Umekamilika!"
+    },
+    "individual": {
+      "toasts": {
+        "kycFailed": "Akaunti yako imethibitishwa kwa mafanikio. Sasa unaweza kuanza kupokea michango.",
+        "submitError": "KYC imeshindikana"
+      },
+      "card": {
+        "title": "Hitilafu wakati wa kuwasilisha KYC",
+        "description": "Akaunti ya Mtu Binafsi",
+        "features": {
+          "bvn": "Kwa uchangishaji fedha binafsi na wafadhili binafsi",
+          "bank": "Uthibitishaji wa BVN",
+          "idUpload": "Uthibitishaji wa Akaunti ya Benki"
+        }
+      },
+      "form": {
+        "title": "Pakia Hati ya Utambulisho",
+        "description": "Uthibitishaji wa KYC wa Mtu Binafsi"
+      },
+      "sections": {
+        "personalInformation": "Jaza maelezo yako ya uthibitisho",
+        "governmentId": "Taarifa za Kibinafsi",
+        "uploadIdDocument": "Kitambulisho cha Serikali"
+      }
+    },
+    "business": {
+      "toasts": {
+        "kycFailed": "Pakia Hati ya Utambulisho",
+        "submitError": "KYC imeshindikana"
+      },
+      "card": {
+        "title": "Hitilafu katika kuwasilisha KYC ya biashara",
+        "description": "Akaunti ya Biashara",
+        "features": {
+          "companyInformation": "Kwa biashara na mashirika yaliyosajiliwa",
+          "directorInformation": "Taarifa za Kampuni",
+          "bankVerification": "Maelezo ya Mkurugenzi",
+          "uploadDirectorId": "Uthibitisho wa Akaunti ya Benki"
+        }
+      },
+      "form": {
+        "title": "Pakia Kitambulisho cha Mkurugenzi",
+        "description": "Uthibitishaji wa KYC ya Biashara"
+      },
+      "sections": {
+        "companyInformation": "Jaza taarifa zako za kampuni, mkurugenzi, na benki",
+        "directorInformation": "Taarifa za Kampuni",
+        "uploadDirectorId": "Taarifa za Mkurugenzi"
+      },
+      "fields": {
+        "companyName": "Pakia Kitambulisho cha Mkurugenzi",
+        "companyEmail": "Jina la Kampuni",
+        "companyPhone": "Barua pepe ya Kampuni",
+        "companyAddress": "Nambari ya simu ya kampuni",
+        "taxId": "Anwani ya Kampuni"
+      }
+    },
+    "verification": {
+      "userBadge": "Kitambulisho cha kodi",
+      "title": "Mtumiaji",
+      "description": "Hali ya Uthibitishaji",
+      "overallStatus": "Maendeleo ya uthibitisho wa akaunti",
+      "progressSummary": "{{completed}} of {{total}} verification levels completed",
+      "steps": {
+        "personal": {
+          "title": "Hali ya Uthibitishaji kwa Ujumla",
+          "description": "Taarifa za Kibinafsi"
+        },
+        "identity": {
+          "title": "Maelezo ya msingi ya kibinafsi na taarifa za mawasiliano",
+          "description": "Utambulisho"
+        },
+        "bvn": {
+          "title": "Uthibitisho wa Utambulisho",
+          "description": "Uthibitisho wa kitambulisho kilichotolewa na serikali"
+        },
+        "bank": {
+          "title": "Uthibitishaji wa BVN",
+          "description": "Uhakiki wa Nambari ya Uthibitishaji ya Benki"
+        }
+      }
+    },
+    "dashboard": {
+      "title": "Uthibitishaji wa Akaunti ya Benki",
+      "subtitle": "Maelezo ya akaunti ya benki kwa malipo",
+      "cards": {
+        "totalDonations": "Dashibodi ya Michango",
+        "donationsReceived": "{{count}} michango iliyopokelewa",
+        "settlements": "Malipo",
+        "settlementsCompleted": "{{count}} malipo yaliyokamilika",
+        "transactionsPending": "{{count}} transaction(s) pending"
+      },
+      "history": {
+        "title": "Historia ya Miamala",
+        "description": "Tazama miamala yako yote ya michango na malipo",
+        "export": "Toa",
+        "loading": "Inapakia...",
+        "donationType": "Mchango",
+        "empty": "Hakuna miamala bado",
+        "table": {
+          "reference": "Rejea",
+          "profile": "Wasifu",
+          "type": "Aina",
+          "donorDescription": "Mfadhili/Maelezo",
+          "purpose": "Lengo",
+          "amount": "Kiasi",
+          "date": "Tarehe",
+          "status": "Hali"
+        }
+      }
+    }
+  },
+  "inviteHistory": {
+    "title": "Historia ya Mialiko",
+    "actions": {
+      "sendInvite": "Tuma Mwaliko",
+      "resendInvite": "Tuma Mwaliko Tena"
+    },
+    "table": {
+      "type": "Tuma Mwaliko",
+      "roomName": "Aina",
+      "guest": "Jina la chumba",
+      "dateSent": "Mgeni",
+      "action": "Tarehe ya Kutumwa"
+    },
+    "states": {
+      "loadErrorTitle": "Kitendo",
+      "loadErrorDescription": "Haiwezekani kupakia historia ya mialiko.",
+      "noData": "Angalia muunganisho wako na ujaribu tena."
+    },
+    "dialog": {
+      "title": "Hakuna data inayopatikana kwa jedwali hili",
+      "description": "Haikuwezekana kupakia historia ya mialiko."
+    },
+    "meetingForm": {
+      "labels": {
+        "roomName": "Tuma Mwaliko Mpya",
+        "hostname": "Tuma mwaliko wa mkutano uliopangwa",
+        "title": "Tuma Mwaliko Mpya",
+        "date": "Jina la Chumba",
+        "time": "Hostname",
+        "timezone": "Kichwa",
+        "additionalInformation": "Tarehe",
+        "guestEmails": "Muda"
+      },
+      "placeholders": {
+        "selectRoom": "Muda wa eneo",
+        "searchRoom": "Taarifa za ziada",
+        "noRoomFound": "Barua pepe za Wageni",
+        "hostname": "Chagua chumba...",
+        "title": "Tafuta chumba...",
+        "pickDate": "Hakuna chumba kilichopatikana.",
+        "selectTimezone": "Jina la mwenyeji",
+        "searchTimezone": "Kichwa",
+        "noTimezoneFound": "Chagua tarehe",
+        "additionalInformation": "Chagua eneo la saa...",
+        "guestEmails": "Tafuta eneo la saa..."
+      },
+      "actions": {
+        "submitting": "Hakuna eneo la saa lililopatikana."
+      },
+      "toasts": {
+        "sent": "Ingiza taarifa za ziada",
+        "retry": "Weka barua pepe za wageni zilizotenganishwa kwa koma"
+      },
+      "validation": {
+        "roomRequired": "Inasubmitishwa...",
+        "hostnameRequired": "Tuma Mwaliko",
+        "titleRequired": "Angalia muunganisho wako na jaribu tena.",
+        "dateRequired": "Chumba kinahitajika.",
+        "timeRequired": "Jina la mwenyeji linahitajika.",
+        "timezoneRequired": "Kichwa kinahitajika.",
+        "additionalRequired": "Tarehe inahitajika.",
+        "guestRequired": "Muda unahitajika.",
+        "guestInvalid": "Eneo la saa linahitajika."
+      }
+    }
+  },
+  "events": {
+    "list": {
+      "actions": {
+        "participants": "Washiriki",
+        "eventLink": "Kiungo cha Tukio"
+      },
+      "summary": {
+        "totalEvents": "Matukio yote",
+        "totalParticipants": "Washiriki Wote"
+      },
+      "table": {
+        "title": "Kichwa",
+        "host": "Mwenyeji",
+        "room": "Chumba",
+        "date": "Tarehe",
+        "time": "Muda",
+        "timeZone": "Muda wa kanda",
+        "action": "Kitendo"
+      },
+      "states": {
+        "untitled": "Isiyo na kichwa",
+        "notAvailable": "Hakipatikani",
+        "noRoom": "Hakuna Nafasi",
+        "emptyValue": "-",
+        "empty": "Hakuna matukio yaliyopatikana."
+      },
+      "toasts": {
+        "linkCopied": "Kiungo cha tukio kime nakiliwa!"
+      }
+    },
+    "create": {
+      "title": "Tengeneza Tukio",
+      "description": "Jaza fomu ili kuunda tukio papo hapo",
+      "selectedFile": "Iliyochaguliwa: {{name}}",
+      "logoRecommendation": "Inapendekezwa: 80px kwa 80px, muundo wa PNG",
+      "fileHelp": "JPG, PNG, au PDF (kiasi cha juu 10MB)",
+      "fields": {
+        "eventTitle": "Kichwa cha Tukio",
+        "hostName": "Jina la Mwenyeji",
+        "selectRoom": "Chagua Chumba",
+        "eventDate": "Tarehe ya Tukio",
+        "eventTime": "Muda wa Tukio",
+        "eventType": "Aina ya Tukio",
+        "currency": "Sarafu",
+        "amount": "Kiasi",
+        "timeZone": "Zona ya saa",
+        "aboutEvent": "Kuhusu tukio",
+        "setReminder": "Weka Kikumbusho",
+        "uploadLogo": "Pakia nembo *"
+      },
+      "placeholders": {
+        "eventTitle": "Ingiza kichwa cha tukio lako",
+        "hostName": "Ingiza jina la mwenyeji",
+        "amount": "6000",
+        "selectTimezone": "Chagua eneo la saa",
+        "aboutEvent": "Andika maelezo mafupi kuhusu tukio lako",
+        "selectReminder": "Chagua kumbusho",
+        "selectOrDropFile": "Chagua faili au liache hapa"
+      },
+      "eventTypes": {
+        "free": "Bure",
+        "paid": "Imelipwa"
+      },
+      "reminders": {
+        "twoDays": "siku 2 kabla",
+        "oneDay": "siku 1 kabla",
+        "twelveHours": "Saa 12 kabla"
+      },
+      "states": {
+        "loadingRooms": "Vyumba vya kupakia..."
+      },
+      "actions": {
+        "submitting": "Inasubmiti..."
+      },
+      "validation": {
+        "logoRequired": "Upakiaji wa nembo ni lazima."
+      },
+      "toasts": {
+        "created": "Tukio limeundwa kwa mafanikio!",
+        "createFailed": "Uundaji wa tukio umeshindikana. Tafadhali angalia maingizo yako.",
+        "createError": "Imeshindikana kuunda tukio. Tafadhali jaribu tena."
+      }
+    },
+    "participants": {
+      "title": "Watumiaji Waliosajiliwa Awali ({{count}})",
+      "showing": "Inaonyesha {{from}}-{{to}} kati ya {{total}}",
+      "actions": {
+        "copy": "Nakili",
+        "csv": "CSV",
+        "excel": "Excel",
+        "print": "Chapisha",
+        "sendReminder": "Tuma Kikumbusho Sasa"
+      },
+      "filters": {
+        "search": "Tafuta"
+      },
+      "table": {
+        "serial": "Tafuta",
+        "name": "S/N",
+        "email": "Jina",
+        "phone": "Barua pepe",
+        "dateTime": "Simu"
+      },
+      "states": {
+        "loading": "Tarehe na saa",
+        "empty": "Inapakia..."
+      },
+      "toasts": {
+        "reminderSent": "Hakuna washiriki waliopatikana.",
+        "reminderFailed": "Kikumbusho kimepelekwa.",
+        "copied": "Imeshindikana kutuma kikumbusho.",
+        "copyFailed": "Imenakiliwa kwenye kibao cha kunakili.",
+        "csvDownloaded": "Kuiga kumeshindikana (kivinjari kimezuia kibodi ya kunakili).",
+        "excelDownloaded": "CSV imepakuliwa."
+      }
+    }
+  },
+  "streaming": {
+    "toasts": {
+      "ended": "Utoaji wa moja kwa moja umekamilika kwa mafanikio",
+      "started": "Mtiririko ulianza",
+      "comboStarted": "Utoaji wa combo umeanza"
+    },
+    "states": {
+      "loadErrorTitle": "Utoaji wa mfululizo wa combo umemalizika",
+      "loadErrorDescription": "Hatuwezi kupakia mitiririko kwa sasa.",
+      "temporaryRoom": "Tafadhali jaribu tena baada ya kuangalia muunganisho wako.",
+      "noData": "Chumba cha muda"
+    },
+    "actions": {
+      "stream": "Hakuna data inayopatikana kwa jedwali hili",
+      "stopStreaming": "Sasisha",
+      "submit": "Simamisha Utiririshaji"
+    },
+    "stats": {
+      "totalStreams": "Wasilisha",
+      "activeStreams": "Jumla ya Mitiririko"
+    },
+    "table": {
+      "number": "Mitiririko Inayoendelea",
+      "roomName": "Hapana",
+      "type": "Jina la Chumba",
+      "status": "Aina",
+      "startedAt": "Hali",
+      "endedAt": "Ilianza Siku",
+      "action": "Iliyomalizika"
+    },
+    "status": {
+      "running": "Kitendo",
+      "ended": "Inakimbia"
+    },
+    "dialog": {
+      "title": "Imeisha",
+      "description": "Tengeneza mtiririko mpya"
+    },
+    "form": {
+      "selectRoom": "Anza kutiririsha mkutano wako kwenye majukwaa mbalimbali",
+      "loadingRooms": "Chagua Chumba",
+      "type": "Inapakia vyumba...",
+      "selectType": "Aina",
+      "searchType": "Chagua aina...",
+      "noTypeFound": "Tafuta aina...",
+      "youtubeKey": "Hakuna aina iliyopatikana.",
+      "enterYouTubeKey": "Ufunguo wa YouTube",
+      "facebookKey": "Ingiza Ufunguo wa YouTube",
+      "enterFacebookKey": "Ufunguo wa Facebook",
+      "key": "Ingiza Ufunguo wa Facebook",
+      "enterKey": "Ufunguo",
+      "validation": {
+        "roomRequired": "Ingiza Ufunguo",
+        "typeInvalid": "Chumba kinahitajika.",
+        "youtubeKeyRequired": "Chagua aina halali.",
+        "facebookKeyRequired": "Ufunguo wa YouTube unahitajika kwa Combo.",
+        "keyRequired": "Ufunguo wa Facebook unahitajika kwa Combo."
+      },
+      "types": {
+        "youtube": "Ufunguo unahitajika.",
+        "facebook": "Youtube",
+        "combo": "Facebook"
+      }
+    }
+  },
+  "recordings": {
+    "toasts": {
+      "deleted": "Rekodi imefutwa kwa mafanikio",
+      "linkCopied": "Kiungo cha rekodi kime nakiliwa kwenye kibao"
+    },
+    "stats": {
+      "totalRecordings": "Jumla ya rekodi"
+    },
+    "filters": {
+      "searchPlaceholder": "Tafuta kwa jina la mkutano...",
+      "clear": "Safisha Vichujio",
+      "noMatch": "Hakuna rekodi zinazolingana na kichujio chako"
+    },
+    "table": {
+      "meetingName": "Jina la Mkutano",
+      "parameters": "Vigezo",
+      "date": "Tarehe",
+      "options": "Chaguzi",
+      "participants": "{{count}} washiriki",
+      "minutes": "{{count}} Dakika",
+      "megabytes": "{{count}} MB"
+    },
+    "actions": {
+      "playVideo": "Cheza video",
+      "copyLink": "Nakili Kiungo",
+      "download": "Pakua",
+      "video": "Video",
+      "screenshare": "Screenshare",
+      "chats": "Chats",
+      "delete": "Futa",
+      "cancel": "Futa"
+    },
+    "dialog": {
+      "deleteTitle": "Thibitisha Ufutaji",
+      "deleteDescription": "Hatua hii haiwezi kurejeshwa."
+    }
+  },
+  "profile": {
+    "tabs": {
+      "info": "Maelezo ya Wasifu",
+      "password": "Sasisha Nenosiri",
+      "sessions": "Vikao vya kivinjari"
+    },
+    "toasts": {
+      "copied": "Vikao vya kivinjari"
+    },
+    "states": {
+      "profileLoadErrorTitle": "Imebanwa kwenye kibao cha kunakili",
+      "profileLoadErrorDescription": "Haiwezekani kupakia taarifa za wasifu.",
+      "sessionsLoadErrorTitle": "Tafadhali sasisha na ujaribu tena.",
+      "sessionsLoadErrorDescription": "Haiwezekani kupakia vikao vya kivinjari.",
+      "notAvailable": "Tafadhali burudisha na ujaribu tena.",
+      "unknownBrowser": "Hakipatikani",
+      "unknownLocation": "Kivinjari kisichojulikana"
+    },
+    "info": {
+      "photo": "Mahali pasipojulikana",
+      "activePlan": "Picha",
+      "referralCode": "Mpango unaotumika",
+      "referralLink": "Nambari ya rufaa",
+      "copy": "Kiungo cha rufaa"
+    },
+    "password": {
+      "helper": "Nakala"
+    },
+    "sessions": {
+      "helper": "Hakikisha akaunti yako inatumia nenosiri ndefu la nasibu ili iwe salama.",
+      "thisDevice": "Ikiwa ni lazima, unaweza kutoka kwenye vikao vyako vyote vingine vya kivinjari kwenye vifaa vyako vyote.",
+      "otherDevices": "Kifaa hiki",
+      "logoutOtherSessions": "Vifaa vingine"
+    },
+    "form": {
+      "imageAlt": "Kutoa Kikao Kingine cha kivinjari",
+      "firstName": "Wasifu",
+      "lastName": "Jina la Kwanza",
+      "phone": "Jina la mwisho",
+      "updating": "Simu",
+      "submit": "Inasasishwa...",
+      "validation": {
+        "firstNameMin": "Sasisha Wasifu",
+        "lastNameMin": "Jina la kwanza lazima liwe na angalau herufi 2",
+        "phoneMin": "Jina la mwisho lazima liwe na angalau herufi 2"
+      },
+      "errors": {
+        "load": "Nambari ya simu lazima iwe na angalau tarakimu 10.",
+        "updateFailed": "Haiwezekani kupakia maelezo ya wasifu kwa sasa.",
+        "updateSuccess": "Haikuwezekana kusasisha wasifu."
+      }
+    },
+    "passwordForm": {
+      "currentPassword": "Wasifu umesasishwa kwa mafanikio.",
+      "newPassword": "Nenosiri lililopo",
+      "confirmNewPassword": "Nenosiri Jipya",
+      "currentPasswordPlaceholder": "Thibitisha Nenosiri Jipya",
+      "newPasswordPlaceholder": "Ingiza nenosiri la sasa",
+      "confirmNewPasswordPlaceholder": "Ingiza nenosiri jipya",
+      "submit": "Thibitisha nenosiri jipya",
+      "validation": {
+        "currentPasswordMin": "Hifadhi",
+        "newPasswordMin": "Nenosiri la sasa lazima liwe na angalau herufi 6.",
+        "confirmPasswordMin": "Nenosiri jipya lazima liwe na angalau herufi 6.",
+        "passwordsMustMatch": "Nenosiri la kuthibitisha lazima liwe na angalau herufi 6."
+      }
+    }
+  },
+  "referees": {
+    "title": "Orodha ya Marefa",
+    "controls": {
+      "showEntries": "Onyesha vingine",
+      "search": "Tafuta:",
+      "searchPlaceholder": "Tafuta marefa"
+    },
+    "table": {
+      "serial": "Tafuta marefa",
+      "name": "#",
+      "emailAddress": "Jina",
+      "plan": "Anwani ya barua pepe",
+      "dateRegistered": "Mpango"
+    },
+    "states": {
+      "loadErrorTitle": "Tarehe ya Usajili",
+      "loadErrorDescription": "Haiwezekani kupakia marefari.",
+      "empty": "Tafadhali jaribu tena wakati mtandao wako utakapokuwa thabiti.",
+      "notAvailable": "Hakuna data inayopatikana kwa jedwali hili"
+    }
+  },
+  "components": {
+    "dialog": {
+      "close": "Funga"
+    },
+    "pagination": {
+      "navigation": "Funga",
+      "previousAriaLabel": "pagination",
+      "previous": "Nenda kwenye ukurasa uliopita",
+      "nextAriaLabel": "Iliyopita",
+      "next": "Nenda kwenye ukurasa unaofuata",
+      "morePages": "Inayofuata"
+    },
+    "sheet": {
+      "close": "Kurasa zaidi"
+    },
+    "sidebar": {
+      "toggle": "Funga"
+    },
+    "fallbackScreens": {
+      "badge": {
+        "crash": "Badilisha Upau wa Kando",
+        "offline": "Urekebishaji wa Programu"
+      },
+      "offline": {
+        "title": "Hali ya Mtandao",
+        "description": "Hakuna muunganisho wa intaneti"
+      },
+      "crash": {
+        "title": "Kwa sasa haupo mtandaoni. Ungana tena ili kuendelea kutumia vipengele vya Konn3ct na masasisho ya moja kwa moja.",
+        "description": "Tumekumbana na tatizo lisilotarajiwa"
+      },
+      "route": {
+        "title": "Konn3ct haikuweza kuonyesha skrini hii kwa usalama. Tafadhali jaribu tena au rudi kwenye dashibodi yako.",
+        "description": "Kuna tatizo limetokea kwenye njia hii",
+        "pageNotFoundTitle": "Ukurasa huu umekumbana na tatizo lisilotarajiwa. Unaweza kujaribu tena au kurudi nyuma kwa usalama.",
+        "pageNotFoundDescription": "Ukurasa haujapatikana",
+        "routeErrorTitle": "Hitilafu ya njia ({{status}})"
+      }
+    }
+  }
+}

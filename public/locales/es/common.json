@@ -1,0 +1,1155 @@
+{
+  "common": {
+    "or": "O",
+    "emailAddress": "Dirección de correo electrónico",
+    "password": "Contraseña",
+    "continueWith": "Continuar con:",
+    "facebook": "Facebook",
+    "google": "Google",
+    "apple": "Apple",
+    "sso": "SSO",
+    "searchCountryOrCode": "Buscar país o código",
+    "noCountryMatches": "No hay ningún país que coincida con tu búsqueda.",
+    "selectCountry": "Seleccionar país",
+    "actions": {
+      "cancel": "Cancelar",
+      "create": "Crear",
+      "delete": "Eliminar",
+      "managePlan": "Gestionar plan",
+      "save": "Guardar",
+      "submit": "Enviar",
+      "transfer": "Transferir",
+      "upload": "Cargar",
+      "visitMeeting": "Visitar reunión",
+      "testAudioAndVideo": "Probar audio y vídeo",
+      "retry": "Reintentar",
+      "refresh": "Actualizar",
+      "goBack": "Volver",
+      "goHome": "Ir a la página de inicio",
+      "goToDashboard": "Ir al panel de control"
+    },
+    "status": {
+      "copiedToClipboard": "Copiado al portapapeles",
+      "noMeetingId": "No se ha encontrado ningún ID de reunión",
+      "error": "Error"
+    },
+    "forms": {
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "email": "Correo electrónico",
+      "phone": "Teléfono",
+      "address": "Dirección"
+    }
+  },
+  "app": {
+    "sidebar": {
+      "groupLabel": "Personal",
+      "home": "Inicio",
+      "profile": "Perfil",
+      "rooms": "Salas de reuniones",
+      "streaming": "Transmisión",
+      "recordings": "Grabaciones",
+      "payments": "Planes y pagos",
+      "addons": "Complementos",
+      "referees": "Referentes",
+      "donations": "Donaciones",
+      "attendance": "Asistencia",
+      "events": "Eventos",
+      "history": "Historial de invitaciones",
+      "settings": "Configuración",
+      "logout": "Cerrar sesión"
+    },
+    "navbar": {
+      "logoAlt": "Logotipo de Konn3ct",
+      "solutions": "Soluciones",
+      "plansAndPricing": "Planes y precios",
+      "dashboard": "Panel",
+      "schedule": "Agenda",
+      "join": "Unirse",
+      "host": "Anfitrión",
+      "createMeeting": "Crear nueva reunión",
+      "startStreaming": "Iniciar transmisión",
+      "joinMeetingRoom": "Unirse a una sala de reuniones",
+      "signIn": "Iniciar sesión",
+      "signUpFree": "Regístrate, es gratis",
+      "toggleMenu": "Alternar el menú de navegación"
+    }
+  },
+  "auth": {
+    "termsPrefix": "By signing up you understand and agree to the Konn3ct Terms of Use. For more information about Privacy Data visit the",
+    "privacyLinkLabel": "Konn3ct Privacy Data Sheets.",
+    "sideDetail": {
+      "features": [
+        "Meeting length up to 60 min for FREE",
+        "Transcription & Translation",
+        "Meeting Summary & Highlights",
+        "Auto Attendance",
+        "Share Youtube Videos(eCinema)",
+        "Livestream to Youtube & Facebook Concurrently",
+        "Receive Donations in your Meeting",
+        "Multi-User, Multi-Page and Friendly Whiteboard",
+        "Create Public & Private, Free & Paid Events"
+      ]
+    },
+    "login": {
+      "title": "Sign in",
+      "submit": "Sign in",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign up",
+      "forgotPassword": "Forgot password?",
+      "successTitle": "Login Successful",
+      "errorTitle": "Login Unsuccessful",
+      "googleUserInfoMissing": "Google user info URL is not configured.",
+      "appleFailedTitle": "Apple login failed",
+      "appleFailedDescription": "Could not complete Apple login",
+      "appleUnavailable": "Apple sign-in is temporarily unavailable.",
+      "appleLoading": "Apple sign-in is still loading. Please try again.",
+      "ssoFailedTitle": "SSO Login Failed",
+      "ssoFailedDescription": "Your device is not registered for this access. Please contact your system administrator.",
+      "validation": {
+        "email": "Invalid email address.",
+        "passwordMin": "Password must be at least 6 characters."
+      }
+    },
+    "register": {
+      "title": "Sign Up",
+      "submit": "Sign up",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Enter your password",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Samuel",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Odejinmi",
+      "phone": "Phone",
+      "referralCode": "Referral Code",
+      "referralCodePlaceholder": "Referral Code",
+      "alreadyHaveAccount": "Already have an account?",
+      "signIn": "Sign in",
+      "successTitle": "Sign-up Successful",
+      "errorTitle": "Sign-up Unsuccessful",
+      "loginSuccessTitle": "Login Successful",
+      "loginErrorTitle": "Login Unsuccessful",
+      "googleUserInfoMissing": "Google user info URL is not configured.",
+      "appleUnavailable": "Apple sign-in is temporarily unavailable.",
+      "appleLoading": "Apple sign-in is still loading. Please try again.",
+      "validation": {
+        "email": "Invalid email address.",
+        "passwordMin": "Password must be at least 8 characters.",
+        "passwordUppercase": "Password must contain at least one uppercase letter.",
+        "passwordLowercase": "Password must contain at least one lowercase letter.",
+        "passwordNumber": "Password must contain at least one number.",
+        "passwordSpecialCharacter": "Password must contain at least one special character (@$!%*?&).",
+        "firstNameRequired": "First name is required.",
+        "firstNameWhitespace": "First name is required and cannot be empty or whitespace.",
+        "lastNameRequired": "Last name is required.",
+        "lastNameWhitespace": "Last name is required and cannot be empty or whitespace.",
+        "countryRequired": "Country code is required.",
+        "phoneTooShort": "Phone number is too short for the selected country.",
+        "phoneTooLong": "Phone number is too long for the selected country.",
+        "phoneInvalidLength": "Phone number length is invalid for the selected country.",
+        "phoneInvalid": "Enter a valid phone number for the selected country."
+      }
+    },
+    "forgotPassword": {
+      "step1": {
+        "title": "Forgot password",
+        "description": "Please enter your email to reset the password",
+        "emailPlaceholder": "Enter your email address",
+        "sending": "Sending...",
+        "submit": "Reset Password"
+      },
+      "step2": {
+        "title": "Check your email",
+        "description": "We sent a reset code to {{email}}. Enter the 4-digit code.",
+        "submit": "Continue"
+      },
+      "step3": {
+        "title": "Set a new password",
+        "description": "Create a new password. Ensure it differs from previous ones.",
+        "passwordPlaceholder": "Enter new password",
+        "confirmPasswordLabel": "Confirm Password",
+        "confirmPasswordPlaceholder": "Re-enter password",
+        "updating": "Updating...",
+        "submit": "Update Password"
+      },
+      "step4": {
+        "title": "Password Updated!",
+        "description": "Your password has been successfully reset. You can now sign in with your new password.",
+        "submit": "Go to Login"
+      },
+      "validation": {
+        "emailRequired": "Please enter your email address.",
+        "resetRequestFailed": "Failed to request reset.",
+        "codeInvalid": "Enter a valid 4-digit code.",
+        "fillAllFields": "Please fill in all fields.",
+        "passwordsMismatch": "Passwords do not match.",
+        "resetFailed": "Failed to reset password."
+      }
+    }
+  },
+  "dashboard": {
+    "currentPlan": "Tu plan actual: Konn3ct {{plan}}",
+    "stats": {
+      "totalRoom": "Total de salas",
+      "activeRoom": "Habitaciones activas",
+      "inactiveRoom": "Sala inactiva",
+      "privateRoom": "Sala privada"
+    },
+    "gettingStarted": "Empecemos",
+    "videoTitle": "Vídeo de introducción",
+    "quickActions": {
+      "schedule": "Programar",
+      "join": "Unirse",
+      "host": "Anfitrión",
+      "scheduleIconAlt": "programar",
+      "joinIconAlt": "unirse",
+      "hostIconAlt": "anfitrión"
+    },
+    "personalMeetingId": "ID de reunión personal",
+    "noIdAvailable": "No hay ID disponible",
+    "meetings": {
+      "title": "Reuniones",
+      "empty": "No hay reuniones próximas",
+      "room": "Sala: {{room}}",
+      "host": "Anfitrión: {{host}}"
+    },
+    "scheduleDialog": {
+      "title": "Enviar una nueva invitación",
+      "description": "Enviar una invitación para una reunión programada"
+    }
+  },
+  "settings": {
+    "title": "Configuraci?n",
+    "description": "Gestiona las preferencias de tu panel de control y mant?n tu espacio de trabajo c?modo.",
+    "tabs": {
+      "general": "General"
+    },
+    "appearance": {
+      "title": "Apariencia",
+      "description": "Elige el aspecto del panel de control. Selecciona el modo claro, el modo oscuro o sincron?zalo con tu sistema.",
+      "activeTheme": "Tema activo",
+      "systemActiveTheme": "Sistema ({{theme}})",
+      "systemModeDescription": "Actualmente sigue la configuraci?n de tu dispositivo y se ajusta al modo {{theme}}.",
+      "options": {
+        "light": {
+          "label": "Claro",
+          "description": "Utiliza una interfaz m?s brillante con superficies n?tidas y mayor visibilidad a la luz del d?a."
+        },
+        "dark": {
+          "label": "Oscuro",
+          "description": "Reduce el deslumbramiento con superficies m?s oscuras que resultan m?s agradables a la vista por la noche."
+        },
+        "system": {
+          "label": "Sistema",
+          "description": "Se sincroniza autom?ticamente con las preferencias de tu dispositivo y reacciona a los cambios del sistema."
+        }
+      }
+    }
+  },
+  "payments": {
+    "loadingPlans": "Cargando planes...",
+    "currentPlan": "Plan actual",
+    "actions": {
+      "renewSubscriptions": "Renovar suscripciones",
+      "changePlan": "Cambiar plan",
+      "receipt": "Recibo",
+      "payNow": "Pagar ahora",
+      "contactSales": "Contactar con ventas"
+    },
+    "listTitle": "Lista de pagos",
+    "table": {
+      "type": "Tipo",
+      "plan": "Plan",
+      "issuedTo": "Emitido a",
+      "paymentMethod": "Método de pago",
+      "reference": "Referencia",
+      "paymentDate": "Fecha de pago",
+      "amount": "Importe",
+      "action": "Acción"
+    },
+    "empty": "No se han encontrado pagos",
+    "dialogTitle": "Planes y pagos",
+    "checkoutProfileError": "No se pueden cargar los datos de tu perfil para realizar el pago.",
+    "loadingUser": "Cargando usuario...",
+    "billingCycle": {
+      "monthly": "Mensual",
+      "yearly": "Anual"
+    },
+    "planCard": {
+      "targetIndividuals": "Para particulares",
+      "targetEnterprise": "Para empresas",
+      "customPrice": "Personalizado",
+      "customFeatures": "Características personalizadas",
+      "free": "Gratis",
+      "upgrade": "Actualizar"
+    },
+    "features": {
+      "yes": "Sí",
+      "no": "No",
+      "recording": "Grabación: {{value}}",
+      "duration": "Duración: {{value}} minutos",
+      "participants": "Participantes: {{value}}",
+      "rooms": "Salas: {{value}}",
+      "customizeLink": "Salas de grupos: {{value}}",
+      "breakoutRooms": "Código de acceso: {{value}}",
+      "accessCode": "Número de acceso: {{value}}",
+      "dialIn": "Dial-in: {{value}}"
+    },
+    "states": {
+      "loadErrorTitle": "No se pueden cargar los pagos y los planes.",
+      "loadErrorDescription": "Actualiza la página e inténtalo de nuevo.",
+      "notAvailable": "N/A"
+    },
+    "toasts": {
+      "allowPopups": "Permita las ventanas emergentes para imprimir el recibo",
+      "purchaseSuccessful": "Compra realizada con éxito",
+      "paymentCancelled": "Pago cancelado"
+    },
+    "receipt": {
+      "title": "Recibo de pago",
+      "issuedTo": "Emitido a:",
+      "plan": "Plan:",
+      "paymentType": "Tipo de pago:",
+      "paymentMethod": "Método de pago:",
+      "reference": "Referencia:",
+      "paymentDate": "Fecha de pago:",
+      "amountPaid": "Importe pagado:",
+      "footer": "Este recibo se ha generado electrónicamente."
+    }
+  },
+  "rooms": {
+    "actions": {
+      "createRoom": "Crear sala",
+      "scheduleMeeting": "Programar una reunión",
+      "copyLink": "Copiar enlace",
+      "manage": "Gestionar",
+      "startMeeting": "Iniciar reunión"
+    },
+    "stats": {
+      "totalRoom": "Total de salas",
+      "activeRoom": "Sala activa",
+      "scheduledRoom": "Sala programada",
+      "inactiveRoom": "Sala inactiva"
+    },
+    "table": {
+      "name": "NOMBRE",
+      "roomUrl": "URL DE LA SALA",
+      "actions": "ACCIONES"
+    },
+    "states": {
+      "loadErrorTitle": "No se pueden cargar las salas en este momento.",
+      "loadErrorDescription": "Comprueba tu conexión e inténtalo de nuevo.",
+      "noData": "No hay datos disponibles para esta tabla"
+    },
+    "toasts": {
+      "linkCopied": "Copiado al portapapeles",
+      "meetingStartedMissingUrl": "La reunión ha comenzado, pero no se ha devuelto ninguna URL de inicio.",
+      "meetingStarted": "La reunión ha comenzado correctamente",
+      "accessCodeUpdated": "Código de acceso actualizado correctamente",
+      "userLimitUpdated": "Límite de usuarios actualizado correctamente",
+      "bannerUploaded": "Banner cargado correctamente",
+      "roomTransferred": "Sala transferida correctamente",
+      "meetingCreated": "Reunión creada correctamente",
+      "planLimitReachedTitle": "Se ha alcanzado el límite del plan",
+      "planLimitReachedDescription": "Ha alcanzado el número máximo de salas de su plan actual. Actualice su plan para crear más reuniones.",
+      "planLimitReachedDescriptionWithAddons": "Ha alcanzado el número máximo de salas de su plan actual. Actualice su plan para crear más reuniones o visite Complementos para comprar más paquetes de salas",
+      "createError": "Se ha producido un error al crear la reunión."
+    },
+    "tooltips": {
+      "accessCodeRequired": "Se requiere código de acceso",
+      "roomHasAccessCode": "La sala tiene código de acceso",
+      "meetingHasAccessCode": "La reunión tiene código de acceso"
+    },
+    "dialogs": {
+      "create": {
+        "title": "Crear una nueva sala",
+        "description": "Crearás una nueva sala de reuniones, accesible desde el panel de control."
+      },
+      "delete": {
+        "title": "Confirmar eliminación",
+        "description": "Esta acción no se puede deshacer."
+      },
+      "schedule": {
+        "title": "Programar una nueva reunión",
+        "description": "Enviar una invitación para una reunión programada"
+      }
+    },
+    "manageMenu": {
+      "accessCode": "Código de acceso",
+      "userLimit": "Límite de usuarios",
+      "bannerUpload": "Subir banner de la sala de reuniones",
+      "transferRoom": "Sala de transferencia"
+    },
+    "accessDialog": {
+      "title": "Gestionar código de acceso",
+      "typeLabel": "Tipo (automático / manual / eliminar)",
+      "typePlaceholder": "automático / manual / eliminar",
+      "accessCodeLabel": "Código de acceso (si es manual)",
+      "accessCodePlaceholder": "Introducir código de acceso"
+    },
+    "limitDialog": {
+      "title": "Limitar usuarios",
+      "userLimit": "Límite de usuarios",
+      "validation": {
+        "required": "Obligatorio"
+      }
+    },
+    "bannerDialog": {
+      "title": "Subir banner de la sala",
+      "selectBanner": "Seleccionar banner"
+    },
+    "transferDialog": {
+      "title": "Transferir sala",
+      "newOwnerEmail": "Correo electrónico del nuevo propietario",
+      "newOwnerEmailPlaceholder": "Introduzca el correo electrónico del nuevo propietario",
+      "validation": {
+        "email": "Dirección de correo electrónico no válida."
+      }
+    },
+    "createForm": {
+      "roomName": "Nombre de la sala",
+      "roomNamePlaceholder": "Introduce el nombre de la sala",
+      "roomUrl": "URL de la sala",
+      "roomUrlPlaceholder": "Opcional",
+      "creating": "Creando...",
+      "validation": {
+        "nameMin": "El nombre de la sala debe tener al menos 5 caracteres.",
+        "nameWhitespace": "El nombre de la sala es obligatorio y no puede estar vacío ni contener espacios en blanco."
+      }
+    },
+    "scheduledSheet": {
+      "title": "Reuniones programadas",
+      "description": "Tus próximas reuniones."
+    },
+    "scheduledCard": {
+      "locked": "Bloqueado",
+      "dateTime": "{{date}} a las {{time}}",
+      "guestsPreview": "Invitados: {{guests}}",
+      "guestCount": "Invitados: {{count}}",
+      "moreGuests": ", +{{count}} more",
+      "notAvailable": ":"
+    },
+    "join": {
+      "title": "N/A",
+      "termsPrefix": "Unirse a una reunión",
+      "privacyLinkLabel": "Al iniciar sesión, usted comprende y acepta los Términos de uso del ecosistema Newwaves. Para obtener más información sobre la política de privacidad, visite el",
+      "roomPlaceholder": "Fichas de datos de privacidad de Newwaves.",
+      "namePlaceholder": "Introduzca el nombre o el ID de la sala de reunión",
+      "emailPlaceholder": "Introduzca su nombre",
+      "submit": "Introduce tu dirección de correo electrónico",
+      "toasts": {
+        "meetingLinkMissing": "Konn3ct",
+        "genericError": "El enlace de la reunión no está configurado."
+      },
+      "validation": {
+        "email": "Se ha producido un error.",
+        "roomNameMin": "Dirección de correo electrónico no válida.",
+        "roomNameWhitespace": "El nombre de la sala debe tener al menos 2 caracteres.",
+        "nameMin": "El nombre de la sala no puede estar vacío ni contener espacios.",
+        "nameWhitespace": "El nombre de usuario debe tener al menos 2 caracteres."
+      }
+    }
+  },
+  "attendance": {
+    "common": {
+      "notAvailable": "N/A"
+    },
+    "upgrade": {
+      "roomTitle": "Sala {{room}}",
+      "overview": "Descripción",
+      "stats": {
+        "activeUser": "Usuario activo",
+        "activityScore": "Puntuación de actividad",
+        "timeline": "Cronología",
+        "polls": "Encuestas",
+        "donation": "Donación"
+      },
+      "table": {
+        "user": "Usuario",
+        "online": "En línea",
+        "talk": "Charla",
+        "webcam": "Cámara web",
+        "messages": "Mensajes",
+        "reactions": "Reaccionar",
+        "raise": "Levantar"
+      }
+    },
+    "list": {
+      "title": "Asistencia a reuniones",
+      "actions": {
+        "viewParticipants": "Ver participantes"
+      },
+      "table": {
+        "serial": "N.º de serie",
+        "meetingHost": "Anfitrión de la reunión",
+        "dateTime": "Fecha y hora",
+        "action": "Acción"
+      },
+      "states": {
+        "loading": "Cargando reuniones...",
+        "loadError": "No se pueden cargar los datos de asistencia a las reuniones.",
+        "empty": "No se ha encontrado ninguna asistencia a reuniones.",
+        "noDate": "Sin fecha"
+      }
+    },
+    "details": {
+      "title": "Asistencia a reuniones",
+      "actions": {
+        "copy": "Copiar",
+        "copied": "Copiado",
+        "csv": "CSV",
+        "excel": "Excel",
+        "print": "Imprimir",
+        "sendMinutes": "Enviar actas de la reunión",
+        "sendHighlights": "Enviar lo más destacado de la reunión",
+        "sendSummary": "Enviar resumen de la reunión",
+        "back": "Volver a Asistencia"
+      },
+      "filters": {
+        "search": "Buscar"
+      },
+      "table": {
+        "serial": "N.º de serie",
+        "name": "Nombre",
+        "email": "Correo electrónico",
+        "status": "Estado",
+        "dateTime": "Fecha y hora"
+      },
+      "status": {
+        "moderator": "Moderador",
+        "participant": "Participante"
+      },
+      "states": {
+        "loading": "Cargando datos de los participantes...",
+        "loadError": "No se pueden cargar los datos del participante.",
+        "missingParams": "Falta el meeting_id o el identificador.",
+        "empty": "No se han encontrado participantes para esta reunión."
+      },
+      "toasts": {
+        "copyFailed": "Error al copiar. Por favor, habilita el permiso del portapapeles o utiliza HTTPS.",
+        "allowPopups": "Por favor, permita la impresión de ventanas emergentes"
+      },
+      "export": {
+        "title": "Asistencia a la reunión ({{count}})",
+        "printFooter": "Esta impresión se ha generado electrónicamente."
+      },
+      "panel": {
+        "minutesTitle": "Acta de la reunión",
+        "highlightsTitle": "Puntos destacados de la reunión",
+        "summaryTitle": "Resumen de la reunión",
+        "noDataReturned": "No se han devuelto datos.",
+        "loadFailed": "No se ha podido cargar el contenido.",
+        "loading": "Cargando...",
+        "close": "Cerrar panel"
+      }
+    }
+  },
+  "addons": {
+    "title": "Lista de complementos",
+    "actions": {
+      "payNow": "Pagar ahora"
+    },
+    "table": {
+      "service": "Servicio",
+      "serviceDescription": "Descripción del servicio",
+      "status": "Estado",
+      "amount": "Importe",
+      "action": "Acción"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "running": "En curso",
+      "ended": "Finalizado",
+      "verified": "Verificado",
+      "pending": "Pendiente",
+      "success": "Éxito",
+      "failed": "Fallido",
+      "inProgress": "En curso",
+      "loading": "Cargando...",
+      "unknown": "..."
+    },
+    "states": {
+      "loadErrorTitle": "No se pueden cargar los complementos en este momento.",
+      "loadErrorDescription": "Inténtalo de nuevo en unos momentos.",
+      "noData": "No hay datos disponibles para esta tabla"
+    },
+    "toasts": {
+      "purchaseSuccessful": "Compra del complemento realizada con éxito",
+      "paymentCancelled": "Pago cancelado"
+    }
+  },
+  "donations": {
+    "actions": {
+      "startVerification": "Iniciar verificación",
+      "completeVerification": "Completar verificación"
+    },
+    "status": {
+      "verified": "Verificado",
+      "inProgress": "En curso",
+      "pending": "Pendiente",
+      "successful": "Correcto",
+      "failed": "Fallido"
+    },
+    "common": {
+      "bvn": "BVN",
+      "bank": "Banco",
+      "accountNumber": "Número de cuenta",
+      "accountName": "Nombre de la cuenta",
+      "idType": "Tipo de identificación",
+      "sections": {
+        "bankDetails": "Datos bancarios"
+      },
+      "states": {
+        "noBankFound": "No se ha encontrado ningún banco"
+      },
+      "placeholders": {
+        "enterBvn": "Introduzca el BVN de 10 dígitos",
+        "selectBank": "Seleccione su banco",
+        "searchBank": "Buscar banco...",
+        "enterAccountNumber": "Introduzca el número de cuenta de 10 dígitos",
+        "autoFilled": "Se rellenará automáticamente",
+        "selectIdType": "Selecciona el tipo de identificación"
+      },
+      "idTypes": {
+        "nin": "NIN",
+        "passport": "Pasaporte",
+        "driversLicense": "Permiso de conducir",
+        "votersCard": "Tarjeta de votante"
+      }
+    },
+    "success": {
+      "title": "¡Verificación completada!",
+      "description": "Tu cuenta ha sido verificada correctamente. Ya puedes empezar a aceptar donaciones."
+    },
+    "individual": {
+      "toasts": {
+        "kycFailed": "Error en la verificación de identidad",
+        "submitError": "Error al enviar el KYC"
+      },
+      "card": {
+        "title": "Cuenta individual",
+        "description": "Para recaudación de fondos personales y donantes individuales",
+        "features": {
+          "bvn": "Verificación de BVN",
+          "bank": "Verificación de cuenta bancaria",
+          "idUpload": "Subir documento de identidad"
+        }
+      },
+      "form": {
+        "title": "Verificación KYC de particulares",
+        "description": "Completa tus datos de verificación"
+      },
+      "sections": {
+        "personalInformation": "Información personal",
+        "governmentId": "Documento de identidad oficial",
+        "uploadIdDocument": "Subir documento de identidad"
+      }
+    },
+    "business": {
+      "toasts": {
+        "kycFailed": "Error en la verificación de identidad",
+        "submitError": "Error al enviar el KYC de la empresa"
+      },
+      "card": {
+        "title": "Cuenta empresarial",
+        "description": "Para empresas y organizaciones registradas",
+        "features": {
+          "companyInformation": "Información de la empresa",
+          "directorInformation": "Información del director",
+          "bankVerification": "Verificación de la cuenta bancaria",
+          "uploadDirectorId": "Subir el documento de identidad del director"
+        }
+      },
+      "form": {
+        "title": "Verificación KYC de la empresa",
+        "description": "Rellene los datos de su empresa, del director y bancarios"
+      },
+      "sections": {
+        "companyInformation": "Información de la empresa",
+        "directorInformation": "Información del director",
+        "uploadDirectorId": "Subir el documento de identidad del director"
+      },
+      "fields": {
+        "companyName": "Nombre de la empresa",
+        "companyEmail": "Correo electrónico de la empresa",
+        "companyPhone": "Teléfono de la empresa",
+        "companyAddress": "Dirección de la empresa",
+        "taxId": "NIF"
+      }
+    },
+    "verification": {
+      "userBadge": "Usuario",
+      "title": "Estado de la verificación",
+      "description": "Progreso de la verificación de la cuenta",
+      "overallStatus": "Estado general de la verificación",
+      "progressSummary": "{{completed}} of {{total}} verification levels completed",
+      "steps": {
+        "personal": {
+          "title": "Información personal",
+          "description": "Datos personales básicos e información de contacto"
+        },
+        "identity": {
+          "title": "Verificación de identidad",
+          "description": "Verificación de un documento de identidad oficial"
+        },
+        "bvn": {
+          "title": "Verificación del BVN",
+          "description": "Validación del número de verificación bancaria"
+        },
+        "bank": {
+          "title": "Verificación de la cuenta bancaria",
+          "description": "Datos de la cuenta bancaria para liquidaciones"
+        }
+      }
+    },
+    "dashboard": {
+      "title": "Panel de donaciones",
+      "subtitle": "Cuenta individual • Verificada",
+      "cards": {
+        "totalDonations": "Total de donaciones",
+        "donationsReceived": "{{count}} donaciones recibidas",
+        "settlements": "Liquidaciones",
+        "settlementsCompleted": "{{count}} liquidaciones completadas",
+        "transactionsPending": "{{count}} transacción(es) pendiente(s)"
+      },
+      "history": {
+        "title": "Historial de transacciones",
+        "description": "Ver todas tus transacciones de donaciones y liquidaciones",
+        "export": "Exportar",
+        "loading": "Cargando...",
+        "donationType": "Donación",
+        "empty": "Aún no hay transacciones",
+        "table": {
+          "reference": "Referencia",
+          "profile": "Perfil",
+          "type": "Tipo",
+          "donorDescription": "Donante/Descripción",
+          "purpose": "Finalidad",
+          "amount": "Importe",
+          "date": "Fecha",
+          "status": "Estado"
+        }
+      }
+    }
+  },
+  "inviteHistory": {
+    "title": "Historial de invitaciones",
+    "actions": {
+      "sendInvite": "Enviar invitación",
+      "resendInvite": "Reenviar invitación"
+    },
+    "table": {
+      "type": "Tipo",
+      "roomName": "Nombre de la sala",
+      "guest": "Invitado",
+      "dateSent": "Fecha de envío",
+      "action": "Acción"
+    },
+    "states": {
+      "loadErrorTitle": "No se puede cargar el historial de invitaciones.",
+      "loadErrorDescription": "Comprueba tu conexión e inténtalo de nuevo.",
+      "noData": "No hay datos disponibles para esta tabla"
+    },
+    "dialog": {
+      "title": "Enviar una nueva invitación",
+      "description": "Enviar una invitación para una reunión programada"
+    },
+    "meetingForm": {
+      "labels": {
+        "roomName": "Nombre de la sala",
+        "hostname": "Nombre de host",
+        "title": "Título",
+        "date": "Fecha",
+        "time": "Hora",
+        "timezone": "Zona horaria",
+        "additionalInformation": "Información adicional",
+        "guestEmails": "Correos electrónicos de los invitados"
+      },
+      "placeholders": {
+        "selectRoom": "Seleccionar una sala...",
+        "searchRoom": "Buscar habitación...",
+        "noRoomFound": "No se ha encontrado ninguna habitación.",
+        "hostname": "Nombre de host",
+        "title": "Título",
+        "pickDate": "Selecciona una fecha",
+        "selectTimezone": "Selecciona una zona horaria...",
+        "searchTimezone": "Buscar zona horaria...",
+        "noTimezoneFound": "No se ha encontrado ninguna zona horaria.",
+        "additionalInformation": "Introduce información adicional",
+        "guestEmails": "Introduzca los correos electrónicos de los invitados separados por comas"
+      },
+      "actions": {
+        "submitting": "Enviando..."
+      },
+      "toasts": {
+        "sent": "Enviar invitación",
+        "retry": "Comprueba tu conexión e inténtalo de nuevo."
+      },
+      "validation": {
+        "roomRequired": "Se requiere una sala.",
+        "hostnameRequired": "Se requiere el nombre de host.",
+        "titleRequired": "Se requiere un título.",
+        "dateRequired": "Se requiere la fecha.",
+        "timeRequired": "Se requiere la hora.",
+        "timezoneRequired": "Se requiere la zona horaria.",
+        "additionalRequired": "Se requiere un mensaje adicional",
+        "guestRequired": "Se requieren los correos electrónicos de los invitados.",
+        "guestInvalid": "Todos los correos electrónicos de los invitados deben ser válidos."
+      }
+    }
+  },
+  "events": {
+    "list": {
+      "actions": {
+        "participants": "Participantes",
+        "eventLink": "Enlace del evento"
+      },
+      "summary": {
+        "totalEvents": "Total de eventos",
+        "totalParticipants": "Total de participantes"
+      },
+      "table": {
+        "title": "Título",
+        "host": "Anfitrión",
+        "room": "Sala",
+        "date": "Fecha",
+        "time": "Hora",
+        "timeZone": "Zona horaria",
+        "action": "Acción"
+      },
+      "states": {
+        "untitled": "Sin título",
+        "notAvailable": "N/A",
+        "noRoom": "Sin habitación",
+        "emptyValue": "-",
+        "empty": "No se han encontrado eventos."
+      },
+      "toasts": {
+        "linkCopied": "¡Enlace del evento copiado!"
+      }
+    },
+    "create": {
+      "title": "Crear evento",
+      "description": "Rellena el formulario para crear un evento al instante",
+      "selectedFile": "Seleccionado: {{name}}",
+      "logoRecommendation": "Recomendado: 80 píxeles por 80 píxeles, formato PNG",
+      "fileHelp": "JPG, PNG o PDF (máx. 10 MB)",
+      "fields": {
+        "eventTitle": "Título del evento",
+        "hostName": "Nombre del anfitrión",
+        "selectRoom": "Seleccionar sala",
+        "eventDate": "Fecha del evento",
+        "eventTime": "Hora del evento",
+        "eventType": "Tipo de evento",
+        "currency": "Moneda",
+        "amount": "Importe",
+        "timeZone": "Zona horaria",
+        "aboutEvent": "Acerca del evento",
+        "setReminder": "Configurar recordatorio",
+        "uploadLogo": "Subir un logotipo *"
+      },
+      "placeholders": {
+        "eventTitle": "Introduce el título de tu evento",
+        "hostName": "Introduce el nombre del anfitrión",
+        "amount": "6000",
+        "selectTimezone": "Selecciona la zona horaria",
+        "aboutEvent": "Escribe una breve descripción de tu evento",
+        "selectReminder": "Selecciona un recordatorio",
+        "selectOrDropFile": "Selecciona un archivo o arrástralo aquí"
+      },
+      "eventTypes": {
+        "free": "Gratuito",
+        "paid": "De pago"
+      },
+      "reminders": {
+        "twoDays": "2 días antes",
+        "oneDay": "1 día antes",
+        "twelveHours": "12 horas antes"
+      },
+      "states": {
+        "loadingRooms": "Cargando salas..."
+      },
+      "actions": {
+        "submitting": "Enviando..."
+      },
+      "validation": {
+        "logoRequired": "Es obligatorio subir un logotipo."
+      },
+      "toasts": {
+        "created": "¡Evento creado correctamente!",
+        "createFailed": "Error al crear el evento. Por favor, comprueba los datos introducidos.",
+        "createError": "No se ha podido crear el evento. Inténtalo de nuevo."
+      }
+    },
+    "participants": {
+      "title": "Usuarios preinscritos ({{count}})",
+      "showing": "Mostrando {{from}}-{{to}} de {{total}}",
+      "actions": {
+        "copy": "Copiar",
+        "csv": "CSV",
+        "excel": "Excel",
+        "print": "Imprimir",
+        "sendReminder": "Enviar recordatorio ahora"
+      },
+      "filters": {
+        "search": "Buscar"
+      },
+      "table": {
+        "serial": "N.º de serie",
+        "name": "Nombre",
+        "email": "Correo electrónico",
+        "phone": "Teléfono",
+        "dateTime": "Fecha y hora"
+      },
+      "states": {
+        "loading": "Cargando...",
+        "empty": "No se han encontrado participantes."
+      },
+      "toasts": {
+        "reminderSent": "Recordatorio enviado.",
+        "reminderFailed": "No se ha podido enviar el recordatorio.",
+        "copied": "Copiado al portapapeles.",
+        "copyFailed": "Error al copiar (el navegador ha bloqueado el portapapeles).",
+        "csvDownloaded": "CSV descargado.",
+        "excelDownloaded": "Excel descargado."
+      }
+    }
+  },
+  "streaming": {
+    "toasts": {
+      "ended": "La transmisión ha finalizado correctamente",
+      "started": "Transmisión iniciada",
+      "comboStarted": "Transmisión combinada iniciada"
+    },
+    "states": {
+      "loadErrorTitle": "No se pueden cargar las transmisiones en este momento.",
+      "loadErrorDescription": "Vuelve a intentarlo después de comprobar tu conexión.",
+      "temporaryRoom": "Sala temporal",
+      "noData": "No hay datos disponibles para esta tabla"
+    },
+    "actions": {
+      "stream": "Transmisión",
+      "stopStreaming": "Detener transmisión",
+      "submit": "Enviar"
+    },
+    "stats": {
+      "totalStreams": "Total de transmisiones",
+      "activeStreams": "Transmisiones activas"
+    },
+    "table": {
+      "number": "N.º",
+      "roomName": "Nombre de la sala",
+      "type": "Tipo",
+      "status": "Estado",
+      "startedAt": "Inicio a las",
+      "endedAt": "Finalizó a las",
+      "action": "Acción"
+    },
+    "status": {
+      "running": "En ejecución",
+      "ended": "Finalizada"
+    },
+    "dialog": {
+      "title": "Crear una nueva transmisión",
+      "description": "Empieza a retransmitir tu reunión en varias plataformas"
+    },
+    "form": {
+      "selectRoom": "Seleccionar sala",
+      "loadingRooms": "Cargando salas...",
+      "type": "Tipo",
+      "selectType": "Seleccionar tipo...",
+      "searchType": "Buscar tipo...",
+      "noTypeFound": "No se ha encontrado ningún tipo.",
+      "youtubeKey": "Clave de YouTube",
+      "enterYouTubeKey": "Introducir clave de YouTube",
+      "facebookKey": "Clave de Facebook",
+      "enterFacebookKey": "Introducir clave de Facebook",
+      "key": "Clave",
+      "enterKey": "Introducir clave",
+      "validation": {
+        "roomRequired": "Se requiere una sala.",
+        "typeInvalid": "Selecciona un tipo válido.",
+        "youtubeKeyRequired": "Se requiere una clave de YouTube para Combo.",
+        "facebookKeyRequired": "Se requiere una clave de Facebook para Combo.",
+        "keyRequired": "Se requiere una clave."
+      },
+      "types": {
+        "youtube": "YouTube",
+        "facebook": "Facebook",
+        "combo": "Combinado (YouTube + Facebook)"
+      }
+    }
+  },
+  "recordings": {
+    "toasts": {
+      "deleted": "Grabación eliminada correctamente",
+      "linkCopied": "Enlace de la grabación copiado al portapapeles"
+    },
+    "stats": {
+      "totalRecordings": "Total de grabaciones"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar por nombre de reunión...",
+      "clear": "Borrar filtros",
+      "noMatch": "No hay grabaciones que coincidan con tu filtro"
+    },
+    "table": {
+      "meetingName": "Nombre de la reunión",
+      "parameters": "Parámetros",
+      "date": "Fecha",
+      "options": "Opciones",
+      "participants": "{{count}} participantes",
+      "minutes": "{{count}} minutos",
+      "megabytes": "{{count}} MB"
+    },
+    "actions": {
+      "playVideo": "Reproducir vídeo",
+      "copyLink": "Copiar enlace",
+      "download": "Descargar",
+      "video": "Vídeo",
+      "screenshare": "Compartir pantalla",
+      "chats": "Chats",
+      "delete": "Eliminar",
+      "cancel": "Cancelar"
+    },
+    "dialog": {
+      "deleteTitle": "Confirmar eliminación",
+      "deleteDescription": "Esta acción no se puede deshacer."
+    }
+  },
+  "profile": {
+    "tabs": {
+      "info": "Información del perfil",
+      "password": "Actualizar contraseña",
+      "sessions": "Sesiones del navegador"
+    },
+    "toasts": {
+      "copied": "Copiado al portapapeles"
+    },
+    "states": {
+      "profileLoadErrorTitle": "No se puede cargar la información del perfil.",
+      "profileLoadErrorDescription": "Actualiza la página e inténtalo de nuevo.",
+      "sessionsLoadErrorTitle": "No se pueden cargar las sesiones del navegador.",
+      "sessionsLoadErrorDescription": "Actualice la página e inténtelo de nuevo.",
+      "notAvailable": "N/A",
+      "unknownBrowser": "Navegador desconocido",
+      "unknownLocation": "Ubicación desconocida"
+    },
+    "info": {
+      "photo": "Foto",
+      "activePlan": "Plan activo",
+      "referralCode": "Código de referencia",
+      "referralLink": "Enlace de referencia",
+      "copy": "Copiar"
+    },
+    "password": {
+      "helper": "Asegúrate de que tu cuenta utilice una contraseña larga y aleatoria para mantener la seguridad."
+    },
+    "sessions": {
+      "helper": "Si es necesario, puede cerrar sesión en todas las demás sesiones de su navegador en todos sus dispositivos.",
+      "thisDevice": "Este dispositivo",
+      "otherDevices": "Otros dispositivos",
+      "logoutOtherSessions": "Cerrar otras sesiones del navegador"
+    },
+    "form": {
+      "imageAlt": "Perfil",
+      "firstName": "Nombre",
+      "lastName": "Apellido",
+      "phone": "Teléfono",
+      "updating": "Actualizando...",
+      "submit": "Actualizar perfil",
+      "validation": {
+        "firstNameMin": "El nombre debe tener al menos 2 caracteres",
+        "lastNameMin": "El apellido debe tener al menos 2 caracteres",
+        "phoneMin": "El número de teléfono debe tener al menos 10 dígitos."
+      },
+      "errors": {
+        "load": "No se pueden cargar los datos del perfil en este momento.",
+        "updateFailed": "No se puede actualizar el perfil.",
+        "updateSuccess": "Perfil actualizado correctamente."
+      }
+    },
+    "passwordForm": {
+      "currentPassword": "Contraseña actual",
+      "newPassword": "Nueva contraseña",
+      "confirmNewPassword": "Confirmar nueva contraseña",
+      "currentPasswordPlaceholder": "Introduzca la contraseña actual",
+      "newPasswordPlaceholder": "Introduzca la nueva contraseña",
+      "confirmNewPasswordPlaceholder": "Confirmar nueva contraseña",
+      "submit": "Guardar",
+      "validation": {
+        "currentPasswordMin": "La contraseña actual debe tener al menos 6 caracteres.",
+        "newPasswordMin": "La nueva contraseña debe tener al menos 6 caracteres.",
+        "confirmPasswordMin": "La contraseña de confirmación debe tener al menos 6 caracteres.",
+        "passwordsMustMatch": "Las contraseñas deben coincidir."
+      }
+    }
+  },
+  "referees": {
+    "title": "Lista de árbitros",
+    "controls": {
+      "showEntries": "Mostrar entradas",
+      "search": "Buscar:",
+      "searchPlaceholder": "Buscar árbitros"
+    },
+    "table": {
+      "serial": "#",
+      "name": "Nombre",
+      "emailAddress": "Dirección de correo electrónico",
+      "plan": "Plan",
+      "dateRegistered": "Fecha de registro"
+    },
+    "states": {
+      "loadErrorTitle": "No se pueden cargar los árbitros.",
+      "loadErrorDescription": "Inténtalo de nuevo cuando tu conexión a Internet sea estable.",
+      "empty": "No hay datos disponibles para esta tabla",
+      "notAvailable": "N/A"
+    }
+  },
+  "components": {
+    "dialog": {
+      "close": "Cerrar"
+    },
+    "pagination": {
+      "navigation": "paginación",
+      "previousAriaLabel": "Ir a la página anterior",
+      "previous": "Anterior",
+      "nextAriaLabel": "Ir a la página siguiente",
+      "next": "Siguiente",
+      "morePages": "Más páginas"
+    },
+    "sheet": {
+      "close": "Cerrar"
+    },
+    "sidebar": {
+      "toggle": "Alternar barra lateral"
+    },
+    "fallbackScreens": {
+      "badge": {
+        "crash": "Recuperación de la aplicación",
+        "offline": "Estado de la red"
+      },
+      "offline": {
+        "title": "Sin conexión a Internet",
+        "description": "Actualmente no tienes conexión. Vuelve a conectarte para seguir utilizando las funciones de Konn3ct y las actualizaciones en tiempo real."
+      },
+      "crash": {
+        "title": "Se ha producido un error inesperado",
+        "description": "Konn3ct no ha podido mostrar esta pantalla de forma segura. Inténtalo de nuevo o vuelve a tu panel de control."
+      },
+      "route": {
+        "title": "Ha surgido un problema en esta ruta",
+        "description": "Esta página ha encontrado un problema inesperado. Puedes volver a intentarlo o regresar de forma segura.",
+        "pageNotFoundTitle": "Página no encontrada",
+        "pageNotFoundDescription": "La página que intentaste abrir no existe o se ha movido a otra ruta.",
+        "routeErrorTitle": "Error de ruta ({{status}})"
+      }
+    }
+  }
+}

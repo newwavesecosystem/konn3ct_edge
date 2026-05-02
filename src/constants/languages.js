@@ -6,6 +6,21 @@ export const SUPPORTED_LANGUAGES = [
     name: "English",
     dir: "ltr",
   },
+  {
+    code: "fr",
+    name: "French",
+    dir: "ltr",
+  },
+  {
+    code: "es",
+    name: "Spanish",
+    dir: "ltr",
+  },
+  {
+    code: "sw",
+    name: "Swahili",
+    dir: "ltr",
+  },
 ];
 
 export const DEFAULT_LANGUAGE = SUPPORTED_LANGUAGES[0].code;

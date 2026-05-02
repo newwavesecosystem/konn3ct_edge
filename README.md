@@ -1,275 +1,271 @@
 # Konn3ct Dashboard Frontend
 
-## Project Overview
+Konn3ct Dashboard Frontend is the React single-page application that powers the browser dashboard for Konn3ct users. It covers authentication, rooms, livestreaming, recordings, plans and payments, add-ons, donations onboarding, attendance reporting, event pre-registration, and profile management.
 
-Konn3ct Dashboard Frontend is a React single-page application for authenticated Konn3ct users. It provides the browser-based operational dashboard for account access, room management, meeting scheduling, livestreaming, recordings, billing, add-ons, donations onboarding, attendance review, event pre-registration, and profile management.
+## Latest Updates
 
-From a business perspective, this repository is the customer-facing control panel for the Konn3ct platform. From a technical perspective, it is a Create React App frontend that consumes external Konn3ct APIs plus several third-party services for payments, social authentication, analytics, and media-related flows.
+The current codebase includes these recent product and architecture updates:
 
-## System Scope
+- Internationalization is now wired into the app runtime with `i18next`, `react-i18next`, browser language detection, and translation loading from `public/locales/{{lng}}/common.json`.
+- The translation layer is actively used in the navbar, login, register, join-room, settings, attendance, rooms, payments, donations, events, and shared resilience UI.
+- The app bootstrap now includes global resilience wrappers:
+  - `GlobalErrorBoundary`
+  - `GlobalNetworkGuard`
+  - `RouteErrorFallback`
+- Theme handling has been upgraded to support `light`, `dark`, and `system` modes through `ThemeProvider`, with live system-theme syncing and `meta[name="theme-color"]` updates.
+- The settings page has been rebuilt around the new appearance controls and currently exposes the theme selector as the live settings surface.
+- Registration now supports country-aware phone number entry and validation using `libphonenumber-js`.
+- Registration also preserves referral codes from query params and session storage before passing normalized referral data to the backend.
+- The public join-room screen has been made responsive and now builds the final meeting URL via `buildJoinMeetingUrl(sessionToken)`.
+- The navbar has updated mobile behavior, translation support, and clearer separation between guest and authenticated actions.
+
+## High-Level Scope
 
 ### Included in this repository
 
-- Public authentication and meeting-join screens
-- Authenticated dashboard routes and UI components
-- Frontend state, routing, theming, and request orchestration
-- Feature-specific API wrappers for Konn3ct backend endpoints
-- Client-side exports, print flows, and receipt generation
-- Docker and nginx configuration for static deployment
+- Public auth and meeting-join screens
+- Authenticated dashboard routes
+- UI state, route protection, theming, and request orchestration
+- Feature-specific API wrappers under `src/api/`
+- Client-side export and print flows
+- Static deployment config for Docker and nginx
 
 ### Handled externally
 
-- User authentication validation and token issuance
-- Core business APIs for profile, rooms, streams, plans, invites, recordings, events, donations, and attendance
-- AI-generated meeting summaries, highlights, and minutes
-- Paystack checkout and payment processing
-- Google, Facebook, and Apple identity flows
-- Recording playback/download infrastructure
-- Google Analytics delivery and tracking
+- Token issuance and backend authorization
+- Business APIs for rooms, streams, recordings, plans, payments, donations, attendance, and events
+- Google, Facebook, and Apple identity providers
+- Paystack checkout
+- Attendance AI summary/highlight/minutes generation
+- Recording playback and asset delivery
 
-## Core Features
+## Runtime Architecture
 
-### Access and identity
+### App bootstrap
 
-- Email/password sign-in and sign-up
-- Google, Facebook, and Apple social sign-in entry points
-- Forgot-password request and reset flow
-- Referral capture during registration via query params and session storage
-- Auth-gated dashboard routes backed by localStorage state
+`src/index.js` composes the live runtime in this order:
 
-### Meetings and rooms
+```text
+ReactDOM.createRoot
+|
++-- ThemeProvider
+    |
+    +-- GoogleOAuthProvider
+        |
+        +-- QueryClientProvider
+            |
+            +-- AuthProvider
+                |
+                +-- GlobalErrorBoundary
+                    |
+                    +-- GlobalNetworkGuard
+                        |
+                        +-- App
+                        +-- Toaster
+```
 
-- Create, list, start, and delete rooms
-- Copy room join links
-- Manage room access code, participant limit, banner upload, and room transfer
-- Join meetings from a public route using either room ID or room name
-- Schedule meeting invites and review invite history
+### Route structure
 
-### Streaming and recordings
+`src/App.js` uses `createBrowserRouter` and separates public routes from authenticated dashboard routes.
 
-- Start YouTube, Facebook, or combo livestreams
-- Stop active livestreams and review stream history
-- Browse, search, and filter recordings
-- Open playback URLs, copy recording links, download assets, and delete recordings
+```text
+/
+|
++-- Public
+|   +-- /login
+|   +-- /register
+|   +-- /forgot-password
+|   +-- /join
+|
++-- Protected via IsAuthenticated
+    +-- /                      Dashboard
+    +-- /profile
+    +-- /rooms
+    +-- /streams
+    +-- /recordings
+    +-- /payments
+    +-- /addons
+    +-- /referees
+    +-- /donations
+    +-- /attendance
+    +-- /attendance-details/:meeting_id/:identifier
+    +-- /events/*
+    +-- /events/participants/:reference
+    +-- /history
+    +-- /settings
+```
 
-### Billing and commercial features
+### Route and auth flow
 
-- Display current subscription plan
-- Browse available pricing plans
-- Review payment history and generate printable receipts
-- Initiate Paystack checkout for plans and add-ons
-- Open a contact-sales flow for enterprise plans
+```text
+Browser request
+      |
+      v
+createBrowserRouter route match
+      |
+      +--> Public route? --------------------> Render page directly
+      |
+      +--> Protected route
+              |
+              v
+       IsAuthenticated
+              |
+              +--> user in localStorage -> AuthProvider hydrates user -> render layout
+              |
+              +--> no user and not loading -> navigate("/login")
+```
 
-### Donations and verification
+## Core Data Flow
 
-- Individual donation KYC onboarding
-- Business donation KYC onboarding
-- Bank lookup and bank-account verification
-- Donation dashboard with summary metrics and transaction history
+Most feature pages follow the same pattern:
 
-### Attendance and event operations
+```text
+Page component in src/pages/
+        |
+        v
+Feature API module in src/api/
+        |
+        v
+Shared axios client (src/api/index.js)
+        |
+        +-- baseURL = REACT_APP_BASE_URL
+        +-- Authorization: Bearer <token> from localStorage
+        |
+        v
+Backend response
+        |
+        v
+React Query cache or component state
+        |
+        v
+Rendered dashboard UI
+```
 
-- Attendance meeting list and detailed participant view
-- Client-side attendance export to copy, CSV, Excel, and print
-- AI-triggered meeting minutes, highlights, and summaries
-- Event pre-registration list and summary metrics
-- Create free or paid events tied to rooms
-- View pre-registered participants, export them, and send reminders
+Attendance AI is a special case:
 
-### Account and workspace settings
+```text
+Attendance details page
+        |
+        v
+native fetch
+        |
+        v
+REACT_APP_API_BOT
+        |
+        +-- /summary
+        +-- /highlights
+        +-- /minutes
+```
 
-- Profile photo and profile details management
-- Password update
-- Browser-session visibility and logout of other sessions
-- Referral code and referral-link display
-- Light, dark, and system theme support
+## Current Feature Flows
 
-## High-Level Architecture
+### Authentication
 
-This application is structured as a browser SPA with a public route layer and an authenticated route layer. `src/index.js` composes the global runtime by wrapping the app with:
-
-- `ThemeProvider`
-- `GoogleOAuthProvider`
-- `QueryClientProvider`
-- `AuthProvider`
-- `GlobalErrorBoundary`
-- `GlobalNetworkGuard`
-
-`src/App.js` defines the route tree using `createBrowserRouter`. Public routes include `/login`, `/register`, `/forgot-password`, and `/join`. All operational dashboard routes sit behind `IsAuthenticated`, which redirects unauthenticated users to `/login`.
-
-The frontend uses:
-
-- `@tanstack/react-query` for server-state fetching and cache invalidation
-- a shared Axios instance in `src/api/index.js` for the main backend API
-- feature-specific API modules under `src/api/`
-- local storage for auth token, user snapshot, and theme preference
-- session storage for referral code persistence
-
-Frontend responsibility ends at orchestration, rendering, and client-side export utilities. Business rules, authorization enforcement, payment confirmation, recording delivery, and AI output generation are delegated to external services.
-
-## Data Flow Overview
-
-The main application flow is:
-
-1. User interacts with a route-level page component in `src/pages/`.
-2. The page calls a feature API function from `src/api/` or a helper in `src/lib/`.
-3. The API wrapper sends a request to the configured backend or external endpoint.
-4. The response is normalized in the API layer or page component.
-5. React Query or local component state updates the UI.
-
-Two integration patterns are used:
-
-- Main Konn3ct API traffic goes through the shared Axios client at `src/api/index.js`, which uses `REACT_APP_BASE_URL` and injects `Authorization: Bearer <token>` from `localStorage`.
-- Attendance AI requests bypass Axios and use `fetch` directly against `REACT_APP_API_BOT`.
-
-## Key Feature Flows
-
-### Authentication flow
-
-- `useAuth` initializes user state from `localStorage`.
+- `AuthProvider` hydrates `user` from `localStorage`.
 - Login and social login call `src/api/authService.js`.
-- Successful responses store both `user` and `token` in `localStorage`.
-- Protected routes are enabled by `IsAuthenticated`.
-- Registration can add referral payloads sourced from URL params or session storage.
+- Successful auth stores both `user` and `token` in `localStorage`.
+- Protected dashboard routes depend on `IsAuthenticated`.
+- Google social login fetches user details from `REACT_APP_GOOGLE_USERINFO_URL` before calling the backend social-login endpoint.
+- Apple and Facebook login rely on their respective SDK hooks.
 
-### Room and invite flow
+### Registration
 
-- Users create and manage rooms from `src/pages/Rooms.jsx`.
-- Starting a meeting calls `start-a-room/:id` and opens the returned URL in a new tab.
-- Scheduling is handled by `MeetingForm` from `src/pages/InviteHistory.jsx`.
-- The same meeting-invite form is reused in both the dashboard and rooms pages.
+- `src/pages/auth/Register.jsx` validates passwords with Zod.
+- Country codes and example numbers come from `libphonenumber-js`.
+- Phone input is normalized to `+<country calling code><digits>` before submission.
+- Referral codes are read from URL params, mirrored into storage, normalized, and sent as both `referral` and `ref` when present.
 
-### Meeting join flow
+### Public join-room flow
 
-- The public `/join` form submits to `joinRoom` in `src/api/roomsApi.js`.
-- Numeric room values are sent to `/join-room`; non-numeric values are sent to `/kv4/join-room`.
-- The returned session token is converted into a browser URL using `buildJoinMeetingUrl`.
+```text
+/join form
+   |
+   v
+joinRoom(data)
+   |
+   +-- numeric roomName -----> POST /join-room   with { id, ...body }
+   |
+   +-- non-numeric roomName -> POST /kv4/join-room with { room, ...body }
+   |
+   v
+sessionToken returned
+   |
+   v
+buildJoinMeetingUrl(sessionToken)
+   |
+   v
+window.open(meetingUrl, "_blank")
+```
 
-### Streaming flow
+### Settings and theming
 
-- Streams are listed from `/streamings?page=:page`.
-- Starting a stream posts either to `/start-streaming` or `/start-streaming-combo`.
-- Active streams are polled periodically while running.
-- Stop actions call `/stop-streaming/:id`.
+- `ThemeProvider` persists the selected theme in `localStorage`.
+- `system` mode listens to `prefers-color-scheme`.
+- The root document gets the `dark` class only when the resolved theme is dark.
+- The settings screen currently exposes the appearance selector as the active settings experience.
 
-### Recordings flow
+### Rooms, streaming, recordings, payments, donations, attendance, and events
 
-- Recordings are fetched from `/recording`.
-- Playback URLs are built from `REACT_APP_PLAYBACK_URL`.
-- Screenshare and chat downloads use `REACT_APP_RECORDING_DOWNLOAD_BASE`.
-- Webcam video downloads use `REACT_APP_VIDEO_DOWNLOAD_BASE`.
+- Rooms are managed through `src/api/roomsApi.js`.
+- Streaming uses feature-specific API modules and page-level React Query state.
+- Recordings build playback/download URLs from env-driven base paths.
+- Payments and add-ons integrate Paystack via the frontend public key.
+- Donations branch between individual and business verification flows based on backend state.
+- Attendance supports browser-side copy, CSV, Excel, print, and AI-generated meeting content.
+- Events support creation, participant exports, and reminder triggers.
 
-### Payments and add-ons flow
+## Internationalization
 
-- Pricing plans come from `/pricing-plans`.
-- Payment history comes from `/payments`.
-- Add-ons come from `/addons`.
-- Plan and add-on purchases use `react-paystack` with `REACT_APP_PAYSTACK_KEY`.
-- Printable receipts are generated entirely in the browser.
+The app now boots translation support from `src/i18n/index.js`.
 
-### Donations flow
+- Backend loader path: `/locales/{{lng}}/common.json`
+- Detection order:
+  - query string
+  - `localStorage`
+  - browser navigator
+  - `<html>` tag
+- Language preference storage key: `konn3ct-language`
+- Current supported language in code: `en`
 
-- Donations first call `/kyc/fetch` to determine current verification state.
-- Unverified users are routed into individual or corporate KYC forms.
-- KYC forms upload multipart data to `/kyc/submit` or `/kyc-corporate/submit`.
-- Verified users see donation metrics from `/donation/stats` and transaction data from `/donation/in`.
+Document language metadata is kept in sync:
 
-### Attendance and AI flow
-
-- Attendance list data comes from `/meeting-attendance`.
-- Detailed participant data comes from `/attendance-details/:meeting_id/:identifier`.
-- Export, print, and clipboard output are generated client-side in the browser.
-- Meeting summary, highlights, and minutes are requested from the separate AI service using `/summary`, `/highlights`, and `/minutes`.
-
-### Event flow
-
-- Event list and summary come from `/pre-reg-list` and `/pre-reg-summary`.
-- Event creation posts multipart form data to `/pre-reg`.
-- Participant lists come from `/pre-reg-participants/:reference`.
-- Reminder actions post to `/sendPreregReminder/:reference`.
-
-## Tech Stack
-
-### Core framework
-
-- React 18
-- Create React App / `react-scripts`
-- React Router DOM 7
-
-### Data and networking
-
-- Axios
-- TanStack React Query
-- Native `fetch` for AI attendance requests
-
-### Forms and validation
-
-- React Hook Form
-- Zod
-- `@hookform/resolvers`
-
-### UI and styling
-
-- Tailwind CSS
-- Radix UI primitives
-- shadcn-style component structure
-- Lucide React icons
-- `clsx`, `class-variance-authority`, and `tailwind-merge`
-
-### External integrations and browser APIs
-
-- `@react-oauth/google`
-- Facebook JavaScript SDK
-- `react-apple-login`
-- `react-paystack`
-- Google Analytics via `public/index.html`
-- Clipboard API
-- `window.open` for meeting launch, playback, receipts, print, and downloads
-- `localStorage` and `sessionStorage`
-
-### Utility libraries
-
-- `date-fns`
-- `moment-timezone`
-- `jwt-decode`
-- `react-markdown`
-- `socket.io-client` is installed in dependencies, but no active usage was found in the audited frontend code
+- `document.documentElement.lang`
+- `document.documentElement.dir`
 
 ## Project Structure
 
 ```text
 .
 |- public/
-|  |- index.html                HTML shell, metadata, analytics, font links, theme bootstrap
-|  `- ...                       Static assets
+|  |- index.html
+|  `- locales/
+|     `- en/common.json
 |- src/
-|  |- api/                      Feature-specific API wrappers
-|  |- assets/                   Logos, SVGs, icon components, images
+|  |- api/                    Feature API wrappers
+|  |- assets/                 Images, SVGs, icon components
 |  |- components/
-|  |  |- ui/                    Reusable UI primitives and resilience components
-|  |  `- ...                    Shared app-level components such as Navbar and StatCard
-|  |- hooks/                    Auth, theme, mobile, toast, Apple SDK, Facebook SDK hooks
-|  |- lib/                      Utilities, route guard, env-driven external links, referral helpers
-|  |- pages/
-|  |  |- auth/                  Login, register, forgot-password, auth-side content
-|  |  |- profile/               Profile forms and password/session views
-|  |  `- ...                    Dashboard feature pages
-|  |- providers/                Theme provider
-|  |- App.js                    Route tree and authenticated layout
-|  `- index.js                  Application bootstrap
-|- .env                         Frontend build-time environment variables
-|- Dockerfile                   Multi-stage build to nginx image
-|- default.conf                 nginx SPA fallback config
-|- components.json              shadcn/ui configuration
-|- jsconfig.json                Base-path alias configuration
-`- tailwind.config.js           Tailwind setup
+|  |  |- ui/                  Reusable UI primitives and resilience UI
+|  |  `- Navbar.jsx           Top navigation
+|  |- constants/
+|  |  `- languages.js         i18n language metadata
+|  |- hooks/                  Auth, theme, SDK, toast, mobile hooks
+|  |- i18n/
+|  |  `- index.js             i18next setup
+|  |- lib/                    Route guard, env links, helpers
+|  |- pages/                  Route-level pages
+|  |- providers/
+|  |  `- ThemeProvider.jsx
+|  |- App.js                  Router and authenticated layout
+|  `- index.js                Runtime bootstrap
+|- Dockerfile
+|- default.conf
+|- package.json
+`- README.md
 ```
 
-## Environment Configuration
+## Environment Variables Used by the App
 
-This project uses Create React App environment variables, so `REACT_APP_*` values are compiled into the frontend during build time.
-
-### Variables referenced by the codebase
+This is a Create React App project, so all `REACT_APP_*` values are compiled into the client bundle.
 
 ```env
 REACT_APP_BASE_BACKENED_URL=
@@ -301,139 +297,50 @@ REACT_APP_GETTING_STARTED_VIDEO_URL=
 REACT_APP_CONTACT_SALES_URL=
 ```
 
-### What they control
+Key notes:
 
-- `REACT_APP_BASE_URL`: base URL for the main authenticated product API
-- `REACT_APP_BASE_BACKENED_URL`: base URL used to construct room join links in the rooms UI
-- `REACT_APP_API_BOT`: external AI service for attendance summary, highlights, and minutes
-- `REACT_APP_CLIENT_ID`: Google OAuth client ID
-- `REACT_APP_PAYSTACK_KEY`: Paystack public key for plan and add-on checkout
-- `REACT_APP_PLAYBACK_URL`: playback URL prefix for recordings
-- `REACT_APP_FACEBOOK_APP_ID`: Facebook SDK app ID
-- `REACT_APP_APPLE_CLIENT_ID`: Apple sign-in client ID
-- `REACT_APP_APPLE_REDIRECT_URI`: Apple sign-in redirect URI
-- `REACT_APP_LANDING_URL`: marketing-site base URL used by navbar links
-- `REACT_APP_RECORDING_DOWNLOAD_BASE`: recording asset download base
-- `REACT_APP_VIDEO_DOWNLOAD_BASE`: webcam video download base
-- `REACT_APP_SITE_URL`: canonical site URL injected into `public/index.html`
-- `REACT_APP_PRIVACY_POLICY_URL`: privacy-policy link shown in auth screens
-- `REACT_APP_OG_IMAGE_URL`: Open Graph image URL
-- `REACT_APP_FAVICON_URL`: favicon and touch-icon URL
-- `REACT_APP_GOOGLE_FONTS_PRECONNECT_URL`, `REACT_APP_GOOGLE_FONTS_STATIC_URL`, `REACT_APP_GOOGLE_FONTS_STYLESHEET_URL`: font loading URLs
-- `REACT_APP_GOOGLE_ANALYTICS_SCRIPT_URL`, `REACT_APP_GOOGLE_ANALYTICS_ID`: analytics script and tracking ID
-- `REACT_APP_APPLE_SIGNIN_SDK_URL`: Apple sign-in SDK source
-- `REACT_APP_GOOGLE_USERINFO_URL`: Google user-info endpoint used after OAuth login
-- `REACT_APP_FACEBOOK_SDK_URL`: Facebook SDK script URL
-- `REACT_APP_JOIN_MEETING_URL`: base meeting URL used to append `sessionToken`
-- `REACT_APP_GETTING_STARTED_VIDEO_URL`: dashboard onboarding video URL
-- `REACT_APP_CONTACT_SALES_URL`: contact-sales URL for enterprise plan flow
+- `REACT_APP_BASE_URL` drives the shared Axios client.
+- `REACT_APP_JOIN_MEETING_URL` is required to open joined meetings.
+- `REACT_APP_API_BOT` powers attendance summary, highlights, and minutes.
+- `REACT_APP_BASE_BACKENED_URL` is still referenced with its current spelling.
+- Values in `.env` are public in the final built bundle and must not be treated as secrets.
 
-### Environment notes observed in code
-
-- The code expects the exact key name `REACT_APP_BASE_BACKENED_URL`, including the existing spelling.
-- Variables used inside both JavaScript and `public/index.html` must be present before `npm run build`.
-- A checked-in `.env` file is present in the repository.
-- A checked-in `REACT_APP_FACEBOOK_APP_SECRET` value exists in `.env`, but no audited frontend code reads it.
-
-## Build & Deployment
-
-### Local development
+## Development
 
 ```bash
 npm install
 npm start
 ```
 
-Available scripts:
+Other scripts:
 
 ```bash
 npm run build
 npm test
 ```
 
-Notes:
+## Deployment
 
-- The app is a standard CRA development server during `npm start`.
-- `npm test` is available through CRA, but no test files were found during the audit.
+The repository ships with a multi-stage Docker build:
 
-### Containerized deployment
+1. Build the frontend with `node:22-alpine`
+2. Serve the static `build/` output with `nginx:1.13.9-alpine`
 
-The repository includes a multi-stage Docker build:
-
-1. `node:22-alpine` installs dependencies and runs `npm run build`
-2. `nginx:1.13.9-alpine` serves the generated `build/` output
-
-`default.conf` configures SPA fallback with:
+`default.conf` uses SPA fallback:
 
 ```nginx
 try_files $uri $uri/ /index.html;
 ```
 
-Example container build and run:
+## Known Notes
 
-```bash
-docker build -t konn3ct-dashboard .
-docker run --rm -p 8080:80 konn3ct-dashboard
-```
+- This is a frontend-only repository; business behavior depends on external services.
+- The settings page currently exposes appearance controls only.
+- The login SSO option is still a placeholder toast.
+- `src/pages/AttendanceUpgrade.jsx` exists but is not routed.
+- `socket.io-client` is installed but no active usage was found in the inspected runtime path.
+- A checked-in `.env` file exists in the repository, and client-side env values should be treated as public.
 
-The same compiled `build/` output can also be hosted behind any static file server or reverse proxy that supports SPA fallback to `index.html`.
+## Summary
 
-## External Dependencies
-
-### Konn3ct platform services
-
-- Main product API at `REACT_APP_BASE_URL`
-- Public/join-related URL base at `REACT_APP_BASE_BACKENED_URL`
-- Recording playback and download endpoints
-- Attendance AI endpoint at `REACT_APP_API_BOT`
-
-### Identity providers
-
-- Google OAuth
-- Facebook SDK login
-- Apple sign-in SDK and popup flow
-
-### Payments and commercial
-
-- Paystack
-
-### Observability and delivery
-
-- Google Analytics
-- Google Fonts
-- nginx for production static hosting
-
-## Known Limitations / Caveats
-
-These observations are based on the current codebase only.
-
-- This repository is frontend-only; all core business workflows depend on external APIs and services.
-- The Settings screen only implements appearance controls. Meeting, Recording, Audio Conference, White Board, and Scheduling tabs are placeholders.
-- The SSO option in the login screen is a UI placeholder that only shows an error toast.
-- `src/pages/AttendanceUpgrade.jsx` exists in the repository but is not wired into the active route tree.
-- `src/components/PricingCard.jsx` exists but is not used by the current payments flow.
-- Several pages perform client-side normalization around inconsistent API response shapes, which suggests backend payloads are not fully uniform.
-- Some flows rely on popup windows (`window.open`) for meetings, playback, receipts, and printing, so popup blocking can affect usability.
-- The donations dashboard labels the account as "Individual Account • Verified" in the UI even though the parent donations flow can branch into business verification as well.
-
-## Security & Architectural Notes
-
-- Because this is a CRA frontend, all `REACT_APP_*` variables are embedded into the client bundle at build time and should be treated as public.
-- The repository currently contains a checked-in `.env` file with real-looking values; client-side env files should not hold secrets.
-- Authentication state is stored in `localStorage`, which is simple and common for SPAs but increases exposure to XSS-driven token theft if a script injection issue exists elsewhere.
-- Route protection is enforced client-side by `IsAuthenticated`, but true authorization must still be enforced by backend services.
-- Client-side validation is present in many forms, but final trust must remain with backend validation.
-- The frontend generates exports and printable views locally in the browser, which reduces backend complexity but can expose raw returned data directly to the client.
-
-## Extensibility Notes
-
-- New backend integrations should follow the existing pattern of adding a focused module under `src/api/` and calling it from a route-level page.
-- Shared env-driven URLs should continue to be centralized in `src/lib/externalLinks.js` rather than embedded directly inside UI components.
-- New authenticated features fit naturally into the route structure in `src/App.js` and the sidebar item list in `AppSidebar`.
-- React Query is already the dominant server-state pattern, so new remote data flows should prefer query/mutation hooks over ad hoc fetch state where practical.
-- Theme-aware UI should continue using the existing `ThemeProvider` and Tailwind dark-mode class approach.
-- If settings functionality expands, `src/pages/Settings.jsx` already provides tab placeholders that can be replaced incrementally without changing global theme behavior.
-
-## Audit Summary
-
-The audited codebase is a production-oriented React dashboard for the Konn3ct platform. Its primary role is to give authenticated users a single frontend for meetings, streams, recordings, billing, add-ons, donations onboarding, attendance intelligence, events, and account management, while delegating business logic and transaction execution to external APIs and providers.
+The current frontend is a React dashboard with a stronger runtime foundation than before: translation bootstrapping is in place, theme behavior is more complete, auth/public flows are better documented in code, and resilience wrappers now sit around the core application tree. This README has been updated to match that current architecture and to make the main runtime and request flows easier to understand at a glance.
