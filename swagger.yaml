@@ -139,3 +139,49 @@ paths:
       responses:
         '200':
           description: Dial-in numbers retrieved
+
+  /ai/summary/{roomId}:
+    post:
+      summary: Generate an AI meeting summary
+      tags: [AI Intelligence]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: roomId
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Summary generated and returned
+    get:
+      summary: Get generated AI summary for a room
+      tags: [AI Intelligence]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: roomId
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Summary retrieved
+
+  /ai/transcription/{roomId}:
+    get:
+      summary: Get all transcriptions for a room
+      tags: [AI Intelligence]
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: roomId
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Transcriptions retrieved

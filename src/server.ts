@@ -17,6 +17,7 @@ import { paymentsRouter } from './routes/payments';
 import { schedulingRouter } from './routes/scheduling';
 import { dashboardRouter } from './routes/dashboard';
 import { telephonyRouter } from './routes/telephony';
+import { aiRouter } from './routes/ai';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,6 +47,7 @@ app.use('/api/payments', paymentsRouter);
 app.use('/api/scheduling', schedulingRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/telephony', telephonyRouter);
+app.use('/api/ai', aiRouter);
 
 // Basic 404 handler
 app.use((req, res) => {

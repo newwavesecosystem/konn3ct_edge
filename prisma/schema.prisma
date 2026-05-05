@@ -81,6 +81,8 @@ model Room {
   meetingInvites MeetingInvite[]
   sessions MeetingSession[]
   cdrs CallDetailRecord[]
+  transcriptions Transcription[]
+  summary MeetingSummary?
 
   @@index([ownerId])
   @@index([teamId])
@@ -201,4 +203,24 @@ model PaymentTransaction {
   @@index([userId])
   @@index([planId])
   @@index([recordingId])
+}
+
+model Transcription {
+  id        String   @id @default(cuid())
+  roomId    String
+  content   String   // The full text
+  createdAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+  @@index([roomId])
+}
+
+model MeetingSummary {
+  id          String   @id @default(cuid())
+  roomId      String   @unique
+  actionItems String
+  summary     String
+  createdAt   DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
 }
