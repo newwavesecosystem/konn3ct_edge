@@ -91,6 +91,7 @@ Operational requirements:
 ### 2.9 In-Meeting Experience & Media
 - Reactions (floating emojis) and interactive Polls
 - In-meeting Doc viewer/collaborative notes
+- Remote Control (requires Native Client + WebRTC DataChannels for OS-level mouse/keyboard simulation)
 - eCinema (synchronized high-bitrate media playback)
 - Donate button integrated with Paystack during live streams
 - Audio Boost (client-side amplification)

@@ -30,6 +30,7 @@ Below is the definitive list of features required for conn3ct, mapping the reque
 ### Core Meeting Experience
 - **Scheduling:** Ability to schedule meetings in advance, generate recurring links, and send calendar invites (ICS integration).
 - **Rooms:** Breakout rooms for splitting large meetings into smaller groups, plus persistent "always-on" team rooms.
+- **Remote Control:** Ability for a user (host or IT support) to request and take control of another participant's mouse, keyboard, and system. This feature **requires** the Native Desktop Client to hook into the host OS.
 - **Reactions:** In-meeting floating emojis (thumbs up, clapping, heart) for silent audience feedback.
 - **Polls:** In-meeting interactive polling and Q&A to engage the audience.
 - **Events:** Dedicated event management for webinars/townhalls with registration pages and capacity limits.
