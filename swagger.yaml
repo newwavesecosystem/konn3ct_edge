@@ -1,0 +1,141 @@
+openapi: 3.0.0
+info:
+  title: Conn3ct API
+  version: 1.0.0
+  description: API documentation for the Conn3ct Meeting Platform
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+paths:
+  /auth/signup:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, example: "test@conn3ct.com" }
+                password: { type: string, example: "password123" }
+                name: { type: string, example: "John Doe" }
+      responses:
+        '201':
+          description: User created
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: token=abcde12345; HttpOnly
+  
+  /auth/login:
+    post:
+      summary: Login
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, example: "test@conn3ct.com" }
+                password: { type: string, example: "password123" }
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+
+  /auth/logout:
+    post:
+      summary: Logout
+      tags: [Auth]
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /dashboard:
+    get:
+      summary: Get unified dashboard statistics
+      tags: [Dashboard]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Dashboard statistics retrieved
+
+  /rooms:
+    post:
+      summary: Create a new room
+      tags: [Rooms]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, example: "Weekly Standup" }
+      responses:
+        '201':
+          description: Room created
+    get:
+      summary: Get all accessible rooms
+      tags: [Rooms]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Rooms retrieved
+
+  /scheduling:
+    post:
+      summary: Schedule a meeting
+      tags: [Scheduling]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roomId: { type: string, example: "cm0abcde123" }
+                title: { type: string, example: "Design Review" }
+                startTime: { type: string, format: date-time, example: "2026-06-01T10:00:00Z" }
+                durationMin: { type: number, example: 60 }
+      responses:
+        '201':
+          description: Meeting scheduled (returns ICS content)
+    get:
+      summary: Get upcoming scheduled meetings
+      tags: [Scheduling]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Schedules retrieved
+
+  /telephony/numbers:
+    get:
+      summary: Get available dial-in numbers
+      tags: [Telephony]
+      responses:
+        '200':
+          description: Dial-in numbers retrieved
