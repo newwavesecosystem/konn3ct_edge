@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+
+  ownedTeams   Team[]   @relation("TeamOwner")
+  teamMembers  TeamMember[]
+  ownedRooms   Room[]   @relation("RoomOwner")
+  invitesSent  TeamInvite[] @relation("TeamInviteSender")
+  meetingInvitesSent MeetingInvite[] @relation("MeetingInviteSender")
+  recordings   Recording[]
+  subscriptions Subscription[]
+  payments     PaymentTransaction[]
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation("TeamOwner", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+
+  members   TeamMember[]
+  invites   TeamInvite[]
+  rooms     Room[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+}
+
+model TeamInvite {
+  id          String   @id @default(cuid())
+  teamId      String
+  email       String
+  token       String   @unique
+  invitedById String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  team      Team @relation(fields: [teamId], references: [id])
+  invitedBy User @relation("TeamInviteSender", fields: [invitedById], references: [id])
+
+  @@index([teamId])
+  @@index([email])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  ownerId   String
+  teamId    String?
+  createdAt DateTime @default(now())
+
+  owner User @relation("RoomOwner", fields: [ownerId], references: [id])
+  team  Team? @relation(fields: [teamId], references: [id])
+
+  recordings Recording[]
+  meetingInvites MeetingInvite[]
+  sessions MeetingSession[]
+
+  @@index([ownerId])
+  @@index([teamId])
+}
+
+model MeetingSession {
+  id          String   @id @default(cuid())
+  roomId      String
+  title       String
+  startTime   DateTime
+  durationMin Int      @default(60)
+  createdAt   DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+  @@index([startTime])
+}
+
+model MeetingInvite {
+  id          String   @id @default(cuid())
+  roomId      String
+  email       String
+  token       String   @unique
+  invitedById String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  room      Room @relation(fields: [roomId], references: [id])
+  invitedBy User @relation("MeetingInviteSender", fields: [invitedById], references: [id])
+
+  @@index([roomId])
+  @@index([email])
+}
+
+model Recording {
+  id         String   @id @default(cuid())
+  ownerId    String
+  roomId     String?
+  title      String
+  url        String
+  isPaid     Boolean  @default(false)
+  priceKobo  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  owner User @relation(fields: [ownerId], references: [id])
+  room  Room? @relation(fields: [roomId], references: [id])
+  payments PaymentTransaction[]
+
+  @@index([ownerId])
+  @@index([roomId])
+}
+
+model Plan {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  name       String
+  priceKobo  Int
+  featuresJson String
+  createdAt  DateTime @default(now())
+
+  subscriptions Subscription[]
+  payments PaymentTransaction[]
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String
+  planId           String
+  status           String   @default("active")
+  currentPeriodEnd DateTime?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  plan Plan @relation(fields: [planId], references: [id])
+
+  @@index([userId])
+  @@index([planId])
+}
+
+model PaymentTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  kind        String
+  planId      String?
+  recordingId String?
+  reference   String   @unique
+  amountKobo  Int
+  status      String   @default("initialized")
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  plan Plan? @relation(fields: [planId], references: [id])
+  recording Recording? @relation(fields: [recordingId], references: [id])
+
+  @@index([userId])
+  @@index([planId])
+  @@index([recordingId])
+}

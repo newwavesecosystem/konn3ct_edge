@@ -1,0 +1,95 @@
+import express, { Router, Request, Response } from 'express';
+import { z } from 'zod';
+import crypto from 'crypto';
+import { db } from '../db';
+import { logger } from '../logger';
+import { requireAuth } from '../middleware/auth';
+
+export const paymentsRouter = Router();
+
+const initPaymentSchema = z.object({
+  recordingId: z.string()
+});
+
+// Initialize payment (Requires Auth)
+paymentsRouter.post('/initialize', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { recordingId } = initPaymentSchema.parse(req.body);
+    const userId = req.user!.userId;
+    const email = req.user!.email;
+
+    const recording = await db.recording.findUnique({ where: { id: recordingId } });
+    
+    if (!recording || !recording.isPaid) {
+      return res.status(400).json({ error: 'Recording is not valid for payment' });
+    }
+
+    const reference = `ref_${crypto.randomBytes(8).toString('hex')}`;
+    const amountKobo = recording.priceKobo;
+
+    // Log transaction to DB
+    await db.paymentTransaction.create({
+      data: {
+        userId,
+        recordingId,
+        kind: 'recording',
+        reference,
+        amountKobo,
+        status: 'initialized'
+      }
+    });
+
+    // Note: In production, call Paystack API to initialize transaction here
+    // const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', ...)
+
+    res.status(200).json({
+      message: 'Payment initialized',
+      reference,
+      amountKobo,
+      email,
+      // authorization_url: paystackRes.data.authorization_url
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid input', details: error.flatten().fieldErrors });
+    }
+    logger.error('Error initializing payment', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Paystack Webhook (No Auth, relies on Paystack signature)
+paymentsRouter.post('/webhook', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
+  try {
+    const secret = process.env.PAYSTACK_SECRET_KEY;
+    if (!secret) {
+      logger.error('PAYSTACK_SECRET_KEY is not defined');
+      return res.sendStatus(500);
+    }
+
+    const hash = crypto.createHmac('sha512', secret).update(req.body).digest('hex');
+    if (hash !== req.headers['x-paystack-signature']) {
+      logger.warn('Invalid Paystack webhook signature');
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+
+    const event = JSON.parse(req.body.toString());
+
+    if (event.event === 'charge.success') {
+      const reference = event.data.reference;
+
+      // Idempotent update
+      await db.paymentTransaction.updateMany({
+        where: { reference, status: 'initialized' },
+        data: { status: 'success' }
+      });
+
+      logger.info(`Payment successful for reference: ${reference}`);
+    }
+
+    res.status(200).send('OK');
+  } catch (error) {
+    logger.error('Webhook processing error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
