@@ -33,6 +33,8 @@ Real-time side:
 
 - **Signaling Gateway**: WebSocket service for room join, role updates, chat/Q\&A events
 - **SFU Cluster (mediasoup)**: handles WebRTC media routing
+- **Data Channel Router**: Dedicated ultra-low latency WebRTC channels for transmitting Remote Control coordinates and keystrokes.
+- **AI Intelligence Layer**: Processing workers that ingest audio streams for live captioning, translation, and meeting summarization.
 - **TURN/STUN (coturn)**: connectivity fallback for NAT/firewalls
 - **Recording Pipeline**: captures streams and produces recording artifacts
 - **Object Storage + CDN**: stores and serves recordings
