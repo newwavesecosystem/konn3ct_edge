@@ -24,6 +24,7 @@ export function MeetingShell() {
     setIsMobilePanelOpen,
     meetingInfo,
     isRecording,
+    webrtcStatus,
   } = useMeeting();
 
   const panelContent: Record<string, React.ReactNode> = {
@@ -54,6 +55,24 @@ export function MeetingShell() {
               Recording
             </span>
           )}
+          
+          {/* WebRTC Connection Status Badge */}
+          <div className={cn(
+            "hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+            webrtcStatus === 'connected' ? "bg-brand-green/10 text-brand-green border-brand-green/20" :
+            webrtcStatus === 'connecting' ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20" :
+            "bg-red-400/10 text-red-400 border-red-400/20"
+          )}>
+            <div className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              webrtcStatus === 'connected' ? "bg-brand-green" :
+              webrtcStatus === 'connecting' ? "bg-yellow-400 animate-pulse" :
+              "bg-red-400"
+            )} />
+            {webrtcStatus === 'connected' ? 'Connected' : 
+             webrtcStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+          </div>
+
         </div>
 
         <div className="flex items-center gap-2">

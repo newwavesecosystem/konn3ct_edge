@@ -1,0 +1,163 @@
+/**
+ * Konn3ct Edge API Client
+ * Uses Next.js Rewrites to bypass CORS
+ */
+
+const BASE_URL = '/api';
+
+// ── TYPES ──────────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId: string;
+  createdAt: string;
+}
+
+export interface ScheduledMeeting {
+  id: string;
+  roomId: string;
+  title: string;
+  startTime: string;
+  durationMin: number;
+}
+
+export interface DashboardStats {
+  totalRooms: number;
+  upcomingMeetings: number;
+  totalRecordings: number;
+}
+
+// ── INTERNAL HELPERS ───────────────────────────────────────────────────────
+
+/**
+ * Standard fetch wrapper that handles JSON parsing and error throwing.
+ * Automatically includes credentials (cookies) for authenticated endpoints.
+ */
+async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${BASE_URL}${endpoint}`;
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    // Ensure cookies (auth tokens) are sent with every cross-origin request if needed
+    // credentials: 'include', 
+  });
+
+  if (!response.ok) {
+    let errorMsg = 'An error occurred';
+    try {
+      const errData = await response.json();
+      errorMsg = errData.error || errData.message || errorMsg;
+    } catch (e) {
+      errorMsg = response.statusText;
+    }
+    throw new Error(errorMsg);
+  }
+
+  // Handle empty responses (like 204 No Content for logout)
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// ── API METHODS ────────────────────────────────────────────────────────────
+
+export const apiClient = {
+  // ── AUTHENTICATION ──
+  
+  auth: {
+    signup: async (data: { email: string; password: string; name: string }) => {
+      return fetchApi<{ user: User }>('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    login: async (data: { email: string; password: string }) => {
+      return fetchApi<{ user: User }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    logout: async () => {
+      return fetchApi('/auth/logout', { method: 'POST' });
+    },
+  },
+
+  // ── DASHBOARD ──
+
+  dashboard: {
+    getStats: async () => {
+      return fetchApi<DashboardStats>('/dashboard');
+    },
+  },
+
+  // ── ROOMS ──
+
+  rooms: {
+    getAll: async () => {
+      return fetchApi<Room[]>('/rooms');
+    },
+
+    create: async (name: string) => {
+      return fetchApi<Room>('/rooms', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+    },
+  },
+
+  // ── SCHEDULING ──
+
+  scheduling: {
+    getUpcoming: async () => {
+      return fetchApi<ScheduledMeeting[]>('/scheduling');
+    },
+
+    schedule: async (data: { roomId: string; title: string; startTime: string; durationMin: number }) => {
+      return fetchApi<{ icsContent: string }>('/scheduling', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+  },
+
+  // ── TELEPHONY ──
+
+  telephony: {
+    getDialInNumbers: async () => {
+      return fetchApi<Array<{ number: string; country: string }>>('/telephony/numbers');
+    },
+  },
+
+  // ── AI INTELLIGENCE ──
+
+  ai: {
+    getTranscription: async (roomId: string) => {
+      return fetchApi<Array<{ content: string; createdAt: string }>>(`/ai/transcription/${roomId}`);
+    },
+
+    getSummary: async (roomId: string) => {
+      return fetchApi<{ summary: string; actionItems: string }>(`/ai/summary/${roomId}`);
+    },
+
+    generateSummary: async (roomId: string) => {
+      return fetchApi<{ summary: string; actionItems: string }>(`/ai/summary/${roomId}`, {
+        method: 'POST',
+      });
+    },
+  },
+};
