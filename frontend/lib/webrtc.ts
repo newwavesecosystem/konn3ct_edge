@@ -110,7 +110,7 @@ export class WebRTCClient {
     const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
     this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
 
-    this.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+    this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
       try {
         await this.request('connectWebRtcTransport', 'transportConnected', {
           transportId: this.sendTransport!.id,
@@ -122,7 +122,7 @@ export class WebRTCClient {
       }
     });
 
-    this.sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
+    this.sendTransport.on('produce', async ({ kind, rtpParameters }: any, callback: any, errback: any) => {
       try {
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
@@ -139,7 +139,7 @@ export class WebRTCClient {
     const recvTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'recv' });
     this.recvTransport = this.device.createRecvTransport(recvTransportData.transportParams);
 
-    this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+    this.recvTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
       try {
         await this.request('connectWebRtcTransport', 'transportConnected', {
           transportId: this.recvTransport!.id,
