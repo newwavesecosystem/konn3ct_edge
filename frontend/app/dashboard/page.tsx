@@ -9,9 +9,38 @@ import {
   Link2, Copy, CalendarDays
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { apiClient, DashboardStats, ScheduledMeeting } from "@/lib/api-client";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [meetings, setMeetings] = useState<ScheduledMeeting[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+
+  const handleStartInstantMeeting = async () => {
+    try {
+      setIsCreatingRoom(true);
+      const room = await apiClient.rooms.create("Instant Meeting");
+      router.push(`/meeting/${room.slug}`);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsCreatingRoom(false);
+    }
+  };
+
+  useEffect(() => {
+    Promise.all([
+      apiClient.dashboard.getStats().catch(() => null),
+      apiClient.scheduling.getUpcoming().catch(() => [])
+    ]).then(([s, m]) => {
+      setStats(s);
+      setMeetings(m);
+      setIsLoading(false);
+    });
+  }, []);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -44,10 +73,11 @@ export default function DashboardPage() {
             Copy Personal Link
           </Button>
           <Button 
-            onClick={() => router.push(`/meeting/demo-room-${Math.floor(Math.random() * 1000)}`)}
+            disabled={isCreatingRoom}
+            onClick={handleStartInstantMeeting}
             className="flex-1 md:flex-none h-12 rounded-xl px-6 bg-brand-green hover:bg-[#287854] shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all">
             <Video className="w-5 h-5 mr-2" />
-            New Meeting
+            {isCreatingRoom ? "Starting..." : "New Meeting"}
           </Button>
         </div>
       </div>
@@ -60,10 +90,10 @@ export default function DashboardPage() {
       >
         {/* Stat Cards */}
         {[
-          { title: "Total Rooms", value: "12", icon: Users, color: "text-brand-blue", bg: "bg-brand-blue/10" },
-          { title: "Upcoming Meetings", value: "3", icon: Calendar, color: "text-brand-green", bg: "bg-brand-green/10" },
-          { title: "Recordings", value: "24", icon: Play, color: "text-[#CC505C]", bg: "bg-[#CC505C]/10" },
-          { title: "Total Minutes", value: "1,240", icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" }
+          { title: "Total Rooms", value: stats?.totalRooms || "0", icon: Users, color: "text-brand-blue", bg: "bg-brand-blue/10" },
+          { title: "Upcoming Meetings", value: stats?.upcomingMeetings || "0", icon: Calendar, color: "text-brand-green", bg: "bg-brand-green/10" },
+          { title: "Recordings", value: stats?.totalRecordings || "0", icon: Play, color: "text-[#CC505C]", bg: "bg-[#CC505C]/10" },
+          { title: "Total Minutes", value: "0", icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" }
         ].map((stat, i) => (
           <motion.div key={i} variants={itemVariants}>
             <Card className="rounded-2xl border-none shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden relative group h-full">
@@ -72,7 +102,11 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-text-muted mb-1">{stat.title}</p>
-                    <h3 className="text-3xl font-bold text-text-primary">{stat.value}</h3>
+                    {isLoading ? (
+                      <div className="h-9 w-16 bg-black/[0.05] rounded animate-pulse" />
+                    ) : (
+                      <h3 className="text-3xl font-bold text-text-primary">{stat.value}</h3>
+                    )}
                   </div>
                   <div className={`w-12 h-12 rounded-full ${stat.bg} flex items-center justify-center`}>
                     <stat.icon className={`w-6 h-6 ${stat.color}`} />
@@ -101,23 +135,28 @@ export default function DashboardPage() {
           
           <Card className="rounded-2xl border-border bg-surface shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] overflow-hidden">
             <div className="divide-y divide-border">
-              {[
-                { time: "10:00 AM", title: "Product Sync", type: "Internal", duration: "45m", dot: "bg-brand-blue" },
-                { time: "01:30 PM", title: "Client Pitch: Acme Corp", type: "External", duration: "1h", dot: "bg-brand-green" },
-                { time: "04:00 PM", title: "Design Review", type: "Internal", duration: "30m", dot: "bg-amber-400" }
-              ].map((meeting, i) => (
+              {isLoading ? (
+                <div className="p-5 flex justify-center text-text-muted text-sm">Loading schedule...</div>
+              ) : meetings.length === 0 ? (
+                <div className="p-5 flex justify-center text-text-muted text-sm">No upcoming meetings scheduled.</div>
+              ) : meetings.map((meeting, i) => {
+                const date = new Date(meeting.startTime);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dotColor = ["bg-brand-blue", "bg-brand-green", "bg-amber-400"][i % 3];
+                
+                return (
                 <div key={i} className="flex items-center p-5 hover:bg-black/[0.02] transition-colors group">
                   <div className="flex flex-col items-center justify-center w-20 text-center shrink-0">
-                    <span className="text-sm font-bold text-text-primary">{meeting.time.split(' ')[0]}</span>
-                    <span className="text-xs font-semibold text-text-muted">{meeting.time.split(' ')[1]}</span>
+                    <span className="text-sm font-bold text-text-primary">{timeStr.split(' ')[0]}</span>
+                    <span className="text-xs font-semibold text-text-muted">{timeStr.split(' ')[1]}</span>
                   </div>
-                  <div className={`w-1 h-12 rounded-full mx-4 opacity-70 ${meeting.dot}`} />
+                  <div className={`w-1 h-12 rounded-full mx-4 opacity-70 ${dotColor}`} />
                   <div className="flex-1 min-w-0">
                     <h4 className="text-base font-semibold text-text-primary truncate">{meeting.title}</h4>
                     <div className="flex items-center gap-3 mt-1 text-sm text-text-muted">
-                      <span className="flex items-center"><Clock className="w-3.5 h-3.5 mr-1" /> {meeting.duration}</span>
+                      <span className="flex items-center"><Clock className="w-3.5 h-3.5 mr-1" /> {meeting.durationMin}m</span>
                       <span className="w-1 h-1 rounded-full bg-border-strong"></span>
-                      <span>{meeting.type}</span>
+                      <span>Scheduled</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -125,12 +164,12 @@ export default function DashboardPage() {
                       <Copy className="w-4 h-4 mr-2" />
                       Link
                     </Button>
-                    <Button size="sm" className="rounded-lg h-9 bg-brand-green hover:bg-[#287854]">
+                    <Button onClick={() => router.push(`/meeting/${meeting.roomId}`)} size="sm" className="rounded-lg h-9 bg-brand-green hover:bg-[#287854]">
                       Join
                     </Button>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </Card>
         </motion.div>
@@ -154,9 +193,10 @@ export default function DashboardPage() {
               
               <div className="space-y-3">
                 <Button 
-                  onClick={() => router.push(`/meeting/demo-room-${Math.floor(Math.random() * 1000)}`)}
+                  disabled={isCreatingRoom}
+                  onClick={handleStartInstantMeeting}
                   className="w-full bg-white text-brand-blue hover:bg-gray-100 h-12 rounded-xl font-bold transition-transform active:scale-95">
-                  Start Now
+                  {isCreatingRoom ? "Starting..." : "Start Now"}
                 </Button>
                 <Button 
                   onClick={() => router.push('/dashboard/schedule/new')}

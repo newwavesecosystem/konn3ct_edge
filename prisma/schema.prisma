@@ -80,6 +80,9 @@ model Room {
   recordings Recording[]
   meetingInvites MeetingInvite[]
   sessions MeetingSession[]
+  cdrs CallDetailRecord[]
+  transcriptions Transcription[]
+  summary MeetingSummary?
 
   @@index([ownerId])
   @@index([teamId])
@@ -133,6 +136,28 @@ model Recording {
   @@index([roomId])
 }
 
+model DialInNumber {
+  id        String   @id @default(cuid())
+  number    String   @unique
+  country   String
+  region    String?
+  createdAt DateTime @default(now())
+}
+
+model CallDetailRecord {
+  id        String   @id @default(cuid())
+  roomId    String
+  callerId  String
+  direction String   // 'inbound' | 'outbound'
+  duration  Int      @default(0) // seconds
+  status    String   // 'completed' | 'failed' | 'in-progress'
+  createdAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+}
+
 model Plan {
   id         String   @id @default(cuid())
   code       String   @unique
@@ -178,4 +203,24 @@ model PaymentTransaction {
   @@index([userId])
   @@index([planId])
   @@index([recordingId])
+}
+
+model Transcription {
+  id        String   @id @default(cuid())
+  roomId    String
+  content   String   // The full text
+  createdAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+  @@index([roomId])
+}
+
+model MeetingSummary {
+  id          String   @id @default(cuid())
+  roomId      String   @unique
+  actionItems String
+  summary     String
+  createdAt   DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
 }

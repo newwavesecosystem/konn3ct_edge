@@ -11,15 +11,16 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { apiClient, Room } from "@/lib/api-client";
 
-const rooms = [
-  { id: 1, name: "Product Standup", slug: "product-standup", participants: 8, type: "Team", isLocked: false, lastUsed: "Today, 10:00 AM", color: "from-brand-blue to-blue-500" },
-  { id: 2, name: "Client War Room", slug: "client-warroom", participants: 4, type: "External", isLocked: true, lastUsed: "Yesterday", color: "from-brand-green to-emerald-400" },
-  { id: 3, name: "All Hands", slug: "all-hands", participants: 25, type: "Company", isLocked: false, lastUsed: "Mon, 3:00 PM", color: "from-amber-500 to-orange-400" },
-  { id: 4, name: "Design Critique", slug: "design-critique", participants: 6, type: "Team", isLocked: false, lastUsed: "2 days ago", color: "from-purple-500 to-pink-400" },
-  { id: 5, name: "Interview Room", slug: "interview-room", participants: 2, type: "Private", isLocked: true, lastUsed: "Last week", color: "from-rose-500 to-red-400" },
-  { id: 6, name: "1:1 with Manager", slug: "one-on-one", participants: 2, type: "Private", isLocked: true, lastUsed: "Today, 2:00 PM", color: "from-cyan-500 to-blue-400" },
-];
+// Extended interface for UI properties not in API schema
+interface UIRoom extends Room {
+  participants: number;
+  type: string;
+  isLocked: boolean;
+  lastUsed: string;
+  color: string;
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -31,7 +32,34 @@ const itemVariants = {
 };
 
 export default function RoomsPage() {
-  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<UIRoom[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const colors = [
+    "from-brand-blue to-blue-500",
+    "from-brand-green to-emerald-400",
+    "from-amber-500 to-orange-400",
+    "from-purple-500 to-pink-400"
+  ];
+
+  useEffect(() => {
+    apiClient.rooms.getAll()
+      .then(data => {
+        // Map missing UI fields until API is updated to support them
+        const formatted = data.map((r, i) => ({
+          ...r,
+          participants: Math.floor(Math.random() * 5),
+          type: "Team",
+          isLocked: false,
+          lastUsed: new Date(r.createdAt).toLocaleDateString(),
+          color: colors[i % colors.length]
+        }));
+        setRooms(formatted);
+      })
+      .catch(console.error)
+      .finally(() => setIsLoading(false));
+  }, []);
 
   return (
     <div className="flex flex-col gap-8 pb-10">
@@ -52,10 +80,10 @@ export default function RoomsPage() {
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Rooms", value: "6", icon: Video },
-          { label: "Active Now", value: "2", icon: Users },
-          { label: "Public", value: "4", icon: Globe },
-          { label: "Private", value: "2", icon: Lock },
+          { label: "Total Rooms", value: rooms.length.toString(), icon: Video },
+          { label: "Active Now", value: "0", icon: Users },
+          { label: "Public", value: rooms.length.toString(), icon: Globe },
+          { label: "Private", value: "0", icon: Lock },
         ].map((s, i) => (
           <div key={i} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-green/10">

@@ -19,6 +19,7 @@ import {
   mockDocs,
   mockMeetingInfo,
 } from "@/lib/mock/meeting";
+import { WebRTCClient } from "./webrtc";
 
 interface MeetingContextValue {
   // State
@@ -40,6 +41,7 @@ interface MeetingContextValue {
   showReactionPicker: boolean;
   meetingDuration: number; // seconds
   isMobilePanelOpen: boolean;
+  webrtcStatus: string;
 
   // Actions
   toggleMute: () => void;
@@ -94,6 +96,58 @@ export function MeetingProvider({
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState(0);
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
+  const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
+  
+  // ── WebRTC Instance ──────────────────────────────────
+  const webrtcClient = useRef<WebRTCClient | null>(null);
+
+  useEffect(() => {
+    let client: WebRTCClient | null = null;
+
+    const connectToMeeting = async () => {
+      try {
+        setWebrtcStatus("fetching-token");
+        
+        // Call our new Next.js endpoint to get a secure JWT
+        const res = await fetch("/api/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            roomId: roomSlug,
+            name: currentUser.name,
+            email: "guest@conn3ct.com" 
+          })
+        });
+
+        const data = await res.json();
+        
+        if (!data.token) {
+          throw new Error("Failed to get connection token");
+        }
+
+        client = new WebRTCClient(roomSlug, data.token);
+        
+        client.onConnectionStateChange = (state) => {
+          setWebrtcStatus(state);
+        };
+
+        await client.connect();
+        webrtcClient.current = client;
+
+      } catch (err) {
+        console.error("WebRTC Connection Error:", err);
+        setWebrtcStatus("failed");
+      }
+    };
+
+    connectToMeeting();
+
+    return () => {
+      if (client) {
+        client.disconnect();
+      }
+    };
+  }, [roomSlug, currentUser.name]);
 
   // ── Timer ────────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -107,8 +161,14 @@ export function MeetingProvider({
   }, []);
 
   // ── Actions ──────────────────────────────────────────
-  const toggleMute = useCallback(() => setIsMuted((v) => !v), []);
-  const toggleCamera = useCallback(() => setIsCameraOn((v) => !v), []);
+  const toggleMute = useCallback(() => {
+    setIsMuted((v) => !v);
+    // TODO: implement webrtcClient.current.enableMic()/disableMic()
+  }, []);
+  const toggleCamera = useCallback(() => {
+    setIsCameraOn((v) => !v);
+    // TODO: implement webrtcClient.current.enableCamera()/disableCamera()
+  }, []);
   const toggleScreenShare = useCallback(() => setIsScreenSharing((v) => !v), []);
   const toggleRecording = useCallback(() => setIsRecording((v) => !v), []);
   const toggleHandRaise = useCallback(() => setIsHandRaised((v) => !v), []);
@@ -193,6 +253,7 @@ export function MeetingProvider({
         showReactionPicker,
         meetingDuration,
         isMobilePanelOpen,
+        webrtcStatus,
         toggleMute,
         toggleCamera,
         toggleScreenShare,

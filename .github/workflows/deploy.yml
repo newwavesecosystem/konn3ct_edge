@@ -1,0 +1,67 @@
+name: Build and Deploy to DigitalOcean Kubernetes
+
+on:
+  push:
+    branches:
+      - main1
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install DigitalOcean doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DigitalOcean Container Registry
+        run: docker login registry.digitalocean.com -u ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} -p ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Build and Push Docker Image
+        run: |
+          # IMPORTANT: Update 'conn3ct-registry' to match the name of your DigitalOcean container registry
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
+          
+          # Build the Docker image natively on GitHub's Ubuntu servers
+          docker build -t $IMAGE_NAME:${{ github.sha }} .
+          
+          # Tag as latest
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          
+          # Push both tags to DigitalOcean
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
+      - name: Authenticate with Kubernetes Cluster
+        run: |
+          # IMPORTANT: Update 'conn3ct-cluster' to match the exact name of your cluster in DigitalOcean
+          doctl kubernetes cluster kubeconfig save k8s-1-35-1-do-5-atl1-newkonn3ct
+
+      - name: Deploy Manifests to Kubernetes
+        run: |
+          # Safely inject GitHub Secrets into a Kubernetes Secret called 'conn3ct-secrets'
+          kubectl create secret generic conn3ct-secrets \
+            --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+          # Apply all our deployment, service, and redis yaml files
+          kubectl apply -f k8s/
+          
+          # Tell Kubernetes to gracefully restart the pods so they download the new image we just pushed
+          kubectl rollout restart deployment conn3ct-backend
+
+      # - name: Debugging - Print Pod Logs
+      #   run: |
+      #     echo "Waiting up to 3 minutes for the new pod to download the Docker image and start up..."
+      #     kubectl rollout status deployment/conn3ct-backend --timeout=180s
+      #     echo "Pod is successfully running! Fetching logs..."
+      #     kubectl logs -l app=conn3ct-backend --all-containers=true --tail=100
