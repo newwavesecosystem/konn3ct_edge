@@ -12,7 +12,7 @@ import { Mail, Shield, Crown, User } from "lucide-react";
 
 const inviteSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
-  role: z.enum(["Owner", "Admin", "Member"], { required_error: "Please select a role." }),
+  role: z.enum(["Owner", "Admin", "Member"] as const, { error: "Please select a role." }),
 });
 
 export type InviteFormValues = z.infer<typeof inviteSchema>;
