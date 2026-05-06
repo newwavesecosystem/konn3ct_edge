@@ -1,6 +1,12 @@
 import 'dotenv/config';
+import { createServer } from 'http';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yamljs';
+import path from 'path';
+import { initializeSignaling } from './signaling/server';
+import { initializeWorkers } from './media/sfu';
 import { logger } from './logger';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
@@ -10,6 +16,8 @@ import { recordingsRouter } from './routes/recordings';
 import { paymentsRouter } from './routes/payments';
 import { schedulingRouter } from './routes/scheduling';
 import { dashboardRouter } from './routes/dashboard';
+import { telephonyRouter } from './routes/telephony';
+import { aiRouter } from './routes/ai';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +33,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Swagger Documentation
+const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 // Routes
 app.use('/health', healthRouter);
 app.use('/api/auth', authRouter);
@@ -34,6 +46,8 @@ app.use('/api/recordings', recordingsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/scheduling', schedulingRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/telephony', telephonyRouter);
+app.use('/api/ai', aiRouter);
 
 // Basic 404 handler
 app.use((req, res) => {
@@ -41,6 +55,17 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  logger.info(`Server is running on http://localhost:${PORT}`);
+// Start server
+const server = createServer(app);
+initializeSignaling(server);
+
+// Boot mediasoup workers then start HTTP server
+initializeWorkers().then(() => {
+  logger.info('Mediasoup workers initialized successfully.');
+}).catch(err => {
+  logger.warn('Failed to initialize mediasoup workers (Native C++ bindings may be missing on this OS). Running in REST-only mode.', err);
+}).finally(() => {
+  server.listen(PORT, () => {
+    logger.info(`Server is running on http://localhost:${PORT}`);
+  });
 });
