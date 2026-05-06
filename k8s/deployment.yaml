@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-backend
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: conn3ct-backend
@@ -14,9 +14,6 @@ spec:
       labels:
         app: conn3ct-backend
     spec:
-      # Use hostNetwork for direct UDP packet routing (critical for WebRTC performance)
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: backend
           image: your-registry/conn3ct-backend:latest
