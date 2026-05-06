@@ -5,8 +5,36 @@ import { Input } from "@/components/ui/Input";
 import Link from "next/link";
 import { Video, ArrowRight, ShieldCheck, User, Mail, Lock, Star } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export default function SignupPage() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await apiClient.auth.signup({ name, email, password });
+      toast.success("Account created successfully!");
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create account");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="flex min-h-screen w-full">
       {/* Left side: Visuals */}
@@ -87,7 +115,7 @@ export default function SignupPage() {
           </div>
 
           <div className="grid gap-6">
-            <div className="grid gap-5">
+            <form onSubmit={handleSubmit} className="grid gap-5">
               <div className="grid gap-2">
                 <label htmlFor="name" className="text-sm font-semibold text-text-primary">
                   Full Name
@@ -99,7 +127,10 @@ export default function SignupPage() {
                   autoCapitalize="words"
                   autoComplete="name"
                   autoCorrect="off"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   leftIcon={<User className="h-4 w-4" />}
+                  disabled={isLoading}
                 />
               </div>
               <div className="grid gap-2">
@@ -113,7 +144,10 @@ export default function SignupPage() {
                   autoCapitalize="none"
                   autoComplete="email"
                   autoCorrect="off"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   leftIcon={<Mail className="h-4 w-4" />}
+                  disabled={isLoading}
                 />
               </div>
               <div className="grid gap-2">
@@ -125,15 +159,23 @@ export default function SignupPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   leftIcon={<Lock className="h-4 w-4" />}
+                  disabled={isLoading}
                 />
               </div>
-              <Button className="w-full mt-1 h-12 rounded-xl bg-brand-green hover:bg-[#287854] shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all text-base font-semibold" size="lg">
-                Create Account
-                <ArrowRight className="ml-2 h-4 w-4" />
+              <Button 
+                type="submit" 
+                disabled={isLoading}
+                className="w-full mt-1 h-12 rounded-xl bg-brand-green hover:bg-[#287854] shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all text-base font-semibold" 
+                size="lg"
+              >
+                {isLoading ? "Creating Account..." : "Create Account"}
+                {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
-            </div>
-
+            </form>
+            
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />

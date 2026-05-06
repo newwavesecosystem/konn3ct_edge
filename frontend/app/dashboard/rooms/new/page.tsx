@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Select } from "@/components/ui/Select";
+import { apiClient } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export default function NewRoomPage() {
   const router = useRouter();
@@ -34,10 +36,23 @@ export default function NewRoomPage() {
     setSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, ""));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Normally you'd save to API here
-    setTimeout(() => router.push("/dashboard/rooms"), 500);
+    if (!roomName) return;
+    
+    try {
+      setIsLoading(true);
+      // We send just name as per Swagger API
+      await apiClient.rooms.create(roomName);
+      toast.success("Room created successfully!");
+      router.push("/dashboard/rooms");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create room");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -166,8 +181,8 @@ export default function NewRoomPage() {
               Cancel
             </Button>
           </Link>
-          <Button type="submit" className="h-12 px-8 rounded-xl bg-brand-green hover:bg-[#287854] text-white font-bold shadow-lg shadow-brand-green/20">
-            Create Room
+          <Button disabled={isLoading} type="submit" className="h-12 px-8 rounded-xl bg-brand-green hover:bg-[#287854] text-white font-bold shadow-lg shadow-brand-green/20">
+            {isLoading ? "Creating..." : "Create Room"}
           </Button>
         </div>
       </form>

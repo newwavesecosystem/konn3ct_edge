@@ -5,8 +5,35 @@ import { Input } from "@/components/ui/Input";
 import Link from "next/link";
 import { Video, ArrowRight, CheckCircle2, Mail, Lock, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await apiClient.auth.login({ email, password });
+      toast.success("Login successful!");
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to login");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="flex min-h-screen w-full">
       {/* Left side: Form */}
@@ -35,7 +62,7 @@ export default function LoginPage() {
           </div>
 
           <div className="grid gap-6">
-            <div className="grid gap-5">
+            <form onSubmit={handleSubmit} className="grid gap-5">
               <div className="grid gap-2">
                 <label htmlFor="email" className="text-sm font-semibold text-text-primary">
                   Email
@@ -47,7 +74,10 @@ export default function LoginPage() {
                   autoCapitalize="none"
                   autoComplete="email"
                   autoCorrect="off"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   leftIcon={<Mail className="h-4 w-4" />}
+                  disabled={isLoading}
                 />
               </div>
               <div className="grid gap-2">
@@ -64,15 +94,23 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   leftIcon={<Lock className="h-4 w-4" />}
+                  disabled={isLoading}
                 />
               </div>
-              <Button className="w-full mt-1 h-12 rounded-xl bg-brand-green hover:bg-[#287854] shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all text-base font-semibold" size="lg">
-                Log In
-                <ArrowRight className="ml-2 h-4 w-4" />
+              <Button 
+                type="submit" 
+                disabled={isLoading}
+                className="w-full mt-1 h-12 rounded-xl bg-brand-green hover:bg-[#287854] shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all text-base font-semibold" 
+                size="lg"
+              >
+                {isLoading ? "Logging in..." : "Log In"}
+                {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
-            </div>
-
+            </form>
+            
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
