@@ -1,0 +1,179 @@
+"use client";
+
+import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Video, Plus, Copy, Link2, MoreVertical,
+  Users, Globe, Lock, Settings, Trash2, ExternalLink, Edit
+} from "lucide-react";
+import Link from "next/link";
+import { useState, useEffect } from "react";
+
+const rooms = [
+  { id: 1, name: "Product Standup", slug: "product-standup", participants: 8, type: "Team", isLocked: false, lastUsed: "Today, 10:00 AM", color: "from-brand-blue to-blue-500" },
+  { id: 2, name: "Client War Room", slug: "client-warroom", participants: 4, type: "External", isLocked: true, lastUsed: "Yesterday", color: "from-brand-green to-emerald-400" },
+  { id: 3, name: "All Hands", slug: "all-hands", participants: 25, type: "Company", isLocked: false, lastUsed: "Mon, 3:00 PM", color: "from-amber-500 to-orange-400" },
+  { id: 4, name: "Design Critique", slug: "design-critique", participants: 6, type: "Team", isLocked: false, lastUsed: "2 days ago", color: "from-purple-500 to-pink-400" },
+  { id: 5, name: "Interview Room", slug: "interview-room", participants: 2, type: "Private", isLocked: true, lastUsed: "Last week", color: "from-rose-500 to-red-400" },
+  { id: 6, name: "1:1 with Manager", slug: "one-on-one", participants: 2, type: "Private", isLocked: true, lastUsed: "Today, 2:00 PM", color: "from-cyan-500 to-blue-400" },
+];
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } },
+};
+
+export default function RoomsPage() {
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+
+  return (
+    <div className="flex flex-col gap-8 pb-10">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">Rooms</h1>
+          <p className="text-text-muted mt-1">Create and manage your meeting rooms.</p>
+        </div>
+        <Link href="/dashboard/rooms/new">
+          <Button className="h-11 rounded-xl px-5 bg-brand-green hover:bg-[#287854] shadow-[0_6px_20px_rgba(32,116,80,0.2)] transition-all">
+            <Plus className="w-4 h-4 mr-2" />
+            Create Room
+          </Button>
+        </Link>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          { label: "Total Rooms", value: "6", icon: Video },
+          { label: "Active Now", value: "2", icon: Users },
+          { label: "Public", value: "4", icon: Globe },
+          { label: "Private", value: "2", icon: Lock },
+        ].map((s, i) => (
+          <div key={i} className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-green/10">
+              <s.icon className="h-5 w-5 text-brand-green" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-text-primary">{s.value}</p>
+              <p className="text-xs text-text-muted">{s.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Room Grid */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        {rooms.map((room) => (
+          <motion.div key={room.id} variants={itemVariants}>
+            <Card className="rounded-2xl border-border/60 bg-surface hover:shadow-lg hover:shadow-brand-blue/5 transition-all duration-300 group relative">
+              {/* Gradient stripe */}
+              <div className={`h-1.5 w-full rounded-t-2xl bg-gradient-to-r ${room.color}`} />
+
+              <CardContent className="p-5 space-y-4">
+                {/* Title row */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${room.color} shadow-sm`}>
+                      <Video className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-text-primary truncate">{room.name}</h3>
+                      <p className="text-xs text-text-muted truncate">/{room.slug}</p>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdownId(openDropdownId === room.id ? null : room.id);
+                      }}
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg hover:bg-black/[0.04] text-text-muted transition-all ${openDropdownId === room.id ? 'opacity-100 bg-black/[0.04]' : 'opacity-0 group-hover:opacity-100'}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                    
+                    <AnimatePresence>
+                      {openDropdownId === room.id && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-40 cursor-default"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenDropdownId(null);
+                            }}
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-8 w-40 rounded-xl border border-border/60 bg-surface shadow-lg shadow-black/5 z-50 overflow-hidden"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="p-1.5 space-y-0.5">
+                            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-primary hover:bg-black/[0.04] transition-colors">
+                              <Edit className="h-4 w-4 text-text-muted" /> Edit Room
+                            </button>
+                            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-primary hover:bg-black/[0.04] transition-colors">
+                              <Copy className="h-4 w-4 text-text-muted" /> Duplicate
+                            </button>
+                            <div className="h-px w-full bg-border/60 my-1" />
+                            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">
+                              <Trash2 className="h-4 w-4" /> Delete
+                            </button>
+                          </div>
+                        </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* Meta */}
+                <div className="flex items-center gap-3 text-xs text-text-muted">
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" /> {room.participants}
+                  </span>
+                  <span className="w-1 h-1 rounded-full bg-border-strong" />
+                  <span>{room.type}</span>
+                  <span className="w-1 h-1 rounded-full bg-border-strong" />
+                  {room.isLocked ? (
+                    <span className="flex items-center gap-1 text-amber-500"><Lock className="h-3 w-3" /> Locked</span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-brand-green"><Globe className="h-3 w-3" /> Open</span>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                  <span className="text-[11px] text-text-muted">Last used: {room.lastUsed}</span>
+                  <div className="flex gap-1.5">
+                    <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-green/10 text-text-muted hover:text-brand-green transition-colors" title="Copy link">
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" title="Open room">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
