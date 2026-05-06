@@ -17,6 +17,19 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [meetings, setMeetings] = useState<ScheduledMeeting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+
+  const handleStartInstantMeeting = async () => {
+    try {
+      setIsCreatingRoom(true);
+      const room = await apiClient.rooms.create("Instant Meeting");
+      router.push(`/meeting/${room.slug}`);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsCreatingRoom(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -60,10 +73,11 @@ export default function DashboardPage() {
             Copy Personal Link
           </Button>
           <Button 
-            onClick={() => router.push(`/meeting/demo-room-${Math.floor(Math.random() * 1000)}`)}
+            disabled={isCreatingRoom}
+            onClick={handleStartInstantMeeting}
             className="flex-1 md:flex-none h-12 rounded-xl px-6 bg-brand-green hover:bg-[#287854] shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all">
             <Video className="w-5 h-5 mr-2" />
-            New Meeting
+            {isCreatingRoom ? "Starting..." : "New Meeting"}
           </Button>
         </div>
       </div>
@@ -179,9 +193,10 @@ export default function DashboardPage() {
               
               <div className="space-y-3">
                 <Button 
-                  onClick={() => router.push(`/meeting/demo-room-${Math.floor(Math.random() * 1000)}`)}
+                  disabled={isCreatingRoom}
+                  onClick={handleStartInstantMeeting}
                   className="w-full bg-white text-brand-blue hover:bg-gray-100 h-12 rounded-xl font-bold transition-transform active:scale-95">
-                  Start Now
+                  {isCreatingRoom ? "Starting..." : "Start Now"}
                 </Button>
                 <Button 
                   onClick={() => router.push('/dashboard/schedule/new')}
