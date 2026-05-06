@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  /* Brand */
+  --color-brand-blue: #002C88;
+  --color-brand-green: #207450;
+  --color-brand-green-soft: #3C8464;
+  --color-brand-green-muted: #84B09C;
+
+  /* Page / Layout */
+  --color-page-bg: #FCFCFC;
+  --color-meeting-bg: #E4E4E4;
+  --color-surface: #FFFFFF;
+  --color-border: #D9D9D9;
+  --color-border-strong: #404040;
+
+  /* Meeting video / participant UI */
+  --color-video-placeholder: #B8C8C0;
+  --color-avatar-bg: #90B0A4;
+  --color-disabled-control: #B8C9C2;
+  --color-active-chip: #84B09C;
+  --color-inactive-chip: #E0ECE4;
+
+  /* Buttons / Controls */
+  --color-primary-button: #207450;
+  --color-primary-button-hover: #287854;
+  --color-upload-toast: #3C8464;
+  --color-danger: #CC505C;
+  --color-danger-hover: #D45C68;
+
+  /* Text */
+  --color-text-primary: #000000;
+  --color-text-secondary: #343030;
+  --color-text-muted: #A0A0A0;
+  --color-text-inverse: #FFFFFF;
+
+  /* Inputs */
+  --color-input-bg: #F8F8F8;
+  --color-input-border: #70A08C;
+  --color-input-focus: #3C8464;
+
+  /* Icons / Accents */
+  --color-hand-yellow: #FFD400;
+  --color-hand-blue-outline: #0047BA;
+  --color-white-icon: #FFFFFF;
+
+  /* Shadcn standard mappings */
+  --background: var(--color-page-bg);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-brand-green);
+  --primary-foreground: var(--color-text-inverse);
+  --secondary: var(--color-brand-blue);
+  --secondary-foreground: var(--color-text-inverse);
+  --muted: var(--color-meeting-bg);
+  --muted-foreground: var(--color-text-muted);
+  --accent: var(--color-inactive-chip);
+  --accent-foreground: var(--color-brand-blue);
+  --destructive: var(--color-danger);
+  --destructive-foreground: var(--color-text-inverse);
+  --border: var(--color-border);
+  --input: var(--color-input-bg);
+  --ring: var(--color-brand-green-soft);
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Expose brand colors directly to tailwind */
+  --color-brand-blue: var(--color-brand-blue);
+  --color-brand-green: var(--color-brand-green);
+  --color-brand-green-soft: var(--color-brand-green-soft);
+  --color-brand-green-muted: var(--color-brand-green-muted);
+  --color-surface: var(--color-surface);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-muted: var(--color-text-muted);
+  --color-border-strong: var(--color-border-strong);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+/* Custom modern scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-brand-green);
+  border-radius: 4px;
+  border: 2px solid var(--color-surface);
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-brand-green) var(--color-surface);
+}
+
+/* Utility: hide scrollbar but keep scrolling */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
