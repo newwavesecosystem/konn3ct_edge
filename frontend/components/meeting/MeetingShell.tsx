@@ -135,7 +135,7 @@ export function MeetingShell() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              transition={{ type: "spring" as const, damping: 30, stiffness: 300 }}
               className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#111128] rounded-t-3xl border-t border-white/10 max-h-[75vh] flex flex-col"
             >
               {/* Handle bar */}
