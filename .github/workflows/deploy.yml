@@ -58,3 +58,10 @@ jobs:
           
           # Tell Kubernetes to gracefully restart the pods so they download the new image we just pushed
           kubectl rollout restart deployment conn3ct-backend
+
+      - name: Debugging - Print Pod Logs
+        run: |
+          echo "Waiting 15 seconds for pod to boot..."
+          sleep 15
+          echo "Fetching latest logs from the Node.js backend..."
+          kubectl logs -l app=conn3ct-backend --all-containers=true --tail=100
