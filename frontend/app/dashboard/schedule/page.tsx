@@ -97,7 +97,7 @@ export default function SchedulePage() {
                 key={session.id}
                 initial={{ opacity: 0, x: -16 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.08, type: "spring", stiffness: 300, damping: 24 }}
+                transition={{ delay: i * 0.08, type: "spring" as const, stiffness: 300, damping: 24 }}
               >
                 <Card className={`rounded-xl border-border/60 bg-surface overflow-hidden border-l-4 ${session.mode === 'webinar' ? 'border-l-brand-blue' : 'border-l-brand-green'} hover:shadow-md transition-all group`}>
                   <CardContent className="p-0">

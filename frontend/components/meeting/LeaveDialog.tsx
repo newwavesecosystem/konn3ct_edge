@@ -38,7 +38,7 @@ export function LeaveDialog() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            transition={{ type: "spring" as const, damping: 25, stiffness: 300 }}
             className="fixed inset-0 z-[61] flex items-center justify-center p-4"
           >
             <div className="w-full max-w-sm bg-[#1a1a2e] border border-white/10 rounded-2xl p-6 shadow-2xl">

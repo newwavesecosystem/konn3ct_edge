@@ -122,7 +122,7 @@ export default function TeamsPage() {
               key={member.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06, type: "spring", stiffness: 300, damping: 24 }}
+              transition={{ delay: i * 0.06, type: "spring" as const, stiffness: 300, damping: 24 }}
               className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4 items-center px-6 py-4 border-b border-border/30 hover:bg-black/[0.015] transition-colors group last:border-b-0"
             >
               {/* Member */}
