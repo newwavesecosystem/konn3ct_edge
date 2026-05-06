@@ -38,6 +38,21 @@ export function ParticipantTile({
     .slice(0, 2)
     .toUpperCase();
 
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+
+  React.useEffect(() => {
+    if (videoRef.current && participant.videoTrack) {
+      videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
+    }
+  }, [participant.videoTrack]);
+
+  React.useEffect(() => {
+    if (audioRef.current && participant.audioTrack) {
+      audioRef.current.srcObject = new MediaStream([participant.audioTrack]);
+    }
+  }, [participant.audioTrack]);
+
   return (
     <div
       className={cn(
@@ -51,33 +66,44 @@ export function ParticipantTile({
       {/* Mock video area / avatar fallback */}
       {participant.isCameraOn ? (
         <div className="absolute inset-0 bg-gradient-to-br from-[#1a2a3a] via-[#1a1a2e] to-[#2a1a3a] flex items-center justify-center">
-          {/* Simulated video feed with avatar */}
-          <div className="relative flex flex-col items-center gap-2">
-            <Avatar
-              fallback={initials}
-              alt={participant.name}
-              className={cn(
-                "border-2 border-white/10",
-                isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
-              )}
+          {participant.videoTrack ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted // Always mute the video tag, we play audio via audio tag
+              className="w-full h-full object-cover"
+              style={{ transform: participant.id === 'p1' ? 'scaleX(-1)' : 'none' }} // Mirror self
             />
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
-              {participant.isSpeaking && (
-                <div className="flex items-center gap-[2px]">
-                  {[...Array(4)].map((_, i) => (
-                    <span
-                      key={i}
-                      className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
-                      style={{
-                        height: `${[12, 18, 10, 16][i]}px`,
-                        animationDelay: `${i * 0.15}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+          ) : (
+            /* Simulated video feed with avatar */
+            <div className="relative flex flex-col items-center gap-2">
+              <Avatar
+                fallback={initials}
+                alt={participant.name}
+                className={cn(
+                  "border-2 border-white/10",
+                  isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
+                )}
+              />
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
+                {participant.isSpeaking && (
+                  <div className="flex items-center gap-[2px]">
+                    {[...Array(4)].map((_, i) => (
+                      <span
+                        key={i}
+                        className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
+                        style={{
+                          height: `${[12, 18, 10, 16][i]}px`,
+                          animationDelay: `${i * 0.15}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-[#1e293b] via-[#1a1a2e] to-[#2d1f3d] flex items-center justify-center">
@@ -134,6 +160,11 @@ export function ParticipantTile({
           </div>
         </div>
       </div>
+      
+      {/* Hidden audio element for remote participants */}
+      {participant.audioTrack && participant.id !== 'p1' && (
+        <audio ref={audioRef} autoPlay playsInline />
+      )}
     </div>
   );
 }

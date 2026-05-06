@@ -17,6 +17,8 @@ export interface Participant {
   isHandRaised: boolean;
   isSpeaking: boolean;
   joinedAt: string;
+  videoTrack?: MediaStreamTrack | null;
+  audioTrack?: MediaStreamTrack | null;
 }
 
 export interface ChatMessage {

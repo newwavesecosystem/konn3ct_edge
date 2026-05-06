@@ -3,7 +3,7 @@ name: Build and Deploy to DigitalOcean Kubernetes
 on:
   push:
     branches:
-      - main1
+      - main
       - master
 
 jobs:
@@ -23,18 +23,19 @@ jobs:
       - name: Log in to DigitalOcean Container Registry
         run: docker login registry.digitalocean.com -u ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} -p ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Build and Push Docker Image
+      - name: Build and Push Backend Docker Image
         run: |
-          # IMPORTANT: Update 'conn3ct-registry' to match the name of your DigitalOcean container registry
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
-          
-          # Build the Docker image natively on GitHub's Ubuntu servers
           docker build -t $IMAGE_NAME:${{ github.sha }} .
-          
-          # Tag as latest
           docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
-          
-          # Push both tags to DigitalOcean
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
+      - name: Build and Push Frontend Docker Image
+        run: |
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
+          docker build -t $IMAGE_NAME:${{ github.sha }} ./frontend
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
 
@@ -58,6 +59,7 @@ jobs:
           
           # Tell Kubernetes to gracefully restart the pods so they download the new image we just pushed
           kubectl rollout restart deployment conn3ct-backend
+          kubectl rollout restart deployment conn3ct-frontend
 
       # - name: Debugging - Print Pod Logs
       #   run: |

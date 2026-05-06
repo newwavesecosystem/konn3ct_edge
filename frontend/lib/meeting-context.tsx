@@ -75,7 +75,7 @@ export function MeetingProvider({
   roomSlug: string;
 }) {
   // ── State ────────────────────────────────────────────
-  const [participants] = useState<Participant[]>(mockParticipants);
+  const [participants, setParticipants] = useState<Participant[]>(mockParticipants);
   const [currentUser] = useState<Participant>(mockCurrentUser);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
   const [polls, setPolls] = useState<Poll[]>(mockPolls);
@@ -147,7 +147,53 @@ export function MeetingProvider({
         client.disconnect();
       }
     };
-  }, [roomSlug, currentUser.name]);
+  }, [roomSlug, currentUser.name, currentUser.id]);
+
+  // ── Initialize Local Media upon WebRTC connect ────────
+  useEffect(() => {
+    if (webrtcStatus === "connected" && webrtcClient.current) {
+      const client = webrtcClient.current;
+
+      const initMedia = async () => {
+        try {
+          const videoTrack = await client.enableCamera();
+          const audioTrack = await client.enableMic();
+          
+          setParticipants((prev) =>
+            prev.map((p) => {
+              if (p.id === currentUser.id) {
+                return { ...p, videoTrack, audioTrack, isCameraOn: true, isMuted: false };
+              }
+              return p;
+            })
+          );
+        } catch (e) {
+          console.error("Failed to enable local media", e);
+        }
+      };
+
+      initMedia();
+
+      // Handle Remote Streams
+      client.onNewConsumer = (consumer, userId) => {
+        setParticipants((prev) =>
+          prev.map((p) => {
+            // If the backend doesn't send the correct userId for the mock participants,
+            // we will just bind remote tracks to participant p2 for demonstration purposes
+            if (p.id === userId || p.id === "p2") {
+              if (consumer.kind === "video") {
+                return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
+              }
+              if (consumer.kind === "audio") {
+                return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
+              }
+            }
+            return p;
+          })
+        );
+      };
+    }
+  }, [webrtcStatus, currentUser.id]);
 
   // ── Timer ────────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

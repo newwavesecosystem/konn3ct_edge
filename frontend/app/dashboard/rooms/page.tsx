@@ -12,6 +12,8 @@ import {
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { apiClient, Room } from "@/lib/api-client";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 // Extended interface for UI properties not in API schema
 interface UIRoom extends Room {
@@ -32,6 +34,7 @@ const itemVariants = {
 };
 
 export default function RoomsPage() {
+  const router = useRouter();
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [rooms, setRooms] = useState<UIRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -189,10 +192,22 @@ export default function RoomsPage() {
                 <div className="flex items-center justify-between pt-2 border-t border-border/40">
                   <span className="text-[11px] text-text-muted">Last used: {room.lastUsed}</span>
                   <div className="flex gap-1.5">
-                    <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-green/10 text-text-muted hover:text-brand-green transition-colors" title="Copy link">
+                    <button 
+                      onClick={() => {
+                        const link = `${window.location.origin}/meeting/${room.slug}`;
+                        navigator.clipboard.writeText(link);
+                        toast.success("Meeting link copied to clipboard");
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-green/10 text-text-muted hover:text-brand-green transition-colors" 
+                      title="Copy link"
+                    >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
-                    <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" title="Open room">
+                    <button 
+                      onClick={() => router.push(`/meeting/${room.slug}`)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" 
+                      title="Open room"
+                    >
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </div>

@@ -7,6 +7,8 @@ import type {
   Reaction,
 } from "../types/meeting";
 
+const BASE_TIME = 1714838400000; // Fixed static timestamp to prevent Next.js hydration errors
+
 // ── Mock Participants ──────────────────────────────────
 export const mockParticipants: Participant[] = [
   {
@@ -18,7 +20,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: true,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 45).toISOString(),
   },
   {
     id: "p2",
@@ -29,7 +31,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 40).toISOString(),
   },
   {
     id: "p3",
@@ -40,7 +42,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 38).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 38).toISOString(),
   },
   {
     id: "p4",
@@ -51,7 +53,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: true,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 30).toISOString(),
   },
   {
     id: "p5",
@@ -62,7 +64,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 25).toISOString(),
   },
   {
     id: "p6",
@@ -73,7 +75,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 20).toISOString(),
   },
   {
     id: "p7",
@@ -84,7 +86,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 15).toISOString(),
   },
   {
     id: "p8",
@@ -95,7 +97,7 @@ export const mockParticipants: Participant[] = [
     isScreenSharing: false,
     isHandRaised: true,
     isSpeaking: false,
-    joinedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+    joinedAt: new Date(BASE_TIME - 1000 * 60 * 10).toISOString(),
   },
 ];
 
@@ -110,7 +112,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "System",
     senderRole: "host",
     content: "Meeting started",
-    timestamp: new Date(Date.now() - 1000 * 60 * 44).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 44).toISOString(),
     isSystem: true,
   },
   {
@@ -119,7 +121,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Adaeze Okafor",
     senderRole: "host",
     content: "Welcome everyone! Let's get started with the product review.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 42).toISOString(),
   },
   {
     id: "m3",
@@ -127,7 +129,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Chidi Nwosu",
     senderRole: "co-host",
     content: "Thanks Adaeze. I've shared the deck in the docs panel.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 40).toISOString(),
   },
   {
     id: "m4",
@@ -135,7 +137,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Fatima Bello",
     senderRole: "presenter",
     content: "Screen sharing the Q3 metrics now 📊",
-    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 35).toISOString(),
   },
   {
     id: "m5",
@@ -143,7 +145,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Emeka Eze",
     senderRole: "attendee",
     content: "The conversion numbers look great! Up 23% from last quarter.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 30).toISOString(),
   },
   {
     id: "m6",
@@ -151,7 +153,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Ngozi Ibe",
     senderRole: "attendee",
     content: "Can we discuss the mobile retention rates?",
-    timestamp: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 25).toISOString(),
   },
   {
     id: "m7",
@@ -159,7 +161,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Amina Lawal",
     senderRole: "guest",
     content: "Hi everyone, just joined. Happy to be here!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 15).toISOString(),
   },
   {
     id: "m8",
@@ -167,7 +169,7 @@ export const mockChatMessages: ChatMessage[] = [
     senderName: "Adaeze Okafor",
     senderRole: "host",
     content: "Welcome Amina! We're reviewing Q3 product metrics.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
+    timestamp: new Date(BASE_TIME - 1000 * 60 * 14).toISOString(),
   },
 ];
 
@@ -208,7 +210,7 @@ export const mockDocs: DocNote[] = [
     title: "Q3 Product Review — Meeting Notes",
     content: `## Agenda\n\n1. Q3 metrics overview\n2. Feature prioritization for Q4\n3. Mobile retention discussion\n4. Budget allocation\n5. Action items\n\n## Key Takeaways\n\n- Conversion rates up 23% QoQ\n- Mobile retention needs improvement\n- AI summaries feature highly requested\n\n## Action Items\n\n- [ ] Finalize Q4 feature roadmap\n- [ ] Schedule follow-up with mobile team\n- [ ] Prepare budget proposal`,
     lastEditedBy: "Chidi Nwosu",
-    lastEditedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+    lastEditedAt: new Date(BASE_TIME - 1000 * 60 * 20).toISOString(),
   },
 ];
 
@@ -218,7 +220,7 @@ export const mockMeetingInfo: MeetingInfo = {
   roomName: "Q3 Product Review",
   roomType: "meeting",
   hostName: "Adaeze Okafor",
-  startedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+  startedAt: new Date(BASE_TIME - 1000 * 60 * 45).toISOString(),
   meetingLink: "https://konn3ct.app/join/q3-product-review",
   isRecording: false,
   isWaitingRoomEnabled: true,

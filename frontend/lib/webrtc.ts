@@ -28,8 +28,23 @@ export class WebRTCClient {
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
-      this.onConnectionStateChange?.('connected');
-      await this.initializeMediasoup();
+      try {
+        await this.initializeMediasoup();
+        this.onConnectionStateChange?.('connected');
+        
+        // Fetch any existing producers from users already in the room
+        try {
+          const res = await this.request('getProducers', 'producersList');
+          for (const p of res.producers || []) {
+            await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+          }
+        } catch (syncErr) {
+          console.error("Failed to sync existing producers:", syncErr);
+        }
+      } catch (err) {
+        console.error("Mediasoup initialization failed:", err);
+        this.onConnectionStateChange?.('failed');
+      }
     };
 
     this.ws.onmessage = async (event) => {
@@ -174,6 +189,11 @@ export class WebRTCClient {
 
     this.consumers.set(consumer.id, consumer);
     this.onNewConsumer?.(consumer, userId);
+    
+    // Tell the backend to resume sending media (unpause the consumer)
+    this.request('resume', 'resumed', { consumerId: consumer.id }).catch(err => {
+      console.error("Failed to resume consumer:", err);
+    });
   }
 
   public disconnect() {
