@@ -17,8 +17,8 @@ export const MOCK_SESSIONS: ScheduledSession[] = [
     roomName: "Product Standup",
     roomSlug: "product-standup",
     mode: "meeting",
-    startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours from now
-    endTime: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+    startTime: new Date(1714838400000 + 2 * 60 * 60 * 1000).toISOString(), // 2 hours from now
+    endTime: new Date(1714838400000 + 3 * 60 * 60 * 1000).toISOString(),
     timezone: "Africa/Lagos",
     capacity: 20,
     inviteEmails: ["dev@konn3ct.io", "design@konn3ct.io"],
@@ -26,7 +26,7 @@ export const MOCK_SESSIONS: ScheduledSession[] = [
     joinUrl: "https://konn3ct.io/join/sess_1",
     icsUrl: "https://konn3ct.io/api/calendar/sess_1.ics",
     status: "upcoming",
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(1714838400000 - 24 * 60 * 60 * 1000).toISOString(),
   },
   {
     id: "sess_2",
@@ -36,15 +36,15 @@ export const MOCK_SESSIONS: ScheduledSession[] = [
     roomName: "All Hands",
     roomSlug: "all-hands",
     mode: "webinar",
-    startTime: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), // 2 days from now
-    endTime: new Date(Date.now() + 49 * 60 * 60 * 1000).toISOString(),
+    startTime: new Date(1714838400000 + 48 * 60 * 60 * 1000).toISOString(), // 2 days from now
+    endTime: new Date(1714838400000 + 49 * 60 * 60 * 1000).toISOString(),
     timezone: "Africa/Lagos",
     capacity: 500,
     registrationCount: 156,
     joinUrl: "https://konn3ct.io/join/sess_2",
     icsUrl: "https://konn3ct.io/api/calendar/sess_2.ics",
     status: "upcoming",
-    createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(1714838400000 - 48 * 60 * 60 * 1000).toISOString(),
   },
   {
     id: "sess_3",
@@ -54,13 +54,13 @@ export const MOCK_SESSIONS: ScheduledSession[] = [
     roomName: "Design Critique",
     roomSlug: "design-critique",
     mode: "meeting",
-    startTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
-    endTime: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+    startTime: new Date(1714838400000 - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+    endTime: new Date(1714838400000 - 1 * 60 * 60 * 1000).toISOString(),
     timezone: "Africa/Lagos",
     capacity: 10,
     inviteCount: 5,
     joinUrl: "https://konn3ct.io/join/sess_3",
     status: "ended",
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(1714838400000 - 7 * 24 * 60 * 60 * 1000).toISOString(),
   }
 ];
