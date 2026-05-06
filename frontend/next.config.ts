@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "https://konn3ctedge.konn3ct.net/api/:path*", // Proxy to Backend
+        destination: `https://${process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net'}/api/:path*`, // Proxy to Backend
       },
     ];
   },

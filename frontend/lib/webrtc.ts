@@ -23,7 +23,8 @@ export class WebRTCClient {
     this.onConnectionStateChange?.('connecting');
     
     // Connect WebSocket
-    const wsUrl = `wss://konn3ctedge.konn3ct.net/signal?roomId=${this.roomId}&token=${this.token}`;
+    const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
