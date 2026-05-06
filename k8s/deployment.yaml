@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conn3ct-backend
+  labels:
+    app: conn3ct-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: conn3ct-backend
+  template:
+    metadata:
+      labels:
+        app: conn3ct-backend
+    spec:
+      # Use hostNetwork for direct UDP packet routing (critical for WebRTC performance)
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: backend
+          image: your-registry/conn3ct-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+            # UDP ports do not strictly need declaring if hostNetwork=true, but good for docs
+            - containerPort: 10000
+              name: webrtc-udp-start
+              protocol: UDP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: WEBRTC_LISTEN_IP
+              value: "0.0.0.0"
+            - name: WEBRTC_ANNOUNCED_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            # Load secrets from K8s Secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: JWT_SECRET
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: GEMINI_API_KEY
+            - name: PAYSTACK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: PAYSTACK_SECRET_KEY
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "4000m"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
