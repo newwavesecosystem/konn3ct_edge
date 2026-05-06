@@ -1,5 +1,6 @@
 import { Device } from 'mediasoup-client';
-import { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
+// @ts-ignore
+import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 
 export class WebRTCClient {
   private ws: WebSocket | null = null;

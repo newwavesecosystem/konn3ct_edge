@@ -69,7 +69,7 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
 
   // Handle empty responses (like 204 No Content for logout)
   const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 // ── API METHODS ────────────────────────────────────────────────────────────
