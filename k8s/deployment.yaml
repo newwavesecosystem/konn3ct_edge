@@ -59,11 +59,11 @@ spec:
                   key: PAYSTACK_SECRET_KEY
           resources:
             requests:
-              cpu: "1000m"
-              memory: "1Gi"
+              cpu: "100m"
+              memory: "256Mi"
             limits:
-              cpu: "4000m"
-              memory: "4Gi"
+              cpu: "1000m"
+              memory: "2Gi"
           readinessProbe:
             httpGet:
               path: /health
