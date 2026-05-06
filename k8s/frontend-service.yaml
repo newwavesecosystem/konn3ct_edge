@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: conn3ct-frontend
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-port: "3000"
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-path: "/"
+spec:
+  type: LoadBalancer
+  selector:
+    app: conn3ct-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000

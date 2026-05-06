@@ -15,6 +15,7 @@ interface Client {
 }
 
 const rooms = new Map<string, Map<string, Client>>();
+const roomProducers = new Map<string, Array<{ producerId: string, userId: string, kind: string }>>();
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -167,6 +168,11 @@ export function initializeSignaling(server: Server) {
       
       case 'produce': {
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters);
+        
+        // Track for late joiners
+        if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
+        roomProducers.get(roomId)!.push({ producerId, userId, kind: data.kind });
+        
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
         
         // Broadcast to others that a new producer (video/audio track) is available
@@ -178,6 +184,21 @@ export function initializeSignaling(server: Server) {
         const router = await getOrCreateRouter(roomId);
         const consumerParams = await createConsumer(data.transportId, data.producerId, data.rtpCapabilities, router);
         client.ws.send(JSON.stringify({ type: 'consumed', ...consumerParams }));
+        break;
+      }
+
+      case 'resume': {
+        const { resumeConsumer } = require('../media/sfu');
+        await resumeConsumer(data.consumerId);
+        client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
+        break;
+      }
+
+      case 'getProducers': {
+        const producers = roomProducers.get(roomId) || [];
+        // Exclude own producers just in case
+        const othersProducers = producers.filter(p => p.userId !== userId);
+        client.ws.send(JSON.stringify({ type: 'producersList', producers: othersProducers }));
         break;
       }
 

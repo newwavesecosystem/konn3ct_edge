@@ -153,3 +153,13 @@ export async function createConsumer(transportId: string, producerId: string, rt
     rtpParameters: consumer.rtpParameters
   };
 }
+
+/**
+ * Resume a paused consumer
+ */
+export async function resumeConsumer(consumerId: string) {
+  const consumer = consumers.get(consumerId);
+  if (consumer) {
+    await consumer.resume();
+  }
+}
