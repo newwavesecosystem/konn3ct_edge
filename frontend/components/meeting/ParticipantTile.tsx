@@ -1,0 +1,139 @@
+"use client";
+
+import React from "react";
+import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/ui/Avatar";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  MonitorUp,
+  Hand,
+  Crown,
+  Shield,
+} from "lucide-react";
+import type { Participant } from "@/lib/types/meeting";
+
+interface ParticipantTileProps {
+  participant: Participant;
+  isLarge?: boolean;
+  className?: string;
+}
+
+const roleIcon: Record<string, React.ReactNode> = {
+  host: <Crown className="w-3 h-3 text-yellow-400" />,
+  "co-host": <Shield className="w-3 h-3 text-blue-400" />,
+};
+
+export function ParticipantTile({
+  participant,
+  isLarge = false,
+  className,
+}: ParticipantTileProps) {
+  const initials = participant.name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <div
+      className={cn(
+        "relative rounded-2xl overflow-hidden bg-[#1a1a2e] group transition-all duration-300",
+        participant.isSpeaking &&
+          "ring-2 ring-brand-green ring-offset-2 ring-offset-[#0d0d1a]",
+        isLarge ? "aspect-video" : "aspect-video",
+        className
+      )}
+    >
+      {/* Mock video area / avatar fallback */}
+      {participant.isCameraOn ? (
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1a2a3a] via-[#1a1a2e] to-[#2a1a3a] flex items-center justify-center">
+          {/* Simulated video feed with avatar */}
+          <div className="relative flex flex-col items-center gap-2">
+            <Avatar
+              fallback={initials}
+              alt={participant.name}
+              className={cn(
+                "border-2 border-white/10",
+                isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
+              )}
+            />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
+              {participant.isSpeaking && (
+                <div className="flex items-center gap-[2px]">
+                  {[...Array(4)].map((_, i) => (
+                    <span
+                      key={i}
+                      className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
+                      style={{
+                        height: `${[12, 18, 10, 16][i]}px`,
+                        animationDelay: `${i * 0.15}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1e293b] via-[#1a1a2e] to-[#2d1f3d] flex items-center justify-center">
+          <Avatar
+            fallback={initials}
+            alt={participant.name}
+            className={cn(
+              "border-2 border-white/10",
+              isLarge ? "w-24 h-24 text-3xl" : "w-14 h-14 text-lg"
+            )}
+          />
+        </div>
+      )}
+
+      {/* Hand raised indicator */}
+      {participant.isHandRaised && (
+        <div className="absolute top-3 right-3 z-10">
+          <div className="bg-yellow-500/90 backdrop-blur-sm rounded-full p-1.5 animate-bounce shadow-lg">
+            <Hand className="w-4 h-4 text-white" />
+          </div>
+        </div>
+      )}
+
+      {/* Screen sharing indicator */}
+      {participant.isScreenSharing && (
+        <div className="absolute top-3 left-3 z-10">
+          <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
+            <MonitorUp className="w-3 h-3" />
+            Sharing
+          </div>
+        </div>
+      )}
+
+      {/* Bottom overlay with name & controls */}
+      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {roleIcon[participant.role] && (
+              <span className="shrink-0">{roleIcon[participant.role]}</span>
+            )}
+            <span className="text-white text-xs font-medium truncate">
+              {participant.name}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {participant.isMuted ? (
+              <MicOff className="w-3.5 h-3.5 text-red-400" />
+            ) : (
+              <Mic className="w-3.5 h-3.5 text-white/80" />
+            )}
+            {!participant.isCameraOn && (
+              <VideoOff className="w-3.5 h-3.5 text-red-400" />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
