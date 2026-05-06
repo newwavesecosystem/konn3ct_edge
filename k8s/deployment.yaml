@@ -26,7 +26,7 @@ spec:
               name: http
             # UDP ports do not strictly need declaring if hostNetwork=true, but good for docs
             - containerPort: 10000
-              name: webrtc-udp-start
+              name: webrtc-udp
               protocol: UDP
           env:
             - name: NODE_ENV
