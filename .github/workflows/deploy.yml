@@ -41,7 +41,7 @@ jobs:
       - name: Authenticate with Kubernetes Cluster
         run: |
           # IMPORTANT: Update 'conn3ct-cluster' to match the exact name of your cluster in DigitalOcean
-          doctl kubernetes cluster kubeconfig save conn3ct-cluster
+          doctl kubernetes cluster kubeconfig save k8s-1-35-1-do-5-atl1-newkonn3ct
 
       - name: Deploy Manifests to Kubernetes
         run: |
