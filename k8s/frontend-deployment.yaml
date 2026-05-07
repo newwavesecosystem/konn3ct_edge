@@ -25,6 +25,11 @@ spec:
               value: "konn3ctedge.konn3ct.net"
             - name: PORT
               value: "3000"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: JWT_SECRET
           resources:
             requests:
               cpu: "100m"
