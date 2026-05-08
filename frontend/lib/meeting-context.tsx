@@ -75,15 +75,36 @@ export function MeetingProvider({
   children: React.ReactNode;
   roomSlug: string;
 }) {
+  // Extract user info from URL (passed from Join or Dashboard)
+  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const queryName = searchParams.get("name") || "Guest";
+  const queryRole = (searchParams.get("role") as ParticipantRole) || "attendee";
+  
   // ── State ────────────────────────────────────────────
-  const [currentUser] = useState<Participant>(mockCurrentUser);
+  const [currentUser] = useState<Participant>({
+    id: `u-${Math.random().toString(36).substring(2, 9)}`,
+    name: queryName,
+    role: queryRole,
+    isMuted: false,
+    isCameraOn: true,
+    isScreenSharing: false,
+    isHandRaised: false,
+    isSpeaking: false,
+    joinedAt: new Date().toISOString(),
+  });
+  
   // Start with only the current user, so real users are dynamically added
-  const [participants, setParticipants] = useState<Participant[]>([mockCurrentUser]);
+  const [participants, setParticipants] = useState<Participant[]>([currentUser]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
   const [polls, setPolls] = useState<Poll[]>(mockPolls);
   const [docs] = useState<DocNote[]>(mockDocs);
+  const formattedTitle = roomSlug
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
   const [meetingInfo] = useState<MeetingInfo>({
     ...mockMeetingInfo,
+    title: formattedTitle,
     roomSlug,
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
@@ -305,9 +326,8 @@ export function MeetingProvider({
   const toggleScreenShare = useCallback(async () => {
     try {
       if (isScreenSharing) {
-        if (localCameraTrackRef.current) {
-          await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current);
-        }
+        const newTrack = await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current || undefined);
+        if (newTrack) localCameraTrackRef.current = newTrack;
         setIsScreenSharing(false);
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
@@ -315,9 +335,8 @@ export function MeetingProvider({
           setIsScreenSharing(true);
           // Listen for native "Stop sharing" button built into browsers
           screenTrack.onended = async () => {
-            if (localCameraTrackRef.current) {
-              await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current);
-            }
+            const newTrack = await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current || undefined);
+            if (newTrack) localCameraTrackRef.current = newTrack;
             setIsScreenSharing(false);
           };
         }

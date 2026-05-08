@@ -95,6 +95,10 @@ export const apiClient = {
     logout: async () => {
       return fetchApi('/auth/logout', { method: 'POST' });
     },
+
+    getMe: async () => {
+      return fetchApi<User>('/auth/me');
+    },
   },
 
   // ── DASHBOARD ──
