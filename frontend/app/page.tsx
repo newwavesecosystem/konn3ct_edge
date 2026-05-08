@@ -5,8 +5,8 @@ import { PublicFooter } from "@/components/layout/PublicFooter"
 import { Button } from "@/components/ui/Button"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { 
-  CheckCircle, Shield, Zap, Users, ArrowRight, Video, 
+import {
+  CheckCircle, Shield, Zap, Users, ArrowRight, Video,
   MessageSquare, Layout, Lock, Globe, MonitorPlay, Sparkles, PieChart, Star
 } from "lucide-react"
 
@@ -87,16 +87,16 @@ export default function Home() {
                   <div className="w-full h-auto mt-12 bg-gradient-to-br from-brand-blue to-brand-green aspect-video flex items-center justify-center relative overflow-hidden">
                     <div className="absolute inset-0 bg-black/20" />
                     <div className="grid grid-cols-3 gap-4 p-6 w-full h-full relative z-10">
-                       <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
-                         <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">You</div>
-                       </div>
-                       <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
-                         <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Sarah K.</div>
-                         <div className="absolute top-2 right-2 bg-[#FFD400] text-black text-xs px-1.5 py-0.5 rounded shadow">👏</div>
-                       </div>
-                       <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
-                         <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Alex D.</div>
-                       </div>
+                      <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">You</div>
+                      </div>
+                      <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Sarah K.</div>
+                        <div className="absolute top-2 right-2 bg-[#FFD400] text-black text-xs px-1.5 py-0.5 rounded shadow">👏</div>
+                      </div>
+                      <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Alex D.</div>
+                      </div>
                     </div>
                   </div>
                   <motion.div
@@ -126,10 +126,10 @@ export default function Home() {
               Trusted by innovative teams worldwide
             </p>
             <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-50 grayscale">
-              <div className="text-2xl font-bold flex items-center gap-2"><Globe className="h-6 w-6"/> TechFlow</div>
-              <div className="text-2xl font-bold flex items-center gap-2"><PieChart className="h-6 w-6"/> DataCorp</div>
-              <div className="text-2xl font-bold flex items-center gap-2"><Layout className="h-6 w-6"/> DesignSyndicate</div>
-              <div className="text-2xl font-bold flex items-center gap-2"><MonitorPlay className="h-6 w-6"/> MediaPulse</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><Globe className="h-6 w-6" /> TechFlow</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><PieChart className="h-6 w-6" /> DataCorp</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><Layout className="h-6 w-6" /> DesignSyndicate</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><MonitorPlay className="h-6 w-6" /> MediaPulse</div>
             </div>
           </div>
         </section>
@@ -179,7 +179,7 @@ export default function Home() {
                   desc: "Host and monetize your past webinars or training sessions with built-in paywalls."
                 }
               ].map((feature, i) => (
-                <motion.div 
+                <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -242,7 +242,7 @@ export default function Home() {
           <div className="container mx-auto px-4 md:px-6 max-w-6xl">
             <div className="bg-surface border border-border rounded-3xl p-8 md:p-16 flex flex-col md:flex-row items-center gap-12 shadow-sm relative overflow-hidden">
               <div className="absolute top-[-50%] right-[-10%] w-[400px] h-[400px] rounded-full bg-brand-green/5 blur-[80px] pointer-events-none" />
-              
+
               <div className="flex-1 space-y-6 relative z-10">
                 <h2 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
                   Enterprise-grade security, by default.
