@@ -37,15 +37,27 @@ export function MeetingShell() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d0d1a] overflow-hidden">
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}
+    >
       {/* Top bar — minimal */}
-      <div className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 bg-[#0d0d1a] border-b border-white/5">
+      <div
+        className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2"
+        style={{
+          backgroundColor: "var(--mt-bg)",
+          borderBottom: "1px solid var(--mt-border)",
+        }}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-brand-green/20 flex items-center justify-center">
               <span className="text-brand-green font-bold text-xs">K</span>
             </div>
-            <span className="text-sm font-semibold text-white truncate max-w-[120px] sm:max-w-[200px] lg:max-w-none">
+            <span
+              className="text-sm font-semibold truncate max-w-[120px] sm:max-w-[200px] lg:max-w-none"
+              style={{ color: "var(--mt-text)" }}
+            >
               {meetingInfo.roomName}
             </span>
           </div>
@@ -55,28 +67,31 @@ export function MeetingShell() {
               Recording
             </span>
           )}
-          
+
           {/* WebRTC Connection Status Badge */}
           <div className={cn(
             "hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
             webrtcStatus === 'connected' ? "bg-brand-green/10 text-brand-green border-brand-green/20" :
-            webrtcStatus === 'connecting' ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20" :
-            "bg-red-400/10 text-red-400 border-red-400/20"
+              webrtcStatus === 'connecting' ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20" :
+                "bg-red-400/10 text-red-400 border-red-400/20"
           )}>
             <div className={cn(
               "w-1.5 h-1.5 rounded-full",
               webrtcStatus === 'connected' ? "bg-brand-green" :
-              webrtcStatus === 'connecting' ? "bg-yellow-400 animate-pulse" :
-              "bg-red-400"
+                webrtcStatus === 'connecting' ? "bg-yellow-400 animate-pulse" :
+                  "bg-red-400"
             )} />
-            {webrtcStatus === 'connected' ? 'Connected' : 
-             webrtcStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+            {webrtcStatus === 'connected' ? 'Connected' :
+              webrtcStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
           </div>
 
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-white/30 hidden sm:block">
+          <span
+            className="text-[11px] hidden sm:block"
+            style={{ color: "var(--mt-text-faint)" }}
+          >
             {meetingInfo.roomType === "webinar" ? "Webinar" : "Meeting"} ·{" "}
             {meetingInfo.participantCount} participants
           </span>
@@ -99,12 +114,19 @@ export function MeetingShell() {
               animate={{ width: 340, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: "easeInOut" }}
-              className="hidden md:flex flex-col shrink-0 border-l border-white/5 bg-[#111128] overflow-hidden"
+              className="hidden md:flex flex-col shrink-0 overflow-hidden"
+              style={{
+                backgroundColor: "var(--mt-bg-elevated)",
+                borderLeft: "1px solid var(--mt-border)",
+              }}
             >
               <div className="flex items-center justify-end p-2">
                 <button
                   onClick={() => setActivePanel(null)}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors"
+                  className="p-1.5 rounded-lg transition-colors"
+                  style={{ color: "var(--mt-text-faint)" }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -125,7 +147,8 @@ export function MeetingShell() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              className="fixed inset-0 z-40 md:hidden"
+              style={{ backgroundColor: "var(--mt-overlay)" }}
               onClick={() => {
                 setIsMobilePanelOpen(false);
                 setActivePanel(null);
@@ -136,11 +159,18 @@ export function MeetingShell() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring" as const, damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#111128] rounded-t-3xl border-t border-white/10 max-h-[75vh] flex flex-col"
+              className="fixed bottom-0 left-0 right-0 z-50 md:hidden rounded-t-3xl max-h-[75vh] flex flex-col"
+              style={{
+                backgroundColor: "var(--mt-bg-elevated)",
+                borderTop: "1px solid var(--mt-border-strong)",
+              }}
             >
               {/* Handle bar */}
               <div className="flex items-center justify-center py-2">
-                <div className="w-10 h-1 rounded-full bg-white/20" />
+                <div
+                  className="w-10 h-1 rounded-full"
+                  style={{ backgroundColor: "var(--mt-text-ghost)" }}
+                />
               </div>
               {/* Close */}
               <div className="flex items-center justify-end px-4">
@@ -149,7 +179,10 @@ export function MeetingShell() {
                     setIsMobilePanelOpen(false);
                     setActivePanel(null);
                   }}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors"
+                  className="p-1.5 rounded-lg transition-colors"
+                  style={{ color: "var(--mt-text-faint)" }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                 >
                   <X className="w-4 h-4" />
                 </button>

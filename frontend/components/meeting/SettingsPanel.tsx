@@ -1,22 +1,64 @@
 "use client";
 
 import React from "react";
+import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
 import {
   Speaker,
   Mic,
   Video,
   Globe,
   Volume2,
+  Sun,
+  Moon,
+  Palette,
 } from "lucide-react";
 
 export function SettingsPanel() {
+  const { theme, setTheme } = useMeetingTheme();
+
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-white/5">
-        <h3 className="text-sm font-semibold text-white">Settings</h3>
+      <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--mt-border)" }}>
+        <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Settings</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 space-y-5">
+        {/* Theme settings */}
+        <SettingsGroup label="Theme">
+          <div className="space-y-2">
+            <p className="text-xs font-medium" style={{ color: "var(--mt-text-muted)" }}>
+              <Palette className="w-4 h-4 inline mr-2" style={{ verticalAlign: "text-bottom" }} />
+              Meeting Theme
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <ThemeOption
+                themeName="emerald"
+                label="Emerald"
+                icon={<Palette className="w-4 h-4" />}
+                description="Default"
+                active={theme === "emerald"}
+                onSelect={() => setTheme("emerald")}
+              />
+              <ThemeOption
+                themeName="konn3ct"
+                label="Konn3ct"
+                icon={<Sun className="w-4 h-4" />}
+                description="Light"
+                active={theme === "konn3ct"}
+                onSelect={() => setTheme("konn3ct")}
+              />
+              <ThemeOption
+                themeName="dark"
+                label="Dark"
+                icon={<Moon className="w-4 h-4" />}
+                description="Cinematic"
+                active={theme === "dark"}
+                onSelect={() => setTheme("dark")}
+              />
+            </div>
+          </div>
+        </SettingsGroup>
+
         {/* Audio settings */}
         <SettingsGroup label="Audio">
           <SettingsSelect
@@ -63,6 +105,77 @@ export function SettingsPanel() {
   );
 }
 
+function ThemeOption({
+  themeName,
+  label,
+  icon,
+  description,
+  active,
+  onSelect,
+}: {
+  themeName: MeetingTheme;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className="flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-200"
+      style={{
+        backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+        border: active ? "2px solid var(--color-brand-green)" : "2px solid var(--mt-border)",
+      }}
+    >
+      <div
+        className="w-full aspect-[16/10] rounded-lg flex items-center justify-center"
+        style={{
+          backgroundColor:
+            themeName === "emerald" ? "#0B2B1E" :
+            themeName === "dark" ? "#0d0d1a" : "#FCFCFC",
+          border: "1px solid var(--mt-border)",
+        }}
+      >
+        <div className="flex gap-1">
+          <div
+            className="w-6 h-4 rounded"
+            style={{
+              backgroundColor:
+                themeName === "emerald" ? "#14412F" :
+                themeName === "dark" ? "#1a1a2e" : "#F0F5F2",
+            }}
+          />
+          <div
+            className="w-6 h-4 rounded"
+            style={{
+              backgroundColor:
+                themeName === "emerald" ? "#14412F" :
+                themeName === "dark" ? "#1a1a2e" : "#F0F5F2",
+            }}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span style={{ color: active ? "var(--mt-text)" : "var(--mt-text-muted)" }}>{icon}</span>
+        <span
+          className="text-xs font-semibold"
+          style={{ color: active ? "var(--mt-text)" : "var(--mt-text-muted)" }}
+        >
+          {label}
+        </span>
+      </div>
+      <span
+        className="text-[10px]"
+        style={{ color: "var(--mt-text-faint)" }}
+      >
+        {description}
+      </span>
+    </button>
+  );
+}
+
 function SettingsGroup({
   label,
   children,
@@ -72,7 +185,10 @@ function SettingsGroup({
 }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wider text-white/30 font-semibold mb-3">
+      <p
+        className="text-[11px] uppercase tracking-wider font-semibold mb-3"
+        style={{ color: "var(--mt-text-faint)" }}
+      >
         {label}
       </p>
       <div className="space-y-3">{children}</div>
@@ -91,13 +207,20 @@ function SettingsSelect({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-2 text-white/50 mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5" style={{ color: "var(--mt-text-muted)" }}>
         {icon}
         <span className="text-xs font-medium">{label}</span>
       </div>
-      <select className="w-full bg-white/5 border border-white/5 rounded-xl px-3 py-2 text-xs text-white/80 outline-none focus:border-brand-green/40 transition-colors appearance-none">
+      <select
+        className="w-full rounded-xl px-3 py-2 text-xs outline-none transition-colors appearance-none"
+        style={{
+          backgroundColor: "var(--mt-bg-input)",
+          border: "1px solid var(--mt-border)",
+          color: "var(--mt-text-secondary)",
+        }}
+      >
         {options.map((o) => (
-          <option key={o} value={o} className="bg-[#1a1a2e]">
+          <option key={o} value={o} style={{ backgroundColor: "var(--mt-option-bg)" }}>
             {o}
           </option>
         ))}
@@ -116,12 +239,13 @@ function SettingsToggle({
   const [isOn, setIsOn] = React.useState(checked);
   return (
     <div className="flex items-center justify-between py-1">
-      <span className="text-xs text-white/60">{label}</span>
+      <span className="text-xs" style={{ color: "var(--mt-text-muted)" }}>{label}</span>
       <button
         onClick={() => setIsOn(!isOn)}
         className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
-          isOn ? "bg-brand-green" : "bg-white/10"
+          isOn ? "bg-brand-green" : ""
         }`}
+        style={!isOn ? { backgroundColor: "var(--mt-bg-control-hover)" } : undefined}
       >
         <span
           className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
@@ -145,10 +269,10 @@ function SettingsSlider({
   const [val, setVal] = React.useState(value);
   return (
     <div>
-      <div className="flex items-center gap-2 text-white/50 mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5" style={{ color: "var(--mt-text-muted)" }}>
         {icon}
         <span className="text-xs font-medium">{label}</span>
-        <span className="ml-auto text-[10px] text-white/30">{val}%</span>
+        <span className="ml-auto text-[10px]" style={{ color: "var(--mt-text-faint)" }}>{val}%</span>
       </div>
       <input
         type="range"
@@ -156,7 +280,8 @@ function SettingsSlider({
         max={100}
         value={val}
         onChange={(e) => setVal(Number(e.target.value))}
-        className="w-full h-1 bg-white/10 rounded-full appearance-none accent-brand-green"
+        className="w-full h-1 rounded-full appearance-none accent-brand-green"
+        style={{ backgroundColor: "var(--mt-bg-control-hover)" }}
       />
     </div>
   );
