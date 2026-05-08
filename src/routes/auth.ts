@@ -87,3 +87,24 @@ authRouter.post('/logout', (req: Request, res: Response) => {
   res.clearCookie('token');
   res.status(200).json({ message: 'Logged out successfully' });
 });
+
+authRouter.get('/me', async (req: Request, res: Response) => {
+  try {
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+
+    const secret = process.env.JWT_SECRET || 'fallback-secret-key';
+    const decoded = jwt.verify(token, secret) as { userId: string, email: string };
+    
+    const user = await db.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    return res.status(200).json({
+      id: user.id,
+      name: user.name || user.email.split('@')[0],
+      email: user.email
+    });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+});

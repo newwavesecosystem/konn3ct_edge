@@ -46,7 +46,7 @@ export default function JoinPage({
       setIsWaiting(true);
       // After "waiting room" delay, go to meeting
       setTimeout(() => {
-        router.push(`/meeting/${resolvedParams.roomSlug}`);
+        router.push(`/meeting/${resolvedParams.roomSlug}?name=${encodeURIComponent(name)}&role=attendee`);
       }, 2500);
     }, 1500);
   };

@@ -38,6 +38,11 @@ export default function RoomsPage() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [rooms, setRooms] = useState<UIRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{name: string} | null>(null);
+
+  useEffect(() => {
+    apiClient.auth.getMe().then(user => setCurrentUser(user)).catch(() => {});
+  }, []);
 
   const colors = [
     "from-brand-blue to-blue-500",
@@ -204,7 +209,13 @@ export default function RoomsPage() {
                       <Copy className="h-3.5 w-3.5" />
                     </button>
                     <button 
-                      onClick={() => router.push(`/meeting/${room.slug}`)}
+                      onClick={() => {
+                        if (currentUser) {
+                          router.push(`/meeting/${room.slug}?name=${encodeURIComponent(currentUser.name)}&role=host`);
+                        } else {
+                          router.push(`/meeting/${room.slug}?role=host`);
+                        }
+                      }}
                       className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" 
                       title="Open room"
                     >

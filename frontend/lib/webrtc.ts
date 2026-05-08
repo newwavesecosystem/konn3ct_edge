@@ -258,9 +258,17 @@ export class WebRTCClient {
     return screenTrack;
   }
 
-  public async disableScreenShare(cameraTrack?: MediaStreamTrack) {
-    if (this.localVideoProducer && cameraTrack) {
+  public async disableScreenShare(cameraTrack?: MediaStreamTrack): Promise<MediaStreamTrack | undefined> {
+    if (!this.localVideoProducer) return undefined;
+    
+    if (cameraTrack && cameraTrack.readyState === 'live') {
       await this.localVideoProducer.replaceTrack({ track: cameraTrack });
+      return cameraTrack;
+    } else {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const newTrack = stream.getVideoTracks()[0];
+      await this.localVideoProducer.replaceTrack({ track: newTrack });
+      return newTrack;
     }
   }
 
