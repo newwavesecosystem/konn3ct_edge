@@ -14,9 +14,12 @@ export function DocsPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Docs & Notes</h3>
-        <button className="text-xs text-brand-green-soft hover:text-white transition-colors font-medium">
+      <div
+        className="px-4 py-3 flex items-center justify-between"
+        style={{ borderBottom: "1px solid var(--mt-border)" }}
+      >
+        <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Docs & Notes</h3>
+        <button className="text-xs text-brand-green-soft hover:text-brand-green transition-colors font-medium">
           + Add Note
         </button>
       </div>
@@ -24,9 +27,9 @@ export function DocsPanel() {
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-3 space-y-4">
         {docs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
-            <FileText className="w-10 h-10 text-white/10 mb-3" />
-            <p className="text-sm text-white/40">No documents shared</p>
-            <p className="text-xs text-white/20 mt-1">
+            <FileText className="w-10 h-10 mb-3" style={{ color: "var(--mt-text-whisper)" }} />
+            <p className="text-sm" style={{ color: "var(--mt-text-faint)" }}>No documents shared</p>
+            <p className="text-xs mt-1" style={{ color: "var(--mt-text-ghost)" }}>
               Share notes or documents with participants
             </p>
           </div>
@@ -34,31 +37,53 @@ export function DocsPanel() {
           docs.map((doc) => (
             <div
               key={doc.id}
-              className="bg-white/5 rounded-2xl border border-white/5 overflow-hidden"
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: "var(--mt-bg-control)",
+                border: "1px solid var(--mt-border)",
+              }}
             >
-              <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+              <div
+                className="px-4 py-3 flex items-center justify-between"
+                style={{ borderBottom: "1px solid var(--mt-border)" }}
+              >
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText className="w-4 h-4 text-brand-green-soft shrink-0" />
-                  <span className="text-sm font-medium text-white truncate">
+                  <span className="text-sm font-medium truncate" style={{ color: "var(--mt-text)" }}>
                     {doc.title}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors">
+                  <button
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{ color: "var(--mt-text-faint)" }}
+                  >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </button>
-                  <button className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors">
+                  <button
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{ color: "var(--mt-text-faint)" }}
+                  >
                     <Download className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
               {/* Rendered content */}
-              <div className="px-4 py-3 text-xs text-white/60 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto no-scrollbar">
+              <div
+                className="px-4 py-3 text-xs leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto no-scrollbar"
+                style={{ color: "var(--mt-text-muted)" }}
+              >
                 {doc.content}
               </div>
 
-              <div className="px-4 py-2 border-t border-white/5 text-[10px] text-white/25">
+              <div
+                className="px-4 py-2 text-[10px]"
+                style={{
+                  borderTop: "1px solid var(--mt-border)",
+                  color: "var(--mt-text-ghost)",
+                }}
+              >
                 Last edited by {doc.lastEditedBy} at{" "}
                 {formatTime(doc.lastEditedAt)}
               </div>

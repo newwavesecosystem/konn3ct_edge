@@ -41,25 +41,35 @@ export function ParticipantTile({
   return (
     <div
       className={cn(
-        "relative rounded-2xl overflow-hidden bg-[#1a1a2e] group transition-all duration-300",
+        "relative rounded-2xl overflow-hidden group transition-all duration-300",
         participant.isSpeaking &&
-          "ring-2 ring-brand-green ring-offset-2 ring-offset-[#0d0d1a]",
+          "ring-2 ring-brand-green ring-offset-2",
         isLarge ? "aspect-video" : "aspect-video",
         className
       )}
+      style={{
+        backgroundColor: "var(--mt-bg-tile)",
+        ...(participant.isSpeaking ? { ringOffsetColor: "var(--mt-bg)" } as React.CSSProperties : {}),
+      }}
     >
       {/* Mock video area / avatar fallback */}
       {participant.isCameraOn ? (
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1a2a3a] via-[#1a1a2e] to-[#2a1a3a] flex items-center justify-center">
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{
+            background: `linear-gradient(to bottom right, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))`,
+          }}
+        >
           {/* Simulated video feed with avatar */}
           <div className="relative flex flex-col items-center gap-2">
             <Avatar
               fallback={initials}
               alt={participant.name}
               className={cn(
-                "border-2 border-white/10",
+                "border-2",
                 isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
               )}
+              style={{ borderColor: "var(--mt-border-strong)" } as React.CSSProperties}
             />
             <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
               {participant.isSpeaking && (
@@ -80,14 +90,20 @@ export function ParticipantTile({
           </div>
         </div>
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1e293b] via-[#1a1a2e] to-[#2d1f3d] flex items-center justify-center">
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{
+            background: `linear-gradient(to bottom right, var(--mt-bg-tile-alt), var(--mt-bg-tile), var(--mt-bg-tile-alt2))`,
+          }}
+        >
           <Avatar
             fallback={initials}
             alt={participant.name}
             className={cn(
-              "border-2 border-white/10",
+              "border-2",
               isLarge ? "w-24 h-24 text-3xl" : "w-14 h-14 text-lg"
             )}
+            style={{ borderColor: "var(--mt-border-strong)" } as React.CSSProperties}
           />
         </div>
       )}

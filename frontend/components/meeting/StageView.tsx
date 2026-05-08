@@ -75,8 +75,11 @@ export function StageView() {
             </div>
           ))}
           {others.length > 6 && (
-            <div className="w-28 sm:w-36 lg:w-44 shrink-0 aspect-video rounded-2xl bg-[#1a1a2e] flex items-center justify-center">
-              <span className="text-white/60 text-sm font-medium">
+            <div
+              className="w-28 sm:w-36 lg:w-44 shrink-0 aspect-video rounded-2xl flex items-center justify-center"
+              style={{ backgroundColor: "var(--mt-bg-tile)" }}
+            >
+              <span className="text-sm font-medium" style={{ color: "var(--mt-text-muted)" }}>
                 +{others.length - 6} more
               </span>
             </div>
@@ -111,16 +114,26 @@ function ScreenShareLayout({
       {/* ── Shared screen area ──────────────────────── */}
       <div
         className={cn(
-          "relative rounded-2xl overflow-hidden bg-[#0a0a18] border border-white/5 transition-all duration-300",
+          "relative rounded-2xl overflow-hidden transition-all duration-300",
           isFullscreen
             ? "fixed inset-2 z-50"
             : "flex-1 min-h-0 lg:min-w-0"
         )}
+        style={{
+          backgroundColor: "var(--mt-bg-screen)",
+          border: "1px solid var(--mt-border)",
+        }}
       >
         {/* Mock shared screen content */}
         <div className="absolute inset-0 flex flex-col">
           {/* Top bar */}
-          <div className="flex items-center justify-between px-4 py-2.5 bg-[#0a0a18]/90 backdrop-blur-sm border-b border-white/5 shrink-0 z-10">
+          <div
+            className="flex items-center justify-between px-4 py-2.5 backdrop-blur-sm shrink-0 z-10"
+            style={{
+              backgroundColor: "var(--mt-bg-screen)",
+              borderBottom: "1px solid var(--mt-border)",
+            }}
+          >
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2.5 py-1 rounded-lg">
                 <MonitorUp className="w-3.5 h-3.5" />
@@ -132,7 +145,8 @@ function ScreenShareLayout({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors"
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: "var(--mt-text-faint)" }}
                 title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? (
@@ -154,34 +168,48 @@ function ScreenShareLayout({
           </div>
 
           {/* Screen content mock */}
-          <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-[#0e1525] via-[#0a0a18] to-[#0e0e24]">
+          <div
+            className="flex-1 flex items-center justify-center"
+            style={{
+              background: `linear-gradient(to bottom right, var(--mt-bg-screen-grad1), var(--mt-bg-screen), var(--mt-bg-screen-grad2))`,
+            }}
+          >
             <div className="flex flex-col items-center gap-4 text-center px-6 max-w-lg">
               {/* Mock presentation / desktop */}
-              <div className="w-full max-w-md aspect-[16/10] rounded-xl bg-[#141428] border border-white/5 p-6 flex flex-col gap-3 shadow-2xl">
+              <div
+                className="w-full max-w-md aspect-[16/10] rounded-xl p-6 flex flex-col gap-3 shadow-2xl"
+                style={{
+                  backgroundColor: "var(--mt-bg-screen-content)",
+                  border: "1px solid var(--mt-border)",
+                }}
+              >
                 {/* Mock title bar */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
                   <div className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
-                  <div className="ml-3 h-4 w-40 rounded bg-white/5" />
+                  <div
+                    className="ml-3 h-4 w-40 rounded"
+                    style={{ backgroundColor: "var(--mt-bg-control)" }}
+                  />
                 </div>
                 {/* Mock content lines */}
                 <div className="flex-1 flex flex-col gap-2 pt-2">
-                  <div className="h-5 w-3/4 rounded bg-white/8" />
-                  <div className="h-3 w-full rounded bg-white/4" />
-                  <div className="h-3 w-5/6 rounded bg-white/4" />
-                  <div className="h-3 w-2/3 rounded bg-white/4" />
+                  <div className="h-5 w-3/4 rounded" style={{ backgroundColor: "var(--mt-text-whisper)" }} />
+                  <div className="h-3 w-full rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="h-3 w-5/6 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="h-3 w-2/3 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
                   <div className="mt-3 flex gap-2">
                     <div className="h-16 flex-1 rounded-lg bg-blue-500/10 border border-blue-500/10" />
                     <div className="h-16 flex-1 rounded-lg bg-green-500/10 border border-green-500/10" />
                     <div className="h-16 flex-1 rounded-lg bg-purple-500/10 border border-purple-500/10" />
                   </div>
-                  <div className="h-3 w-1/2 rounded bg-white/4 mt-2" />
-                  <div className="h-3 w-3/4 rounded bg-white/4" />
+                  <div className="h-3 w-1/2 rounded mt-2" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="h-3 w-3/4 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-white/20">
+              <div className="flex items-center gap-2" style={{ color: "var(--mt-text-ghost)" }}>
                 <MousePointerClick className="w-4 h-4" />
                 <span className="text-xs">
                   {isMe

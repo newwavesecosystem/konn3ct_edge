@@ -42,10 +42,13 @@ export function ParticipantsPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">
+      <div
+        className="px-4 py-3 flex items-center justify-between"
+        style={{ borderBottom: "1px solid var(--mt-border)" }}
+      >
+        <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>
           Participants{" "}
-          <span className="text-white/40 font-normal">
+          <span style={{ color: "var(--mt-text-faint)" }} className="font-normal">
             ({participants.length})
           </span>
         </h3>
@@ -89,7 +92,10 @@ function ParticipantGroup({
 }) {
   return (
     <div className="px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wider text-white/30 font-semibold px-1 mb-1">
+      <p
+        className="text-[11px] uppercase tracking-wider font-semibold px-1 mb-1"
+        style={{ color: "var(--mt-text-faint)" }}
+      >
         {label} ({participants.length})
       </p>
       {participants.map((p) => (
@@ -118,7 +124,11 @@ function ParticipantRow({
     .toUpperCase();
 
   return (
-    <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors group">
+    <div className="flex items-center gap-3 px-2 py-2 rounded-xl transition-colors group"
+      style={{ cursor: "default" }}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+    >
       <div className="relative">
         <Avatar
           fallback={initials}
@@ -126,17 +136,20 @@ function ParticipantRow({
           className="w-8 h-8 text-xs"
         />
         {participant.isSpeaking && (
-          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-brand-green border-2 border-[#0d0d1a]" />
+          <div
+            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-brand-green border-2"
+            style={{ borderColor: "var(--mt-bg)" }}
+          />
         )}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm text-white/90 truncate font-medium">
+          <span className="text-sm truncate font-medium" style={{ color: "var(--mt-text-secondary)" }}>
             {participant.name}
           </span>
           {isMe && (
-            <span className="text-[10px] text-white/30">(You)</span>
+            <span className="text-[10px]" style={{ color: "var(--mt-text-faint)" }}>(You)</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -166,15 +179,17 @@ function ParticipantRow({
         {participant.isMuted ? (
           <MicOff className="w-3.5 h-3.5 text-red-400/60" />
         ) : (
-          <Mic className="w-3.5 h-3.5 text-white/30" />
+          <Mic className="w-3.5 h-3.5" style={{ color: "var(--mt-text-faint)" }} />
         )}
         {participant.isCameraOn ? (
-          <Video className="w-3.5 h-3.5 text-white/30" />
+          <Video className="w-3.5 h-3.5" style={{ color: "var(--mt-text-faint)" }} />
         ) : (
           <VideoOff className="w-3.5 h-3.5 text-red-400/60" />
         )}
-        <button className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all">
-          <MoreHorizontal className="w-3.5 h-3.5 text-white/40" />
+        <button className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+          style={{ color: "var(--mt-text-faint)" }}
+        >
+          <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
