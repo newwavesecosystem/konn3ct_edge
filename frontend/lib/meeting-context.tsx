@@ -201,7 +201,7 @@ export function MeetingProvider({
             const newParticipant: Participant = {
               id: userId,
               name: `Participant ${userId.substring(5, 9)}`,
-              role: "audience",
+              role: "attendee",
               isMuted: consumer.kind !== "audio",
               isCameraOn: consumer.kind === "video",
               isScreenSharing: false,
