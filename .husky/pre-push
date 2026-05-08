@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "========================================="
+echo "Running Pre-Push Validation Check"
+echo "========================================="
+
+echo "1/2 Building Backend..."
+npm run build
+if [ $? -ne 0 ]; then
+  echo "Backend build failed! Aborting push."
+  exit 1
+fi
+
+echo "2/2 Building Frontend..."
+cd frontend
+npm run build
+if [ $? -ne 0 ]; then
+  echo "Frontend build failed! Aborting push."
+  exit 1
+fi
+
+echo "========================================="
+echo "Validation passed! Pushing to GitHub..."
+echo "========================================="
+exit 0

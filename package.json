@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
@@ -43,6 +44,7 @@
     "@types/ws": "^8.18.1",
     "@types/yamljs": "^0.2.34",
     "eslint": "^9.29.0",
+    "husky": "^9.1.7",
     "prisma": "^6.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.8.3"
