@@ -7,6 +7,7 @@ import YAML from 'yamljs';
 import path from 'path';
 import { initializeSignaling } from './signaling/server';
 import { initializeWorkers } from './media/sfu';
+import { config } from './media/config';
 import { logger } from './logger';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
@@ -60,12 +61,34 @@ const server = createServer(app);
 initializeSignaling(server);
 
 // Boot mediasoup workers then start HTTP server
-initializeWorkers().then(() => {
-  logger.info('Mediasoup workers initialized successfully.');
-}).catch(err => {
-  logger.warn('Failed to initialize mediasoup workers (Native C++ bindings may be missing on this OS). Running in REST-only mode.', err);
-}).finally(() => {
-  server.listen(PORT, () => {
-    logger.info(`Server is running on http://localhost:${PORT}`);
-  });
-});
+async function boot() {
+  try {
+    // In production (Kubernetes), dynamically fetch the true public IP for WebRTC routing
+    if (process.env.NODE_ENV === 'production') {
+      const https = require('https');
+      const publicIp = await new Promise<string>((resolve) => {
+        https.get('https://api.ipify.org', (res: any) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve(data.trim()));
+        }).on('error', (err: any) => {
+          logger.error('Failed to fetch public IP for WebRTC', err);
+          resolve(process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1');
+        });
+      });
+      logger.info(`Dynamically detected Public IP for WebRTC: ${publicIp}`);
+      config.mediasoup.webRtcTransport.listenIps[0].announcedIp = publicIp;
+    }
+
+    await initializeWorkers();
+    logger.info('Mediasoup workers initialized successfully.');
+  } catch (err) {
+    logger.warn('Failed to initialize mediasoup workers. Running in REST-only mode.', err);
+  } finally {
+    server.listen(PORT, () => {
+      logger.info(`Server is running on http://localhost:${PORT}`);
+    });
+  }
+}
+
+boot();

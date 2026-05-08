@@ -6,6 +6,8 @@ metadata:
     app: conn3ct-frontend
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: conn3ct-frontend
