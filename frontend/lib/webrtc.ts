@@ -17,6 +17,12 @@ export class WebRTCClient {
 
   public onNewConsumer?: (consumer: Consumer, userId: string) => void;
   public onConnectionStateChange?: (state: string) => void;
+  
+  // Collaboration Callbacks
+  public onChatMessage?: (msg: any) => void;
+  public onReaction?: (reaction: any) => void;
+  public onPollCreate?: (poll: any) => void;
+  public onPollVote?: (vote: any) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -66,6 +72,18 @@ export class WebRTCClient {
         case 'user_left':
           // Cleanup consumers for this user
           break;
+        case 'chat':
+          this.onChatMessage?.(msg);
+          break;
+        case 'reaction':
+          this.onReaction?.(msg);
+          break;
+        case 'poll_create':
+          this.onPollCreate?.(msg);
+          break;
+        case 'poll_vote':
+          this.onPollVote?.(msg);
+          break;
       }
     };
 
@@ -96,6 +114,32 @@ export class WebRTCClient {
         }
       }, 10000);
     });
+  }
+
+  // --- Collaboration Methods ---
+  
+  public sendChatMessage(message: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'chat', message }));
+    }
+  }
+
+  public sendReaction(reaction: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'reaction', reaction }));
+    }
+  }
+
+  public createPoll(pollId: string, question: string, options: any[]) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'poll_create', pollId, question, options }));
+    }
+  }
+
+  public votePoll(pollId: string, optionId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
   }
 
   private async initializeMediasoup() {
@@ -170,6 +214,54 @@ export class WebRTCClient {
     
     this.localAudioProducer = await this.sendTransport.produce({ track: audioTrack });
     return audioTrack;
+  }
+
+  // --- Media Controls ---
+  
+  public pauseMic() {
+    if (this.localAudioProducer && !this.localAudioProducer.paused) {
+      this.localAudioProducer.pause();
+    }
+  }
+
+  public resumeMic() {
+    if (this.localAudioProducer && this.localAudioProducer.paused) {
+      this.localAudioProducer.resume();
+    }
+  }
+
+  public pauseCamera() {
+    if (this.localVideoProducer && !this.localVideoProducer.paused) {
+      this.localVideoProducer.pause();
+    }
+  }
+
+  public resumeCamera() {
+    if (this.localVideoProducer && this.localVideoProducer.paused) {
+      this.localVideoProducer.resume();
+    }
+  }
+
+  public async enableScreenShare(): Promise<MediaStreamTrack> {
+    if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const screenTrack = stream.getVideoTracks()[0];
+    
+    // Replace the camera track with the screen track
+    if (this.localVideoProducer) {
+      await this.localVideoProducer.replaceTrack({ track: screenTrack });
+    } else {
+      this.localVideoProducer = await this.sendTransport.produce({ track: screenTrack });
+    }
+    
+    return screenTrack;
+  }
+
+  public async disableScreenShare(cameraTrack?: MediaStreamTrack) {
+    if (this.localVideoProducer && cameraTrack) {
+      await this.localVideoProducer.replaceTrack({ track: cameraTrack });
+    }
   }
 
   private async consumeRemoteStream(producerId: string, userId: string, kind: string) {

@@ -54,6 +54,7 @@ interface MeetingContextValue {
   sendMessage: (content: string) => void;
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
+  createPoll: (question: string, options: string[]) => void;
   setShowLeaveDialog: (show: boolean) => void;
   setShowReactionPicker: (show: boolean) => void;
   setIsMobilePanelOpen: (open: boolean) => void;
@@ -101,6 +102,7 @@ export function MeetingProvider({
   
   // ── WebRTC Instance ──────────────────────────────────
   const webrtcClient = useRef<WebRTCClient | null>(null);
+  const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
@@ -128,6 +130,62 @@ export function MeetingProvider({
 
         client = new WebRTCClient(roomSlug, data.token);
         
+        // --- Collaboration Event Listeners ---
+        client.onChatMessage = (msg) => {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: `m-${Date.now()}-${Math.random()}`,
+              senderId: msg.userId,
+              senderName: `Participant ${msg.userId.substring(5, 9)}`,
+              senderRole: "attendee",
+              content: msg.message,
+              timestamp: msg.timestamp,
+            },
+          ]);
+        };
+
+        client.onReaction = (msg) => {
+          const reaction: Reaction = {
+            id: `r-${Date.now()}-${Math.random()}`,
+            emoji: msg.reaction,
+            senderId: msg.userId,
+            senderName: `Participant ${msg.userId.substring(5, 9)}`,
+            timestamp: Date.now(),
+          };
+          setReactions((prev) => [...prev, reaction]);
+          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), 3000);
+        };
+
+        client.onPollCreate = (msg) => {
+          setPolls((prev) => [
+            ...prev,
+            {
+              id: msg.pollId,
+              question: msg.question,
+              options: msg.options,
+              createdBy: msg.userId,
+              isActive: true,
+              totalVotes: 0,
+            },
+          ]);
+        };
+
+        client.onPollVote = (msg) => {
+          setPolls((prev) =>
+            prev.map((p) => {
+              if (p.id !== msg.pollId) return p;
+              return {
+                ...p,
+                totalVotes: p.totalVotes + 1,
+                options: p.options.map((o) =>
+                  o.id === msg.optionId ? { ...o, votes: o.votes + 1 } : o
+                ),
+              };
+            })
+          );
+        };
+
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
@@ -163,6 +221,7 @@ export function MeetingProvider({
       const initMedia = async () => {
         try {
           const videoTrack = await client.enableCamera();
+          localCameraTrackRef.current = videoTrack;
           const audioTrack = await client.enableMic();
           
           setParticipants((prev) =>
@@ -232,19 +291,48 @@ export function MeetingProvider({
 
   // ── Actions ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
+    if (isMuted) webrtcClient.current?.resumeMic();
+    else webrtcClient.current?.pauseMic();
     setIsMuted((v) => !v);
-    // TODO: implement webrtcClient.current.enableMic()/disableMic()
-  }, []);
+  }, [isMuted]);
+
   const toggleCamera = useCallback(() => {
+    if (isCameraOn) webrtcClient.current?.pauseCamera();
+    else webrtcClient.current?.resumeCamera();
     setIsCameraOn((v) => !v);
-    // TODO: implement webrtcClient.current.enableCamera()/disableCamera()
-  }, []);
-  const toggleScreenShare = useCallback(() => setIsScreenSharing((v) => !v), []);
+  }, [isCameraOn]);
+
+  const toggleScreenShare = useCallback(async () => {
+    try {
+      if (isScreenSharing) {
+        if (localCameraTrackRef.current) {
+          await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current);
+        }
+        setIsScreenSharing(false);
+      } else {
+        const screenTrack = await webrtcClient.current?.enableScreenShare();
+        if (screenTrack) {
+          setIsScreenSharing(true);
+          // Listen for native "Stop sharing" button built into browsers
+          screenTrack.onended = async () => {
+            if (localCameraTrackRef.current) {
+              await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current);
+            }
+            setIsScreenSharing(false);
+          };
+        }
+      }
+    } catch (e) {
+      console.error("Screen share error:", e);
+    }
+  }, [isScreenSharing]);
+
   const toggleRecording = useCallback(() => setIsRecording((v) => !v), []);
   const toggleHandRaise = useCallback(() => setIsHandRaised((v) => !v), []);
 
   const sendMessage = useCallback(
     (content: string) => {
+      webrtcClient.current?.sendChatMessage(content);
       const msg: ChatMessage = {
         id: `m-${Date.now()}`,
         senderId: currentUser.id,
@@ -260,6 +348,7 @@ export function MeetingProvider({
 
   const sendReaction = useCallback(
     (emoji: string) => {
+      webrtcClient.current?.sendReaction(emoji);
       const reaction: Reaction = {
         id: `r-${Date.now()}`,
         emoji,
@@ -268,7 +357,6 @@ export function MeetingProvider({
         timestamp: Date.now(),
       };
       setReactions((prev) => [...prev, reaction]);
-      // Remove after 3 seconds
       setTimeout(() => {
         setReactions((prev) => prev.filter((r) => r.id !== reaction.id));
       }, 3000);
@@ -277,6 +365,7 @@ export function MeetingProvider({
   );
 
   const votePoll = useCallback((pollId: string, optionId: string) => {
+    webrtcClient.current?.votePoll(pollId, optionId);
     setPolls((prev) =>
       prev.map((p) => {
         if (p.id !== pollId) return p;
@@ -291,6 +380,21 @@ export function MeetingProvider({
       })
     );
   }, []);
+
+  const createPoll = useCallback((question: string, optionsText: string[]) => {
+    const pollId = `p-${Date.now()}`;
+    const options = optionsText.map((t, i) => ({ id: `o${i+1}`, text: t, votes: 0 }));
+    webrtcClient.current?.createPoll(pollId, question, options);
+    
+    setPolls(prev => [...prev, {
+      id: pollId,
+      question,
+      options,
+      createdBy: currentUser.id,
+      isActive: true,
+      totalVotes: 0
+    }]);
+  }, [currentUser]);
 
   const handleSetActivePanel = useCallback(
     (panel: SidePanel) => {
@@ -334,6 +438,7 @@ export function MeetingProvider({
         sendMessage,
         sendReaction,
         votePoll,
+        createPoll,
         setShowLeaveDialog,
         setShowReactionPicker,
         setIsMobilePanelOpen,

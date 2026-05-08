@@ -147,6 +147,15 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'poll_vote':
+        broadcastToRoom(roomId, {
+          type: 'poll_vote',
+          pollId: data.pollId,
+          optionId: data.optionId,
+          userId: userId
+        });
+        break;
+
       // --- WebRTC Media Signaling ---
       case 'getRouterRtpCapabilities': {
         const router = await getOrCreateRouter(roomId);
