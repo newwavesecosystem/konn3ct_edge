@@ -75,8 +75,9 @@ export function MeetingProvider({
   roomSlug: string;
 }) {
   // ── State ────────────────────────────────────────────
-  const [participants, setParticipants] = useState<Participant[]>(mockParticipants);
   const [currentUser] = useState<Participant>(mockCurrentUser);
+  // Start with only the current user, so real users are dynamically added
+  const [participants, setParticipants] = useState<Participant[]>([mockCurrentUser]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
   const [polls, setPolls] = useState<Poll[]>(mockPolls);
   const [docs] = useState<DocNote[]>(mockDocs);
@@ -128,7 +129,9 @@ export function MeetingProvider({
         client = new WebRTCClient(roomSlug, data.token);
         
         client.onConnectionStateChange = (state) => {
-          setWebrtcStatus(state);
+          if (webrtcClient.current === client) {
+            setWebrtcStatus(state);
+          }
         };
 
         await client.connect();
@@ -145,6 +148,9 @@ export function MeetingProvider({
     return () => {
       if (client) {
         client.disconnect();
+        if (webrtcClient.current === client) {
+          webrtcClient.current = null;
+        }
       }
     };
   }, [roomSlug, currentUser.name, currentUser.id]);
@@ -176,21 +182,39 @@ export function MeetingProvider({
 
       // Handle Remote Streams
       client.onNewConsumer = (consumer, userId) => {
-        setParticipants((prev) =>
-          prev.map((p) => {
-            // If the backend doesn't send the correct userId for the mock participants,
-            // we will just bind remote tracks to participant p2 for demonstration purposes
-            if (p.id === userId || p.id === "p2") {
-              if (consumer.kind === "video") {
-                return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
+        setParticipants((prev) => {
+          const exists = prev.find((p) => p.id === userId);
+          if (exists) {
+            return prev.map((p) => {
+              if (p.id === userId) {
+                if (consumer.kind === "video") {
+                  return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
+                }
+                if (consumer.kind === "audio") {
+                  return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
+                }
               }
-              if (consumer.kind === "audio") {
-                return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
-              }
-            }
-            return p;
-          })
-        );
+              return p;
+            });
+          } else {
+            // Add new participant dynamically!
+            const newParticipant: Participant = {
+              id: userId,
+              name: `Participant ${userId.substring(5, 9)}`,
+              role: "audience",
+              isMuted: consumer.kind !== "audio",
+              isCameraOn: consumer.kind === "video",
+              isScreenSharing: false,
+              isHandRaised: false,
+              isSpeaking: false,
+              joinedAt: new Date().toISOString(),
+            };
+            if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
+            if (consumer.kind === "audio") newParticipant.audioTrack = consumer.track as MediaStreamTrack;
+            
+            return [...prev, newParticipant];
+          }
+        });
       };
     }
   }, [webrtcStatus, currentUser.id]);
