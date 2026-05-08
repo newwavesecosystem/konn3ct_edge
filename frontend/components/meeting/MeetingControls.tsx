@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { useMeetingTheme } from "@/lib/meeting-theme-context";
 import { cn } from "@/lib/utils";
 import {
   Mic,
@@ -23,6 +24,9 @@ import {
   LayoutGrid,
   Presentation,
   Focus,
+  Sun,
+  Moon,
+  Leaf,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -47,6 +51,8 @@ export function MeetingControls() {
     showReactionPicker,
   } = useMeeting();
 
+  const { theme, toggleTheme } = useMeetingTheme();
+
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -62,10 +68,16 @@ export function MeetingControls() {
   ];
 
   return (
-    <div className="relative shrink-0 bg-[#0d0d1a] border-t border-white/5">
+    <div
+      className="relative shrink-0"
+      style={{
+        backgroundColor: "var(--mt-bg)",
+        borderTop: "1px solid var(--mt-border)",
+      }}
+    >
       {/* Duration bar */}
       <div className="flex items-center justify-center py-1">
-        <div className="flex items-center gap-2 text-xs text-white/50">
+        <div className="flex items-center gap-2 text-xs" style={{ color: "var(--mt-text-muted)" }}>
           {isRecording && (
             <span className="flex items-center gap-1 text-red-400">
               <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
@@ -101,7 +113,7 @@ export function MeetingControls() {
           className="hidden sm:flex"
         />
 
-        <div className="w-px h-8 bg-white/10 mx-1 hidden sm:block" />
+        <div className="w-px h-8 mx-1 hidden sm:block" style={{ backgroundColor: "var(--mt-border-strong)" }} />
 
         {/* Interaction controls */}
         <ControlButton
@@ -118,7 +130,7 @@ export function MeetingControls() {
           icon={<SmilePlus className="w-5 h-5" />}
         />
 
-        <div className="w-px h-8 bg-white/10 mx-1 hidden sm:block" />
+        <div className="w-px h-8 mx-1 hidden sm:block" style={{ backgroundColor: "var(--mt-border-strong)" }} />
 
         {/* Panel toggles */}
         <ControlButton
@@ -162,7 +174,23 @@ export function MeetingControls() {
           className="hidden lg:flex"
         />
 
-        <div className="w-px h-8 bg-white/10 mx-1" />
+        <div className="w-px h-8 mx-1 hidden sm:block" style={{ backgroundColor: "var(--mt-border-strong)" }} />
+
+        {/* Theme cycle */}
+        <ControlButton
+          active={false}
+          onClick={toggleTheme}
+          label={
+            theme === "emerald" ? "Switch to Konn3ct" :
+            theme === "konn3ct" ? "Switch to Dark" : "Switch to Emerald"
+          }
+          icon={
+            theme === "emerald" ? <Sun className="w-5 h-5" /> :
+            theme === "konn3ct" ? <Moon className="w-5 h-5" /> :
+            <Leaf className="w-5 h-5" />
+          }
+          className="hidden sm:flex"
+        />
 
         {/* Recording */}
         <ControlButton
@@ -185,7 +213,16 @@ export function MeetingControls() {
       </div>
 
       {/* Layout switcher — small strip above controls on desktop */}
-      <div className="hidden md:flex items-center justify-center gap-1 absolute -top-9 left-1/2 -translate-x-1/2 bg-[#1a1a2e]/90 backdrop-blur-sm rounded-full px-1 py-1 border border-white/5">
+      <div
+        className="hidden md:flex items-center justify-center gap-1 absolute -top-9 left-1/2 -translate-x-1/2 backdrop-blur-sm rounded-full px-1 py-1"
+        style={{
+          backgroundColor:
+            theme === "konn3ct" ? "rgba(255,255,255,0.90)" :
+            theme === "emerald" ? "rgba(11,43,30,0.90)" :
+            "rgba(26,26,46,0.90)",
+          border: "1px solid var(--mt-border)",
+        }}
+      >
         {layoutModes.map((l) => (
           <button
             key={l.mode}
@@ -194,8 +231,9 @@ export function MeetingControls() {
               "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all duration-200",
               layoutMode === l.mode
                 ? "bg-brand-green text-white"
-                : "text-white/50 hover:text-white/80"
+                : ""
             )}
+            style={layoutMode !== l.mode ? { color: "var(--mt-text-muted)" } : undefined}
             title={l.label}
           >
             {l.icon}
@@ -233,12 +271,18 @@ function ControlButton({
         "relative flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl transition-all duration-200 active:scale-90",
         danger
           ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-          : active
-          ? "bg-white/15 text-white"
-          : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80",
+          : "",
         highlight && "ring-2 ring-yellow-400/50",
         className
       )}
+      style={
+        !danger
+          ? {
+              backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+              color: active ? "var(--mt-text)" : "var(--mt-text-muted)",
+            }
+          : undefined
+      }
     >
       {icon}
     </button>

@@ -30,7 +30,13 @@ export function ReactionsLayer() {
             >
               <div className="flex flex-col items-center">
                 <span className="text-3xl">{r.emoji}</span>
-                <span className="text-[10px] text-white/60 font-medium bg-black/40 px-2 py-0.5 rounded-full mt-0.5">
+                <span
+                  className="text-[10px] font-medium px-2 py-0.5 rounded-full mt-0.5"
+                  style={{
+                    color: "var(--mt-text-muted)",
+                    backgroundColor: "var(--mt-bg-control)",
+                  }}
+                >
                   {r.senderName.split(" ")[0]}
                 </span>
               </div>
@@ -47,7 +53,11 @@ export function ReactionsLayer() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl"
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 backdrop-blur-xl rounded-2xl p-3 shadow-2xl"
+            style={{
+              backgroundColor: "var(--mt-reaction-picker)",
+              border: "1px solid var(--mt-border-strong)",
+            }}
           >
             <div className="grid grid-cols-6 gap-1">
               {REACTION_EMOJIS.map((emoji) => (
@@ -57,7 +67,9 @@ export function ReactionsLayer() {
                     sendReaction(emoji);
                     setShowReactionPicker(false);
                   }}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 active:scale-90 transition-all text-xl"
+                  className="w-10 h-10 flex items-center justify-center rounded-xl active:scale-90 transition-all text-xl"
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                 >
                   {emoji}
                 </button>

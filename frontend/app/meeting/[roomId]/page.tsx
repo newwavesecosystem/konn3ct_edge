@@ -2,6 +2,7 @@
 
 import React from "react";
 import { MeetingProvider } from "@/lib/meeting-context";
+import { MeetingThemeProvider } from "@/lib/meeting-theme-context";
 import { MeetingShell } from "@/components/meeting/MeetingShell";
 
 export default function MeetingPage({
@@ -12,8 +13,10 @@ export default function MeetingPage({
   const resolvedParams = React.use(params);
 
   return (
-    <MeetingProvider roomSlug={resolvedParams.roomId}>
-      <MeetingShell />
-    </MeetingProvider>
+    <MeetingThemeProvider>
+      <MeetingProvider roomSlug={resolvedParams.roomId}>
+        <MeetingShell />
+      </MeetingProvider>
+    </MeetingThemeProvider>
   );
 }

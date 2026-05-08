@@ -34,8 +34,8 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-white/5">
-        <h3 className="text-sm font-semibold text-white">Chat</h3>
+      <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--mt-border)" }}>
+        <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Chat</h3>
       </div>
 
       {/* Messages */}
@@ -44,7 +44,13 @@ export function ChatPanel() {
           if (msg.isSystem) {
             return (
               <div key={msg.id} className="flex justify-center">
-                <span className="text-[11px] text-white/30 bg-white/5 px-3 py-1 rounded-full">
+                <span
+                  className="text-[11px] px-3 py-1 rounded-full"
+                  style={{
+                    color: "var(--mt-text-faint)",
+                    backgroundColor: "var(--mt-bg-control)",
+                  }}
+                >
                   {msg.content}
                 </span>
               </div>
@@ -59,10 +65,10 @@ export function ChatPanel() {
             >
               <div className="flex items-center gap-1.5">
                 {badge && <span className={badge.color}>{badge.icon}</span>}
-                <span className="text-[11px] font-medium text-white/50">
+                <span className="text-[11px] font-medium" style={{ color: "var(--mt-text-muted)" }}>
                   {isMe ? "You" : msg.senderName}
                 </span>
-                <span className="text-[10px] text-white/25">
+                <span className="text-[10px]" style={{ color: "var(--mt-text-ghost)" }}>
                   {formatTime(msg.timestamp)}
                 </span>
               </div>
@@ -71,8 +77,12 @@ export function ChatPanel() {
                   "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed",
                   isMe
                     ? "bg-brand-green/80 text-white rounded-br-md"
-                    : "bg-white/5 text-white/90 rounded-bl-md"
+                    : "rounded-bl-md"
                 )}
+                style={!isMe ? {
+                  backgroundColor: "var(--mt-bg-control)",
+                  color: "var(--mt-text-secondary)",
+                } : undefined}
               >
                 {msg.content}
               </div>
@@ -83,14 +93,20 @@ export function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-white/5">
-        <div className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-1">
+      <div className="p-3" style={{ borderTop: "1px solid var(--mt-border)" }}>
+        <div
+          className="flex items-center gap-2 rounded-xl px-3 py-1"
+          style={{ backgroundColor: "var(--mt-bg-input)" }}
+        >
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Type a message…"
-            className="flex-1 bg-transparent text-sm text-white placeholder:text-white/30 py-2 outline-none"
+            className="flex-1 bg-transparent text-sm py-2 outline-none"
+            style={{
+              color: "var(--mt-text)",
+            }}
           />
           <button
             onClick={handleSend}
