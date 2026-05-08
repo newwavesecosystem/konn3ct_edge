@@ -58,29 +58,53 @@ export function StageView() {
   // Default: speaker layout
   return (
     <div className="flex-1 flex flex-col gap-2 p-2 sm:p-3 overflow-hidden">
-      {/* Main speaker */}
-      <div className="flex-1 min-h-0">
+      {/* Main speaker — 50% on mobile, flex-1 on desktop */}
+      <div className="h-1/2 sm:flex-1 sm:h-auto min-h-0 shrink-0 sm:shrink">
         <ParticipantTile
           participant={activeSpeaker}
           isLarge
           className="w-full h-full"
         />
       </div>
-      {/* Filmstrip */}
+      {/* Filmstrip — 50% on mobile (grid), horizontal scroll on desktop */}
       {others.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 shrink-0">
-          {others.slice(0, 6).map((p) => (
-            <div key={p.id} className="w-28 sm:w-36 lg:w-44 shrink-0">
-              <ParticipantTile participant={p} />
-            </div>
-          ))}
-          {others.length > 6 && (
-            <div className="w-28 sm:w-36 lg:w-44 shrink-0 aspect-video rounded-2xl bg-[#1a1a2e] flex items-center justify-center">
-              <span className="text-white/60 text-sm font-medium">
-                +{others.length - 6} more
-              </span>
-            </div>
-          )}
+        <div className="h-1/2 sm:h-auto sm:shrink-0 min-h-0 overflow-hidden">
+          {/* Mobile: 2-column grid, scrollable */}
+          <div className="grid grid-cols-2 gap-2 h-full overflow-y-auto no-scrollbar sm:hidden">
+            {others.slice(0, 6).map((p) => (
+              <div key={p.id}>
+                <ParticipantTile participant={p} />
+              </div>
+            ))}
+            {others.length > 6 && (
+              <div
+                className="aspect-video rounded-2xl flex items-center justify-center"
+                style={{ backgroundColor: "var(--mt-bg-tile)" }}
+              >
+                <span className="text-sm font-medium" style={{ color: "var(--mt-text-muted)" }}>
+                  +{others.length - 6} more
+                </span>
+              </div>
+            )}
+          </div>
+          {/* Desktop: horizontal filmstrip */}
+          <div className="hidden sm:flex gap-2 overflow-x-auto no-scrollbar py-1">
+            {others.slice(0, 6).map((p) => (
+              <div key={p.id} className="w-36 lg:w-44 shrink-0">
+                <ParticipantTile participant={p} />
+              </div>
+            ))}
+            {others.length > 6 && (
+              <div
+                className="w-36 lg:w-44 shrink-0 aspect-video rounded-2xl flex items-center justify-center"
+                style={{ backgroundColor: "var(--mt-bg-tile)" }}
+              >
+                <span className="text-sm font-medium" style={{ color: "var(--mt-text-muted)" }}>
+                  +{others.length - 6} more
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -107,24 +131,34 @@ function ScreenShareLayout({
     isCurrentUserSharing || screenSharer?.id === currentUserId;
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row gap-2 p-2 sm:p-3 overflow-hidden">
+    <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
       {/* ── Shared screen area ──────────────────────── */}
       <div
         className={cn(
-          "relative rounded-2xl overflow-hidden bg-[#0a0a18] border border-white/5 transition-all duration-300",
+          "relative rounded-2xl overflow-hidden transition-all duration-300",
           isFullscreen
             ? "fixed inset-2 z-50"
-            : "flex-1 min-h-0 lg:min-w-0"
+            : "flex-1 min-h-0 min-w-0"
         )}
+        style={{
+          backgroundColor: "var(--mt-bg-screen)",
+          border: "1px solid var(--mt-border)",
+        }}
       >
         {/* Mock shared screen content */}
         <div className="absolute inset-0 flex flex-col">
           {/* Top bar */}
-          <div className="flex items-center justify-between px-4 py-2.5 bg-[#0a0a18]/90 backdrop-blur-sm border-b border-white/5 shrink-0 z-10">
+          <div
+            className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 backdrop-blur-sm shrink-0 z-10"
+            style={{
+              backgroundColor: "var(--mt-bg-screen)",
+              borderBottom: "1px solid var(--mt-border)",
+            }}
+          >
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2.5 py-1 rounded-lg">
+              <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2 sm:px-2.5 py-1 rounded-lg">
                 <MonitorUp className="w-3.5 h-3.5" />
-                <span className="text-xs font-semibold">
+                <span className="text-[11px] sm:text-xs font-semibold">
                   {isMe ? "You are sharing" : `${sharerName} is sharing`}
                 </span>
               </div>
@@ -132,7 +166,8 @@ function ScreenShareLayout({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors"
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: "var(--mt-text-faint)" }}
                 title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? (
@@ -144,48 +179,63 @@ function ScreenShareLayout({
               {isMe && (
                 <button
                   onClick={onStopSharing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95"
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95"
                 >
                   <MonitorOff className="w-3.5 h-3.5" />
-                  Stop Sharing
+                  <span className="hidden sm:inline">Stop Sharing</span>
+                  <span className="sm:hidden">Stop</span>
                 </button>
               )}
             </div>
           </div>
 
           {/* Screen content mock */}
-          <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-[#0e1525] via-[#0a0a18] to-[#0e0e24]">
-            <div className="flex flex-col items-center gap-4 text-center px-6 max-w-lg">
+          <div
+            className="flex-1 flex items-center justify-center"
+            style={{
+              background: `linear-gradient(to bottom right, var(--mt-bg-screen-grad1), var(--mt-bg-screen), var(--mt-bg-screen-grad2))`,
+            }}
+          >
+            <div className="flex flex-col items-center gap-3 sm:gap-4 text-center px-4 sm:px-6 max-w-lg">
               {/* Mock presentation / desktop */}
-              <div className="w-full max-w-md aspect-[16/10] rounded-xl bg-[#141428] border border-white/5 p-6 flex flex-col gap-3 shadow-2xl">
+              <div
+                className="w-full max-w-md aspect-[16/10] rounded-xl p-4 sm:p-6 flex flex-col gap-2 sm:gap-3 shadow-2xl"
+                style={{
+                  backgroundColor: "var(--mt-bg-screen-content)",
+                  border: "1px solid var(--mt-border)",
+                }}
+              >
                 {/* Mock title bar */}
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
-                  <div className="ml-3 h-4 w-40 rounded bg-white/5" />
+                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-red-400/60" />
+                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-yellow-400/60" />
+                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-400/60" />
+                  <div
+                    className="ml-2 sm:ml-3 h-3 sm:h-4 w-24 sm:w-40 rounded"
+                    style={{ backgroundColor: "var(--mt-bg-control)" }}
+                  />
                 </div>
                 {/* Mock content lines */}
-                <div className="flex-1 flex flex-col gap-2 pt-2">
-                  <div className="h-5 w-3/4 rounded bg-white/8" />
-                  <div className="h-3 w-full rounded bg-white/4" />
-                  <div className="h-3 w-5/6 rounded bg-white/4" />
-                  <div className="h-3 w-2/3 rounded bg-white/4" />
-                  <div className="mt-3 flex gap-2">
-                    <div className="h-16 flex-1 rounded-lg bg-blue-500/10 border border-blue-500/10" />
-                    <div className="h-16 flex-1 rounded-lg bg-green-500/10 border border-green-500/10" />
-                    <div className="h-16 flex-1 rounded-lg bg-purple-500/10 border border-purple-500/10" />
+                <div className="flex-1 flex flex-col gap-1.5 sm:gap-2 pt-1 sm:pt-2">
+                  <div className="h-4 sm:h-5 w-3/4 rounded" style={{ backgroundColor: "var(--mt-text-whisper)" }} />
+                  <div className="h-2.5 sm:h-3 w-full rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="h-2.5 sm:h-3 w-5/6 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="h-2.5 sm:h-3 w-2/3 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="mt-2 sm:mt-3 flex gap-1.5 sm:gap-2">
+                    <div className="h-10 sm:h-16 flex-1 rounded-lg bg-blue-500/10 border border-blue-500/10" />
+                    <div className="h-10 sm:h-16 flex-1 rounded-lg bg-green-500/10 border border-green-500/10" />
+                    <div className="h-10 sm:h-16 flex-1 rounded-lg bg-purple-500/10 border border-purple-500/10" />
                   </div>
-                  <div className="h-3 w-1/2 rounded bg-white/4 mt-2" />
-                  <div className="h-3 w-3/4 rounded bg-white/4" />
+                  <div className="h-2.5 sm:h-3 w-1/2 rounded mt-1 sm:mt-2" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="h-2.5 sm:h-3 w-3/4 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-white/20">
-                <MousePointerClick className="w-4 h-4" />
-                <span className="text-xs">
+              <div className="flex items-center gap-2" style={{ color: "var(--mt-text-ghost)" }}>
+                <MousePointerClick className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="text-[11px] sm:text-xs">
                   {isMe
-                    ? "Your screen is being shared with participants"
+                    ? "Your screen is being shared"
                     : "Viewing shared screen"}
                 </span>
               </div>
@@ -194,31 +244,29 @@ function ScreenShareLayout({
         </div>
       </div>
 
-      {/* ── Participant filmstrip (side on desktop, bottom on mobile) ── */}
+      {/* ── Participant filmstrip (bottom horizontal on mobile, vertical sidebar on desktop) ── */}
       <div
         className={cn(
-          "shrink-0 flex gap-2 overflow-auto no-scrollbar",
-          isFullscreen && "hidden",
-          // Mobile: horizontal scroll at bottom
-          "flex-row lg:flex-col",
-          // Desktop: vertical column on the right
-          "lg:w-44 xl:w-52 lg:overflow-y-auto lg:overflow-x-hidden"
+          "shrink-0 overflow-hidden no-scrollbar",
+          isFullscreen && "hidden"
         )}
       >
-        {participants.map((p) => (
-          <div
-            key={p.id}
-            className={cn(
-              "shrink-0",
-              // Mobile: fixed width horizontal tiles
-              "w-28 sm:w-36",
-              // Desktop: full width vertical tiles
-              "lg:w-full"
-            )}
-          >
-            <ParticipantTile participant={p} />
-          </div>
-        ))}
+        {/* Mobile / Tablet: horizontal scroll at bottom */}
+        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
+          {participants.map((p) => (
+            <div key={p.id} className="w-24 sm:w-32 shrink-0">
+              <ParticipantTile participant={p} />
+            </div>
+          ))}
+        </div>
+        {/* Desktop: vertical sidebar */}
+        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
+          {participants.map((p) => (
+            <div key={p.id} className="w-full shrink-0">
+              <ParticipantTile participant={p} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

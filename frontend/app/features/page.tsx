@@ -7,7 +7,7 @@ import Link from "next/link"
 import { motion } from "framer-motion"
 import { 
   Video, MessageSquare, Layout, Sparkles, MonitorPlay, Users,
-  Globe, Lock, Hand, CheckCircle, Smartphone
+  Globe, Lock, Hand, CheckCircle, Smartphone, ArrowRight, Mic, FileText, BarChart3, Wifi
 } from "lucide-react"
 
 export default function FeaturesPage() {
@@ -39,6 +39,23 @@ export default function FeaturesPage() {
             >
               Everything you need to host, record, and monetize your meetings, webinars, and classes. Built securely for the modern workforce.
             </motion.p>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="flex items-center justify-center gap-4 pt-2"
+            >
+              <Link href="/signup">
+                <Button size="lg" className="h-14 px-8 rounded-xl text-base font-bold" style={{ backgroundColor: '#207450' }}>
+                  Get started free <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
+              <Link href="/pricing">
+                <Button variant="outline" size="lg" className="h-14 px-8 rounded-xl text-base font-semibold border-border-strong/20 hover:border-brand-blue hover:text-brand-blue">
+                  View pricing
+                </Button>
+              </Link>
+            </motion.div>
           </div>
         </section>
 
@@ -91,7 +108,22 @@ export default function FeaturesPage() {
                   icon: Smartphone,
                   title: "Join from Anywhere",
                   desc: "Works perfectly in modern web browsers with no downloads required. Fully responsive mobile experience."
-                }
+                },
+                {
+                  icon: Mic,
+                  title: "Real-time Captions",
+                  desc: "AI-powered captions in 30+ languages let every participant follow along, regardless of language."
+                },
+                {
+                  icon: FileText,
+                  title: "Meeting Notes & Docs",
+                  desc: "Collaborative documents sync live during meetings. Attach agendas beforehand, take notes in real-time."
+                },
+                {
+                  icon: BarChart3,
+                  title: "Analytics Dashboard",
+                  desc: "Track attendance, engagement scores, and recording performance across your organization."
+                },
               ].map((feature, i) => (
                 <motion.div 
                   key={i}
@@ -132,7 +164,7 @@ export default function FeaturesPage() {
                     "Detailed post-event analytics and attendee reports"
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <CheckCircle className="h-6 w-6 text-brand-green shrink-0" />
+                      <CheckCircle className="h-6 w-6 shrink-0" style={{ color: '#207450' }} />
                       <span className="text-text-primary font-medium">{item}</span>
                     </li>
                   ))}
@@ -140,7 +172,6 @@ export default function FeaturesPage() {
               </div>
               <div className="flex-1 w-full">
                 <div className="aspect-[4/3] rounded-2xl bg-gradient-to-br from-[#E0ECE4] to-[#B8C8C0] border border-border flex items-center justify-center relative shadow-xl overflow-hidden">
-                   {/* Abstract illustration for webinars */}
                    <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-64 h-64 bg-brand-green/10 rounded-full blur-3xl" />
                       <div className="w-48 h-48 bg-brand-blue/10 rounded-full blur-2xl absolute" />
@@ -168,15 +199,112 @@ export default function FeaturesPage() {
           </div>
         </section>
 
+        {/* eCinema Deep Dive */}
+        <section className="w-full py-24 relative overflow-hidden" style={{ backgroundColor: '#002C88' }}>
+          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:24px_24px] opacity-20" />
+          <div className="container mx-auto px-4 md:px-6 max-w-6xl relative z-10">
+            <div className="flex flex-col lg:flex-row items-center gap-16">
+              <div className="flex-1 w-full">
+                <div className="aspect-video bg-black rounded-2xl border border-white/20 shadow-2xl relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-brand-blue/40 to-black/60 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full text-white flex items-center justify-center shadow-xl" style={{ backgroundColor: '#207450' }}>
+                      <MonitorPlay className="h-8 w-8 ml-1" />
+                    </div>
+                  </div>
+                  <div className="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black to-transparent">
+                    <h4 className="text-xl font-bold text-white">Advanced React Patterns</h4>
+                    <p className="text-sm text-white/70">1h 45m • ₦15,000</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex-1 space-y-6 text-white">
+                <div className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm font-medium">
+                  <MonitorPlay className="mr-2 h-4 w-4 text-[#FFD400]" />
+                  <span>eCinema Platform</span>
+                </div>
+                <h2 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  Monetize your expertise
+                </h2>
+                <p className="text-lg text-white/80 leading-relaxed">
+                  Turn webinar recordings into a passive income stream. Upload content, set your price, and let konn3ct handle secure playback and Paystack-powered payments.
+                </p>
+                <ul className="space-y-3 pt-2">
+                  {[
+                    "DRM-protected, non-downloadable playback",
+                    "Integrated Paystack billing (NGN, USD, GHS, KES)",
+                    "Viewer engagement analytics & heatmaps",
+                    "Coupon codes and bundle pricing",
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-center gap-3 text-white/90">
+                      <CheckCircle className="h-5 w-5" style={{ color: '#84B09C' }} /> {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Integrations / Compatibility */}
+        <section className="w-full py-24">
+          <div className="container mx-auto px-4 md:px-6 max-w-6xl">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
+                Works with your stack
+              </h2>
+              <p className="mt-4 text-lg text-text-secondary">
+                konn3ct integrates seamlessly with the tools your team already uses.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {[
+                { name: "Google Calendar", icon: Globe },
+                { name: "Slack", icon: MessageSquare },
+                { name: "Microsoft Teams", icon: Users },
+                { name: "Notion", icon: FileText },
+                { name: "Zapier", icon: Wifi },
+                { name: "HubSpot", icon: BarChart3 },
+                { name: "Jira", icon: Layout },
+                { name: "Paystack", icon: Lock },
+              ].map((tool, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: (i % 4) * 0.08 }}
+                  className="bg-surface border border-border rounded-2xl p-6 flex items-center gap-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-brand-blue/5 flex items-center justify-center">
+                    <tool.icon className="h-5 w-5 text-brand-blue" />
+                  </div>
+                  <span className="font-semibold text-text-primary">{tool.name}</span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* CTA */}
-        <section className="w-full py-20 text-center">
-          <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-extrabold tracking-tight text-text-primary mb-6">Experience it yourself</h2>
-            <Link href="/signup">
-              <Button size="lg" className="h-14 px-8 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-lg text-base font-bold">
-                Start Free Trial
-              </Button>
-            </Link>
+        <section className="w-full py-24 text-center relative overflow-hidden" style={{ backgroundColor: '#207450' }}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12)_0,transparent_70%)]" />
+          <div className="container mx-auto px-4 relative z-10">
+            <h2 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl mb-6">Experience it yourself</h2>
+            <p className="text-xl text-white/80 mb-10 max-w-2xl mx-auto">
+              Start collaborating in minutes. No credit card required.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
+              <Link href="/signup">
+                <Button size="lg" className="h-14 px-8 rounded-xl bg-white text-[#207450] hover:bg-white/90 text-base font-bold shadow-md transition-all">
+                  Start Free Trial
+                </Button>
+              </Link>
+              <Link href="/contact">
+                <Button variant="outline" size="lg" className="h-14 px-8 rounded-xl border-white/30 text-white hover:bg-white/10 text-base font-semibold">
+                  Talk to Sales
+                </Button>
+              </Link>
+            </div>
           </div>
         </section>
       </main>

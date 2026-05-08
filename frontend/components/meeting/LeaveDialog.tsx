@@ -29,7 +29,8 @@ export function LeaveDialog() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[60] backdrop-blur-sm"
+            style={{ backgroundColor: "var(--mt-overlay)" }}
             onClick={() => setShowLeaveDialog(false)}
           />
 
@@ -41,23 +42,30 @@ export function LeaveDialog() {
             transition={{ type: "spring" as const, damping: 25, stiffness: 300 }}
             className="fixed inset-0 z-[61] flex items-center justify-center p-4"
           >
-            <div className="w-full max-w-sm bg-[#1a1a2e] border border-white/10 rounded-2xl p-6 shadow-2xl">
+            <div
+              className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+              style={{
+                backgroundColor: "var(--mt-dialog-bg)",
+                border: "1px solid var(--mt-border-strong)",
+              }}
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 rounded-2xl bg-red-500/10">
                   <LogOut className="w-6 h-6 text-red-400" />
                 </div>
                 <button
                   onClick={() => setShowLeaveDialog(false)}
-                  className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors"
+                  className="p-1 rounded-lg transition-colors"
+                  style={{ color: "var(--mt-text-faint)" }}
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <h3 className="text-lg font-bold text-white mb-1">
+              <h3 className="text-lg font-bold mb-1" style={{ color: "var(--mt-text)" }}>
                 Leave meeting?
               </h3>
-              <p className="text-sm text-white/50 mb-6">
+              <p className="text-sm mb-6" style={{ color: "var(--mt-text-muted)" }}>
                 Are you sure you want to leave this meeting? You can rejoin anytime using the meeting link.
               </p>
 
@@ -76,7 +84,11 @@ export function LeaveDialog() {
                 </button>
                 <button
                   onClick={() => setShowLeaveDialog(false)}
-                  className="w-full px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 font-medium text-sm transition-all duration-200 active:scale-[0.98]"
+                  className="w-full px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 active:scale-[0.98]"
+                  style={{
+                    backgroundColor: "var(--mt-bg-control)",
+                    color: "var(--mt-text-muted)",
+                  }}
                 >
                   Cancel
                 </button>

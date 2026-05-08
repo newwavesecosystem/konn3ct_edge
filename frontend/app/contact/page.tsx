@@ -4,6 +4,7 @@ import { PublicNavbar } from "@/components/layout/PublicNavbar"
 import { PublicFooter } from "@/components/layout/PublicFooter"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
+import Link from "next/link"
 import { motion } from "framer-motion"
 import { Mail, MessageSquare, MapPin, Phone, ArrowRight, Send } from "lucide-react"
 
@@ -160,6 +161,50 @@ export default function ContactPage() {
               </motion.div>
 
             </div>
+          </div>
+        </section>
+
+        {/* Trust Badges */}
+        <section className="w-full py-16 border-t border-border">
+          <div className="container mx-auto px-4 md:px-6 max-w-4xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+              {[
+                { value: "< 2 hrs", label: "Average response time" },
+                { value: "98%", label: "Customer satisfaction" },
+                { value: "24/7", label: "Emergency support (Enterprise)" },
+              ].map((stat, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="space-y-2"
+                >
+                  <p className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-blue to-brand-green">{stat.value}</p>
+                  <p className="text-sm text-text-muted font-medium">{stat.label}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="w-full py-20 text-center relative overflow-hidden" style={{ backgroundColor: '#207450' }}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12)_0,transparent_70%)]" />
+          <div className="container mx-auto px-4 relative z-10">
+            <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl mb-4">
+              Want to try before you talk?
+            </h2>
+            <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+              Start with a free account and explore konn3ct at your own pace.
+            </p>
+            <Link href="/signup">
+              <Button size="lg" className="h-14 px-8 rounded-xl bg-white text-[#207450] hover:bg-white/90 text-base font-bold shadow-md transition-all">
+                Create Free Account
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
           </div>
         </section>
       </main>

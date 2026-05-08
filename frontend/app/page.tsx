@@ -5,8 +5,8 @@ import { PublicFooter } from "@/components/layout/PublicFooter"
 import { Button } from "@/components/ui/Button"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { 
-  CheckCircle, Shield, Zap, Users, ArrowRight, Video, 
+import {
+  CheckCircle, Shield, Zap, Users, ArrowRight, Video,
   MessageSquare, Layout, Lock, Globe, MonitorPlay, Sparkles, PieChart, Star
 } from "lucide-react"
 
@@ -87,16 +87,16 @@ export default function Home() {
                   <div className="w-full h-auto mt-12 bg-gradient-to-br from-brand-blue to-brand-green aspect-video flex items-center justify-center relative overflow-hidden">
                     <div className="absolute inset-0 bg-black/20" />
                     <div className="grid grid-cols-3 gap-4 p-6 w-full h-full relative z-10">
-                       <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
-                         <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">You</div>
-                       </div>
-                       <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
-                         <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Sarah K.</div>
-                         <div className="absolute top-2 right-2 bg-[#FFD400] text-black text-xs px-1.5 py-0.5 rounded shadow">👏</div>
-                       </div>
-                       <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
-                         <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Alex D.</div>
-                       </div>
+                      <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">You</div>
+                      </div>
+                      <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Sarah K.</div>
+                        <div className="absolute top-2 right-2 bg-[#FFD400] text-black text-xs px-1.5 py-0.5 rounded shadow">👏</div>
+                      </div>
+                      <div className="bg-white/10 rounded-xl backdrop-blur-md border border-white/20 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute bottom-2 left-2 text-white text-xs font-semibold bg-black/40 px-2 py-0.5 rounded">Alex D.</div>
+                      </div>
                     </div>
                   </div>
                   <motion.div
@@ -126,10 +126,10 @@ export default function Home() {
               Trusted by innovative teams worldwide
             </p>
             <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-50 grayscale">
-              <div className="text-2xl font-bold flex items-center gap-2"><Globe className="h-6 w-6"/> TechFlow</div>
-              <div className="text-2xl font-bold flex items-center gap-2"><PieChart className="h-6 w-6"/> DataCorp</div>
-              <div className="text-2xl font-bold flex items-center gap-2"><Layout className="h-6 w-6"/> DesignSyndicate</div>
-              <div className="text-2xl font-bold flex items-center gap-2"><MonitorPlay className="h-6 w-6"/> MediaPulse</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><Globe className="h-6 w-6" /> TechFlow</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><PieChart className="h-6 w-6" /> DataCorp</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><Layout className="h-6 w-6" /> DesignSyndicate</div>
+              <div className="text-2xl font-bold flex items-center gap-2"><MonitorPlay className="h-6 w-6" /> MediaPulse</div>
             </div>
           </div>
         </section>
@@ -179,7 +179,7 @@ export default function Home() {
                   desc: "Host and monetize your past webinars or training sessions with built-in paywalls."
                 }
               ].map((feature, i) => (
-                <motion.div 
+                <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -242,7 +242,7 @@ export default function Home() {
           <div className="container mx-auto px-4 md:px-6 max-w-6xl">
             <div className="bg-surface border border-border rounded-3xl p-8 md:p-16 flex flex-col md:flex-row items-center gap-12 shadow-sm relative overflow-hidden">
               <div className="absolute top-[-50%] right-[-10%] w-[400px] h-[400px] rounded-full bg-brand-green/5 blur-[80px] pointer-events-none" />
-              
+
               <div className="flex-1 space-y-6 relative z-10">
                 <h2 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
                   Enterprise-grade security, by default.
@@ -283,11 +283,235 @@ export default function Home() {
           </div>
         </section>
 
-        {/* CTA SECTION */}
-        <section className="w-full py-24 relative overflow-hidden">
-          <div className="absolute inset-0 bg-brand-green -z-20" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.1)_0,transparent_100%)] -z-10" />
-          <div className="container mx-auto px-4 md:px-6 max-w-4xl text-center">
+        {/* STATS SECTION */}
+        <section className="w-full py-20 relative">
+          <div className="container mx-auto px-4 md:px-6 max-w-6xl">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+              {[
+                { value: "10M+", label: "Minutes of meetings hosted" },
+                { value: "50K+", label: "Active teams worldwide" },
+                { value: "99.9%", label: "Uptime SLA guarantee" },
+                { value: "150+", label: "Countries supported" },
+              ].map((stat, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="text-center space-y-2"
+                >
+                  <p className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-blue to-brand-green">{stat.value}</p>
+                  <p className="text-sm text-text-muted font-medium">{stat.label}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* HOW IT WORKS */}
+        <section className="w-full py-24 bg-surface border-y border-border">
+          <div className="container mx-auto px-4 md:px-6 max-w-6xl">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
+                Get started in minutes
+              </h2>
+              <p className="mt-4 text-lg text-text-secondary">
+                No complicated setup. No downloads needed. Just start collaborating.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-12">
+              {[
+                { step: "01", title: "Create your room", desc: "Sign up for free and create a permanent meeting room with a custom link in seconds." },
+                { step: "02", title: "Invite your team", desc: "Share your room link — guests can join instantly from their browser without signing up." },
+                { step: "03", title: "Collaborate & record", desc: "Meet in HD, share screens, use whiteboards, and record sessions for later or to monetize." },
+              ].map((item, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.15 }}
+                  className="relative text-center space-y-4"
+                >
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-blue to-brand-green text-white text-2xl font-extrabold shadow-lg">
+                    {item.step}
+                  </div>
+                  <h3 className="text-xl font-bold text-text-primary">{item.title}</h3>
+                  <p className="text-text-muted leading-relaxed max-w-xs mx-auto">{item.desc}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* PRICING PREVIEW */}
+        <section className="w-full py-24 relative">
+          <div className="absolute top-[10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-brand-green/5 blur-[120px] -z-10" />
+          <div className="container mx-auto px-4 md:px-6 max-w-6xl">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
+                Plans that scale with you
+              </h2>
+              <p className="mt-4 text-lg text-text-secondary">
+                Start free, upgrade when you're ready. No hidden fees.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                {
+                  name: "Free",
+                  price: "₦0",
+                  period: "forever",
+                  desc: "For personal use & small meetups",
+                  features: ["40 min per meeting", "100 participants", "720p HD video", "3 rooms", "Basic chat"],
+                  cta: "Start for free",
+                  href: "/signup",
+                  popular: false,
+                  icon: Zap,
+                },
+                {
+                  name: "Pro",
+                  price: "₦4,900",
+                  period: "per user/month",
+                  desc: "For growing teams & creators",
+                  features: ["Unlimited duration", "300 participants", "1080p HD video", "Unlimited rooms", "AI summaries", "eCinema monetization"],
+                  cta: "Start 14-day trial",
+                  href: "/signup",
+                  popular: true,
+                  icon: Star,
+                },
+                {
+                  name: "Enterprise",
+                  price: "Custom",
+                  period: "annual billing",
+                  desc: "For large orgs with strict security",
+                  features: ["10,000+ attendees", "4K video", "SSO & SAML", "White-label", "Dedicated manager", "99.99% SLA"],
+                  cta: "Contact Sales",
+                  href: "/contact",
+                  popular: false,
+                  icon: Shield,
+                },
+              ].map((plan, i) => (
+                <motion.div
+                  key={plan.name}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.15 }}
+                  className={`relative flex flex-col rounded-3xl border p-8 transition-shadow ${plan.popular ? 'border-[#207450] bg-surface shadow-xl shadow-[#207450]/10 md:-translate-y-4' : 'border-border bg-surface shadow-sm hover:shadow-md'}`}
+                >
+                  {plan.popular && (
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest text-white shadow-md" style={{ backgroundColor: '#207450' }}>
+                      Most Popular
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${plan.popular ? 'text-white' : 'bg-black/[0.04] text-text-primary'}`} style={plan.popular ? { backgroundColor: '#207450' } : {}}>
+                      <plan.icon className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-text-primary">{plan.name}</h3>
+                  </div>
+                  <p className="text-sm text-text-secondary mb-6">{plan.desc}</p>
+                  <div className="mb-6">
+                    <span className="text-4xl font-extrabold text-text-primary">{plan.price}</span>
+                    <span className="text-text-muted ml-1">/{plan.period}</span>
+                  </div>
+                  <ul className="space-y-3 mb-8 flex-1">
+                    {plan.features.map((f, j) => (
+                      <li key={j} className="flex items-center gap-3 text-sm text-text-secondary">
+                        <CheckCircle className="w-4 h-4 shrink-0" style={{ color: '#207450' }} />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href={plan.href} className="w-full">
+                    <Button
+                      variant={plan.popular ? "default" : "outline"}
+                      className={`w-full h-12 rounded-xl text-base font-bold ${plan.popular ? 'shadow-lg hover:shadow-xl' : ''}`}
+                      style={plan.popular ? { backgroundColor: '#207450' } : {}}
+                    >
+                      {plan.cta}
+                    </Button>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+            <div className="text-center mt-10">
+              <Link href="/pricing" className="text-sm font-semibold hover:underline" style={{ color: '#207450' }}>
+                Compare all plan features →
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* TESTIMONIALS */}
+        <section className="w-full py-24 bg-surface border-y border-border">
+          <div className="container mx-auto px-4 md:px-6 max-w-6xl">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary sm:text-4xl">
+                Loved by teams everywhere
+              </h2>
+              <p className="mt-4 text-lg text-text-secondary">
+                See what our customers have to say about their experience.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                {
+                  quote: "konn3ct replaced three separate tools for us. The eCinema feature alone has generated ₦2M+ in passive revenue from our training content.",
+                  name: "Adaeze Okoro",
+                  role: "Head of Learning, Finova",
+                  stars: 5,
+                },
+                {
+                  quote: "The persistent rooms and instant join experience mean my team actually shows up to meetings on time. Best investment we've made this year.",
+                  name: "David Chen",
+                  role: "CTO, StackLayer",
+                  stars: 5,
+                },
+                {
+                  quote: "We migrated from Zoom and haven't looked back. The AI meeting summaries save us hours every week and the security gives our compliance team peace of mind.",
+                  name: "Sarah Kimani",
+                  role: "VP Operations, DataPulse",
+                  stars: 5,
+                },
+              ].map((testimonial, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="bg-background border border-border rounded-2xl p-8 space-y-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex gap-1">
+                    {Array.from({ length: testimonial.stars }).map((_, j) => (
+                      <Star key={j} className="w-5 h-5 fill-[#FFD400] text-[#FFD400]" />
+                    ))}
+                  </div>
+                  <p className="text-text-secondary leading-relaxed italic">"{testimonial.quote}"</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#002C88' }}>
+                      {testimonial.name.split(" ").map(n => n[0]).join("")}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-text-primary">{testimonial.name}</p>
+                      <p className="text-xs text-text-muted">{testimonial.role}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+
+        <section className="w-full py-24 relative overflow-hidden" style={{ backgroundColor: '#207450' }}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12)_0,transparent_70%)]" />
+          <div className="absolute top-[-50%] left-[-20%] w-[600px] h-[600px] rounded-full bg-white/5 blur-[80px]" />
+          <div className="absolute bottom-[-30%] right-[-10%] w-[500px] h-[500px] rounded-full bg-[#002C88]/20 blur-[100px]" />
+          <div className="container mx-auto px-4 md:px-6 max-w-4xl text-center relative z-10">
             <h2 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl mb-6">
               Ready to elevate your meetings?
             </h2>
@@ -296,7 +520,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
               <Link href="/signup">
-                <Button size="lg" className="h-14 px-8 rounded-xl bg-white text-brand-green hover:bg-white/90 text-base font-bold shadow-xl hover:shadow-2xl transition-all">
+                <Button size="lg" className="h-14 px-8 rounded-xl bg-white text-[#207450] hover:bg-white/90 text-base font-bold shadow-md transition-all">
                   Create Free Account
                 </Button>
               </Link>
