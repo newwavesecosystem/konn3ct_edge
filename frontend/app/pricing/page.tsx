@@ -190,6 +190,49 @@ export default function PricingPage() {
           </div>
         </section>
 
+        {/* Feature Comparison Table */}
+        <section className="w-full pb-24 relative z-10">
+          <div className="container mx-auto px-4 md:px-6 max-w-5xl">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary">Compare all features</h2>
+            </div>
+            <div className="bg-surface border border-border rounded-3xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-4 font-bold text-text-primary">Feature</th>
+                    <th className="p-4 font-bold text-text-primary text-center">Free</th>
+                    <th className="p-4 font-bold text-center" style={{ color: '#207450' }}>Pro</th>
+                    <th className="p-4 font-bold text-text-primary text-center">Enterprise</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { feature: "Meeting duration", free: "40 min", pro: "Unlimited", ent: "Unlimited" },
+                    { feature: "Max participants", free: "100", pro: "300", ent: "10,000+" },
+                    { feature: "Video quality", free: "720p", pro: "1080p", ent: "4K" },
+                    { feature: "Rooms", free: "3", pro: "Unlimited", ent: "Unlimited" },
+                    { feature: "Cloud recordings", free: "5 (7d)", pro: "Unlimited", ent: "Unlimited (never expire)" },
+                    { feature: "eCinema monetization", free: "—", pro: "5% fee", ent: "0% fee" },
+                    { feature: "AI Meeting Assistant", free: "—", pro: "✓", ent: "✓ Advanced" },
+                    { feature: "Custom branding", free: "—", pro: "✓", ent: "White-label" },
+                    { feature: "SSO & SAML", free: "—", pro: "—", ent: "✓" },
+                    { feature: "Dedicated Account Manager", free: "—", pro: "—", ent: "✓" },
+                    { feature: "Uptime SLA", free: "—", pro: "99.9%", ent: "99.99%" },
+                  ].map((row, i) => (
+                    <tr key={i} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-black/[0.01]' : ''}`}>
+                      <td className="p-4 font-medium text-text-primary">{row.feature}</td>
+                      <td className="p-4 text-center text-text-secondary">{row.free}</td>
+                      <td className="p-4 text-center font-semibold" style={{ color: '#207450' }}>{row.pro}</td>
+                      <td className="p-4 text-center text-text-secondary">{row.ent}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         {/* FAQ Section */}
         <section className="w-full py-24 bg-black/[0.02] border-t border-border">
           <div className="container mx-auto px-4 md:px-6 max-w-3xl">
@@ -213,6 +256,14 @@ export default function PricingPage() {
                 {
                   q: "What forms of payment do you accept?",
                   a: "We process all payments securely through Paystack and Stripe, supporting all major credit cards, debit cards, bank transfers, and mobile money options across Africa and globally."
+                },
+                {
+                  q: "Is there a discount for annual billing?",
+                  a: "Yes! Annual billing saves you 20% compared to monthly billing. Contact our sales team for custom Enterprise pricing and volume discounts."
+                },
+                {
+                  q: "Can I switch plans later?",
+                  a: "Absolutely. You can upgrade or downgrade your plan at any time. When upgrading, the difference is pro-rated. When downgrading, the change takes effect at the next billing cycle."
                 }
               ].map((faq, i) => (
                 <div key={i} className="bg-surface p-6 rounded-2xl border border-border shadow-sm">
@@ -220,6 +271,29 @@ export default function PricingPage() {
                   <p className="text-text-secondary leading-relaxed">{faq.a}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="w-full py-24 text-center relative overflow-hidden" style={{ backgroundColor: '#207450' }}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12)_0,transparent_70%)]" />
+          <div className="container mx-auto px-4 relative z-10">
+            <h2 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl mb-6">Ready to get started?</h2>
+            <p className="text-xl text-white/80 mb-10 max-w-2xl mx-auto">
+              Start with the free plan — no credit card required. Upgrade when you're ready.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
+              <Link href="/signup">
+                <Button size="lg" className="h-14 px-8 rounded-xl bg-white text-[#207450] hover:bg-white/90 text-base font-bold shadow-md transition-all">
+                  Create Free Account
+                </Button>
+              </Link>
+              <Link href="/contact">
+                <Button variant="outline" size="lg" className="h-14 px-8 rounded-xl border-white/30 text-white hover:bg-white/10 text-base font-semibold">
+                  Contact Sales
+                </Button>
+              </Link>
             </div>
           </div>
         </section>
