@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { CheckCircle2, BarChart3 } from "lucide-react";
 
 export function PollsPanel() {
-  const { polls, votePoll } = useMeeting();
+  const { polls, votePoll, createPoll } = useMeeting();
 
   return (
     <div className="flex flex-col h-full">
@@ -15,7 +15,16 @@ export function PollsPanel() {
         style={{ borderBottom: "1px solid var(--mt-border)" }}
       >
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Polls</h3>
-        <button className="text-xs text-brand-green-soft hover:text-brand-green transition-colors font-medium">
+        <button 
+          onClick={() => {
+            const question = window.prompt("Enter poll question:");
+            if (!question) return;
+            const options = window.prompt("Enter options separated by commas (e.g. Yes, No):");
+            if (!options) return;
+            createPoll(question, options.split(',').map(s => s.trim()));
+          }}
+          className="text-xs text-brand-green-soft hover:text-brand-green transition-colors font-medium"
+        >
           + Create Poll
         </button>
       </div>
