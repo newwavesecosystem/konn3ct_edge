@@ -29,6 +29,9 @@ export class WebRTCClient {
   public onPollVote?: (vote: any) => void;
   public onMuteState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
+  public onWaitingRoomRequest?: (msg: any) => void;
+  public onChatHistory?: (messages: any[]) => void;
+  public onPollHistory?: (polls: any[]) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -43,24 +46,9 @@ export class WebRTCClient {
     this.ws.onopen = async () => {
       try {
         this.reconnectAttempts = 0; // Reset on success
-        
-        if (!this.device?.loaded) {
-          await this.initializeMediasoup();
-        }
-        
-        this.onConnectionStateChange?.('connected');
-        
-        // Fetch any existing producers from users already in the room
-        try {
-          const res = await this.request('getProducers', 'producersList');
-          for (const p of res.producers || []) {
-            await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
-          }
-        } catch (syncErr) {
-          console.error("Failed to sync existing producers:", syncErr);
-        }
+        // Device init moved to session_status handling to respect waiting room
       } catch (err) {
-        console.error("Mediasoup initialization failed:", err);
+        console.error("Connection failed:", err);
         this.onConnectionStateChange?.('failed');
       }
     };
@@ -78,9 +66,32 @@ export class WebRTCClient {
       // Handle server-initiated events
       switch (msg.type) {
         case 'session_status':
+          if (msg.status === 'denied') {
+            this.onConnectionStateChange?.('denied');
+            this.isIntentionalDisconnect = true;
+            this.disconnect();
+            return;
+          }
+          if (msg.status === 'waiting') {
+            this.onConnectionStateChange?.('waiting');
+            return; // Don't republish yet
+          }
+          
+          // Only change to connected if we aren't waiting/denied
+          this.onConnectionStateChange?.('connected');
+
           if (!msg.recovered && this.device?.loaded) {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
             await this.republishMedia();
+          } else if (!this.device?.loaded && msg.status === 'active') {
+            // First time active
+            await this.initializeMediasoup();
+            try {
+              const res = await this.request('getProducers', 'producersList');
+              for (const p of res.producers || []) {
+                await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+              }
+            } catch (err) { console.error(err); }
           }
           break;
         case 'newProducer':
@@ -106,6 +117,15 @@ export class WebRTCClient {
           break;
         case 'hand_raise':
           this.onHandRaise?.(msg);
+          break;
+        case 'waiting_room_request':
+          this.onWaitingRoomRequest?.(msg);
+          break;
+        case 'chat_history':
+          this.onChatHistory?.(msg.messages);
+          break;
+        case 'poll_history':
+          this.onPollHistory?.(msg.polls);
           break;
       }
     };
@@ -196,6 +216,18 @@ export class WebRTCClient {
   public sendHandRaise(isHandRaised: boolean) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
+    }
+  }
+
+  public admitUser(userId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'admit_user', userId }));
+    }
+  }
+
+  public denyUser(userId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'deny_user', userId }));
     }
   }
 

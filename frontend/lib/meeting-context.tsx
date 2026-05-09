@@ -26,6 +26,7 @@ import { WebRTCClient } from "./webrtc";
 interface MeetingContextValue {
   // State
   participants: Participant[];
+  waitingUsers: Array<{ userId: string, name: string }>;
   currentUser: Participant;
   chatMessages: ChatMessage[];
   polls: Poll[];
@@ -60,6 +61,8 @@ interface MeetingContextValue {
   setShowLeaveDialog: (show: boolean) => void;
   setShowReactionPicker: (show: boolean) => void;
   setIsMobilePanelOpen: (open: boolean) => void;
+  admitUser: (userId: string) => void;
+  denyUser: (userId: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -97,8 +100,9 @@ export function MeetingProvider({
   
   // Start with only the current user, so real users are dynamically added
   const [participants, setParticipants] = useState<Participant[]>([currentUser]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(mockChatMessages);
-  const [polls, setPolls] = useState<Poll[]>(mockPolls);
+  const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
   const [docs] = useState<DocNote[]>(mockDocs);
   const formattedTitle = roomSlug
     .replace(/-/g, " ")
@@ -155,20 +159,42 @@ export function MeetingProvider({
         client = new WebRTCClient(roomSlug, data.token);
         
         // --- Collaboration Event Listeners ---
+        client.onChatHistory = (messages) => {
+          setChatMessages(messages.map((m: any) => ({
+            id: m.id,
+            senderId: m.userId,
+            senderName: m.senderName || `Participant ${m.userId.substring(5, 9)}`,
+            senderRole: "attendee",
+            content: m.content,
+            timestamp: m.createdAt,
+            isPrivate: m.isPrivate,
+            fileUrl: m.fileUrl
+          })));
+        };
+
+        client.onPollHistory = (historyPolls) => {
+          setPolls(historyPolls);
+        };
+
         client.onChatMessage = (msg) => {
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              id: `m-${Date.now()}-${Math.random()}`,
-              senderId: msg.userId,
-              senderName: `Participant ${msg.userId.substring(5, 9)}`,
-              senderRole: "attendee",
-              content: msg.message,
-              timestamp: msg.timestamp,
-              isPrivate: msg.isPrivate,
-              fileUrl: msg.fileUrl,
-            },
-          ]);
+          setChatMessages((prev) => {
+            // Prevent duplicates if same ID arrives
+            if (msg.id && prev.some(m => m.id === msg.id)) return prev;
+            
+            return [
+              ...prev,
+              {
+                id: msg.id || `m-${Date.now()}-${Math.random()}`,
+                senderId: msg.userId,
+                senderName: msg.userId === currentUser.id ? currentUser.name : participants.find(p => p.id === msg.userId)?.name || `Participant ${msg.userId.substring(5, 9)}`,
+                senderRole: "attendee",
+                content: msg.message,
+                timestamp: msg.timestamp,
+                isPrivate: msg.isPrivate,
+                fileUrl: msg.fileUrl,
+              },
+            ];
+          });
         };
 
         client.onReaction = (msg) => {
@@ -228,6 +254,19 @@ export function MeetingProvider({
           setParticipants((prev) => prev.map(p => 
             p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
           ));
+        };
+
+        client.onWaitingRoomRequest = (msg) => {
+          setWaitingUsers(prev => {
+            if (prev.find(u => u.userId === msg.userId)) return prev;
+            toast(`${msg.name} is waiting to join`, {
+              action: {
+                label: 'Admit',
+                onClick: () => webrtcClient.current?.admitUser(msg.userId)
+              }
+            });
+            return [...prev, { userId: msg.userId, name: msg.name }];
+          });
         };
 
         client.onConnectionStateChange = (state) => {
@@ -505,10 +544,21 @@ export function MeetingProvider({
     []
   );
 
+  const admitUser = useCallback((userId: string) => {
+    webrtcClient.current?.admitUser(userId);
+    setWaitingUsers(prev => prev.filter(u => u.userId !== userId));
+  }, []);
+
+  const denyUser = useCallback((userId: string) => {
+    webrtcClient.current?.denyUser(userId);
+    setWaitingUsers(prev => prev.filter(u => u.userId !== userId));
+  }, []);
+
   return (
     <MeetingContext.Provider
       value={{
         participants,
+        waitingUsers,
         currentUser,
         chatMessages,
         polls,
@@ -541,6 +591,8 @@ export function MeetingProvider({
         setShowLeaveDialog,
         setShowReactionPicker,
         setIsMobilePanelOpen,
+        admitUser,
+        denyUser,
       }}
     >
       {children}

@@ -36,6 +36,45 @@ export function MeetingShell() {
     settings: <SettingsPanel />,
   };
 
+  if (webrtcStatus === 'waiting') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
+        <div className="p-8 rounded-2xl max-w-md w-full text-center" style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}>
+          <div className="w-16 h-16 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center mx-auto mb-6">
+            <span className="text-2xl font-bold">K</span>
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Waiting for the host to let you in</h2>
+          <p style={{ color: "var(--mt-text-faint)" }} className="mb-6">
+            You will join the meeting automatically once the host admits you.
+          </p>
+          <div className="flex justify-center">
+            <div className="flex gap-1">
+              <div className="w-2 h-2 rounded-full bg-brand-green animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 rounded-full bg-brand-green animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 rounded-full bg-brand-green animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (webrtcStatus === 'denied') {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
+        <div className="p-8 rounded-2xl max-w-md w-full text-center" style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}>
+          <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center mx-auto mb-6">
+            <X className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">Entry Denied</h2>
+          <p style={{ color: "var(--mt-text-faint)" }}>
+            The host has declined your request to join this meeting.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col h-screen overflow-hidden"
