@@ -32,6 +32,8 @@ export class WebRTCClient {
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
   public onPollHistory?: (polls: any[]) => void;
+  public onNoteHistory?: (content: string) => void;
+  public onNoteUpdate?: (msg: any) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -127,6 +129,12 @@ export class WebRTCClient {
         case 'poll_history':
           this.onPollHistory?.(msg.polls);
           break;
+        case 'note_history':
+          this.onNoteHistory?.(msg.content);
+          break;
+        case 'note_update':
+          this.onNoteUpdate?.(msg);
+          break;
       }
     };
 
@@ -192,6 +200,12 @@ export class WebRTCClient {
   public sendReaction(reaction: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'reaction', reaction }));
+    }
+  }
+
+  public sendNoteUpdate(content: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'note_update', content }));
     }
   }
 

@@ -123,9 +123,15 @@ export function initializeSignaling(server: Server) {
             where: { roomId, isActive: true },
             orderBy: { createdAt: 'asc' }
           });
+          const noteHistory = await db.sharedNote.findUnique({
+            where: { roomId }
+          });
           
           ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
           ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+          if (noteHistory) {
+            ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
+          }
         } catch (e) {
           logger.error("Failed to load history", e);
         }
@@ -258,6 +264,23 @@ export function initializeSignaling(server: Server) {
           userId,
           reaction: data.reaction // e.g., 'thumbs_up', 'heart'
         });
+        break;
+
+      case 'note_update':
+        try {
+          await db.sharedNote.upsert({
+            where: { roomId },
+            create: { roomId, content: data.content },
+            update: { content: data.content }
+          });
+          broadcastToRoom(roomId, {
+            type: 'note_update',
+            userId,
+            content: data.content
+          }, userId);
+        } catch (e) {
+          logger.error("Failed to update shared note", e);
+        }
         break;
 
       case 'poll_create':

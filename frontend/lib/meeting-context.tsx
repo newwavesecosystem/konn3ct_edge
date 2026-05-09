@@ -30,7 +30,7 @@ interface MeetingContextValue {
   currentUser: Participant;
   chatMessages: ChatMessage[];
   polls: Poll[];
-  docs: DocNote[];
+  sharedNoteContent: string;
   meetingInfo: MeetingInfo;
   reactions: Reaction[];
   activePanel: SidePanel;
@@ -58,6 +58,7 @@ interface MeetingContextValue {
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
   createPoll: (question: string, options: string[]) => void;
+  updateSharedNote: (content: string) => void;
   setShowLeaveDialog: (show: boolean) => void;
   setShowReactionPicker: (show: boolean) => void;
   setIsMobilePanelOpen: (open: boolean) => void;
@@ -103,7 +104,7 @@ export function MeetingProvider({
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
-  const [docs] = useState<DocNote[]>(mockDocs);
+  const [sharedNoteContent, setSharedNoteContent] = useState<string>("");
   const formattedTitle = roomSlug
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -174,6 +175,14 @@ export function MeetingProvider({
 
         client.onPollHistory = (historyPolls) => {
           setPolls(historyPolls);
+        };
+
+        client.onNoteHistory = (content) => {
+          setSharedNoteContent(content);
+        };
+
+        client.onNoteUpdate = (msg) => {
+          setSharedNoteContent(msg.content);
         };
 
         client.onChatMessage = (msg) => {
@@ -534,6 +543,11 @@ export function MeetingProvider({
     }]);
   }, [currentUser]);
 
+  const updateSharedNote = useCallback((content: string) => {
+    setSharedNoteContent(content);
+    webrtcClient.current?.sendNoteUpdate(content);
+  }, []);
+
   const handleSetActivePanel = useCallback(
     (panel: SidePanel) => {
       setActivePanel((prev) => (prev === panel ? null : panel));
@@ -562,7 +576,7 @@ export function MeetingProvider({
         currentUser,
         chatMessages,
         polls,
-        docs,
+        sharedNoteContent,
         meetingInfo,
         reactions,
         activePanel,
@@ -588,6 +602,7 @@ export function MeetingProvider({
         sendReaction,
         votePoll,
         createPoll,
+        updateSharedNote,
         setShowLeaveDialog,
         setShowReactionPicker,
         setIsMobilePanelOpen,
