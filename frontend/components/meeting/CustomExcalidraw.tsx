@@ -3,8 +3,22 @@
 import React, { useEffect, useState } from "react";
 import { Excalidraw, MainMenu, WelcomeScreen } from "@excalidraw/excalidraw";
 
-export default function CustomExcalidraw() {
+interface Props {
+  remoteElements?: readonly any[];
+  onChange?: (elements: readonly any[], appState: any) => void;
+}
+
+export default function CustomExcalidraw({ remoteElements, onChange }: Props) {
   const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
+
+  useEffect(() => {
+    if (!excalidrawAPI || !remoteElements || remoteElements.length === 0) return;
+    // Prevent interrupting local dragging
+    const appState = excalidrawAPI.getAppState();
+    if (appState && appState.draggingElement) return;
+    
+    excalidrawAPI.updateScene({ elements: remoteElements });
+  }, [remoteElements, excalidrawAPI]);
 
   useEffect(() => {
     if (!excalidrawAPI) return;
@@ -33,7 +47,10 @@ export default function CustomExcalidraw() {
   }, [excalidrawAPI]);
 
   return (
-    <Excalidraw excalidrawAPI={(api: any) => setExcalidrawAPI(api)}>
+    <Excalidraw 
+      excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
+      onChange={onChange}
+    >
       <MainMenu>
         <MainMenu.DefaultItems.LoadScene />
         <MainMenu.DefaultItems.Export />
