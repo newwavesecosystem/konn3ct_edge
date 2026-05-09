@@ -16,6 +16,7 @@ interface Client {
 
 const rooms = new Map<string, Map<string, Client>>();
 const roomProducers = new Map<string, Array<{ producerId: string, userId: string, kind: string }>>();
+const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -80,14 +81,21 @@ export function initializeSignaling(server: Server) {
     }
     rooms.get(roomId)!.set(userId, client);
 
-    logger.info(`User ${userId} (${role}) joined room ${roomId}`);
-
-    // Broadcast presence to room
-    broadcastToRoom(roomId, {
-      type: 'user_joined',
-      userId,
-      role
-    });
+    if (disconnectTimeouts.has(userId)) {
+      clearTimeout(disconnectTimeouts.get(userId)!);
+      disconnectTimeouts.delete(userId);
+      logger.info(`User ${userId} reconnected to room ${roomId} during grace period`);
+      ws.send(JSON.stringify({ type: 'session_status', recovered: true }));
+    } else {
+      logger.info(`User ${userId} (${role}) joined room ${roomId}`);
+      ws.send(JSON.stringify({ type: 'session_status', recovered: false }));
+      // Broadcast presence to room
+      broadcastToRoom(roomId, {
+        type: 'user_joined',
+        userId,
+        role
+      });
+    }
 
     ws.on('message', async (message: string) => {
       try {
@@ -99,19 +107,31 @@ export function initializeSignaling(server: Server) {
     });
 
     ws.on('close', () => {
-      logger.info(`User ${userId} left room ${roomId}`);
-      const roomClients = rooms.get(roomId);
-      if (roomClients) {
-        roomClients.delete(userId);
-        if (roomClients.size === 0) {
-          rooms.delete(roomId);
-        } else {
-          broadcastToRoom(roomId, {
-            type: 'user_left',
-            userId
-          });
+      logger.info(`User ${userId} disconnected from room ${roomId}. Starting 60s grace period...`);
+      
+      const timeout = setTimeout(() => {
+        logger.info(`User ${userId} grace period expired. Cleaning up session.`);
+        const roomClients = rooms.get(roomId);
+        if (roomClients) {
+          roomClients.delete(userId);
+          if (roomClients.size === 0) {
+            rooms.delete(roomId);
+            roomProducers.delete(roomId); // Clean up producers array when room empties
+          } else {
+            // Remove their producers from the array
+            const producers = roomProducers.get(roomId) || [];
+            roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
+            
+            broadcastToRoom(roomId, {
+              type: 'user_left',
+              userId
+            });
+          }
         }
-      }
+        disconnectTimeouts.delete(userId);
+      }, 60000); // 60 seconds
+      
+      disconnectTimeouts.set(userId, timeout);
     });
   });
 

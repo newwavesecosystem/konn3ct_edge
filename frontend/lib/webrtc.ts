@@ -77,6 +77,12 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'session_status':
+          if (!msg.recovered && this.device?.loaded) {
+            console.log("Session lost by server. Executing Client-Side Auto-Republish...");
+            await this.republishMedia();
+          }
+          break;
         case 'newProducer':
           await this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind);
           break;
@@ -245,6 +251,87 @@ export class WebRTCClient {
         errback(error);
       }
     });
+  }
+
+  private async republishMedia() {
+    if (!this.device) return;
+    
+    // Save current tracks
+    const videoTrack = this.localVideoProducer?.track;
+    const audioTrack = this.localAudioProducer?.track;
+    const isVideoPaused = this.localVideoProducer?.paused;
+    const isAudioPaused = this.localAudioProducer?.paused;
+
+    // Clean up old transports
+    if (this.sendTransport) this.sendTransport.close();
+    if (this.recvTransport) this.recvTransport.close();
+    
+    // Recreate transports
+    const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
+    this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
+    
+    this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+      try {
+        await this.request('connectWebRtcTransport', 'transportConnected', {
+          transportId: this.sendTransport!.id,
+          dtlsParameters
+        });
+        callback();
+      } catch (error: any) { errback(error); }
+    });
+
+    this.sendTransport.on('produce', async ({ kind, rtpParameters }: any, callback: any, errback: any) => {
+      try {
+        const { id } = await this.request('produce', 'produced', {
+          transportId: this.sendTransport!.id,
+          kind,
+          rtpParameters
+        });
+        callback({ id });
+      } catch (error: any) { errback(error); }
+    });
+
+    const recvTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'recv' });
+    this.recvTransport = this.device.createRecvTransport(recvTransportData.transportParams);
+
+    this.recvTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+      try {
+        await this.request('connectWebRtcTransport', 'transportConnected', {
+          transportId: this.recvTransport!.id,
+          dtlsParameters
+        });
+        callback();
+      } catch (error: any) { errback(error); }
+    });
+
+    // Republish saved tracks
+    if (videoTrack && videoTrack.readyState === 'live') {
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: videoTrack,
+        encodings: [
+          { scaleResolutionDownBy: 4, maxBitrate: 100000 },
+          { scaleResolutionDownBy: 2, maxBitrate: 300000 },
+          { scaleResolutionDownBy: 1, maxBitrate: 900000 },
+        ],
+        codecOptions: { videoGoogleStartBitrate: 1000 }
+      });
+      if (isVideoPaused) this.localVideoProducer.pause();
+    }
+    
+    if (audioTrack && audioTrack.readyState === 'live') {
+      this.localAudioProducer = await this.sendTransport.produce({ track: audioTrack });
+      if (isAudioPaused) this.localAudioProducer.pause();
+    }
+    
+    // Re-fetch consumers
+    try {
+      const res = await this.request('getProducers', 'producersList');
+      for (const p of res.producers || []) {
+        await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+      }
+    } catch (e) {
+      console.error("Failed to re-sync producers after republish", e);
+    }
   }
 
   public async enableCamera(): Promise<MediaStreamTrack> {
