@@ -14,6 +14,10 @@ export class WebRTCClient {
   
   private pendingRequests: Map<string, { resolve: Function, reject: Function }> = new Map();
   private messageIdCounter = 0;
+  private isIntentionalDisconnect = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private reconnectTimeoutId?: NodeJS.Timeout;
 
   public onNewConsumer?: (consumer: Consumer, userId: string) => void;
   public onConnectionStateChange?: (state: string) => void;
@@ -38,7 +42,12 @@ export class WebRTCClient {
 
     this.ws.onopen = async () => {
       try {
-        await this.initializeMediasoup();
+        this.reconnectAttempts = 0; // Reset on success
+        
+        if (!this.device?.loaded) {
+          await this.initializeMediasoup();
+        }
+        
         this.onConnectionStateChange?.('connected');
         
         // Fetch any existing producers from users already in the room
@@ -97,8 +106,30 @@ export class WebRTCClient {
 
     this.ws.onerror = (err) => {
       console.error('WebSocket Error:', err);
-      this.onConnectionStateChange?.('failed');
     };
+
+    this.ws.onclose = () => {
+      if (!this.isIntentionalDisconnect) {
+        this.onConnectionStateChange?.('disconnected');
+        this.attemptReconnect();
+      }
+    };
+  }
+
+  private attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('Max reconnect attempts reached. Giving up.');
+      this.onConnectionStateChange?.('failed');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000); // Max 10s backoff
+    console.log(`Reconnecting signaling in ${delay}ms (Attempt ${this.reconnectAttempts})...`);
+    
+    this.reconnectTimeoutId = setTimeout(() => {
+      this.connect();
+    }, delay);
   }
 
   private request(sendType: string, expectType: string, payload: any = {}): Promise<any> {
@@ -219,10 +250,20 @@ export class WebRTCClient {
   public async enableCamera(): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } } 
+    });
     const videoTrack = stream.getVideoTracks()[0];
     
-    this.localVideoProducer = await this.sendTransport.produce({ track: videoTrack });
+    this.localVideoProducer = await this.sendTransport.produce({ 
+      track: videoTrack,
+      encodings: [
+        { scaleResolutionDownBy: 4, maxBitrate: 100000 },
+        { scaleResolutionDownBy: 2, maxBitrate: 300000 },
+        { scaleResolutionDownBy: 1, maxBitrate: 900000 },
+      ],
+      codecOptions: { videoGoogleStartBitrate: 1000 }
+    });
     return videoTrack;
   }
 
@@ -268,11 +309,16 @@ export class WebRTCClient {
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const screenTrack = stream.getVideoTracks()[0];
     
-    // Replace the camera track with the screen track
+    // Replace the camera track with the screen track (screenshare usually doesn't need heavy simulcast, but we can maintain high quality)
     if (this.localVideoProducer) {
       await this.localVideoProducer.replaceTrack({ track: screenTrack });
     } else {
-      this.localVideoProducer = await this.sendTransport.produce({ track: screenTrack });
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: screenTrack,
+        encodings: [
+          { maxBitrate: 1500000 } // high bitrate for crisp text
+        ]
+      });
     }
     
     return screenTrack;
@@ -318,6 +364,8 @@ export class WebRTCClient {
   }
 
   public disconnect() {
+    this.isIntentionalDisconnect = true;
+    if (this.reconnectTimeoutId) clearTimeout(this.reconnectTimeoutId);
     this.ws?.close();
     this.sendTransport?.close();
     this.recvTransport?.close();
