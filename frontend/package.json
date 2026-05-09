@@ -14,6 +14,7 @@
     "@excalidraw/excalidraw": "^0.18.1",
     "@hookform/resolvers": "^5.2.2",
     "clsx": "^2.1.1",
+    "exceljs": "^4.4.0",
     "framer-motion": "^12.38.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.14.0",
@@ -28,7 +29,6 @@
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
-    "xlsx": "^0.18.5",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
   },
@@ -42,5 +42,10 @@
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "nanoid": "^4.0.0",
+    "postcss": "^8.5.10",
+    "lodash-es": "^4.17.21"
   }
 }

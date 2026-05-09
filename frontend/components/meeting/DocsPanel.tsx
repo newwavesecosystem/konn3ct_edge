@@ -3,10 +3,11 @@
 import React, { useState } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { FileText, Table, Presentation, Download, Maximize2, Minimize2 } from "lucide-react";
+import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import "react-quill-new/dist/quill.snow.css";
 import "@excalidraw/excalidraw/index.css";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 // Dynamically import heavy editors to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
@@ -78,9 +79,11 @@ export function DocsPanel() {
 
   const lastExcalidrawVersion = React.useRef(0);
 
-  const handleExcalidrawChange = (elements: readonly any[]) => {
+  const handleExcalidrawChange = (elements: readonly any[], appState: any) => {
     // Only broadcast if the elements actually changed (calculate version sum)
     const currentVersion = elements.reduce((acc, el) => acc + (el.version || 0), 0);
+    
+    // Prevent broadcast loop if elements were just updated from the server
     if (currentVersion !== lastExcalidrawVersion.current) {
       lastExcalidrawVersion.current = currentVersion;
       state.excalidraw = elements;
@@ -88,13 +91,23 @@ export function DocsPanel() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (activeTab === "sheet") {
       const rawData = state.sheet.map((row: any[]) => row.map((cell: any) => cell.value || ""));
-      const ws = XLSX.utils.aoa_to_sheet(rawData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Meeting Sheet");
-      XLSX.writeFile(wb, "meeting-sheet.xlsx");
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Meeting Sheet");
+      ws.addRows(rawData);
+      
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "meeting-sheet.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       return;
     }
 
@@ -110,10 +123,8 @@ export function DocsPanel() {
         </html>
       `;
     } else {
-      // Excalidraw handles its own export natively in its UI, but we can fallback here
-      content = "Kindly download this file from the whiteboard panel.";
-      ext = "txt";
-      mime = "text/plain";
+      toast.info("Please use the Export button inside the Whiteboard menu to save your drawing.");
+      return;
     }
 
     const blob = new Blob([content], { type: mime });
@@ -136,6 +147,7 @@ export function DocsPanel() {
       >
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Workspace</h3>
         <div className="flex items-center gap-1">
+         
           <button
             onClick={handleDownload}
             className="p-1.5 rounded-lg transition-colors hover:bg-[var(--mt-bg-hover)]"
@@ -144,6 +156,7 @@ export function DocsPanel() {
           >
             <Download className="w-4 h-4" />
           </button>
+          
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="p-1.5 rounded-lg transition-colors hover:bg-[var(--mt-bg-hover)]"
