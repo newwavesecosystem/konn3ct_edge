@@ -23,6 +23,10 @@ const quillModules = {
   ]
 };
 
+const createEmptyMatrix = (rows: number, cols: number) => {
+  return Array(rows).fill(null).map(() => Array(cols).fill({ value: "" }));
+};
+
 export function DocsPanel() {
   const { sharedNoteContent, updateSharedNote } = useMeeting();
   const [activeTab, setActiveTab] = useState<"doc" | "sheet" | "slide">("doc");
@@ -31,13 +35,8 @@ export function DocsPanel() {
   // Parse unified state
   let state = {
     doc: "",
-    sheet: [
-      [{ value: "" }, { value: "" }, { value: "" }, { value: "" }],
-      [{ value: "" }, { value: "" }, { value: "" }, { value: "" }],
-      [{ value: "" }, { value: "" }, { value: "" }, { value: "" }],
-      [{ value: "" }, { value: "" }, { value: "" }, { value: "" }],
-      [{ value: "" }, { value: "" }, { value: "" }, { value: "" }],
-    ],
+    sheet: createEmptyMatrix(50, 20),
+    excalidraw: [] as readonly any[],
   };
 
   try {
@@ -45,6 +44,7 @@ export function DocsPanel() {
       const parsed = JSON.parse(sharedNoteContent);
       if (parsed.doc !== undefined) state.doc = parsed.doc;
       if (parsed.sheet !== undefined) state.sheet = parsed.sheet;
+      if (parsed.excalidraw !== undefined) state.excalidraw = parsed.excalidraw;
     }
   } catch (e) {
     // Fallback if previous content was plain string
@@ -74,6 +74,18 @@ export function DocsPanel() {
   const handleSheetChange = (data: any[]) => {
     state.sheet = data;
     updateSharedNote(JSON.stringify(state));
+  };
+
+  const lastExcalidrawVersion = React.useRef(0);
+
+  const handleExcalidrawChange = (elements: readonly any[]) => {
+    // Only broadcast if the elements actually changed (calculate version sum)
+    const currentVersion = elements.reduce((acc, el) => acc + (el.version || 0), 0);
+    if (currentVersion !== lastExcalidrawVersion.current) {
+      lastExcalidrawVersion.current = currentVersion;
+      state.excalidraw = elements;
+      updateSharedNote(JSON.stringify(state));
+    }
   };
 
   const handleDownload = () => {
@@ -190,7 +202,10 @@ export function DocsPanel() {
 
         {activeTab === "slide" && (
           <div className="absolute inset-0 w-full h-full bg-white z-[0]">
-            <ExcalidrawWrapper />
+            <ExcalidrawWrapper 
+              remoteElements={state.excalidraw} 
+              onChange={handleExcalidrawChange} 
+            />
           </div>
         )}
       </div>
