@@ -32,6 +32,31 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: JWT_SECRET
+            - name: DO_SPACES_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_ENDPOINT
+            - name: DO_SPACES_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_REGION
+            - name: DO_SPACES_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_KEY
+            - name: DO_SPACES_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_SECRET
+            - name: DO_SPACES_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_BUCKET
           resources:
             requests:
               cpu: "100m"

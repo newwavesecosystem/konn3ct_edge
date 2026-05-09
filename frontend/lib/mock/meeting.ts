@@ -105,73 +105,7 @@ export const mockParticipants: Participant[] = [
 export const mockCurrentUser = mockParticipants[0];
 
 // ── Mock Chat Messages ─────────────────────────────────
-export const mockChatMessages: ChatMessage[] = [
-  {
-    id: "m1",
-    senderId: "system",
-    senderName: "System",
-    senderRole: "host",
-    content: "Meeting started",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 44).toISOString(),
-    isSystem: true,
-  },
-  {
-    id: "m2",
-    senderId: "p1",
-    senderName: "Adaeze Okafor",
-    senderRole: "host",
-    content: "Welcome everyone! Let's get started with the product review.",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 42).toISOString(),
-  },
-  {
-    id: "m3",
-    senderId: "p2",
-    senderName: "Chidi Nwosu",
-    senderRole: "co-host",
-    content: "Thanks Adaeze. I've shared the deck in the docs panel.",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 40).toISOString(),
-  },
-  {
-    id: "m4",
-    senderId: "p3",
-    senderName: "Fatima Bello",
-    senderRole: "presenter",
-    content: "Screen sharing the Q3 metrics now 📊",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 35).toISOString(),
-  },
-  {
-    id: "m5",
-    senderId: "p4",
-    senderName: "Emeka Eze",
-    senderRole: "attendee",
-    content: "The conversion numbers look great! Up 23% from last quarter.",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 30).toISOString(),
-  },
-  {
-    id: "m6",
-    senderId: "p5",
-    senderName: "Ngozi Ibe",
-    senderRole: "attendee",
-    content: "Can we discuss the mobile retention rates?",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 25).toISOString(),
-  },
-  {
-    id: "m7",
-    senderId: "p7",
-    senderName: "Amina Lawal",
-    senderRole: "guest",
-    content: "Hi everyone, just joined. Happy to be here!",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 15).toISOString(),
-  },
-  {
-    id: "m8",
-    senderId: "p1",
-    senderName: "Adaeze Okafor",
-    senderRole: "host",
-    content: "Welcome Amina! We're reviewing Q3 product metrics.",
-    timestamp: new Date(BASE_TIME - 1000 * 60 * 14).toISOString(),
-  },
-];
+export const mockChatMessages: ChatMessage[] = [];
 
 // ── Mock Polls ─────────────────────────────────────────
 export const mockPolls: Poll[] = [

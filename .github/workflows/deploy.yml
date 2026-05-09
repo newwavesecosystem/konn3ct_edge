@@ -52,6 +52,11 @@ jobs:
             --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET }}" \
             --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
             --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
+            --from-literal=DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
+            --from-literal=DO_SPACES_REGION="${{ secrets.DO_SPACES_REGION }}" \
+            --from-literal=DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
+            --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
+            --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
           # Apply all our deployment, service, and redis yaml files
