@@ -12,6 +12,8 @@ import {
   Hand,
   MonitorUp,
   MoreHorizontal,
+  Check,
+  X,
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 
@@ -30,7 +32,7 @@ const roleColor: Record<string, string> = {
 };
 
 export function ParticipantsPanel() {
-  const { participants, currentUser } = useMeeting();
+  const { participants, currentUser, waitingUsers, admitUser, denyUser } = useMeeting();
 
   const hosts = participants.filter(
     (p) => p.role === "host" || p.role === "co-host"
@@ -55,6 +57,47 @@ export function ParticipantsPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar">
+        {currentUser.role === 'host' && waitingUsers.length > 0 && (
+          <div className="px-3 py-2">
+            <p
+              className="text-[11px] uppercase tracking-wider font-semibold px-1 mb-1"
+              style={{ color: "var(--mt-text-faint)" }}
+            >
+              Waiting Room ({waitingUsers.length})
+            </p>
+            {waitingUsers.map((u) => (
+              <div key={u.userId} className="flex items-center gap-3 px-2 py-2 rounded-xl transition-colors group"
+                style={{ backgroundColor: "var(--mt-bg-hover)" }}
+              >
+                <Avatar
+                  fallback={u.name.slice(0, 2).toUpperCase()}
+                  alt={u.name}
+                  className="w-8 h-8 text-xs"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm truncate font-medium" style={{ color: "var(--mt-text-secondary)" }}>
+                    {u.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => admitUser(u.userId)}
+                    className="p-1.5 rounded-lg text-brand-green bg-brand-green/10 hover:bg-brand-green/20 transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => denyUser(u.userId)}
+                    className="p-1.5 rounded-lg text-red-500 bg-red-500/10 hover:bg-red-500/20 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {hosts.length > 0 && (
           <ParticipantGroup
             label="Hosts"

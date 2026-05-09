@@ -10,8 +10,10 @@ interface Client {
   ws: WebSocket;
   userId: string;
   email: string;
+  name: string;
   roomId: string;
   role: string;
+  status: 'waiting' | 'active';
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -40,7 +42,7 @@ export function initializeSignaling(server: Server) {
 
       // Verify token
       const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-      const decoded = jwt.verify(token, secret) as { userId: string; email: string };
+      const decoded = jwt.verify(token, secret) as { userId: string; email: string, name: string };
       
       // Verify room exists
       const room = await db.room.findUnique({ where: { slug: roomSlug } });
@@ -60,8 +62,10 @@ export function initializeSignaling(server: Server) {
         wss.emit('connection', ws, request, {
           userId: decoded.userId,
           email: decoded.email,
+          name: decoded.name || 'Guest',
           roomId: room.id,
-          role
+          role,
+          isWaitingRoomEnabled: room.isWaitingRoomEnabled,
         });
       });
     } catch (error) {
@@ -72,29 +76,67 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, roomId, role } = clientData;
+    const { userId, email, name, roomId, role, isWaitingRoomEnabled } = clientData;
     
-    const client: Client = { ws, userId, email, roomId, role };
+    // Determine initial status
+    const initialStatus = (isWaitingRoomEnabled && role !== 'host') ? 'waiting' : 'active';
+    
+    const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus };
     
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
     }
+    
+    // Check if there's an existing client in the room that was already admitted
+    const existingClient = rooms.get(roomId)!.get(userId);
+    if (existingClient && existingClient.status === 'active') {
+      client.status = 'active';
+    }
+    
     rooms.get(roomId)!.set(userId, client);
 
     if (disconnectTimeouts.has(userId)) {
       clearTimeout(disconnectTimeouts.get(userId)!);
       disconnectTimeouts.delete(userId);
       logger.info(`User ${userId} reconnected to room ${roomId} during grace period`);
-      ws.send(JSON.stringify({ type: 'session_status', recovered: true }));
+      ws.send(JSON.stringify({ type: 'session_status', recovered: true, status: client.status }));
     } else {
-      logger.info(`User ${userId} (${role}) joined room ${roomId}`);
-      ws.send(JSON.stringify({ type: 'session_status', recovered: false }));
-      // Broadcast presence to room
-      broadcastToRoom(roomId, {
-        type: 'user_joined',
-        userId,
-        role
-      });
+      logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
+      ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: client.status }));
+      
+      if (client.status === 'active') {
+        broadcastToRoom(roomId, {
+          type: 'user_joined',
+          userId,
+          name,
+          role
+        });
+        
+        // Fetch and send history
+        try {
+          const chatHistory = await db.chatMessage.findMany({
+            where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
+            orderBy: { createdAt: 'asc' },
+            take: 100
+          });
+          const pollHistory = await db.meetingPoll.findMany({
+            where: { roomId, isActive: true },
+            orderBy: { createdAt: 'asc' }
+          });
+          
+          ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+          ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+        } catch (e) {
+          logger.error("Failed to load history", e);
+        }
+      } else {
+        // Send a request to hosts
+        broadcastToHosts(roomId, {
+          type: 'waiting_room_request',
+          userId,
+          name,
+        });
+      }
     }
 
     ws.on('message', async (message: string) => {
@@ -138,34 +180,75 @@ export function initializeSignaling(server: Server) {
   async function handleMessage(client: Client, data: any) {
     const { roomId, userId } = client;
 
+    // If client is in waiting room, they can only send basic messages
+    if (client.status === 'waiting' && data.type !== 'chat') {
+      logger.warn(`User ${userId} attempted ${data.type} while in waiting room`);
+      return;
+    }
+
     switch (data.type) {
-      case 'chat':
-        if (data.targetUserId) {
-          // Send only to the target user and the sender
-          const roomClients = rooms.get(roomId);
-          if (roomClients) {
-            const targetClient = roomClients.get(data.targetUserId);
-            const msg = {
-              type: 'chat',
-              userId,
-              message: data.message,
-              timestamp: new Date().toISOString(),
-              isPrivate: true,
-            };
-            if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
-              targetClient.ws.send(JSON.stringify(msg));
-            }
-            if (client.ws.readyState === WebSocket.OPEN) {
-              client.ws.send(JSON.stringify(msg));
-            }
+      case 'admit_user':
+        if (client.role === 'host') {
+          const targetClient = rooms.get(roomId)?.get(data.userId);
+          if (targetClient && targetClient.status === 'waiting') {
+            targetClient.status = 'active';
+            targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
+            broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role });
           }
-        } else {
-          broadcastToRoom(roomId, {
+        }
+        break;
+
+      case 'deny_user':
+        if (client.role === 'host') {
+          const targetClient = rooms.get(roomId)?.get(data.userId);
+          if (targetClient && targetClient.status === 'waiting') {
+            targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
+            targetClient.ws.close();
+            rooms.get(roomId)?.delete(data.userId);
+          }
+        }
+        break;
+
+      case 'chat':
+        try {
+          const newMsg = await db.chatMessage.create({
+            data: {
+              roomId,
+              userId,
+              senderName: client.name,
+              content: data.message,
+              fileUrl: data.fileUrl || null,
+              isPrivate: !!data.targetUserId,
+              targetUserId: data.targetUserId || null,
+            }
+          });
+          
+          const msgPayload = {
             type: 'chat',
             userId,
-            message: data.message,
-            timestamp: new Date().toISOString()
-          });
+            message: newMsg.content,
+            timestamp: newMsg.createdAt.toISOString(),
+            isPrivate: newMsg.isPrivate,
+            fileUrl: newMsg.fileUrl,
+            id: newMsg.id
+          };
+
+          if (data.targetUserId) {
+            const roomClients = rooms.get(roomId);
+            if (roomClients) {
+              const targetClient = roomClients.get(data.targetUserId);
+              if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
+                targetClient.ws.send(JSON.stringify(msgPayload));
+              }
+              if (client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify(msgPayload));
+              }
+            }
+          } else {
+            broadcastToRoom(roomId, msgPayload);
+          }
+        } catch (e) {
+          logger.error("Failed to save chat message", e);
         }
         break;
         
@@ -179,22 +262,53 @@ export function initializeSignaling(server: Server) {
 
       case 'poll_create':
         if (client.role === 'host') {
-          broadcastToRoom(roomId, {
-            type: 'poll_create',
-            pollId: data.pollId,
-            question: data.question,
-            options: data.options
-          });
+          try {
+            const newPoll = await db.meetingPoll.create({
+              data: {
+                id: data.pollId,
+                roomId,
+                question: data.question,
+                options: data.options,
+                createdBy: userId,
+              }
+            });
+            broadcastToRoom(roomId, {
+              type: 'poll_create',
+              pollId: newPoll.id,
+              question: newPoll.question,
+              options: newPoll.options,
+              userId
+            });
+          } catch (e) {
+            logger.error("Failed to create poll", e);
+          }
         }
         break;
 
       case 'poll_vote':
-        broadcastToRoom(roomId, {
-          type: 'poll_vote',
-          pollId: data.pollId,
-          optionId: data.optionId,
-          userId: userId
-        });
+        try {
+          // Increment vote in DB
+          const poll = await db.meetingPoll.findUnique({ where: { id: data.pollId } });
+          if (poll && Array.isArray(poll.options)) {
+            const updatedOptions = poll.options.map((opt: any) => {
+              if (opt.id === data.optionId) return { ...opt, votes: (opt.votes || 0) + 1 };
+              return opt;
+            });
+            await db.meetingPoll.update({
+              where: { id: data.pollId },
+              data: { options: updatedOptions }
+            });
+          }
+          
+          broadcastToRoom(roomId, {
+            type: 'poll_vote',
+            pollId: data.pollId,
+            optionId: data.optionId,
+            userId: userId
+          });
+        } catch (e) {
+          logger.error("Failed to vote on poll", e);
+        }
         break;
 
       case 'mute_state':
@@ -279,7 +393,19 @@ export function initializeSignaling(server: Server) {
 
     const payload = JSON.stringify(message);
     for (const [id, client] of roomClients.entries()) {
-      if (id !== excludeUserId && client.ws.readyState === WebSocket.OPEN) {
+      if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(payload);
+      }
+    }
+  }
+
+  function broadcastToHosts(roomId: string, message: any) {
+    const roomClients = rooms.get(roomId);
+    if (!roomClients) return;
+
+    const payload = JSON.stringify(message);
+    for (const [id, client] of roomClients.entries()) {
+      if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
         client.ws.send(payload);
       }
     }
