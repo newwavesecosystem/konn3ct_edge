@@ -13,11 +13,19 @@ export default function CustomExcalidraw({ remoteElements, onChange }: Props) {
 
   useEffect(() => {
     if (!excalidrawAPI || !remoteElements || remoteElements.length === 0) return;
-    // Prevent interrupting local dragging
-    const appState = excalidrawAPI.getAppState();
-    if (appState && appState.draggingElement) return;
     
-    excalidrawAPI.updateScene({ elements: remoteElements });
+    // Prevent interrupting local dragging/drawing
+    const appState = excalidrawAPI.getAppState();
+    if (appState && (appState.draggingElement || appState.editingElement || appState.resizingElement)) return;
+    
+    // Check if the remote elements are actually different from our current local elements
+    const remoteVersion = remoteElements.reduce((acc, el) => acc + (el.version || 0), 0);
+    const localElements = excalidrawAPI.getSceneElements();
+    const localVersion = localElements.reduce((acc: number, el: any) => acc + (el.version || 0), 0);
+    
+    if (remoteVersion !== localVersion) {
+      excalidrawAPI.updateScene({ elements: remoteElements });
+    }
   }, [remoteElements, excalidrawAPI]);
 
   useEffect(() => {

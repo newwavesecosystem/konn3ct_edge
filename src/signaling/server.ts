@@ -75,7 +75,7 @@ export function initializeSignaling(server: Server) {
     }
   });
 
-  wss.on('connection', (ws: WebSocket, request: IncomingMessage, clientData: any) => {
+  wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
     const { userId, email, name, roomId, role, isWaitingRoomEnabled } = clientData;
     
     // Determine initial status
