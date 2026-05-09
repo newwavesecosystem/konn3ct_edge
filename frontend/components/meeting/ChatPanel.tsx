@@ -5,6 +5,9 @@ import { useMeeting } from "@/lib/meeting-context";
 import { cn } from "@/lib/utils";
 import { Send, Crown, Shield, User, Paperclip, Smile, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { REACTION_EMOJIS } from "@/lib/mock/meeting";
+
+const CHAT_EMOJIS = [...REACTION_EMOJIS, "😭", "😍", "😅", "🙏", "👀", "🚀", "💡", "✨", "🎈", "🎵", "☕"];
 
 const roleBadge: Record<string, { icon: React.ReactNode; color: string }> = {
   host: { icon: <Crown className="w-3 h-3" />, color: "text-yellow-400" },
@@ -17,8 +20,22 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [targetUserId, setTargetUserId] = useState<string>("everyone");
   const [isUploading, setIsUploading] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,8 +82,9 @@ export function ChatPanel() {
     }
   };
 
-  const insertEmoji = () => {
-    setInput(prev => prev + "😀");
+  const insertEmoji = (emoji: string) => {
+    setInput(prev => prev + emoji);
+    setShowEmojiPicker(false);
   };
 
   const formatTime = (ts: string) => {
@@ -189,12 +207,30 @@ export function ChatPanel() {
             <Paperclip className="w-4 h-4" />
           </button>
           
-          <button 
-            onClick={insertEmoji}
-            className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 transition-colors shrink-0"
-          >
-            <Smile className="w-4 h-4" />
-          </button>
+          <div className="relative" ref={emojiPickerRef}>
+            <button 
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 transition-colors shrink-0"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+            {showEmojiPicker && (
+              <div 
+                className="absolute bottom-full mb-2 left-0 w-48 p-2 rounded-xl shadow-lg grid grid-cols-6 gap-1"
+                style={{ backgroundColor: "var(--mt-bg-panel)", border: "1px solid var(--mt-border)" }}
+              >
+                {CHAT_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => insertEmoji(emoji)}
+                    className="text-lg hover:bg-black/5 dark:hover:bg-white/5 rounded p-1 transition-colors"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <input
             value={input}
