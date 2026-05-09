@@ -9,10 +9,13 @@ export function MeetingInfoPanel() {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard?.writeText(meetingInfo.meetingLink);
+    navigator.clipboard?.writeText(dynamicLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const dynamicLink = typeof window !== 'undefined' ? `${window.location.origin}/join/${meetingInfo.roomSlug}` : meetingInfo.meetingLink;
+  const hostName = participants.find(p => p.role === 'host')?.name || meetingInfo.hostName;
 
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -55,7 +58,7 @@ export function MeetingInfoPanel() {
           <div className="flex items-center gap-2">
             <Link2 className="w-4 h-4 text-brand-green-soft shrink-0" />
             <span className="text-xs truncate flex-1" style={{ color: "var(--mt-text-muted)" }}>
-              {meetingInfo.meetingLink}
+              {dynamicLink}
             </span>
             <button
               onClick={handleCopy}
@@ -102,7 +105,7 @@ export function MeetingInfoPanel() {
           >
             Host
           </p>
-          <p className="text-sm" style={{ color: "var(--mt-text-secondary)" }}>{meetingInfo.hostName}</p>
+          <p className="text-sm" style={{ color: "var(--mt-text-secondary)" }}>{hostName}</p>
         </div>
 
         {/* Access code */}

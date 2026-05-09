@@ -209,12 +209,10 @@ export default function RoomsPage() {
                       <Copy className="h-3.5 w-3.5" />
                     </button>
                     <button 
-                      onClick={() => {
-                        if (currentUser) {
-                          router.push(`/meeting/${room.slug}?name=${encodeURIComponent(currentUser.name)}&role=host`);
-                        } else {
-                          router.push(`/meeting/${room.slug}?role=host`);
-                        }
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const hostName = currentUser?.name || "Host";
+                        router.push(`/meeting/${room.slug}?name=${encodeURIComponent(hostName)}&role=host`);
                       }}
                       className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" 
                       title="Open room"

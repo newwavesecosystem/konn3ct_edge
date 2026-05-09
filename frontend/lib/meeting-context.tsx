@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import { toast } from "sonner";
 import type {
   Participant,
   ChatMessage,
@@ -10,6 +11,7 @@ import type {
   Reaction,
   SidePanel,
   LayoutMode,
+  ParticipantRole,
 } from "@/lib/types/meeting";
 import {
   mockParticipants,
@@ -51,7 +53,7 @@ interface MeetingContextValue {
   toggleHandRaise: () => void;
   setActivePanel: (panel: SidePanel) => void;
   setLayoutMode: (mode: LayoutMode) => void;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
   createPoll: (question: string, options: string[]) => void;
@@ -104,7 +106,7 @@ export function MeetingProvider({
 
   const [meetingInfo] = useState<MeetingInfo>({
     ...mockMeetingInfo,
-    title: formattedTitle,
+    roomName: formattedTitle,
     roomSlug,
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
@@ -124,6 +126,7 @@ export function MeetingProvider({
   // ── WebRTC Instance ──────────────────────────────────
   const webrtcClient = useRef<WebRTCClient | null>(null);
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
@@ -162,6 +165,8 @@ export function MeetingProvider({
               senderRole: "attendee",
               content: msg.message,
               timestamp: msg.timestamp,
+              isPrivate: msg.isPrivate,
+              fileUrl: msg.fileUrl,
             },
           ]);
         };
@@ -207,6 +212,24 @@ export function MeetingProvider({
           );
         };
 
+        client.onMuteState = (msg) => {
+          setParticipants((prev) => {
+            const user = prev.find(p => p.id === msg.userId);
+            if (user && user.isMuted !== msg.isMuted) {
+              toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
+            }
+            return prev.map(p => 
+              p.id === msg.userId ? { ...p, isMuted: msg.isMuted } : p
+            );
+          });
+        };
+
+        client.onHandRaise = (msg) => {
+          setParticipants((prev) => prev.map(p => 
+            p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
+          ));
+        };
+
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
@@ -244,6 +267,7 @@ export function MeetingProvider({
           const videoTrack = await client.enableCamera();
           localCameraTrackRef.current = videoTrack;
           const audioTrack = await client.enableMic();
+          localAudioTrackRef.current = audioTrack;
           
           setParticipants((prev) =>
             prev.map((p) => {
@@ -310,12 +334,60 @@ export function MeetingProvider({
     };
   }, []);
 
+  // ── Muted Talking Detection ────────────────────────────
+  useEffect(() => {
+    if (!isMuted || !localAudioTrackRef.current) return;
+    
+    let lastAlertTime = 0;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
+    const analyser = audioContext.createAnalyser();
+    const microphone = audioContext.createMediaStreamSource(new MediaStream([localAudioTrackRef.current]));
+    microphone.connect(analyser);
+    
+    analyser.fftSize = 256;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    let animationFrameId: number;
+    
+    const checkVolume = () => {
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
+      const average = sum / bufferLength;
+      
+      // If volume is above threshold while muted
+      if (average > 15 && Date.now() - lastAlertTime > 5000) {
+        toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
+        try {
+          const beep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
+          beep.volume = 0.2;
+          beep.play().catch(() => {});
+        } catch (e) {}
+        lastAlertTime = Date.now();
+      }
+      animationFrameId = requestAnimationFrame(checkVolume);
+    };
+    checkVolume();
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      audioContext.close().catch(() => {});
+    };
+  }, [isMuted]);
+
   // ── Actions ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
-    if (isMuted) webrtcClient.current?.resumeMic();
-    else webrtcClient.current?.pauseMic();
-    setIsMuted((v) => !v);
-  }, [isMuted]);
+    const newState = !isMuted;
+    if (newState) webrtcClient.current?.pauseMic();
+    else webrtcClient.current?.resumeMic();
+    webrtcClient.current?.sendMuteState(newState);
+    setIsMuted(newState);
+    setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isMuted: newState } : p));
+  }, [isMuted, currentUser.id]);
 
   const toggleCamera = useCallback(() => {
     if (isCameraOn) webrtcClient.current?.pauseCamera();
@@ -347,11 +419,16 @@ export function MeetingProvider({
   }, [isScreenSharing]);
 
   const toggleRecording = useCallback(() => setIsRecording((v) => !v), []);
-  const toggleHandRaise = useCallback(() => setIsHandRaised((v) => !v), []);
+  const toggleHandRaise = useCallback(() => {
+    const newState = !isHandRaised;
+    setIsHandRaised(newState);
+    webrtcClient.current?.sendHandRaise(newState);
+    setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isHandRaised: newState } : p));
+  }, [isHandRaised, currentUser.id]);
 
   const sendMessage = useCallback(
-    (content: string) => {
-      webrtcClient.current?.sendChatMessage(content);
+    (content: string, targetUserId?: string, fileUrl?: string) => {
+      webrtcClient.current?.sendChatMessage(content, targetUserId, fileUrl);
       const msg: ChatMessage = {
         id: `m-${Date.now()}`,
         senderId: currentUser.id,
@@ -359,6 +436,9 @@ export function MeetingProvider({
         senderRole: currentUser.role,
         content,
         timestamp: new Date().toISOString(),
+        targetUserId,
+        isPrivate: !!targetUserId,
+        fileUrl,
       };
       setChatMessages((prev) => [...prev, msg]);
     },

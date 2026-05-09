@@ -23,6 +23,8 @@ export class WebRTCClient {
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
   public onPollVote?: (vote: any) => void;
+  public onMuteState?: (msg: any) => void;
+  public onHandRaise?: (msg: any) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -84,6 +86,12 @@ export class WebRTCClient {
         case 'poll_vote':
           this.onPollVote?.(msg);
           break;
+        case 'mute_state':
+          this.onMuteState?.(msg);
+          break;
+        case 'hand_raise':
+          this.onHandRaise?.(msg);
+          break;
       }
     };
 
@@ -118,9 +126,9 @@ export class WebRTCClient {
 
   // --- Collaboration Methods ---
   
-  public sendChatMessage(message: string) {
+  public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat', message }));
+      this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl }));
     }
   }
 
@@ -139,6 +147,18 @@ export class WebRTCClient {
   public votePoll(pollId: string, optionId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
+  }
+
+  public sendMuteState(isMuted: boolean) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted }));
+    }
+  }
+
+  public sendHandRaise(isHandRaised: boolean) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
     }
   }
 

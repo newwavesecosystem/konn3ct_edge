@@ -120,12 +120,33 @@ export function initializeSignaling(server: Server) {
 
     switch (data.type) {
       case 'chat':
-        broadcastToRoom(roomId, {
-          type: 'chat',
-          userId,
-          message: data.message,
-          timestamp: new Date().toISOString()
-        });
+        if (data.targetUserId) {
+          // Send only to the target user and the sender
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            const targetClient = roomClients.get(data.targetUserId);
+            const msg = {
+              type: 'chat',
+              userId,
+              message: data.message,
+              timestamp: new Date().toISOString(),
+              isPrivate: true,
+            };
+            if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
+              targetClient.ws.send(JSON.stringify(msg));
+            }
+            if (client.ws.readyState === WebSocket.OPEN) {
+              client.ws.send(JSON.stringify(msg));
+            }
+          }
+        } else {
+          broadcastToRoom(roomId, {
+            type: 'chat',
+            userId,
+            message: data.message,
+            timestamp: new Date().toISOString()
+          });
+        }
         break;
         
       case 'reaction':
@@ -153,6 +174,22 @@ export function initializeSignaling(server: Server) {
           pollId: data.pollId,
           optionId: data.optionId,
           userId: userId
+        });
+        break;
+
+      case 'mute_state':
+        broadcastToRoom(roomId, {
+          type: 'mute_state',
+          userId,
+          isMuted: data.isMuted
+        });
+        break;
+
+      case 'hand_raise':
+        broadcastToRoom(roomId, {
+          type: 'hand_raise',
+          userId,
+          isHandRaised: data.isHandRaised
         });
         break;
 

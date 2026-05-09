@@ -29,6 +29,9 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   isSystem?: boolean;
+  targetUserId?: string;
+  isPrivate?: boolean;
+  fileUrl?: string;
 }
 
 export interface PollOption {
