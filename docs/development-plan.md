@@ -48,8 +48,8 @@ Acceptance criteria:
 
 ### Milestone 2 — Recordings + Free/Paid Access (Paystack)
 Deliverables:
-- Recording metadata management (publish/unpublish, free/paid, price)
-- Public recording pages
+- Recording metadata management (publish/unpublish, free/paid, price, access settings by email/link/participants)
+- Recording viewer bundled in frontend (dynamic Next.js routes)
 - Paystack payment initialization + webhook verification
 - Recording access enforcement (paywall + secure delivery strategy)
 - Playback: Rich video player with chapter markers and speed controls
@@ -68,7 +68,7 @@ Deliverables:
   - Audio Boost (client-side amplification)
   - active speaker subscription policy
 - In-Meeting Interactions: Reactions (floating emojis), Polls, Donate buttons (via Paystack)
-- eCinema: Synchronized media sharing for high-bitrate video
+- eCinema Broadcast Feature: Synchronized streaming of external content (e.g., YouTube) directly inside the meeting for shared viewing
 - Doc: In-meeting collaborative notes/viewer
 
 Acceptance criteria:
