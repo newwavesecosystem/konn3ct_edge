@@ -32,6 +32,8 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: JWT_SECRET
+            - name: REDIS_URL
+              value: "redis://redis-service:6379"
             - name: DO_SPACES_ENDPOINT
               valueFrom:
                 secretKeyRef:

@@ -147,7 +147,8 @@ export function MeetingProvider({
           body: JSON.stringify({ 
             roomId: roomSlug,
             name: currentUser.name,
-            email: "guest@conn3ct.com" 
+            email: "guest@conn3ct.com",
+            role: currentUser.role
           })
         });
 

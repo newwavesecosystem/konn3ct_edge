@@ -3,12 +3,22 @@ import jwt from "jsonwebtoken";
 import Redis from "ioredis";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new Redis(redisUrl);
+const redis = new Redis(redisUrl, {
+  retryStrategy: (times) => {
+    // Don't reconnect endlessly in local development
+    if (process.env.NODE_ENV !== "production") return null;
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 1
+});
+
+// Swallow the unhandled error event so it doesn't spam the console in local dev
+redis.on("error", () => {});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email } = body;
+    const { roomId, name, email, role } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -45,6 +55,7 @@ export async function POST(request: Request) {
         userId: `user_${Math.random().toString(36).substr(2, 9)}`,
         email: email || "guest@conn3ct.com",
         name: name || "Guest",
+        role: role || "attendee",
       },
       secret,
       { expiresIn: "24h" }

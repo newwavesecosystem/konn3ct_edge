@@ -9,7 +9,15 @@ import os from 'os';
 import Redis from 'ioredis';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl);
+const redis = new Redis(redisUrl, {
+  retryStrategy: (times) => {
+    if (process.env.NODE_ENV !== 'production') return null;
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 1
+});
+
+redis.on("error", () => {}); // Catch unhandled connection error events silently
 const POD_ID = process.env.POD_ID || 'pod-1';
 
 interface Client {
@@ -70,9 +78,8 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Verify token
       const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-      const decoded = jwt.verify(token, secret) as { userId: string; email: string, name: string };
+      const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string };
       
       // Verify room exists
       const room = await db.room.findUnique({ where: { slug: roomSlug } });
@@ -82,8 +89,8 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Basic role logic (MVP)
-      let role = 'audience';
+      // Extract role directly from the JWT token (set by the frontend API)
+      let role = decoded.role || 'audience';
       if (room.ownerId === decoded.userId) {
         role = 'host';
       }
