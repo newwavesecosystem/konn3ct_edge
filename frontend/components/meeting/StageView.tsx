@@ -14,12 +14,17 @@ import {
 } from "lucide-react";
 
 export function StageView() {
-  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser } =
+  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
     useMeeting();
 
   // Check if ANY participant is currently screen sharing
   const screenSharer = participants.find((p) => p.isScreenSharing);
   const isSomeoneSharing = !!screenSharer || isScreenSharing;
+
+  // If eCinema is active, it takes precedence
+  if (eCinemaLink) {
+    return <ECinemaLayout eCinemaLink={eCinemaLink} participants={participants} />;
+  }
 
   // If someone is sharing, override the layout to the screen share view
   if (isSomeoneSharing) {
@@ -279,10 +284,10 @@ function GridLayout({ participants }: { participants: Participant[] }) {
     count <= 1
       ? 1
       : count <= 4
-      ? 2
-      : count <= 9
-      ? 3
-      : 4;
+        ? 2
+        : count <= 9
+          ? 3
+          : 4;
 
   return (
     <div
@@ -297,6 +302,112 @@ function GridLayout({ participants }: { participants: Participant[] }) {
       {participants.map((p) => (
         <ParticipantTile key={p.id} participant={p} />
       ))}
+    </div>
+  );
+}
+
+// ── eCinema Layout ──────────────────────────────────────
+function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const { setECinemaLink } = useMeeting();
+
+  const getEmbedUrl = (url: string) => {
+    try {
+      if (url.includes("youtube.com/watch")) {
+        const videoId = new URL(url).searchParams.get("v");
+        if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+      }
+      if (url.includes("youtu.be/")) {
+        const videoId = new URL(url).pathname.slice(1);
+        if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+      }
+      return url;
+    } catch {
+      return url;
+    }
+  };
+
+  const embedUrl = getEmbedUrl(eCinemaLink);
+
+  return (
+    <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
+      {/* ── Shared Video area ──────────────────────── */}
+      <div
+        className={cn(
+          "relative rounded-2xl overflow-hidden transition-all duration-300 flex-1 flex flex-col",
+          isFullscreen
+            ? "fixed inset-2 z-50"
+            : "min-h-0 min-w-0"
+        )}
+        style={{
+          backgroundColor: "black",
+          border: "1px solid var(--mt-border)",
+        }}
+      >
+        <div
+          className="flex items-center justify-between px-3 py-2 backdrop-blur-sm shrink-0 z-10 absolute top-0 w-full"
+          style={{
+            background: "linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-white text-xs font-semibold drop-shadow-md">eCinema Broadcast</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-1.5 rounded-lg transition-colors text-white hover:bg-white/20"
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              onClick={() => setECinemaLink(null)}
+              className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+            >
+              Stop
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 w-full h-full bg-black">
+          <iframe 
+            src={embedUrl} 
+            className="w-full h-full border-0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            allowFullScreen
+          />
+        </div>
+      </div>
+
+      {/* ── Participant filmstrip ── */}
+      <div
+        className={cn(
+          "shrink-0 overflow-hidden no-scrollbar",
+          isFullscreen && "hidden"
+        )}
+      >
+        {/* Mobile / Tablet: horizontal scroll at bottom */}
+        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
+          {participants.map((p) => (
+            <div key={p.id} className="w-24 sm:w-32 shrink-0">
+              <ParticipantTile participant={p} />
+            </div>
+          ))}
+        </div>
+        {/* Desktop: vertical sidebar */}
+        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
+          {participants.map((p) => (
+            <div key={p.id} className="w-full shrink-0">
+              <ParticipantTile participant={p} />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
