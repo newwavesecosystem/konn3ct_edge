@@ -44,7 +44,7 @@ export function initializeSignaling(server: Server) {
       const cpuCount = os.cpus().length;
       // Convert to a percentage, capping at 100
       const cpuUsage = Math.min((load / cpuCount) * 100, 100);
-      
+
       // Push to Redis for Pre-flight API checks (Method 1)
       await redis.set(`pod:${POD_ID}:cpu`, cpuUsage);
       await redis.expire(`pod:${POD_ID}:cpu`, 10);
@@ -80,7 +80,9 @@ export function initializeSignaling(server: Server) {
 
       const secret = process.env.JWT_SECRET || 'fallback-secret-key';
       const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string };
-      
+
+      console.log("decoded", decoded);
+
       // Verify room exists
       const room = await db.room.findUnique({ where: { slug: roomSlug } });
       if (!room) {
@@ -114,25 +116,25 @@ export function initializeSignaling(server: Server) {
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
     const { userId, email, name, roomId, role, isWaitingRoomEnabled } = clientData;
-    
+
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host') ? 'waiting' : 'active';
-    
+
     const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus };
-    
+
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
       // Register this room to this specific Pod in Redis for NGINX scaling awareness
       redis.set(`room:${roomId}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
       redis.expire(`room:${roomId}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
     }
-    
+
     // Check if there's an existing client in the room that was already admitted
     const existingClient = rooms.get(roomId)!.get(userId);
     if (existingClient && existingClient.status === 'active') {
       client.status = 'active';
     }
-    
+
     rooms.get(roomId)!.set(userId, client);
 
     if (disconnectTimeouts.has(userId)) {
@@ -143,7 +145,7 @@ export function initializeSignaling(server: Server) {
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
       ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: client.status }));
-      
+
       if (client.status === 'active') {
         broadcastToRoom(roomId, {
           type: 'user_joined',
@@ -151,7 +153,7 @@ export function initializeSignaling(server: Server) {
           name,
           role
         });
-        
+
         // Fetch and send history
         try {
           const chatHistory = await db.chatMessage.findMany({
@@ -166,7 +168,7 @@ export function initializeSignaling(server: Server) {
           const noteHistory = await db.sharedNote.findUnique({
             where: { roomId }
           });
-          
+
           ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
           ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
           if (noteHistory) {
@@ -196,7 +198,7 @@ export function initializeSignaling(server: Server) {
 
     ws.on('close', () => {
       logger.info(`User ${userId} disconnected from room ${roomId}. Starting 60s grace period...`);
-      
+
       const timeout = setTimeout(() => {
         logger.info(`User ${userId} grace period expired. Cleaning up session.`);
         const roomClients = rooms.get(roomId);
@@ -210,7 +212,7 @@ export function initializeSignaling(server: Server) {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
-            
+
             broadcastToRoom(roomId, {
               type: 'user_left',
               userId
@@ -219,7 +221,7 @@ export function initializeSignaling(server: Server) {
         }
         disconnectTimeouts.delete(userId);
       }, 60000); // 60 seconds
-      
+
       disconnectTimeouts.set(userId, timeout);
     });
   });
@@ -269,7 +271,7 @@ export function initializeSignaling(server: Server) {
               targetUserId: data.targetUserId || null,
             }
           });
-          
+
           const msgPayload = {
             type: 'chat',
             userId,
@@ -298,7 +300,7 @@ export function initializeSignaling(server: Server) {
           logger.error("Failed to save chat message", e);
         }
         break;
-        
+
       case 'reaction':
         broadcastToRoom(roomId, {
           type: 'reaction',
@@ -363,7 +365,7 @@ export function initializeSignaling(server: Server) {
               data: { options: updatedOptions }
             });
           }
-          
+
           broadcastToRoom(roomId, {
             type: 'poll_vote',
             pollId: data.pollId,
@@ -397,46 +399,46 @@ export function initializeSignaling(server: Server) {
         client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: router.rtpCapabilities }));
         break;
       }
-      
+
       case 'createWebRtcTransport': {
         const transportParams = await createWebRtcTransport(roomId);
         client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams, direction: data.direction }));
         break;
       }
-      
+
       case 'connectWebRtcTransport': {
         await connectTransport(data.transportId, data.dtlsParameters);
         client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
         break;
       }
-      
+
       case 'produce': {
         // Method 3: Hard limit on active cameras
         if (data.kind === 'video') {
           const roomProducersList = roomProducers.get(roomId) || [];
           const videoProducers = roomProducersList.filter(p => p.kind === 'video');
           if (videoProducers.length >= 15) {
-            client.ws.send(JSON.stringify({ 
-              type: 'error', 
-              message: 'Maximum number of active cameras (15) reached in this room to preserve server stability.' 
+            client.ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Maximum number of active cameras (15) reached in this room to preserve server stability.'
             }));
             return;
           }
         }
 
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters);
-        
+
         // Track for late joiners
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
         roomProducers.get(roomId)!.push({ producerId, userId, kind: data.kind });
-        
+
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
-        
+
         // Broadcast to others that a new producer (video/audio track) is available
         broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, kind: data.kind }, userId);
         break;
       }
-      
+
       case 'consume': {
         const router = await getOrCreateRouter(roomId);
         const consumerParams = await createConsumer(data.transportId, data.producerId, data.rtpCapabilities, router);
