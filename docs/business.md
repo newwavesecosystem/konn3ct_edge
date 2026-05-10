@@ -56,11 +56,13 @@ In-meeting:
 - Roles: host/co-host/presenter/audience
 - Chat + Q&A (webinar)
 - Reactions and hand-raise (roadmap)
+- eCinema Broadcast Feature (synchronized streaming of external content to all participants)
 - Recording controls (subject to permissions and plan)
 
 Recording Access:
-- Public recording page with metadata + preview
-- Free recordings: play immediately
+- Recording viewer (integrated directly in frontend Next.js app)
+- Configurable access settings: email list, anyone with link, or only meeting participants
+- Free recordings: play immediately based on access settings
 - Paid recordings: Paystack checkout → verify payment → grant access
 
 ## 8) Pricing (4 Plans)
