@@ -115,6 +115,9 @@ export function initializeSignaling(server: Server) {
     
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
+      // Register this room to this specific Pod in Redis for NGINX scaling awareness
+      redis.set(`room:${roomId}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
+      redis.expire(`room:${roomId}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
     }
     
     // Check if there's an existing client in the room that was already admitted
@@ -195,6 +198,7 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
+            redis.del(`room:${roomId}:pod`).catch(e => logger.warn('Redis del error', e));
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
