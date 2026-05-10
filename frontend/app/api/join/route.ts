@@ -30,9 +30,12 @@ export async function POST(request: Request) {
       // First, determine which Pod the NGINX router has assigned this room to
       const mappedPod = await redis.get(`room:${roomId}:pod`);
 
+      console.log(`room:${roomId}:pod mappedPod`, mappedPod);
+
       // If the room is active on a pod, check that specific pod's CPU
       if (mappedPod) {
         const cpuStr = await redis.get(`pod:${mappedPod}:cpu`);
+        console.log(`pod:${mappedPod}:cpu cpuStr`, cpuStr);
         if (cpuStr) {
           const cpuUsage = parseFloat(cpuStr);
           if (cpuUsage > 90) {
