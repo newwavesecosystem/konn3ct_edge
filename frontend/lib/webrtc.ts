@@ -34,6 +34,8 @@ export class WebRTCClient {
   public onPollHistory?: (polls: any[]) => void;
   public onNoteHistory?: (content: string) => void;
   public onNoteUpdate?: (msg: any) => void;
+  public onServerLoadHigh?: () => void;
+  public onServerReject?: (msg: string) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -134,6 +136,14 @@ export class WebRTCClient {
           break;
         case 'note_update':
           this.onNoteUpdate?.(msg);
+          break;
+        case 'server_load_high':
+          this.onServerLoadHigh?.();
+          break;
+        case 'error':
+          if (msg.message && msg.message.includes("Maximum number of active cameras")) {
+            this.onServerReject?.(msg.message);
+          }
           break;
       }
     };

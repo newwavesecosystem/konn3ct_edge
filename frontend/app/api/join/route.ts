@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
+import Redis from "ioredis";
+
+const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const redis = new Redis(redisUrl);
 
 export async function POST(request: Request) {
   try {
@@ -8,6 +12,19 @@ export async function POST(request: Request) {
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
+    }
+
+    // Method 1: Redis Pre-flight Rejection (Option A)
+    const POD_ID = process.env.POD_ID || 'pod-1';
+    const cpuStr = await redis.get(`pod:${POD_ID}:cpu`);
+    
+    if (cpuStr) {
+      const cpuUsage = parseFloat(cpuStr);
+      if (cpuUsage > 90) {
+        return NextResponse.json({ 
+          error: "This meeting is currently at maximum capacity (Server Overload). Please wait for someone to leave." 
+        }, { status: 503 });
+      }
     }
 
     const secret = process.env.JWT_SECRET || "fallback-secret-key";

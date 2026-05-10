@@ -5,9 +5,9 @@ metadata:
   labels:
     app: conn3ct-backend
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       app: conn3ct-backend
@@ -61,6 +61,12 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: PAYSTACK_SECRET_KEY
+            - name: REDIS_URL
+              value: "redis://redis-service:6379"
+            - name: POD_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           resources:
             requests:
               cpu: "100m"

@@ -153,13 +153,32 @@ export function MeetingProvider({
 
         const data = await res.json();
         
-        if (!data.token) {
-          throw new Error("Failed to get connection token");
+        if (!res.ok || !data.token) {
+          toast.error(data.error || "Failed to get connection token");
+          setWebrtcStatus("failed");
+          return;
         }
 
         client = new WebRTCClient(roomSlug, data.token);
         
         // --- Collaboration Event Listeners ---
+        client.onServerLoadHigh = () => {
+          toast.warning("Server is under heavy load. Optimizing video feeds to maintain stability...");
+          // Method 2: Graceful Quality Degradation (The "Zoom" approach)
+          if (client) {
+            client.pauseCamera();
+            setIsCameraOn(false);
+          }
+        };
+
+        client.onServerReject = (msg) => {
+          toast.error(msg);
+          // Method 3: Hard limit on active cameras - revert the UI if blocked
+          if (client) {
+            client.pauseCamera();
+            setIsCameraOn(false);
+          }
+        };
         client.onChatHistory = (messages) => {
           setChatMessages(messages.map((m: any) => ({
             id: m.id,

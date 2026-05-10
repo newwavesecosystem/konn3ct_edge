@@ -5,6 +5,12 @@ import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
 import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumer } from '../media/sfu';
+import os from 'os';
+import Redis from 'ioredis';
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redis = new Redis(redisUrl);
+const POD_ID = process.env.POD_ID || 'pod-1';
 
 interface Client {
   ws: WebSocket;
@@ -22,6 +28,30 @@ const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
+
+  // Periodically report CPU load to Redis and Broadcast Degradation (Method 1 & 2)
+  setInterval(async () => {
+    try {
+      const load = os.loadavg()[0]; // 1-minute load average
+      const cpuCount = os.cpus().length;
+      // Convert to a percentage, capping at 100
+      const cpuUsage = Math.min((load / cpuCount) * 100, 100);
+      
+      // Push to Redis for Pre-flight API checks (Method 1)
+      await redis.set(`pod:${POD_ID}:cpu`, cpuUsage);
+      await redis.expire(`pod:${POD_ID}:cpu`, 10);
+
+      // Method 2: Graceful Degradation if load is too high
+      // If CPU is > 85%, tell all connected clients to optimize video feeds
+      if (cpuUsage > 85) {
+        for (const roomId of rooms.keys()) {
+          broadcastToRoom(roomId, { type: 'server_load_high' });
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to update CPU load', e);
+    }
+  }, 5000);
 
   server.on('upgrade', async (request: IncomingMessage, socket, head) => {
     try {
@@ -370,6 +400,19 @@ export function initializeSignaling(server: Server) {
       }
       
       case 'produce': {
+        // Method 3: Hard limit on active cameras
+        if (data.kind === 'video') {
+          const roomProducersList = roomProducers.get(roomId) || [];
+          const videoProducers = roomProducersList.filter(p => p.kind === 'video');
+          if (videoProducers.length >= 15) {
+            client.ws.send(JSON.stringify({ 
+              type: 'error', 
+              message: 'Maximum number of active cameras (15) reached in this room to preserve server stability.' 
+            }));
+            return;
+          }
+        }
+
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters);
         
         // Track for late joiners
