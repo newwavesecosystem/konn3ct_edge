@@ -314,7 +314,7 @@ export function initializeSignaling(server: Server) {
               }
             }
           } else {
-            broadcastToRoom(roomId, msgPayload);
+            broadcastToRoom(roomId, msgPayload, userId);
           }
         } catch (e) {
           logger.error("Failed to save chat message", e);
