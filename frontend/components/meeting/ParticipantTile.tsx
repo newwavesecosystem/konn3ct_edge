@@ -14,6 +14,7 @@ import {
   Shield,
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
+import { useMeeting } from "@/lib/meeting-context";
 
 interface ParticipantTileProps {
   participant: Participant;
@@ -31,6 +32,8 @@ export function ParticipantTile({
   isLarge = false,
   className,
 }: ParticipantTileProps) {
+  const { currentUser } = useMeeting();
+  
   const initials = participant.name
     .split(" ")
     .map((n) => n[0])
@@ -38,21 +41,25 @@ export function ParticipantTile({
     .slice(0, 2)
     .toUpperCase();
 
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const audioRef = React.useRef<HTMLAudioElement>(null);
-
-  React.useEffect(() => {
-    if (videoRef.current && participant.videoTrack) {
-      videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
+  const setVideoRef = React.useCallback((el: HTMLVideoElement | null) => {
+    if (el && participant.videoTrack) {
+      if (el.srcObject) {
+        const stream = el.srcObject as MediaStream;
+        if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+      }
+      el.srcObject = new MediaStream([participant.videoTrack]);
     }
   }, [participant.videoTrack]);
 
-  React.useEffect(() => {
-    if (audioRef.current && participant.audioTrack) {
-      audioRef.current.srcObject = new MediaStream([participant.audioTrack]);
+  const setAudioRef = React.useCallback((el: HTMLAudioElement | null) => {
+    if (el && participant.audioTrack) {
+      if (el.srcObject) {
+        const stream = el.srcObject as MediaStream;
+        if (stream.getAudioTracks()[0] === participant.audioTrack) return;
+      }
+      el.srcObject = new MediaStream([participant.audioTrack]);
     }
   }, [participant.audioTrack]);
-
   return (
     <div
       className={cn(
@@ -77,12 +84,12 @@ export function ParticipantTile({
         >
           {participant.videoTrack ? (
             <video
-              ref={videoRef}
+              ref={setVideoRef}
               autoPlay
               playsInline
               muted // Always mute the video tag, we play audio via audio tag
               className="w-full h-full object-cover"
-              style={{ transform: participant.id === 'p1' ? 'scaleX(-1)' : 'none' }} // Mirror self
+              style={{ transform: participant.id === currentUser.id ? 'scaleX(-1)' : 'none' }} // Mirror self
             />
           ) : (
             /* Simulated video feed with avatar */
@@ -178,8 +185,12 @@ export function ParticipantTile({
       </div>
       
       {/* Hidden audio element for remote participants */}
-      {participant.audioTrack && participant.id !== 'p1' && (
-        <audio ref={audioRef} autoPlay playsInline />
+      {participant.audioTrack && participant.id !== currentUser.id && (
+        <audio 
+          autoPlay 
+          playsInline 
+          ref={setAudioRef}
+        />
       )}
     </div>
   );
