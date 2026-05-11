@@ -76,6 +76,76 @@ recordingsRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
+const startRecordingSchema = z.object({
+  title: z.string().min(1),
+  roomSlug: z.string().min(1),
+  durationMinutes: z.number().min(1).max(120).optional()
+});
+
+recordingsRouter.post('/start', async (req: Request, res: Response) => {
+  try {
+    const { title, roomSlug, durationMinutes } = startRecordingSchema.parse(req.body);
+    const userId = req.user!.userId;
+
+    // Create the recording record in 'processing' state
+    const recording = await db.recording.create({
+      data: {
+        title,
+        url: '', // Will be updated when upload finishes
+        ownerId: userId,
+        status: 'processing'
+      }
+    });
+
+    // Fire and forget the bot (run in background)
+    // Note: In production, you'd use a background worker queue like BullMQ here!
+    import('../recording/egress-bot').then(({ startRecordingBot }) => {
+      startRecordingBot(recording.id, roomSlug, durationMinutes).catch(err => {
+        logger.error(`Recording bot failed for ${recording.id}`, err);
+        db.recording.update({
+          where: { id: recording.id },
+          data: { status: 'failed' }
+        }).catch(console.error);
+      });
+    });
+
+    res.status(202).json({ message: 'Recording started', recordingId: recording.id });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid input', details: error.flatten().fieldErrors });
+    }
+    logger.error('Error starting recording', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+recordingsRouter.post('/:id/stop', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const userId = req.user!.userId;
+
+    const recording = await db.recording.findUnique({ where: { id } });
+    if (!recording || recording.ownerId !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (recording.status !== 'recording') {
+      return res.status(400).json({ error: 'Recording is not currently active' });
+    }
+
+    // Update status to stopping. The bot will see this and gracefully finalize the file.
+    await db.recording.update({
+      where: { id },
+      data: { status: 'stopping' }
+    });
+
+    res.status(200).json({ message: 'Stop signal sent to recording bot' });
+  } catch (error) {
+    logger.error('Error stopping recording', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 recordingsRouter.get('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;

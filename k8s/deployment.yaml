@@ -61,6 +61,33 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: PAYSTACK_SECRET_KEY
+            - name: DO_SPACES_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_ENDPOINT
+            - name: DO_SPACES_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_REGION
+            - name: DO_SPACES_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_KEY
+            - name: DO_SPACES_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_SECRET
+            - name: DO_SPACES_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DO_SPACES_BUCKET
+            - name: NEXT_PUBLIC_FRONTEND_URL
+              value: "https://edge.konn3ct.net"
             - name: REDIS_URL
               value: "redis://redis-service:6379"
             - name: POD_ID
@@ -69,10 +96,10 @@ spec:
                   fieldPath: metadata.name
           resources:
             requests:
-              cpu: "100m"
-              memory: "256Mi"
+              cpu: "500m"
+              memory: "512Mi"
             limits:
-              cpu: "1000m"
+              cpu: "2000m"
               memory: "2Gi"
           readinessProbe:
             httpGet:

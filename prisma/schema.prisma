@@ -130,6 +130,10 @@ model Recording {
   url        String
   isPaid     Boolean  @default(false)
   priceKobo  Int      @default(0)
+  status     String   @default("processing") // processing, completed, failed
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  duration   Int?     // Duration in seconds
   createdAt  DateTime @default(now())
 
   owner User @relation(fields: [ownerId], references: [id])
