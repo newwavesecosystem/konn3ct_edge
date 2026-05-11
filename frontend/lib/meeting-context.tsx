@@ -286,6 +286,7 @@ export function MeetingProvider({
         };
 
         client.onWaitingRoomRequest = (msg) => {
+          console.log("🔥 Received waiting room request from server:", msg);
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
             toast(`${msg.name} is waiting to join`, {

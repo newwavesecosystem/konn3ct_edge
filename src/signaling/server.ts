@@ -17,7 +17,7 @@ const redis = new Redis(redisUrl, {
   maxRetriesPerRequest: 1
 });
 
-redis.on("error", () => {}); // Catch unhandled connection error events silently
+redis.on("error", () => { }); // Catch unhandled connection error events silently
 const POD_ID = process.env.POD_ID || 'pod-1';
 
 interface Client {
@@ -49,10 +49,13 @@ export function initializeSignaling(server: Server) {
       await redis.set(`pod:${POD_ID}:cpu`, cpuUsage);
       await redis.expire(`pod:${POD_ID}:cpu`, 10);
 
+      console.info(`pod:${POD_ID}:cpu =>`, cpuUsage)
+
       // Method 2: Graceful Degradation if load is too high
       // If CPU is > 85%, tell all connected clients to optimize video feeds
       if (cpuUsage > 85) {
         for (const roomId of rooms.keys()) {
+          console.warn("CPU LOAD IS HIGH!!!", cpuUsage)
           broadcastToRoom(roomId, { type: 'server_load_high' });
         }
       }
@@ -103,6 +106,7 @@ export function initializeSignaling(server: Server) {
           email: decoded.email,
           name: decoded.name || 'Guest',
           roomId: room.id,
+          roomSlug,
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
         });
@@ -115,7 +119,7 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, role, isWaitingRoomEnabled } = clientData;
+    const { userId, email, name, roomId, roomSlug, role, isWaitingRoomEnabled } = clientData;
 
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host') ? 'waiting' : 'active';
@@ -125,8 +129,8 @@ export function initializeSignaling(server: Server) {
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
       // Register this room to this specific Pod in Redis for NGINX scaling awareness
-      redis.set(`room:${roomId}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
-      redis.expire(`room:${roomId}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
+      redis.set(`room:${roomSlug}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
+      redis.expire(`room:${roomSlug}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
     }
 
     // Check if there's an existing client in the room that was already admitted
@@ -153,6 +157,22 @@ export function initializeSignaling(server: Server) {
           name,
           role
         });
+
+        // Send existing waiting users to the host that just joined
+        if (client.role === 'host') {
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'waiting') {
+                client.ws.send(JSON.stringify({
+                  type: 'waiting_room_request',
+                  userId: c.userId,
+                  name: c.name,
+                }));
+              }
+            }
+          }
+        }
 
         // Fetch and send history
         try {
@@ -207,7 +227,7 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
-            redis.del(`room:${roomId}:pod`).catch(e => logger.warn('Redis del error', e));
+            redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
@@ -483,10 +503,17 @@ export function initializeSignaling(server: Server) {
     if (!roomClients) return;
 
     const payload = JSON.stringify(message);
+    let sentToHost = false;
     for (const [id, client] of roomClients.entries()) {
       if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
         client.ws.send(payload);
+        logger.info(`Sent waiting_room_request to host ${client.userId}`);
+        sentToHost = true;
       }
+    }
+
+    if (!sentToHost) {
+      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
     }
   }
 }
