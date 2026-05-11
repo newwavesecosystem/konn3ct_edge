@@ -5,9 +5,13 @@ import { Button } from "@/components/ui/Button";
 import { motion } from "framer-motion";
 import {
   Play, Download, Share2, MoreVertical, Clock,
-  Film, Eye, Calendar, Search, Filter
+  Film, Eye, Calendar, Search, Filter,
+  Copy, Globe, Lock, Users
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
+import { useState } from "react";
+import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
 
 const recordings = [
   { id: 1, title: "Q3 Planning Session", date: "Today, 11:00 AM", duration: "1h 15m", views: 12, size: "840 MB", thumbnail: "bg-gradient-to-br from-brand-blue to-blue-400" },
@@ -28,12 +32,31 @@ const itemVariants = {
 };
 
 export default function RecordingsPage() {
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [selectedRecording, setSelectedRecording] = useState<{title: string, date: string, duration: string} | null>(null);
+  const [accessLevel, setAccessLevel] = useState("anyone");
+  const [specificUsers, setSpecificUsers] = useState("");
+  const [generatedLink, setGeneratedLink] = useState("");
+
+  const handleShareRecording = (rec: any) => {
+    setSelectedRecording(rec);
+    setIsShareModalOpen(true);
+    setAccessLevel("anyone");
+    setSpecificUsers("");
+    setGeneratedLink("");
+  };
+
+  const handleGenerateLink = () => {
+    const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
+    setGeneratedLink(link);
+  };
+
   return (
     <div className="flex flex-col gap-8 pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">Recordings & eCinema</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">Recordings</h1>
           <p className="text-text-muted mt-1">View, share, and manage your recorded sessions.</p>
         </div>
         <div className="flex gap-3">
@@ -114,7 +137,7 @@ export default function RecordingsPage() {
                     <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-green/10 text-text-muted hover:text-brand-green transition-colors" title="Download">
                       <Download className="h-3.5 w-3.5" />
                     </button>
-                    <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" title="Share">
+                    <button onClick={() => handleShareRecording(rec)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-blue/10 text-text-muted hover:text-brand-blue transition-colors" title="Share">
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -124,6 +147,67 @@ export default function RecordingsPage() {
           </motion.div>
         ))}
       </motion.div>
+
+      {/* Share Recording Modal */}
+      <Modal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)}>
+        <div className="flex flex-col gap-6">
+          <div>
+            <h2 className="text-xl font-bold text-text-primary">Share Recording</h2>
+            <p className="text-sm text-text-muted mt-1">
+              Configure access settings for "{selectedRecording?.title}"
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-text-primary">Access Settings</label>
+              <Select
+                value={accessLevel}
+                onChange={setAccessLevel}
+                options={[
+                  { value: "anyone", label: "Anyone with the link", icon: <Globe className="w-4 h-4" />, description: "No sign-in required" },
+                  { value: "participants", label: "Meeting participants", icon: <Users className="w-4 h-4" />, description: "Only people who were in the meeting" },
+                  { value: "specific", label: "Specific users", icon: <Lock className="w-4 h-4" />, description: "Restrict by email address" }
+                ]}
+              />
+            </div>
+
+            {accessLevel === "specific" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-primary">Email Addresses</label>
+                <Input
+                  placeholder="name@example.com, another@example.com"
+                  value={specificUsers}
+                  onChange={(e) => setSpecificUsers(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          {generatedLink ? (
+            <div className="p-4 rounded-xl border border-brand-green/20 bg-brand-green/5 space-y-3">
+              <p className="text-sm font-medium text-brand-green">Link generated successfully!</p>
+              <div className="flex gap-2">
+                <Input value={generatedLink} readOnly className="h-10 bg-white" />
+                <Button 
+                  onClick={() => navigator.clipboard.writeText(generatedLink)}
+                  className="h-10 bg-brand-green hover:bg-[#287854] shrink-0"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              onClick={handleGenerateLink}
+              className="w-full h-12 bg-brand-blue hover:bg-[#0047E1] text-white rounded-xl shadow-md transition-all"
+            >
+              Generate Link
+            </Button>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

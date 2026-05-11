@@ -46,7 +46,12 @@ This document describes the product requirements, APIs, data concepts, and secur
 - Create recording metadata (title, owner, room)
 - Store playback URL (CDN/object storage URL)
 - Publish/unpublish recordings
-- Free recording access: immediate playback
+- Recording access settings:
+  - Specific users (via email)
+  - Anyone with link
+  - Only meeting participants
+- Architecture: Bundled with the main frontend Next.js directory to reuse authentication state and components. Handled via dynamic public routes (e.g., `/recordings/[recordingId]`).
+- Free recording access: immediate playback based on access settings
 - Paid recording access:
   - Configure price
   - Require payment before playback
@@ -92,7 +97,7 @@ Operational requirements:
 - Reactions (floating emojis) and interactive Polls
 - In-meeting Doc viewer/collaborative notes
 - Remote Control (requires Native Client + WebRTC DataChannels for OS-level mouse/keyboard simulation)
-- eCinema (synchronized high-bitrate media playback)
+- eCinema Broadcast Feature (synchronized streaming of external content like YouTube or MP4 files directly inside the active video conference, allowing all participants to watch together in real time)
 - Donate button integrated with Paystack during live streams
 - Audio Boost (client-side amplification)
 - Strict Low Bandwidth degradation rules

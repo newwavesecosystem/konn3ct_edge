@@ -601,10 +601,10 @@ Build recording listing, recording detail, public playback, and paid recording a
 /dashboard/recordings/[recordingId]
 ```
 
-### Public Page
+### Viewer Page (Bundled in frontend)
 
 ```text
-/recordings/public/[recordingId]
+/recordings/[recordingId]
 ```
 
 ### Recording Fields
@@ -616,6 +616,7 @@ Build recording listing, recording detail, public playback, and paid recording a
 - Playback URL
 - Access type: Free or Paid
 - Price
+- Access Setting: Specific users (email), Anyone with link, Only participants
 - Created date
 
 ### Recording Dashboard Features
@@ -630,10 +631,11 @@ Build recording listing, recording detail, public playback, and paid recording a
 
 Show one of these states:
 
-1. Recording is free → show player
-2. Recording is paid and user has paid → show player
-3. Recording is paid and user has not paid → show payment prompt
-4. Recording is unpublished → show unavailable message
+1. Recording requires email login / participation validation → show auth/access denied if invalid
+2. Recording is free (and access is allowed) → show player
+3. Recording is paid and user has paid → show player
+4. Recording is paid and user has not paid → show payment prompt
+5. Recording is unpublished → show unavailable message
 
 ### Approval Checkpoint
 
@@ -779,7 +781,7 @@ Stop after this phase for review.
 
 ### Goal
 
-Build synchronized media playback UI and Netflix-style recording viewer.
+Build synchronized media playback UI for external media sharing (eCinema Broadcast) and the Netflix-style recording viewer.
 
 ### Pages/Components
 

@@ -27,6 +27,9 @@ import {
   Sun,
   Moon,
   Leaf,
+  Film,
+  X,
+  Play,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -60,6 +63,8 @@ export function MeetingControls() {
     if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
+
+  const [showECinemaDialog, setShowECinemaDialog] = React.useState(false);
 
   const layoutModes: { mode: typeof layoutMode; icon: React.ReactNode; label: string }[] = [
     { mode: "speaker", icon: <Presentation className="w-4 h-4" />, label: "Speaker" },
@@ -110,6 +115,15 @@ export function MeetingControls() {
           onClick={toggleScreenShare}
           label="Share screen"
           icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
+          className="hidden sm:flex"
+        />
+
+        {/* eCinema control */}
+        <ControlButton
+          active={!!useMeeting().eCinemaLink}
+          onClick={() => setShowECinemaDialog(true)}
+          label="eCinema"
+          icon={<Film className="w-5 h-5" />}
           className="hidden sm:flex"
         />
 
@@ -182,12 +196,12 @@ export function MeetingControls() {
           onClick={toggleTheme}
           label={
             theme === "emerald" ? "Switch to Konn3ct" :
-            theme === "konn3ct" ? "Switch to Dark" : "Switch to Emerald"
+              theme === "konn3ct" ? "Switch to Dark" : "Switch to Emerald"
           }
           icon={
             theme === "emerald" ? <Sun className="w-5 h-5" /> :
-            theme === "konn3ct" ? <Moon className="w-5 h-5" /> :
-            <Leaf className="w-5 h-5" />
+              theme === "konn3ct" ? <Moon className="w-5 h-5" /> :
+                <Leaf className="w-5 h-5" />
           }
           className="hidden sm:flex"
         />
@@ -218,8 +232,8 @@ export function MeetingControls() {
         style={{
           backgroundColor:
             theme === "konn3ct" ? "rgba(255,255,255,0.90)" :
-            theme === "emerald" ? "rgba(11,43,30,0.90)" :
-            "rgba(26,26,46,0.90)",
+              theme === "emerald" ? "rgba(11,43,30,0.90)" :
+                "rgba(26,26,46,0.90)",
           border: "1px solid var(--mt-border)",
         }}
       >
@@ -241,6 +255,11 @@ export function MeetingControls() {
           </button>
         ))}
       </div>
+
+      <ECinemaDialog 
+        isOpen={showECinemaDialog} 
+        onClose={() => setShowECinemaDialog(false)} 
+      />
     </div>
   );
 }
@@ -278,13 +297,103 @@ function ControlButton({
       style={
         !danger
           ? {
-              backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
-              color: active ? "var(--mt-text)" : "var(--mt-text-muted)",
-            }
+            backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+            color: active ? "var(--mt-text)" : "var(--mt-text-muted)",
+          }
           : undefined
       }
     >
       {icon}
     </button>
+  );
+}
+
+// ── eCinema Dialog ─────────────────────────────────────
+function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { eCinemaLink, setECinemaLink } = useMeeting();
+  const [linkInput, setLinkInput] = React.useState(eCinemaLink || "");
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setLinkInput(eCinemaLink || "");
+    }
+  }, [isOpen, eCinemaLink]);
+
+  if (!isOpen) return null;
+
+  const handleBroadcast = () => {
+    if (linkInput.trim()) {
+      setECinemaLink(linkInput.trim());
+      onClose();
+    }
+  };
+
+  const handleStop = () => {
+    setECinemaLink(null);
+    setLinkInput("");
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "var(--mt-overlay)" }}>
+      <div 
+        className="w-full max-w-md rounded-2xl p-6 shadow-2xl" 
+        style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold" style={{ color: "var(--mt-text)" }}>eCinema Broadcast</h2>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ color: "var(--mt-text-faint)" }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2" style={{ color: "var(--mt-text)" }}>
+            Add link
+          </label>
+          <input
+            type="text"
+            value={linkInput}
+            onChange={(e) => setLinkInput(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..."
+            className="w-full px-4 py-2.5 rounded-xl text-sm"
+            style={{
+              backgroundColor: "var(--mt-bg)",
+              color: "var(--mt-text)",
+              border: "1px solid var(--mt-border)",
+            }}
+          />
+          <p className="mt-2 text-xs" style={{ color: "var(--mt-text-faint)" }}>
+            Paste a supported video link to broadcast it to all meeting participants.
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          {eCinemaLink && (
+            <button
+              onClick={handleStop}
+              className="px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+              style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text)" }}
+            >
+              Stop Broadcast
+            </button>
+          )}
+          <button
+            onClick={handleBroadcast}
+            disabled={!linkInput.trim()}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-green text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-brand-green/90"
+          >
+            <Play className="w-4 h-4 fill-current" />
+            Broadcast
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
