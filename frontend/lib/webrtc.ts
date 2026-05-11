@@ -80,22 +80,26 @@ export class WebRTCClient {
             this.onConnectionStateChange?.('waiting');
             return; // Don't republish yet
           }
-          
-          // Only change to connected if we aren't waiting/denied
-          this.onConnectionStateChange?.('connected');
-
           if (!msg.recovered && this.device?.loaded) {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
             await this.republishMedia();
+            this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
             // First time active
-            await this.initializeMediasoup();
             try {
+              await this.initializeMediasoup();
               const res = await this.request('getProducers', 'producersList');
               for (const p of res.producers || []) {
                 await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
               }
-            } catch (err) { console.error(err); }
+              // Only broadcast connected AFTER Mediasoup is fully loaded
+              this.onConnectionStateChange?.('connected');
+            } catch (err) { 
+              console.error("Failed to initialize mediasoup", err); 
+              this.onConnectionStateChange?.('failed');
+            }
+          } else if (msg.status === 'active') {
+            this.onConnectionStateChange?.('connected');
           }
           break;
         case 'newProducer':
