@@ -9,7 +9,15 @@ import os from 'os';
 import Redis from 'ioredis';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl);
+const redis = new Redis(redisUrl, {
+  retryStrategy: (times) => {
+    if (process.env.NODE_ENV !== 'production') return null;
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 1
+});
+
+redis.on("error", () => { }); // Catch unhandled connection error events silently
 const POD_ID = process.env.POD_ID || 'pod-1';
 
 interface Client {
@@ -36,15 +44,18 @@ export function initializeSignaling(server: Server) {
       const cpuCount = os.cpus().length;
       // Convert to a percentage, capping at 100
       const cpuUsage = Math.min((load / cpuCount) * 100, 100);
-      
+
       // Push to Redis for Pre-flight API checks (Method 1)
       await redis.set(`pod:${POD_ID}:cpu`, cpuUsage);
       await redis.expire(`pod:${POD_ID}:cpu`, 10);
+
+      console.info(`pod:${POD_ID}:cpu =>`, cpuUsage)
 
       // Method 2: Graceful Degradation if load is too high
       // If CPU is > 85%, tell all connected clients to optimize video feeds
       if (cpuUsage > 85) {
         for (const roomId of rooms.keys()) {
+          console.warn("CPU LOAD IS HIGH!!!", cpuUsage)
           broadcastToRoom(roomId, { type: 'server_load_high' });
         }
       }
@@ -70,10 +81,11 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Verify token
       const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-      const decoded = jwt.verify(token, secret) as { userId: string; email: string, name: string };
-      
+      const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string };
+
+      console.log("decoded", decoded);
+
       // Verify room exists
       const room = await db.room.findUnique({ where: { slug: roomSlug } });
       if (!room) {
@@ -82,8 +94,8 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Basic role logic (MVP)
-      let role = 'audience';
+      // Extract role directly from the JWT token (set by the frontend API)
+      let role = decoded.role || 'audience';
       if (room.ownerId === decoded.userId) {
         role = 'host';
       }
@@ -94,6 +106,7 @@ export function initializeSignaling(server: Server) {
           email: decoded.email,
           name: decoded.name || 'Guest',
           roomId: room.id,
+          roomSlug,
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
         });
@@ -106,23 +119,26 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, role, isWaitingRoomEnabled } = clientData;
-    
+    const { userId, email, name, roomId, roomSlug, role, isWaitingRoomEnabled } = clientData;
+
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host') ? 'waiting' : 'active';
-    
+
     const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus };
-    
+
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
+      // Register this room to this specific Pod in Redis for NGINX scaling awareness
+      redis.set(`room:${roomSlug}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
+      redis.expire(`room:${roomSlug}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
     }
-    
+
     // Check if there's an existing client in the room that was already admitted
     const existingClient = rooms.get(roomId)!.get(userId);
     if (existingClient && existingClient.status === 'active') {
       client.status = 'active';
     }
-    
+
     rooms.get(roomId)!.set(userId, client);
 
     if (disconnectTimeouts.has(userId)) {
@@ -133,7 +149,7 @@ export function initializeSignaling(server: Server) {
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
       ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: client.status }));
-      
+
       if (client.status === 'active') {
         broadcastToRoom(roomId, {
           type: 'user_joined',
@@ -141,9 +157,30 @@ export function initializeSignaling(server: Server) {
           name,
           role
         });
-        
+
+        // Send existing waiting users to the host that just joined
+        if (client.role === 'host') {
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'waiting') {
+                client.ws.send(JSON.stringify({
+                  type: 'waiting_room_request',
+                  userId: c.userId,
+                  name: c.name,
+                }));
+              }
+            }
+          }
+        }
+
         // Fetch and send history
         try {
+          const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
+            .filter(c => c.status === 'active')
+            .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
+          ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+
           const chatHistory = await db.chatMessage.findMany({
             where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
             orderBy: { createdAt: 'asc' },
@@ -156,7 +193,7 @@ export function initializeSignaling(server: Server) {
           const noteHistory = await db.sharedNote.findUnique({
             where: { roomId }
           });
-          
+
           ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
           ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
           if (noteHistory) {
@@ -186,7 +223,7 @@ export function initializeSignaling(server: Server) {
 
     ws.on('close', () => {
       logger.info(`User ${userId} disconnected from room ${roomId}. Starting 60s grace period...`);
-      
+
       const timeout = setTimeout(() => {
         logger.info(`User ${userId} grace period expired. Cleaning up session.`);
         const roomClients = rooms.get(roomId);
@@ -195,11 +232,12 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
+            redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
-            
+
             broadcastToRoom(roomId, {
               type: 'user_left',
               userId
@@ -208,7 +246,7 @@ export function initializeSignaling(server: Server) {
         }
         disconnectTimeouts.delete(userId);
       }, 60000); // 60 seconds
-      
+
       disconnectTimeouts.set(userId, timeout);
     });
   });
@@ -230,6 +268,11 @@ export function initializeSignaling(server: Server) {
             targetClient.status = 'active';
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
             broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role });
+            
+            const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
+              .filter(c => c.status === 'active')
+              .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
+            targetClient.ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
           }
         }
         break;
@@ -258,7 +301,7 @@ export function initializeSignaling(server: Server) {
               targetUserId: data.targetUserId || null,
             }
           });
-          
+
           const msgPayload = {
             type: 'chat',
             userId,
@@ -281,13 +324,13 @@ export function initializeSignaling(server: Server) {
               }
             }
           } else {
-            broadcastToRoom(roomId, msgPayload);
+            broadcastToRoom(roomId, msgPayload, userId);
           }
         } catch (e) {
           logger.error("Failed to save chat message", e);
         }
         break;
-        
+
       case 'reaction':
         broadcastToRoom(roomId, {
           type: 'reaction',
@@ -352,7 +395,7 @@ export function initializeSignaling(server: Server) {
               data: { options: updatedOptions }
             });
           }
-          
+
           broadcastToRoom(roomId, {
             type: 'poll_vote',
             pollId: data.pollId,
@@ -386,46 +429,46 @@ export function initializeSignaling(server: Server) {
         client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: router.rtpCapabilities }));
         break;
       }
-      
+
       case 'createWebRtcTransport': {
         const transportParams = await createWebRtcTransport(roomId);
         client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams, direction: data.direction }));
         break;
       }
-      
+
       case 'connectWebRtcTransport': {
         await connectTransport(data.transportId, data.dtlsParameters);
         client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
         break;
       }
-      
+
       case 'produce': {
         // Method 3: Hard limit on active cameras
         if (data.kind === 'video') {
           const roomProducersList = roomProducers.get(roomId) || [];
           const videoProducers = roomProducersList.filter(p => p.kind === 'video');
           if (videoProducers.length >= 15) {
-            client.ws.send(JSON.stringify({ 
-              type: 'error', 
-              message: 'Maximum number of active cameras (15) reached in this room to preserve server stability.' 
+            client.ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Maximum number of active cameras (15) reached in this room to preserve server stability.'
             }));
             return;
           }
         }
 
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters);
-        
+
         // Track for late joiners
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
         roomProducers.get(roomId)!.push({ producerId, userId, kind: data.kind });
-        
+
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
-        
+
         // Broadcast to others that a new producer (video/audio track) is available
         broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, kind: data.kind }, userId);
         break;
       }
-      
+
       case 'consume': {
         const router = await getOrCreateRouter(roomId);
         const consumerParams = await createConsumer(data.transportId, data.producerId, data.rtpCapabilities, router);
@@ -470,10 +513,17 @@ export function initializeSignaling(server: Server) {
     if (!roomClients) return;
 
     const payload = JSON.stringify(message);
+    let sentToHost = false;
     for (const [id, client] of roomClients.entries()) {
       if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
         client.ws.send(payload);
+        logger.info(`Sent waiting_room_request to host ${client.userId}`);
+        sentToHost = true;
       }
+    }
+
+    if (!sentToHost) {
+      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
     }
   }
 }

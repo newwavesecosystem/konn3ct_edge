@@ -3,32 +3,54 @@ import jwt from "jsonwebtoken";
 import Redis from "ioredis";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new Redis(redisUrl);
+const redis = new Redis(redisUrl, {
+  retryStrategy: (times) => {
+    // Don't reconnect endlessly in local development
+    if (process.env.NODE_ENV !== "production") return null;
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 1
+});
+
+// Swallow the unhandled error event so it doesn't spam the console in local dev
+redis.on("error", () => {});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email } = body;
+    const { roomId, name, email, role } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
     }
 
     // Method 1: Redis Pre-flight Rejection (Option A)
-    const POD_ID = process.env.POD_ID || 'pod-1';
-    const cpuStr = await redis.get(`pod:${POD_ID}:cpu`);
-    
-    if (cpuStr) {
-      const cpuUsage = parseFloat(cpuStr);
-      if (cpuUsage > 90) {
-        return NextResponse.json({ 
-          error: "This meeting is currently at maximum capacity (Server Overload). Please wait for someone to leave." 
-        }, { status: 503 });
+    // Wrap in try/catch so local dev without Redis doesn't break
+    try {
+      // First, determine which Pod the NGINX router has assigned this room to
+      const mappedPod = await redis.get(`room:${roomId}:pod`);
+
+      console.log(`room:${roomId}:pod mappedPod`, mappedPod);
+
+      // If the room is active on a pod, check that specific pod's CPU
+      if (mappedPod) {
+        const cpuStr = await redis.get(`pod:${mappedPod}:cpu`);
+        console.log(`pod:${mappedPod}:cpu cpuStr`, cpuStr);
+        if (cpuStr) {
+          const cpuUsage = parseFloat(cpuStr);
+          if (cpuUsage > 90) {
+            return NextResponse.json({
+              error: "This meeting is currently at maximum capacity (Server Overload). Please wait for someone to leave."
+            }, { status: 503 });
+          }
+        }
       }
+    } catch (e) {
+      console.warn("Redis is unreachable. Skipping capacity check. (Normal in local dev)");
     }
 
     const secret = process.env.JWT_SECRET || "fallback-secret-key";
-    
+
     // Generate a secure JWT that the Kubernetes backend will accept
     // The backend's WebSocket verifier expects `userId` and `email`
     const token = jwt.sign(
@@ -36,6 +58,7 @@ export async function POST(request: Request) {
         userId: `user_${Math.random().toString(36).substr(2, 9)}`,
         email: email || "guest@conn3ct.com",
         name: name || "Guest",
+        role: role || "attendee",
       },
       secret,
       { expiresIn: "24h" }
