@@ -176,6 +176,11 @@ export function initializeSignaling(server: Server) {
 
         // Fetch and send history
         try {
+          const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
+            .filter(c => c.status === 'active')
+            .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
+          ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+
           const chatHistory = await db.chatMessage.findMany({
             where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
             orderBy: { createdAt: 'asc' },
@@ -263,6 +268,11 @@ export function initializeSignaling(server: Server) {
             targetClient.status = 'active';
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
             broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role });
+            
+            const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
+              .filter(c => c.status === 'active')
+              .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
+            targetClient.ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
           }
         }
         break;
