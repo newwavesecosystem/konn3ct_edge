@@ -150,7 +150,8 @@ export function MeetingProvider({
           body: JSON.stringify({
             roomId: roomSlug,
             name: currentUser.name,
-            email: "guest@conn3ct.com"
+            email: "guest@conn3ct.com",
+            role: currentUser.role
           })
         });
 
@@ -288,6 +289,7 @@ export function MeetingProvider({
         };
 
         client.onWaitingRoomRequest = (msg) => {
+          console.log("🔥 Received waiting room request from server:", msg);
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
             toast(`${msg.name} is waiting to join`, {
@@ -304,6 +306,94 @@ export function MeetingProvider({
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
           }
+        };
+
+        // --- Participant Management Callbacks ---
+        client.onParticipantsList = (backendParticipants) => {
+          setParticipants((prev) => {
+            const newParticipants = [...prev];
+            for (const p of backendParticipants) {
+              if (!newParticipants.some(existing => existing.id === p.userId)) {
+                newParticipants.push({
+                  id: p.userId,
+                  name: p.name,
+                  role: p.role as any,
+                  isMuted: true,
+                  isCameraOn: false,
+                  isScreenSharing: false,
+                  isHandRaised: false,
+                  isSpeaking: false,
+                  joinedAt: new Date().toISOString(),
+                });
+              }
+            }
+            return newParticipants;
+          });
+        };
+
+        client.onUserJoined = (user) => {
+          setParticipants((prev) => {
+            if (prev.some(p => p.id === user.userId)) return prev;
+            return [...prev, {
+              id: user.userId,
+              name: user.name,
+              role: user.role as any,
+              isMuted: true,
+              isCameraOn: false,
+              isScreenSharing: false,
+              isHandRaised: false,
+              isSpeaking: false,
+              joinedAt: new Date().toISOString(),
+            }];
+          });
+          toast.info(`${user.name} joined the meeting`);
+        };
+
+        client.onUserLeft = (userId) => {
+          setParticipants((prev) => {
+            const user = prev.find(p => p.id === userId);
+            if (user && user.id !== currentUser.id) {
+               toast.info(`${user.name} left the meeting`);
+            }
+            return prev.filter(p => p.id !== userId);
+          });
+        };
+
+        // Bind onNewConsumer BEFORE connect() to prevent missing initial producers
+        client.onNewConsumer = (consumer, userId) => {
+          setParticipants((prev) => {
+            const exists = prev.find((p) => p.id === userId);
+            if (exists) {
+              return prev.map((p) => {
+                if (p.id === userId) {
+                  if (consumer.kind === "video") {
+                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
+                  }
+                  if (consumer.kind === "audio") {
+                    return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
+                  }
+                }
+                return p;
+              });
+            } else {
+              // Add new participant dynamically!
+              const newParticipant: Participant = {
+                id: userId,
+                name: `Participant ${userId.substring(5, 9)}`,
+                role: "attendee",
+                isMuted: consumer.kind !== "audio",
+                isCameraOn: consumer.kind === "video",
+                isScreenSharing: false,
+                isHandRaised: false,
+                isSpeaking: false,
+                joinedAt: new Date().toISOString(),
+              };
+              if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
+              if (consumer.kind === "audio") newParticipant.audioTrack = consumer.track as MediaStreamTrack;
+              
+              return [...prev, newParticipant];
+            }
+          });
         };
 
         await client.connect();
@@ -353,43 +443,6 @@ export function MeetingProvider({
       };
 
       initMedia();
-
-      // Handle Remote Streams
-      client.onNewConsumer = (consumer, userId) => {
-        setParticipants((prev) => {
-          const exists = prev.find((p) => p.id === userId);
-          if (exists) {
-            return prev.map((p) => {
-              if (p.id === userId) {
-                if (consumer.kind === "video") {
-                  return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
-                }
-                if (consumer.kind === "audio") {
-                  return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
-                }
-              }
-              return p;
-            });
-          } else {
-            // Add new participant dynamically!
-            const newParticipant: Participant = {
-              id: userId,
-              name: `Participant ${userId.substring(5, 9)}`,
-              role: "attendee",
-              isMuted: consumer.kind !== "audio",
-              isCameraOn: consumer.kind === "video",
-              isScreenSharing: false,
-              isHandRaised: false,
-              isSpeaking: false,
-              joinedAt: new Date().toISOString(),
-            };
-            if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
-            if (consumer.kind === "audio") newParticipant.audioTrack = consumer.track as MediaStreamTrack;
-
-            return [...prev, newParticipant];
-          }
-        });
-      };
     }
   }, [webrtcStatus, currentUser.id]);
 
