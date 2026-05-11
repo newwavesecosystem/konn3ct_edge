@@ -45,6 +45,7 @@ interface MeetingContextValue {
   meetingDuration: number; // seconds
   isMobilePanelOpen: boolean;
   webrtcStatus: string;
+  eCinemaLink: string | null;
 
   // Actions
   toggleMute: () => void;
@@ -64,6 +65,7 @@ interface MeetingContextValue {
   setIsMobilePanelOpen: (open: boolean) => void;
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
+  setECinemaLink: (link: string | null) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -85,7 +87,7 @@ export function MeetingProvider({
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const queryName = searchParams.get("name") || "Guest";
   const queryRole = (searchParams.get("role") as ParticipantRole) || "attendee";
-  
+
   // ── State ────────────────────────────────────────────
   const [currentUser] = useState<Participant>({
     id: `u-${Math.random().toString(36).substring(2, 9)}`,
@@ -98,7 +100,7 @@ export function MeetingProvider({
     isSpeaking: false,
     joinedAt: new Date().toISOString(),
   });
-  
+
   // Start with only the current user, so real users are dynamically added
   const [participants, setParticipants] = useState<Participant[]>([currentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
@@ -127,7 +129,8 @@ export function MeetingProvider({
   const [meetingDuration, setMeetingDuration] = useState(0);
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
-  
+  const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
+
   // ── WebRTC Instance ──────────────────────────────────
   const webrtcClient = useRef<WebRTCClient | null>(null);
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -139,12 +142,12 @@ export function MeetingProvider({
     const connectToMeeting = async () => {
       try {
         setWebrtcStatus("fetching-token");
-        
+
         // Call our new Next.js endpoint to get a secure JWT
         const res = await fetch("/api/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             roomId: roomSlug,
             name: currentUser.name,
             email: "guest@conn3ct.com",
@@ -153,7 +156,7 @@ export function MeetingProvider({
         });
 
         const data = await res.json();
-        
+
         if (!res.ok || !data.token) {
           toast.error(data.error || "Failed to get connection token");
           setWebrtcStatus("failed");
@@ -161,7 +164,7 @@ export function MeetingProvider({
         }
 
         client = new WebRTCClient(roomSlug, data.token);
-        
+
         // --- Collaboration Event Listeners ---
         client.onServerLoadHigh = () => {
           toast.warning("Server is under heavy load. Optimizing video feeds to maintain stability...");
@@ -209,7 +212,7 @@ export function MeetingProvider({
           setChatMessages((prev) => {
             // Prevent duplicates if same ID arrives
             if (msg.id && prev.some(m => m.id === msg.id)) return prev;
-            
+
             return [
               ...prev,
               {
@@ -273,14 +276,14 @@ export function MeetingProvider({
             if (user && user.isMuted !== msg.isMuted) {
               toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
             }
-            return prev.map(p => 
+            return prev.map(p =>
               p.id === msg.userId ? { ...p, isMuted: msg.isMuted } : p
             );
           });
         };
 
         client.onHandRaise = (msg) => {
-          setParticipants((prev) => prev.map(p => 
+          setParticipants((prev) => prev.map(p =>
             p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
           ));
         };
@@ -425,7 +428,7 @@ export function MeetingProvider({
           localCameraTrackRef.current = videoTrack;
           const audioTrack = await client.enableMic();
           localAudioTrackRef.current = audioTrack;
-          
+
           setParticipants((prev) =>
             prev.map((p) => {
               if (p.id === currentUser.id) {
@@ -457,7 +460,7 @@ export function MeetingProvider({
   // ── Muted Talking Detection ────────────────────────────
   useEffect(() => {
     if (!isMuted || !localAudioTrackRef.current) return;
-    
+
     let lastAlertTime = 0;
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -466,36 +469,36 @@ export function MeetingProvider({
     const analyser = audioContext.createAnalyser();
     const microphone = audioContext.createMediaStreamSource(new MediaStream([localAudioTrackRef.current]));
     microphone.connect(analyser);
-    
+
     analyser.fftSize = 256;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    
+
     let animationFrameId: number;
-    
+
     const checkVolume = () => {
       analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const average = sum / bufferLength;
-      
+
       // If volume is above threshold while muted
       if (average > 15 && Date.now() - lastAlertTime > 5000) {
         toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
         try {
           const beep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
           beep.volume = 0.2;
-          beep.play().catch(() => {});
-        } catch (e) {}
+          beep.play().catch(() => { });
+        } catch (e) { }
         lastAlertTime = Date.now();
       }
       animationFrameId = requestAnimationFrame(checkVolume);
     };
     checkVolume();
-    
+
     return () => {
       cancelAnimationFrame(animationFrameId);
-      audioContext.close().catch(() => {});
+      audioContext.close().catch(() => { });
     };
   }, [isMuted]);
 
@@ -602,9 +605,9 @@ export function MeetingProvider({
 
   const createPoll = useCallback((question: string, optionsText: string[]) => {
     const pollId = `p-${Date.now()}`;
-    const options = optionsText.map((t, i) => ({ id: `o${i+1}`, text: t, votes: 0 }));
+    const options = optionsText.map((t, i) => ({ id: `o${i + 1}`, text: t, votes: 0 }));
     webrtcClient.current?.createPoll(pollId, question, options);
-    
+
     setPolls(prev => [...prev, {
       id: pollId,
       question,
@@ -680,6 +683,8 @@ export function MeetingProvider({
         setIsMobilePanelOpen,
         admitUser,
         denyUser,
+        eCinemaLink,
+        setECinemaLink,
       }}
     >
       {children}
