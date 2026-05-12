@@ -52,8 +52,9 @@ export function initializeSignaling(server: Server) {
       console.info(`pod:${POD_ID}:cpu =>`, cpuUsage)
 
       // Method 2: Graceful Degradation if load is too high
-      // If CPU is > 85%, tell all connected clients to optimize video feeds
-      if (cpuUsage > 85) {
+      // If CPU is > MAX_DEGRADATION_CPU_LOAD (default 85%), tell all connected clients to optimize video feeds
+      const maxDegradationLoad = parseInt(process.env.MAX_DEGRADATION_CPU_LOAD || "85", 10);
+      if (cpuUsage > maxDegradationLoad) {
         for (const roomId of rooms.keys()) {
           console.warn("CPU LOAD IS HIGH!!!", cpuUsage)
           broadcastToRoom(roomId, { type: 'server_load_high' });
@@ -215,7 +216,15 @@ export function initializeSignaling(server: Server) {
     ws.on('message', async (message: string) => {
       try {
         const data = JSON.parse(message);
-        await handleMessage(client, data);
+        try {
+          await handleMessage(client, data);
+        } catch (handleError) {
+          logger.error(`Error handling message of type ${data.type}:`, handleError);
+          // Only send error back if it's a request expecting a response
+          if (data.type === 'getRouterRtpCapabilities' || data.type === 'createWebRtcTransport' || data.type === 'connectWebRtcTransport' || data.type === 'produce') {
+            ws.send(JSON.stringify({ type: 'error', message: 'Internal server error while handling media request.' }));
+          }
+        }
       } catch (error) {
         logger.warn('Failed to parse WS message', error);
       }
@@ -447,10 +456,11 @@ export function initializeSignaling(server: Server) {
         if (data.kind === 'video') {
           const roomProducersList = roomProducers.get(roomId) || [];
           const videoProducers = roomProducersList.filter(p => p.kind === 'video');
-          if (videoProducers.length >= 15) {
+          const maxCameras = parseInt(process.env.MAX_ACTIVE_CAMERAS || "15", 10);
+          if (videoProducers.length >= maxCameras) {
             client.ws.send(JSON.stringify({
               type: 'error',
-              message: 'Maximum number of active cameras (15) reached in this room to preserve server stability.'
+              message: `Maximum number of active cameras (${maxCameras}) reached in this room to preserve server stability.`
             }));
             return;
           }

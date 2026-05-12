@@ -59,6 +59,8 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: DO_SPACES_BUCKET
+            - name: MAX_REJECTION_CPU_LOAD
+              value: "90"
           resources:
             requests:
               cpu: "100m"
