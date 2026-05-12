@@ -38,7 +38,8 @@ export async function POST(request: Request) {
         console.log(`pod:${mappedPod}:cpu cpuStr`, cpuStr);
         if (cpuStr) {
           const cpuUsage = parseFloat(cpuStr);
-          if (cpuUsage > 90) {
+          const maxRejectionLoad = parseFloat(process.env.MAX_REJECTION_CPU_LOAD || "90");
+          if (cpuUsage > maxRejectionLoad) {
             return NextResponse.json({
               error: "This meeting is currently at maximum capacity (Server Overload). Please wait for someone to leave."
             }, { status: 503 });

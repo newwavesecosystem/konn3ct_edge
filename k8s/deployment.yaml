@@ -94,6 +94,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: MAX_DEGRADATION_CPU_LOAD
+              value: "85"
+            - name: MAX_ACTIVE_CAMERAS
+              value: "15"
           resources:
             requests:
               cpu: "2000m"
