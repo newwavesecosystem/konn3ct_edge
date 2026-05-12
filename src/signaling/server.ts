@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumer } from '../media/sfu';
+import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, closeProducer } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 
@@ -31,8 +31,10 @@ interface Client {
 }
 
 const rooms = new Map<string, Map<string, Client>>();
-const roomProducers = new Map<string, Array<{ producerId: string, userId: string, kind: string }>>();
+const roomProducers = new Map<string, Array<{ producerId: string, userId: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
+// Maps consumerId -> the client who owns that consumer (for producerclose forwarding)
+const consumerOwners = new Map<string, Client>();
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -331,6 +333,7 @@ export function initializeSignaling(server: Server) {
           const msgPayload = {
             type: 'chat',
             userId,
+            name: client.name, // Always include display name — never make client guess from userId
             message: newMsg.content,
             timestamp: newMsg.createdAt.toISOString(),
             isPrivate: newMsg.isPrivate,
@@ -477,12 +480,15 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'produce': {
-        // Method 3: Hard limit on active cameras
-        if (data.kind === 'video') {
+        const appData: Record<string, any> = data.appData || {};
+        const source = appData.source || 'camera'; // 'camera' | 'screen'
+
+        // Camera cap only applies to actual cameras, NOT screen share producers
+        if (data.kind === 'video' && source !== 'screen') {
           const roomProducersList = roomProducers.get(roomId) || [];
-          const videoProducers = roomProducersList.filter(p => p.kind === 'video');
+          const cameraProducers = roomProducersList.filter(p => p.kind === 'video' && p.appData?.source !== 'screen');
           const maxCameras = parseInt(process.env.MAX_ACTIVE_CAMERAS || "15", 10);
-          if (videoProducers.length >= maxCameras) {
+          if (cameraProducers.length >= maxCameras) {
             client.ws.send(JSON.stringify({
               type: 'error',
               message: `Maximum number of active cameras (${maxCameras}) reached in this room to preserve server stability.`
@@ -493,26 +499,73 @@ export function initializeSignaling(server: Server) {
 
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters);
 
-        // Track for late joiners
+        // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
-        roomProducers.get(roomId)!.push({ producerId, userId, kind: data.kind });
+        roomProducers.get(roomId)!.push({ producerId, userId, kind: data.kind, appData });
 
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
 
-        // Broadcast to others that a new producer (video/audio track) is available
-        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, kind: data.kind }, userId);
+        // Broadcast to others — include appData.source so they render screen share correctly
+        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, kind: data.kind, appData }, userId);
+
+        // For screen share, send a dedicated state event so peers update isScreenSharing immediately
+        if (source === 'screen') {
+          broadcastToRoom(roomId, { type: 'screen_share_started', userId, producerId }, userId);
+        }
         break;
       }
 
       case 'consume': {
         const router = await getOrCreateRouter(roomId);
-        const consumerParams = await createConsumer(data.transportId, data.producerId, data.rtpCapabilities, router);
+        const consumerParams = await createConsumerWithCallback(
+          data.transportId,
+          data.producerId,
+          data.rtpCapabilities,
+          router,
+          (closedConsumerId) => {
+            // Producer was closed (e.g. remote peer stopped screen share)
+            // Find the appData of the producer so we know if it was a screen share
+            const allProducers = Array.from(roomProducers.values()).flat();
+            const closedProducer = allProducers.find(p => p.producerId === data.producerId);
+            if (client.ws.readyState === WebSocket.OPEN) {
+              client.ws.send(JSON.stringify({
+                type: 'producer_closed',
+                producerId: data.producerId,
+                consumerId: closedConsumerId,
+                appData: closedProducer?.appData || {}
+              }));
+            }
+            consumerOwners.delete(closedConsumerId);
+          }
+        );
+        // Track which client owns this consumer for cleanup
+        consumerOwners.set(consumerParams.id, client);
         client.ws.send(JSON.stringify({ type: 'consumed', ...consumerParams }));
         break;
       }
 
+      case 'stop_producer': {
+        // Client is explicitly closing a producer (e.g. stopped screen sharing)
+        const { producerId: pidToStop, appData: stopAppData } = data;
+        const source = (stopAppData || {}).source || 'unknown';
+
+        // Remove from room tracking
+        const rp = roomProducers.get(roomId);
+        if (rp) {
+          roomProducers.set(roomId, rp.filter(p => p.producerId !== pidToStop));
+        }
+
+        // Close the Mediasoup producer — this triggers producerclose on all consumers
+        closeProducer(pidToStop);
+
+        // Broadcast a state update to all peers
+        if (source === 'screen') {
+          broadcastToRoom(roomId, { type: 'screen_share_stopped', userId, producerId: pidToStop }, userId);
+        }
+        break;
+      }
+
       case 'resume': {
-        const { resumeConsumer } = require('../media/sfu');
         await resumeConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
         break;
@@ -520,8 +573,9 @@ export function initializeSignaling(server: Server) {
 
       case 'getProducers': {
         const producers = roomProducers.get(roomId) || [];
-        // Exclude own producers just in case
+        // Exclude own producers
         const othersProducers = producers.filter(p => p.userId !== userId);
+        // Include appData so late joiners know which producers are screen share vs camera
         client.ws.send(JSON.stringify({ type: 'producersList', producers: othersProducers }));
         break;
       }

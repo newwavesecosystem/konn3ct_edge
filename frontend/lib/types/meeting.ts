@@ -19,6 +19,7 @@ export interface Participant {
   joinedAt: string;
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
+  screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
 }
 
 export interface ChatMessage {
