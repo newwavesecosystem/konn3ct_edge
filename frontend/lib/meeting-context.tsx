@@ -218,7 +218,10 @@ export function MeetingProvider({
               {
                 id: msg.id || `m-${Date.now()}-${Math.random()}`,
                 senderId: msg.userId,
-                senderName: msg.userId === currentUser.id ? currentUser.name : participants.find(p => p.id === msg.userId)?.name || `Participant ${msg.userId.substring(5, 9)}`,
+                // Use the name the server sent directly — it is always accurate
+                senderName: msg.userId === currentUser.id
+                  ? currentUser.name
+                  : msg.name || `Participant ${msg.userId.substring(5, 9)}`,
                 senderRole: "attendee",
                 content: msg.message,
                 timestamp: msg.timestamp,
@@ -294,6 +297,33 @@ export function MeetingProvider({
           ));
         };
 
+        // --- Screen Share State Callbacks ---
+        client.onScreenShareStarted = (userId, producerId) => {
+          // A remote peer started sharing — mark them as sharing in the UI
+          setParticipants((prev) => prev.map(p =>
+            p.id === userId ? { ...p, isScreenSharing: true } : p
+          ));
+          toast.info(`${participants.find(p => p.id === userId)?.name || 'A participant'} started screen sharing`);
+        };
+
+        client.onScreenShareStopped = (userId, producerId) => {
+          // A remote peer stopped sharing — clear screen track and state
+          setParticipants((prev) => prev.map(p =>
+            p.id === userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
+          ));
+          toast.info(`Screen sharing ended`);
+        };
+
+        client.onConsumerClosed = (producerId, appData) => {
+          // The Mediasoup consumer was closed by the server (producer died)
+          // Clear the matching screenTrack from all participants
+          if (appData?.source === 'screen') {
+            setParticipants((prev) => prev.map(p =>
+              p.isScreenSharing ? { ...p, isScreenSharing: false, screenTrack: null } : p
+            ));
+          }
+        };
+
         client.onWaitingRoomRequest = (msg) => {
           console.log("🔥 Received waiting room request from server:", msg);
           setWaitingUsers(prev => {
@@ -367,16 +397,23 @@ export function MeetingProvider({
 
         // Bind onNewConsumer BEFORE connect() to prevent missing initial producers
         client.onNewConsumer = (consumer, userId) => {
+          const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
+          
           setParticipants((prev) => {
             const exists = prev.find((p) => p.id === userId);
             if (exists) {
               return prev.map((p) => {
                 if (p.id === userId) {
-                  if (consumer.kind === "video") {
-                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
-                  }
-                  if (consumer.kind === "audio") {
+                  if (consumer.kind === 'audio') {
                     return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
+                  }
+                  if (consumer.kind === 'video' && source === 'screen') {
+                    // Screen share producer — render in dedicated overlay, camera stays in tile
+                    return { ...p, screenTrack: consumer.track as MediaStreamTrack, isScreenSharing: true };
+                  }
+                  if (consumer.kind === 'video') {
+                    // Camera producer
+                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
                   }
                 }
                 return p;
@@ -388,13 +425,14 @@ export function MeetingProvider({
                 name: `Participant ${userId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
-                isCameraOn: consumer.kind === "video",
-                isScreenSharing: false,
+                isCameraOn: consumer.kind === "video" && source !== 'screen',
+                isScreenSharing: consumer.kind === "video" && source === 'screen',
                 isHandRaised: false,
                 isSpeaking: false,
                 joinedAt: new Date().toISOString(),
               };
-              if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
+              if (consumer.kind === "video" && source === 'screen') newParticipant.screenTrack = consumer.track as MediaStreamTrack;
+              else if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
               if (consumer.kind === "audio") newParticipant.audioTrack = consumer.track as MediaStreamTrack;
               
               return [...prev, newParticipant];
@@ -530,25 +568,32 @@ export function MeetingProvider({
   const toggleScreenShare = useCallback(async () => {
     try {
       if (isScreenSharing) {
-        const newTrack = await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current || undefined);
-        if (newTrack) localCameraTrackRef.current = newTrack;
+        await webrtcClient.current?.disableScreenShare();
         setIsScreenSharing(false);
+        setParticipants(prev => prev.map(p =>
+          p.id === currentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
+        ));
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
           setIsScreenSharing(true);
-          // Listen for native "Stop sharing" button built into browsers
+          setParticipants(prev => prev.map(p =>
+            p.id === currentUser.id ? { ...p, isScreenSharing: true, screenTrack } : p
+          ));
+          // Listen for native browser "Stop sharing" button
           screenTrack.onended = async () => {
-            const newTrack = await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current || undefined);
-            if (newTrack) localCameraTrackRef.current = newTrack;
+            await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
+            setParticipants(prev => prev.map(p =>
+              p.id === currentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
+            ));
           };
         }
       }
     } catch (e) {
       console.error("Screen share error:", e);
     }
-  }, [isScreenSharing]);
+  }, [isScreenSharing, currentUser.id]);
 
   const toggleRecording = useCallback(() => setIsRecording((v) => !v), []);
   const toggleHandRaise = useCallback(() => {

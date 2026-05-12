@@ -13,6 +13,7 @@ export class WebRTCClient {
   private consumers: Map<string, Consumer> = new Map();
   
   private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
+  private screenShareProducer: Producer | null = null;
   private messageIdCounter = 0;
   private isIntentionalDisconnect = false;
   private reconnectAttempts = 0;
@@ -42,6 +43,10 @@ export class WebRTCClient {
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
+  // Screen share state callbacks
+  public onScreenShareStarted?: (userId: string, producerId: string) => void;
+  public onScreenShareStopped?: (userId: string, producerId: string) => void;
+  public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -102,7 +107,7 @@ export class WebRTCClient {
               try {
                 const res = await this.request('getProducers', 'producersList');
                 for (const p of res.producers || []) {
-                  await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+                  await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
                 this.onConnectionStateChange?.('connected');
@@ -118,7 +123,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind).catch(console.error);
+          this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -165,6 +170,22 @@ export class WebRTCClient {
           break;
         case 'note_update':
           this.onNoteUpdate?.(msg);
+          break;
+        case 'screen_share_started':
+          this.onScreenShareStarted?.(msg.userId, msg.producerId);
+          break;
+        case 'screen_share_stopped':
+          this.onScreenShareStopped?.(msg.userId, msg.producerId);
+          break;
+        case 'producer_closed':
+          // The remote producer was closed — clean up our local consumer
+          this.consumers.forEach((consumer, consumerId) => {
+            if (consumerId === msg.consumerId) {
+              consumer.close();
+              this.consumers.delete(consumerId);
+            }
+          });
+          this.onConsumerClosed?.(msg.producerId, msg.appData || {});
           break;
         case 'server_load_high':
           this.onServerLoadHigh?.();
@@ -341,13 +362,14 @@ export class WebRTCClient {
       }
     });
 
-    this.sendTransport.on('produce', async ({ kind, rtpParameters }: any, callback: any, errback: any) => {
-      console.log(`[WebRTC] Producing local media (${kind})...`);
+    this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
+      console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
       try {
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
           kind,
-          rtpParameters
+          rtpParameters,
+          appData // Forward source tag ('camera' | 'screen') to server
         });
         console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
         callback({ id });
@@ -448,6 +470,7 @@ export class WebRTCClient {
     if (videoTrack && videoTrack.readyState === 'live') {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack,
+        appData: { source: 'camera' },
         encodings: [
           { scaleResolutionDownBy: 4, maxBitrate: 100000 },
           { scaleResolutionDownBy: 2, maxBitrate: 300000 },
@@ -467,7 +490,7 @@ export class WebRTCClient {
     try {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
-        await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+        await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
       }
     } catch (e) {
       console.error("Failed to re-sync producers after republish", e);
@@ -484,6 +507,7 @@ export class WebRTCClient {
     
     this.localVideoProducer = await this.sendTransport.produce({ 
       track: videoTrack,
+      appData: { source: 'camera' }, // Tag so remote peers know this is a camera feed
       encodings: [
         { scaleResolutionDownBy: 4, maxBitrate: 100000 },
         { scaleResolutionDownBy: 2, maxBitrate: 300000 },
@@ -532,43 +556,61 @@ export class WebRTCClient {
 
   public async enableScreenShare(): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    if (this.screenShareProducer && !this.screenShareProducer.closed) {
+      throw new Error("Screen share already active");
+    }
     
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 15, max: 30 } } // Lower framerate = less CPU, still crisp
+    });
     const screenTrack = stream.getVideoTracks()[0];
     
-    // Replace the camera track with the screen track (screenshare usually doesn't need heavy simulcast, but we can maintain high quality)
-    if (this.localVideoProducer) {
-      await this.localVideoProducer.replaceTrack({ track: screenTrack });
-    } else {
-      this.localVideoProducer = await this.sendTransport.produce({ 
-        track: screenTrack,
-        encodings: [
-          { maxBitrate: 1500000 } // high bitrate for crisp text
-        ]
-      });
-    }
+    // Create a SEPARATE producer — camera producer stays untouched
+    this.screenShareProducer = await this.sendTransport.produce({
+      track: screenTrack,
+      appData: { source: 'screen' }, // Tag so remote peers render in screen overlay, not tile
+      encodings: [
+        { maxBitrate: 1500000 } // Single high-quality encoding — no simulcast needed for screen
+      ],
+      codecOptions: { videoGoogleStartBitrate: 1000 }
+    });
+
+    // Auto-stop when user clicks browser's native "Stop sharing" button
+    screenTrack.onended = () => {
+      this.stopScreenShareProducer();
+    };
     
     return screenTrack;
   }
 
-  public async disableScreenShare(cameraTrack?: MediaStreamTrack): Promise<MediaStreamTrack | undefined> {
-    if (!this.localVideoProducer) return undefined;
-    
-    if (cameraTrack && cameraTrack.readyState === 'live') {
-      await this.localVideoProducer.replaceTrack({ track: cameraTrack });
-      return cameraTrack;
-    } else {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const newTrack = stream.getVideoTracks()[0];
-      await this.localVideoProducer.replaceTrack({ track: newTrack });
-      return newTrack;
+  public async disableScreenShare(): Promise<void> {
+    this.stopScreenShareProducer();
+  }
+
+  private stopScreenShareProducer() {
+    if (this.screenShareProducer) {
+      const producerId = this.screenShareProducer.id;
+      // Tell the server FIRST so it can broadcast screen_share_stopped to all peers
+      // and trigger producerclose on all remote consumers
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId,
+          appData: { source: 'screen' }
+        }));
+      }
+      // Stop the track so the OS browser sharing indicator disappears
+      this.screenShareProducer.track?.stop();
+      this.screenShareProducer.close();
+      this.screenShareProducer = null;
     }
   }
 
-  private async consumeRemoteStream(producerId: string, userId: string, kind: string) {
+  private async consumeRemoteStream(producerId: string, userId: string, kind: string, appData?: Record<string, any>) {
     if (!this.device || !this.recvTransport) return;
 
-    console.log(`[WebRTC] Requesting to consume ${kind} from user ${userId} (Producer ID: ${producerId})...`);
+    const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
+    console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${userId} (Producer ID: ${producerId})...`);
 
     const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
       transportId: this.recvTransport.id,
@@ -576,12 +618,13 @@ export class WebRTCClient {
       rtpCapabilities: this.device.rtpCapabilities
     });
 
-    console.log(`[WebRTC] Creating local consumer for ${kind}... (Consumer ID: ${id})`);
+    console.log(`[WebRTC] Creating local consumer for ${kind} (source: ${source})... (Consumer ID: ${id})`);
     const consumer = await this.recvTransport.consume({
       id,
       producerId,
       kind: consumerKind,
-      rtpParameters
+      rtpParameters,
+      appData: { source } // Carry source tag forward to onNewConsumer callback
     });
 
     this.consumers.set(consumer.id, consumer);
@@ -610,6 +653,7 @@ export class WebRTCClient {
     });
     this.pendingRequests.clear();
     
+    this.stopScreenShareProducer();
     if (this.sendTransport) this.sendTransport.close();
     if (this.recvTransport) this.recvTransport.close();
   }

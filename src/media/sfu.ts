@@ -163,3 +163,59 @@ export async function resumeConsumer(consumerId: string) {
     await consumer.resume();
   }
 }
+
+/**
+ * Close a specific producer by ID (used when a client stops screen sharing)
+ */
+export function closeProducer(producerId: string) {
+  const producer = producers.get(producerId);
+  if (producer && !producer.closed) {
+    producer.close();
+    producers.delete(producerId);
+  }
+}
+
+/**
+ * Create a Consumer with an optional producerclose callback so the signaling
+ * server can notify the receiving client when the remote producer stops.
+ */
+export async function createConsumerWithCallback(
+  transportId: string,
+  producerId: string,
+  rtpCapabilities: any,
+  router: Router,
+  onProducerClose: (consumerId: string) => void
+) {
+  const transport = transports.get(transportId);
+  if (!transport) throw new Error(`Transport ${transportId} not found`);
+
+  if (!router.canConsume({ producerId, rtpCapabilities })) {
+    throw new Error('Client cannot consume this producer');
+  }
+
+  const consumer = await transport.consume({
+    producerId,
+    rtpCapabilities,
+    paused: true
+  });
+
+  consumers.set(consumer.id, consumer);
+
+  consumer.on('transportclose', () => {
+    consumer.close();
+    consumers.delete(consumer.id);
+  });
+
+  consumer.on('producerclose', () => {
+    consumer.close();
+    consumers.delete(consumer.id);
+    onProducerClose(consumer.id); // Notify signaling server to forward event to client
+  });
+
+  return {
+    id: consumer.id,
+    producerId,
+    kind: consumer.kind,
+    rtpParameters: consumer.rtpParameters
+  };
+}
