@@ -361,11 +361,13 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'reaction':
+        // Exclude the sender — they already show the reaction locally via sendReaction()
         broadcastToRoom(roomId, {
           type: 'reaction',
           userId,
-          reaction: data.reaction // e.g., 'thumbs_up', 'heart'
-        });
+          name: client.name, // Always include name so clients don't need to look it up
+          reaction: data.reaction
+        }, userId); // <-- userId as excludeUserId prevents the double-animation
         break;
 
       case 'note_update':

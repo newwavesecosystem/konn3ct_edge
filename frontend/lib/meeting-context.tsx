@@ -237,7 +237,7 @@ export function MeetingProvider({
             id: `r-${Date.now()}-${Math.random()}`,
             emoji: msg.reaction,
             senderId: msg.userId,
-            senderName: `Participant ${msg.userId.substring(5, 9)}`,
+            senderName: msg.name || `Participant`, // server now always sends name
             timestamp: Date.now(),
           };
           setReactions((prev) => [...prev, reaction]);
