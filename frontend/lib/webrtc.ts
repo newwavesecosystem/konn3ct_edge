@@ -12,7 +12,7 @@ export class WebRTCClient {
   private localAudioProducer: Producer | null = null;
   private consumers: Map<string, Consumer> = new Map();
   
-  private pendingRequests: Map<string, { resolve: Function, reject: Function }> = new Map();
+  private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
   private messageIdCounter = 0;
   private isIntentionalDisconnect = false;
   private reconnectAttempts = 0;
@@ -68,9 +68,15 @@ export class WebRTCClient {
       
       // Handle Response matching by event type
       if (this.pendingRequests.has(msg.type)) {
-        this.pendingRequests.get(msg.type)!.resolve(msg);
-        this.pendingRequests.delete(msg.type);
-        return;
+        const queue = this.pendingRequests.get(msg.type)!;
+        if (queue.length > 0) {
+          const resolver = queue.shift()!;
+          resolver.resolve(msg);
+          if (queue.length === 0) {
+            this.pendingRequests.delete(msg.type);
+          }
+          return;
+        }
       }
 
       // Handle server-initiated events
@@ -88,28 +94,31 @@ export class WebRTCClient {
           }
           if (!msg.recovered && this.device?.loaded) {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
-            await this.republishMedia();
+            this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
             // First time active
-            try {
-              await this.initializeMediasoup();
-              const res = await this.request('getProducers', 'producersList');
-              for (const p of res.producers || []) {
-                await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+            this.initializeMediasoup().then(async () => {
+              try {
+                const res = await this.request('getProducers', 'producersList');
+                for (const p of res.producers || []) {
+                  await this.consumeRemoteStream(p.producerId, p.userId, p.kind);
+                }
+                // Only broadcast connected AFTER Mediasoup is fully loaded
+                this.onConnectionStateChange?.('connected');
+              } catch (e) {
+                console.error("Failed to load existing producers:", e);
               }
-              // Only broadcast connected AFTER Mediasoup is fully loaded
-              this.onConnectionStateChange?.('connected');
-            } catch (err) { 
+            }).catch(err => {
               console.error("Failed to initialize mediasoup", err); 
               this.onConnectionStateChange?.('failed');
-            }
+            });
           } else if (msg.status === 'active') {
             this.onConnectionStateChange?.('connected');
           }
           break;
         case 'newProducer':
-          await this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind);
+          this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind).catch(console.error);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -202,20 +211,29 @@ export class WebRTCClient {
         return reject(new Error('WebSocket is not connected'));
       }
       
-      this.pendingRequests.set(expectType, { resolve, reject });
-      
+      const timeoutId = setTimeout(() => {
+        if (this.pendingRequests.has(expectType)) {
+          const queue = this.pendingRequests.get(expectType)!;
+          const index = queue.findIndex(req => req.resolve === resolve);
+          if (index !== -1) {
+            queue.splice(index, 1);
+            reject(new Error(`Timeout waiting for ${expectType}`));
+            if (queue.length === 0) {
+              this.pendingRequests.delete(expectType);
+            }
+          }
+        }
+      }, 10000);
+
+      if (!this.pendingRequests.has(expectType)) {
+        this.pendingRequests.set(expectType, []);
+      }
+      this.pendingRequests.get(expectType)!.push({ resolve, reject, timeoutId });
+
       this.ws.send(JSON.stringify({
         type: sendType,
         ...payload
       }));
-
-      // Timeout
-      setTimeout(() => {
-        if (this.pendingRequests.has(expectType)) {
-          this.pendingRequests.get(expectType)!.reject(new Error(`Timeout waiting for ${expectType}`));
-          this.pendingRequests.delete(expectType);
-        }
-      }, 10000);
     });
   }
 
@@ -579,10 +597,20 @@ export class WebRTCClient {
   }
 
   public disconnect() {
+    console.log('[WebRTC] Disconnecting gracefully...');
     this.isIntentionalDisconnect = true;
-    if (this.reconnectTimeoutId) clearTimeout(this.reconnectTimeoutId);
     this.ws?.close();
-    this.sendTransport?.close();
-    this.recvTransport?.close();
+    
+    // Clear all pending requests and timeouts
+    this.pendingRequests.forEach((queue, expectType) => {
+      queue.forEach(req => {
+        clearTimeout(req.timeoutId);
+        req.reject(new Error(`Disconnected before receiving ${expectType}`));
+      });
+    });
+    this.pendingRequests.clear();
+    
+    if (this.sendTransport) this.sendTransport.close();
+    if (this.recvTransport) this.recvTransport.close();
   }
 }

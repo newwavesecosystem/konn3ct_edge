@@ -149,6 +149,19 @@ export function initializeSignaling(server: Server) {
       ws.send(JSON.stringify({ type: 'session_status', recovered: true, status: client.status }));
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
+
+      if (client.status === 'active') {
+        // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
+        // This ensures getOrCreateRouter() is already resolved before session_status triggers
+        // initializeMediasoup() on the client side.
+        try {
+          await getOrCreateRouter(roomId);
+        } catch (e) {
+          logger.error('Failed to pre-warm router on join', e);
+        }
+      }
+
+      // Send session_status IMMEDIATELY after router is ready (not after DB queries)
       ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: client.status }));
 
       if (client.status === 'active') {
@@ -175,34 +188,38 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        // Fetch and send history
-        try {
-          const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
-            .filter(c => c.status === 'active')
-            .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
-          ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+        // Send history ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
+        setImmediate(async () => {
+          try {
+            const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
+              .filter(c => c.status === 'active')
+              .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
+            ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
-          const chatHistory = await db.chatMessage.findMany({
-            where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
-            orderBy: { createdAt: 'asc' },
-            take: 100
-          });
-          const pollHistory = await db.meetingPoll.findMany({
-            where: { roomId, isActive: true },
-            orderBy: { createdAt: 'asc' }
-          });
-          const noteHistory = await db.sharedNote.findUnique({
-            where: { roomId }
-          });
+            const chatHistory = await db.chatMessage.findMany({
+              where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
+              orderBy: { createdAt: 'asc' },
+              take: 100
+            });
+            const pollHistory = await db.meetingPoll.findMany({
+              where: { roomId, isActive: true },
+              orderBy: { createdAt: 'asc' }
+            });
+            const noteHistory = await db.sharedNote.findUnique({
+              where: { roomId }
+            });
 
-          ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
-          ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-          if (noteHistory) {
-            ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+              ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+              if (noteHistory) {
+                ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
+              }
+            }
+          } catch (e) {
+            logger.error("Failed to load history", e);
           }
-        } catch (e) {
-          logger.error("Failed to load history", e);
-        }
+        });
       } else {
         // Send a request to hosts
         broadcastToHosts(roomId, {
