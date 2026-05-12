@@ -282,6 +282,12 @@ export function MeetingProvider({
           });
         };
 
+        client.onCameraState = (msg) => {
+          setParticipants((prev) => prev.map(p =>
+            p.id === msg.userId ? { ...p, isCameraOn: msg.isCameraOn } : p
+          ));
+        };
+
         client.onHandRaise = (msg) => {
           setParticipants((prev) => prev.map(p =>
             p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
@@ -513,10 +519,13 @@ export function MeetingProvider({
   }, [isMuted, currentUser.id]);
 
   const toggleCamera = useCallback(() => {
-    if (isCameraOn) webrtcClient.current?.pauseCamera();
+    const newState = !isCameraOn;
+    if (!newState) webrtcClient.current?.pauseCamera();
     else webrtcClient.current?.resumeCamera();
-    setIsCameraOn((v) => !v);
-  }, [isCameraOn]);
+    webrtcClient.current?.sendCameraState(newState);
+    setIsCameraOn(newState);
+    setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState } : p));
+  }, [isCameraOn, currentUser.id]);
 
   const toggleScreenShare = useCallback(async () => {
     try {
