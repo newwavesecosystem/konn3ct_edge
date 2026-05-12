@@ -424,6 +424,14 @@ export function initializeSignaling(server: Server) {
         });
         break;
 
+      case 'camera_state':
+        broadcastToRoom(roomId, {
+          type: 'camera_state',
+          userId,
+          isCameraOn: data.isCameraOn
+        });
+        break;
+
       case 'hand_raise':
         broadcastToRoom(roomId, {
           type: 'hand_raise',

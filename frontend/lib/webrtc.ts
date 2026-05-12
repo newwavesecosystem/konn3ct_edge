@@ -33,6 +33,7 @@ export class WebRTCClient {
   public onPollCreate?: (poll: any) => void;
   public onPollVote?: (vote: any) => void;
   public onMuteState?: (msg: any) => void;
+  public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
@@ -134,6 +135,9 @@ export class WebRTCClient {
           break;
         case 'mute_state':
           this.onMuteState?.(msg);
+          break;
+        case 'camera_state':
+          this.onCameraState?.(msg);
           break;
         case 'hand_raise':
           this.onHandRaise?.(msg);
@@ -253,6 +257,12 @@ export class WebRTCClient {
     }
   }
 
+  public sendCameraState(isCameraOn: boolean) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn }));
+    }
+  }
+
   public sendHandRaise(isHandRaised: boolean) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
@@ -271,56 +281,96 @@ export class WebRTCClient {
     }
   }
 
-  private async initializeMediasoup() {
-    // 1. Get Router Capabilities
-    const { rtpCapabilities } = await this.request('getRouterRtpCapabilities', 'routerCapabilities');
-    
-    // 2. Initialize Device
-    this.device = new Device();
-    await this.device.load({ routerRtpCapabilities: rtpCapabilities });
+  public async getRouterRtpCapabilities() {
+    console.log('[WebRTC] Requesting Router RTP Capabilities from server...');
+    const res = await this.request('getRouterRtpCapabilities', 'routerCapabilities');
+    console.log('[WebRTC] Received Router RTP Capabilities:', res.rtpCapabilities);
+    return res.rtpCapabilities;
+  }
 
-    // 3. Create Send Transport
+  public async createDevice() {
+    console.log('[WebRTC] Creating Mediasoup Device...');
+    const routerRtpCapabilities = await this.getRouterRtpCapabilities();
+    this.device = new Device();
+    await this.device.load({ routerRtpCapabilities });
+    console.log('[WebRTC] Mediasoup Device loaded successfully. Client RTP Capabilities:', this.device.rtpCapabilities);
+  }
+
+  public async initializeMediasoup() {
+    console.log('[WebRTC] Initiating WebRTC connection flow...');
+    await this.createDevice();
+
+    if (!this.device) throw new Error("Device not initialized");
+
+    // 1. Create Send Transport
+    console.log('[WebRTC] Requesting Send Transport creation...');
     const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
+    console.log('[WebRTC] Send Transport created on server:', sendTransportData.transportParams.id);
     this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
 
     this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+      console.log('[WebRTC] Send Transport connecting with DTLS parameters...');
       try {
         await this.request('connectWebRtcTransport', 'transportConnected', {
           transportId: this.sendTransport!.id,
           dtlsParameters
         });
+        console.log('[WebRTC] Send Transport connected successfully!');
         callback();
       } catch (error: any) {
+        console.error('[WebRTC] Send Transport connect error:', error);
         errback(error);
       }
     });
 
     this.sendTransport.on('produce', async ({ kind, rtpParameters }: any, callback: any, errback: any) => {
+      console.log(`[WebRTC] Producing local media (${kind})...`);
       try {
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
           kind,
           rtpParameters
         });
+        console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
         callback({ id });
       } catch (error: any) {
+        console.error(`[WebRTC] Produce error (${kind}):`, error);
         errback(error);
       }
     });
 
+    this.sendTransport.on('connectionstatechange', (state: any) => {
+      console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
+      if (state === 'failed' || state === 'disconnected') {
+        console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue)');
+      }
+    });
+
     // 4. Create Receive Transport
+    console.log('[WebRTC] Requesting Receive Transport creation...');
     const recvTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'recv' });
+    console.log('[WebRTC] Receive Transport created on server:', recvTransportData.transportParams.id);
     this.recvTransport = this.device.createRecvTransport(recvTransportData.transportParams);
 
     this.recvTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+      console.log('[WebRTC] Receive Transport connecting with DTLS parameters...');
       try {
         await this.request('connectWebRtcTransport', 'transportConnected', {
           transportId: this.recvTransport!.id,
           dtlsParameters
         });
+        console.log('[WebRTC] Receive Transport connected successfully!');
         callback();
       } catch (error: any) {
+        console.error('[WebRTC] Receive Transport connect error:', error);
         errback(error);
+      }
+    });
+
+    this.recvTransport.on('connectionstatechange', (state: any) => {
+      console.log(`[WebRTC] Receive Transport ICE State changed to: ${state}`);
+      if (state === 'failed' || state === 'disconnected') {
+        console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue)');
       }
     });
   }
@@ -500,12 +550,15 @@ export class WebRTCClient {
   private async consumeRemoteStream(producerId: string, userId: string, kind: string) {
     if (!this.device || !this.recvTransport) return;
 
+    console.log(`[WebRTC] Requesting to consume ${kind} from user ${userId} (Producer ID: ${producerId})...`);
+
     const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
       transportId: this.recvTransport.id,
       producerId,
       rtpCapabilities: this.device.rtpCapabilities
     });
 
+    console.log(`[WebRTC] Creating local consumer for ${kind}... (Consumer ID: ${id})`);
     const consumer = await this.recvTransport.consume({
       id,
       producerId,
@@ -517,8 +570,11 @@ export class WebRTCClient {
     this.onNewConsumer?.(consumer, userId);
     
     // Tell the backend to resume sending media (unpause the consumer)
-    this.request('resume', 'resumed', { consumerId: consumer.id }).catch(err => {
-      console.error("Failed to resume consumer:", err);
+    console.log(`[WebRTC] Resuming consumer ${id} on server...`);
+    this.request('resume', 'resumed', { consumerId: consumer.id }).then(() => {
+      console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
+    }).catch(err => {
+      console.error(`[WebRTC] Failed to resume consumer ${id}:`, err);
     });
   }
 

@@ -48,6 +48,7 @@ export function ParticipantTile({
         if (stream.getVideoTracks()[0] === participant.videoTrack) return;
       }
       el.srcObject = new MediaStream([participant.videoTrack]);
+      el.play().catch(e => console.warn("Video play failed:", e));
     }
   }, [participant.videoTrack]);
 
@@ -58,6 +59,7 @@ export function ParticipantTile({
         if (stream.getAudioTracks()[0] === participant.audioTrack) return;
       }
       el.srcObject = new MediaStream([participant.audioTrack]);
+      el.play().catch(e => console.warn("Audio play failed:", e));
     }
   }, [participant.audioTrack]);
   return (
