@@ -14,6 +14,11 @@ export class WebRTCClient {
   
   private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
   private screenShareProducer: Producer | null = null;
+  
+  // Media
+  public rawAudioTrack: MediaStreamTrack | null = null;
+  private purifyInstance: any = null;
+  public isAINoiseSuppressionEnabled = false;
   private messageIdCounter = 0;
   private isIntentionalDisconnect = false;
   private reconnectAttempts = 0;
@@ -526,11 +531,48 @@ export class WebRTCClient {
   public async enableMic(): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const audioTrack = stream.getAudioTracks()[0];
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: { 
+        noiseSuppression: true, // Always keep native on as baseline
+        echoCancellation: true 
+      } 
+    });
+    this.rawAudioTrack = stream.getAudioTracks()[0];
     
-    this.localAudioProducer = await this.sendTransport.produce({ track: audioTrack });
-    return audioTrack;
+    let activeTrack = this.rawAudioTrack;
+    
+    // Apply AI Noise Suppression if enabled
+    if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
+      const rawStream = new MediaStream([this.rawAudioTrack]);
+      const denoisedStream = await this.purifyInstance.processStream(rawStream);
+      activeTrack = denoisedStream.getAudioTracks()[0];
+    }
+    
+    this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack });
+    return activeTrack;
+  }
+
+  public async setAINoiseSuppression(enable: boolean) {
+    if (enable && !this.purifyInstance) {
+      // Dynamically import to avoid SSR issues
+      const { Purify } = await import('purify-voice');
+      this.purifyInstance = new Purify();
+      await this.purifyInstance.initialize();
+    }
+    
+    this.isAINoiseSuppressionEnabled = enable;
+    
+    if (this.localAudioProducer && this.rawAudioTrack) {
+      if (enable) {
+        const rawStream = new MediaStream([this.rawAudioTrack]);
+        const denoisedStream = await this.purifyInstance.processStream(rawStream);
+        const newTrack = denoisedStream.getAudioTracks()[0];
+        await this.localAudioProducer.replaceTrack({ track: newTrack });
+      } else {
+        // Revert to original raw track
+        await this.localAudioProducer.replaceTrack({ track: this.rawAudioTrack });
+      }
+    }
   }
 
   public async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<MediaStreamTrack> {
@@ -544,11 +586,20 @@ export class WebRTCClient {
     }
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    const newTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+    let newTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
 
     const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
 
     if (producer) {
+      if (kind === 'audio') {
+        this.rawAudioTrack = newTrack;
+        if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
+          const rawStream = new MediaStream([this.rawAudioTrack]);
+          const denoisedStream = await this.purifyInstance.processStream(rawStream);
+          newTrack = denoisedStream.getAudioTracks()[0];
+        }
+      }
+
       // Replace the track in the Mediasoup producer
       await producer.replaceTrack({ track: newTrack });
       // Stop the old track to release the hardware
