@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, closeProducer } from '../media/sfu';
+import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 
@@ -28,6 +28,7 @@ interface Client {
   roomId: string;
   role: string;
   status: 'waiting' | 'active';
+  transports: string[];
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -127,13 +128,29 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus };
+    const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus, transports: [] };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
       // Register this room to this specific Pod in Redis for NGINX scaling awareness
       redis.set(`room:${roomSlug}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
       redis.expire(`room:${roomSlug}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
+
+      // Setup audio observer for talking indicators
+      setupAudioObserver(roomId, (producerIds) => {
+        // Map producer IDs to user IDs
+        const activeUsers = new Set<string>();
+        const allProducers = roomProducers.get(roomId) || [];
+        for (const pid of producerIds) {
+          const prod = allProducers.find(p => p.producerId === pid);
+          if (prod) activeUsers.add(prod.userId);
+        }
+        
+        broadcastToRoom(roomId, {
+          type: 'active_speaker',
+          userIds: Array.from(activeUsers)
+        });
+      }).catch(e => logger.error('Failed to setup audio observer', e));
     }
 
     // Check if there's an existing client in the room that was already admitted
@@ -252,6 +269,18 @@ export function initializeSignaling(server: Server) {
     ws.on('close', () => {
       logger.info(`User ${userId} disconnected from room ${roomId}. Starting 60s grace period...`);
 
+      // IMMEDAITELY clean up Mediasoup transports for this connection.
+      // If the client reconnects, they will create new WebRTC transports anyway.
+      // This prevents orphaned ports from causing "UDP connection failed" errors.
+      client.transports.forEach(tId => {
+        try {
+          closeTransport(tId);
+        } catch (e) {
+          logger.warn(`Failed to close transport ${tId}`, e);
+        }
+      });
+      client.transports = [];
+
       const timeout = setTimeout(() => {
         logger.info(`User ${userId} grace period expired. Cleaning up session.`);
         const roomClients = rooms.get(roomId);
@@ -260,6 +289,7 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
+            cleanupAudioObserver(roomId); // Clean up talking indicator
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
           } else {
             // Remove their producers from the array
@@ -471,6 +501,7 @@ export function initializeSignaling(server: Server) {
 
       case 'createWebRtcTransport': {
         const transportParams = await createWebRtcTransport(roomId);
+        client.transports.push(transportParams.id);
         client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams, direction: data.direction }));
         break;
       }
@@ -499,7 +530,7 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters);
+        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId);
 
         // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);

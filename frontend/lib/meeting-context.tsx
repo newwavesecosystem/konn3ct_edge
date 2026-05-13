@@ -324,6 +324,13 @@ export function MeetingProvider({
           }
         };
 
+        client.onActiveSpeaker = (userIds) => {
+          setParticipants((prev) => prev.map(p => ({
+            ...p,
+            isSpeaking: userIds.includes(p.id)
+          })));
+        };
+
         client.onWaitingRoomRequest = (msg) => {
           console.log("🔥 Received waiting room request from server:", msg);
           setWaitingUsers(prev => {
