@@ -79,6 +79,8 @@ interface MeetingContextValue {
     audioOutput: string;
   };
   switchDevice: (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => void;
+  isAINoiseSuppressionEnabled: boolean;
+  toggleAINoiseSuppression: (enable: boolean) => Promise<void>;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -143,6 +145,7 @@ export function MeetingProvider({
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
+  const [isAINoiseSuppressionEnabled, setIsAINoiseSuppressionEnabled] = useState(false);
 
   const [devices, setDevices] = useState<{
     audioInputs: MediaDeviceInfo[];
@@ -811,6 +814,24 @@ export function MeetingProvider({
         devices,
         selectedDevices,
         switchDevice,
+        isAINoiseSuppressionEnabled,
+        toggleAINoiseSuppression: async (enable: boolean) => {
+          try {
+            const loadingToast = toast.loading(enable ? "Initializing AI Noise Suppression..." : "Disabling AI Noise Suppression...");
+            await webrtcClient.current?.setAINoiseSuppression(enable);
+            setIsAINoiseSuppressionEnabled(enable);
+            toast.dismiss(loadingToast);
+            if (enable) {
+              toast.success("AI Noise Suppression is active. Background sounds will be muted.");
+            } else {
+              toast.info("Reverted to basic noise suppression.");
+            }
+          } catch (e) {
+            console.error("Failed to toggle AI Noise Suppression", e);
+            toast.error("Failed to apply AI noise suppression.");
+            setIsAINoiseSuppressionEnabled(false);
+          }
+        },
       }}
     >
       {children}

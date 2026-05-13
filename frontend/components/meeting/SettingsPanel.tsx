@@ -16,7 +16,7 @@ import {
 
 export function SettingsPanel() {
   const { theme, setTheme } = useMeetingTheme();
-  const { devices, selectedDevices, switchDevice } = useMeeting();
+  const { devices, selectedDevices, switchDevice, isAINoiseSuppressionEnabled, toggleAINoiseSuppression } = useMeeting();
 
   return (
     <div className="flex flex-col h-full">
@@ -106,7 +106,11 @@ export function SettingsPanel() {
             value="English"
             onChange={() => {}}
           />
-          <SettingsToggle label="Noise suppression" checked={true} />
+          <SettingsToggle 
+            label="AI Noise Suppression (Premium)" 
+            checked={isAINoiseSuppressionEnabled} 
+            onChange={toggleAINoiseSuppression}
+          />
           <SettingsToggle label="Low bandwidth mode" checked={false} />
           <SettingsToggle label="Always mute on join" checked={false} />
         </SettingsGroup>
@@ -249,16 +253,26 @@ function SettingsSelect({
 function SettingsToggle({
   label,
   checked,
+  onChange,
 }: {
   label: string;
   checked: boolean;
+  onChange?: (val: boolean) => void;
 }) {
-  const [isOn, setIsOn] = React.useState(checked);
+  const [isOnLocal, setIsOnLocal] = React.useState(checked);
+  const isOn = onChange ? checked : isOnLocal;
+
+  const handleClick = () => {
+    const newVal = !isOn;
+    if (onChange) onChange(newVal);
+    else setIsOnLocal(newVal);
+  };
+
   return (
     <div className="flex items-center justify-between py-1">
       <span className="text-xs" style={{ color: "var(--mt-text-muted)" }}>{label}</span>
       <button
-        onClick={() => setIsOn(!isOn)}
+        onClick={handleClick}
         className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
           isOn ? "bg-brand-green" : ""
         }`}
