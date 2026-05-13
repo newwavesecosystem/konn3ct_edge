@@ -533,6 +533,31 @@ export class WebRTCClient {
     return audioTrack;
   }
 
+  public async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<MediaStreamTrack> {
+    if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+
+    const constraints: MediaStreamConstraints = {};
+    if (kind === 'audio') {
+      constraints.audio = { deviceId: { exact: deviceId } };
+    } else {
+      constraints.video = { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } };
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const newTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+
+    const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
+
+    if (producer) {
+      // Replace the track in the Mediasoup producer
+      await producer.replaceTrack({ track: newTrack });
+      // Stop the old track to release the hardware
+      producer.track?.stop();
+    }
+
+    return newTrack;
+  }
+
   // --- Media Controls ---
   
   public pauseMic() {

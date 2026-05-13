@@ -30,6 +30,7 @@ import {
   Film,
   X,
   Play,
+  ChevronUp,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -102,6 +103,21 @@ export function MeetingControls() {
           onClick={toggleMute}
           label={isMuted ? "Unmute" : "Mute"}
           icon={isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          chevronNode={
+            <div className="relative">
+              <ChevronUp className="w-3 h-3 text-white/70 hover:text-white" />
+              <select
+                value={useMeeting().selectedDevices.audioInput}
+                onChange={(e) => useMeeting().switchDevice('audioInput', e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                title="Select Microphone"
+              >
+                {useMeeting().devices.audioInputs.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>{d.label || 'Default Mic'}</option>
+                ))}
+              </select>
+            </div>
+          }
         />
         <ControlButton
           active={isCameraOn}
@@ -109,6 +125,21 @@ export function MeetingControls() {
           onClick={toggleCamera}
           label={isCameraOn ? "Camera off" : "Camera on"}
           icon={isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+          chevronNode={
+            <div className="relative">
+              <ChevronUp className="w-3 h-3 text-white/70 hover:text-white" />
+              <select
+                value={useMeeting().selectedDevices.videoInput}
+                onChange={(e) => useMeeting().switchDevice('videoInput', e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                title="Select Camera"
+              >
+                {useMeeting().devices.videoInputs.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>{d.label || 'Default Camera'}</option>
+                ))}
+              </select>
+            </div>
+          }
         />
         <ControlButton
           active={isScreenSharing}
@@ -273,6 +304,7 @@ function ControlButton({
   label,
   icon,
   className,
+  chevronNode,
 }: {
   active?: boolean;
   danger?: boolean;
@@ -281,30 +313,41 @@ function ControlButton({
   label: string;
   icon: React.ReactNode;
   className?: string;
+  chevronNode?: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      title={label}
-      className={cn(
-        "relative flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl transition-all duration-200 active:scale-90",
-        danger
-          ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-          : "",
-        highlight && "ring-2 ring-yellow-400/50",
-        className
-      )}
+    <div className={cn("relative flex items-center rounded-xl transition-all duration-200", className)}
       style={
         !danger
           ? {
             backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+            border: active ? "1px solid var(--mt-border-active)" : "1px solid var(--mt-border)",
             color: active ? "var(--mt-text)" : "var(--mt-text-muted)",
           }
           : undefined
-      }
-    >
-      {icon}
-    </button>
+      }>
+      <button
+        onClick={onClick}
+        title={label}
+        className={cn(
+          "flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-l-xl transition-all duration-200 active:scale-90",
+          danger
+            ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl border border-red-500/30"
+            : "",
+          highlight && "ring-2 ring-yellow-400/50",
+          !chevronNode && "rounded-r-xl" // If no chevron, full rounded
+        )}
+      >
+        {icon}
+      </button>
+
+      {/* Optional Chevron Split Button */}
+      {chevronNode && (
+        <div className="flex items-center justify-center w-4 h-full border-l border-white/10 hover:bg-white/10 rounded-r-xl cursor-pointer">
+          {chevronNode}
+        </div>
+      )}
+    </div>
   );
 }
 

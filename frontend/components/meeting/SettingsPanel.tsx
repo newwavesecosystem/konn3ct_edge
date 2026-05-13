@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
+import { useMeeting } from "@/lib/meeting-context";
 import {
   Speaker,
   Mic,
@@ -15,6 +16,7 @@ import {
 
 export function SettingsPanel() {
   const { theme, setTheme } = useMeetingTheme();
+  const { devices, selectedDevices, switchDevice } = useMeeting();
 
   return (
     <div className="flex flex-col h-full">
@@ -64,12 +66,16 @@ export function SettingsPanel() {
           <SettingsSelect
             icon={<Mic className="w-4 h-4" />}
             label="Microphone"
-            options={["Default - MacBook Pro Microphone", "External USB Mic"]}
+            options={devices.audioInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Microphone' }))}
+            value={selectedDevices.audioInput}
+            onChange={(val) => switchDevice('audioInput', val)}
           />
           <SettingsSelect
             icon={<Speaker className="w-4 h-4" />}
             label="Speaker"
-            options={["Default - MacBook Pro Speakers", "External Speakers"]}
+            options={devices.audioOutputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Speaker' }))}
+            value={selectedDevices.audioOutput}
+            onChange={(val) => switchDevice('audioOutput', val)}
           />
           <SettingsSlider
             icon={<Volume2 className="w-4 h-4" />}
@@ -83,7 +89,9 @@ export function SettingsPanel() {
           <SettingsSelect
             icon={<Video className="w-4 h-4" />}
             label="Camera"
-            options={["Default - FaceTime HD Camera", "External Webcam"]}
+            options={devices.videoInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Camera' }))}
+            value={selectedDevices.videoInput}
+            onChange={(val) => switchDevice('videoInput', val)}
           />
           <SettingsToggle label="HD Video" checked={true} />
           <SettingsToggle label="Mirror my video" checked={true} />
@@ -94,7 +102,9 @@ export function SettingsPanel() {
           <SettingsSelect
             icon={<Globe className="w-4 h-4" />}
             label="Language"
-            options={["English", "French", "Yoruba", "Hausa", "Igbo"]}
+            options={["English", "French", "Yoruba", "Hausa", "Igbo"].map(l => ({ value: l, label: l }))}
+            value="English"
+            onChange={() => {}}
           />
           <SettingsToggle label="Noise suppression" checked={true} />
           <SettingsToggle label="Low bandwidth mode" checked={false} />
@@ -200,10 +210,14 @@ function SettingsSelect({
   icon,
   label,
   options,
+  value,
+  onChange,
 }: {
   icon: React.ReactNode;
   label: string;
-  options: string[];
+  options: { value: string; label: string }[];
+  value?: string;
+  onChange?: (val: string) => void;
 }) {
   return (
     <div>
@@ -212,6 +226,8 @@ function SettingsSelect({
         <span className="text-xs font-medium">{label}</span>
       </div>
       <select
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
         className="w-full rounded-xl px-3 py-2 text-xs outline-none transition-colors appearance-none"
         style={{
           backgroundColor: "var(--mt-bg-input)",
@@ -219,9 +235,10 @@ function SettingsSelect({
           color: "var(--mt-text-secondary)",
         }}
       >
+        {options.length === 0 && <option value="">No devices found</option>}
         {options.map((o) => (
-          <option key={o} value={o} style={{ backgroundColor: "var(--mt-option-bg)" }}>
-            {o}
+          <option key={o.value} value={o.value} style={{ backgroundColor: "var(--mt-option-bg)" }}>
+            {o.label}
           </option>
         ))}
       </select>
