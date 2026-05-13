@@ -66,6 +66,19 @@ interface MeetingContextValue {
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
   setECinemaLink: (link: string | null) => void;
+  
+  // Device Management
+  devices: {
+    audioInputs: MediaDeviceInfo[];
+    videoInputs: MediaDeviceInfo[];
+    audioOutputs: MediaDeviceInfo[];
+  };
+  selectedDevices: {
+    audioInput: string;
+    videoInput: string;
+    audioOutput: string;
+  };
+  switchDevice: (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -131,6 +144,18 @@ export function MeetingProvider({
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
 
+  const [devices, setDevices] = useState<{
+    audioInputs: MediaDeviceInfo[];
+    videoInputs: MediaDeviceInfo[];
+    audioOutputs: MediaDeviceInfo[];
+  }>({ audioInputs: [], videoInputs: [], audioOutputs: [] });
+
+  const [selectedDevices, setSelectedDevices] = useState({
+    audioInput: "default",
+    videoInput: "default",
+    audioOutput: "default",
+  });
+
   // ── WebRTC Instance ──────────────────────────────────
   const webrtcClient = useRef<WebRTCClient | null>(null);
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -168,7 +193,6 @@ export function MeetingProvider({
         // --- Collaboration Event Listeners ---
         client.onServerLoadHigh = () => {
           toast.warning("Server is under heavy load. Optimizing video feeds to maintain stability...");
-          // Method 2: Graceful Quality Degradation (The "Zoom" approach)
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
@@ -177,7 +201,6 @@ export function MeetingProvider({
 
         client.onServerReject = (msg) => {
           toast.error(msg);
-          // Method 3: Hard limit on active cameras - revert the UI if blocked
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
@@ -210,7 +233,6 @@ export function MeetingProvider({
 
         client.onChatMessage = (msg) => {
           setChatMessages((prev) => {
-            // Prevent duplicates if same ID arrives
             if (msg.id && prev.some(m => m.id === msg.id)) return prev;
 
             return [
@@ -218,7 +240,6 @@ export function MeetingProvider({
               {
                 id: msg.id || `m-${Date.now()}-${Math.random()}`,
                 senderId: msg.userId,
-                // Use the name the server sent directly — it is always accurate
                 senderName: msg.userId === currentUser.id
                   ? currentUser.name
                   : msg.name || `Participant ${msg.userId.substring(5, 9)}`,
@@ -237,7 +258,7 @@ export function MeetingProvider({
             id: `r-${Date.now()}-${Math.random()}`,
             emoji: msg.reaction,
             senderId: msg.userId,
-            senderName: msg.name || `Participant`, // server now always sends name
+            senderName: msg.name || `Participant`,
             timestamp: Date.now(),
           };
           setReactions((prev) => [...prev, reaction]);
@@ -297,9 +318,7 @@ export function MeetingProvider({
           ));
         };
 
-        // --- Screen Share State Callbacks ---
         client.onScreenShareStarted = (userId, producerId) => {
-          // A remote peer started sharing — mark them as sharing in the UI
           setParticipants((prev) => prev.map(p =>
             p.id === userId ? { ...p, isScreenSharing: true } : p
           ));
@@ -307,7 +326,6 @@ export function MeetingProvider({
         };
 
         client.onScreenShareStopped = (userId, producerId) => {
-          // A remote peer stopped sharing — clear screen track and state
           setParticipants((prev) => prev.map(p =>
             p.id === userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
           ));
@@ -315,8 +333,6 @@ export function MeetingProvider({
         };
 
         client.onConsumerClosed = (producerId, appData) => {
-          // The Mediasoup consumer was closed by the server (producer died)
-          // Clear the matching screenTrack from all participants
           if (appData?.source === 'screen') {
             setParticipants((prev) => prev.map(p =>
               p.isScreenSharing ? { ...p, isScreenSharing: false, screenTrack: null } : p
@@ -332,7 +348,6 @@ export function MeetingProvider({
         };
 
         client.onWaitingRoomRequest = (msg) => {
-          console.log("🔥 Received waiting room request from server:", msg);
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
             toast(`${msg.name} is waiting to join`, {
@@ -351,7 +366,6 @@ export function MeetingProvider({
           }
         };
 
-        // --- Participant Management Callbacks ---
         client.onParticipantsList = (backendParticipants) => {
           setParticipants((prev) => {
             const newParticipants = [...prev];
@@ -402,7 +416,6 @@ export function MeetingProvider({
           });
         };
 
-        // Bind onNewConsumer BEFORE connect() to prevent missing initial producers
         client.onNewConsumer = (consumer, userId) => {
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
@@ -415,18 +428,15 @@ export function MeetingProvider({
                     return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
                   }
                   if (consumer.kind === 'video' && source === 'screen') {
-                    // Screen share producer — render in dedicated overlay, camera stays in tile
                     return { ...p, screenTrack: consumer.track as MediaStreamTrack, isScreenSharing: true };
                   }
                   if (consumer.kind === 'video') {
-                    // Camera producer
                     return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
                   }
                 }
                 return p;
               });
             } else {
-              // Add new participant dynamically!
               const newParticipant: Participant = {
                 id: userId,
                 name: `Participant ${userId.substring(5, 9)}`,
@@ -497,6 +507,60 @@ export function MeetingProvider({
     }
   }, [webrtcStatus, currentUser.id]);
 
+  // ── Device Management ────────────────────────────────
+  const fetchDevices = async () => {
+    try {
+      // Must request permission first, otherwise device labels are empty
+      await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => {});
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      
+      setDevices({
+        audioInputs: allDevices.filter((d) => d.kind === "audioinput"),
+        videoInputs: allDevices.filter((d) => d.kind === "videoinput"),
+        audioOutputs: allDevices.filter((d) => d.kind === "audiooutput"),
+      });
+    } catch (e) {
+      console.error("Failed to enumerate devices", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchDevices();
+
+    // Re-fetch when devices are plugged/unplugged
+    navigator.mediaDevices.addEventListener("devicechange", fetchDevices);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", fetchDevices);
+    };
+  }, []);
+
+  const switchDevice = useCallback(async (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => {
+    setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
+
+    if (kind === 'audioOutput') {
+      return;
+    }
+
+    const type = kind === 'audioInput' ? 'audio' : 'video';
+    try {
+      const newTrack = await webrtcClient.current?.switchDevice(type, deviceId);
+      
+      if (newTrack) {
+        if (type === 'audio') {
+          localAudioTrackRef.current = newTrack;
+        } else {
+          localCameraTrackRef.current = newTrack;
+          setParticipants(prev => prev.map(p => 
+            p.id === currentUser.id ? { ...p, videoTrack: newTrack } : p
+          ));
+        }
+      }
+    } catch (e) {
+      console.error(`Failed to switch ${type} device`, e);
+      toast.error(`Could not switch ${type} device`);
+    }
+  }, [currentUser.id]);
+
   // ── Timer ────────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
@@ -533,7 +597,6 @@ export function MeetingProvider({
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const average = sum / bufferLength;
 
-      // If volume is above threshold while muted
       if (average > 15 && Date.now() - lastAlertTime > 5000) {
         toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
         try {
@@ -587,7 +650,6 @@ export function MeetingProvider({
           setParticipants(prev => prev.map(p =>
             p.id === currentUser.id ? { ...p, isScreenSharing: true, screenTrack } : p
           ));
-          // Listen for native browser "Stop sharing" button
           screenTrack.onended = async () => {
             await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
@@ -746,6 +808,9 @@ export function MeetingProvider({
         denyUser,
         eCinemaLink,
         setECinemaLink,
+        devices,
+        selectedDevices,
+        switchDevice,
       }}
     >
       {children}
