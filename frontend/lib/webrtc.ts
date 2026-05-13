@@ -47,6 +47,8 @@ export class WebRTCClient {
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
+  // Talking indicator
+  public onActiveSpeaker?: (userIds: string[]) => void;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -186,6 +188,9 @@ export class WebRTCClient {
             }
           });
           this.onConsumerClosed?.(msg.producerId, msg.appData || {});
+          break;
+        case 'active_speaker':
+          this.onActiveSpeaker?.(msg.userIds);
           break;
         case 'server_load_high':
           this.onServerLoadHigh?.();
