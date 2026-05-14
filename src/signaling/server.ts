@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver } from '../media/sfu';
+import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -629,6 +629,12 @@ export function initializeSignaling(server: Server) {
       case 'resume': {
         await resumeConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
+        break;
+      }
+
+      case 'pause_consumer': {
+        await pauseConsumer(data.consumerId);
+        client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
         break;
       }
 

@@ -276,3 +276,10 @@ export function closeTransport(transportId: string) {
     transports.delete(transportId);
   }
 }
+
+export async function pauseConsumer(consumerId: string) {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.paused) {
+    await consumer.pause();
+  }
+}
