@@ -81,6 +81,16 @@ interface MeetingContextValue {
   switchDevice: (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => void;
   isAINoiseSuppressionEnabled: boolean;
   toggleAINoiseSuppression: (enable: boolean) => Promise<void>;
+  
+  // Settings
+  isHDVideoEnabled: boolean;
+  setIsHDVideoEnabled: (enabled: boolean) => void;
+  isMirrorVideoEnabled: boolean;
+  setIsMirrorVideoEnabled: (enabled: boolean) => void;
+  isLowBandwidthEnabled: boolean;
+  setIsLowBandwidthEnabled: (enabled: boolean) => void;
+  isAlwaysMuteOnJoin: boolean;
+  setIsAlwaysMuteOnJoin: (enabled: boolean) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -146,6 +156,73 @@ export function MeetingProvider({
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
   const [isAINoiseSuppressionEnabled, setIsAINoiseSuppressionEnabled] = useState(false);
+  
+  // Settings State
+  const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
+  const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
+  const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
+  const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
+
+  // Load preferences from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hd = localStorage.getItem("mtg_hdVideo");
+      if (hd !== null) setIsHDVideoEnabled(hd === "true");
+
+      const mirror = localStorage.getItem("mtg_mirrorVideo");
+      if (mirror !== null) setIsMirrorVideoEnabled(mirror === "true");
+
+      const lowBw = localStorage.getItem("mtg_lowBandwidth");
+      if (lowBw !== null) setIsLowBandwidthEnabled(lowBw === "true");
+
+      const alwaysMute = localStorage.getItem("mtg_alwaysMute");
+      if (alwaysMute !== null) {
+        const muteOn = alwaysMute === "true";
+        setIsAlwaysMuteOnJoin(muteOn);
+        if (muteOn) {
+          setIsMuted(true);
+          setParticipants((prev) =>
+            prev.map((p) =>
+              p.id === currentUser.id ? { ...p, isMuted: true } : p
+            )
+          );
+        }
+      }
+    }
+  }, [currentUser.id]);
+
+  // Wrappers to persist settings
+  const updateHDVideo = (val: boolean) => {
+    setIsHDVideoEnabled(val);
+    localStorage.setItem("mtg_hdVideo", String(val));
+    // Apply immediately to WebRTC if connected
+    if (webrtcClient.current && webrtcClient.current.isHDVideo !== val) {
+      webrtcClient.current.isHDVideo = val;
+      // Restart camera with new resolution if active
+      if (isCameraOn) {
+        webrtcClient.current.enableCamera().then(track => {
+          localCameraTrackRef.current = track;
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: track } : p));
+        });
+      }
+    }
+  };
+
+  const updateMirrorVideo = (val: boolean) => {
+    setIsMirrorVideoEnabled(val);
+    localStorage.setItem("mtg_mirrorVideo", String(val));
+  };
+
+  const updateLowBandwidth = (val: boolean) => {
+    setIsLowBandwidthEnabled(val);
+    localStorage.setItem("mtg_lowBandwidth", String(val));
+    toast.info(val ? "Low bandwidth mode active. Optimizing feeds..." : "Low bandwidth mode disabled.");
+  };
+
+  const updateAlwaysMute = (val: boolean) => {
+    setIsAlwaysMuteOnJoin(val);
+    localStorage.setItem("mtg_alwaysMute", String(val));
+  };
 
   const [devices, setDevices] = useState<{
     audioInputs: MediaDeviceInfo[];
@@ -209,6 +286,20 @@ export function MeetingProvider({
             setIsCameraOn(false);
           }
         };
+        let lastNetworkToastTime = 0;
+        client.onNetworkQualityChange = (quality) => {
+          const now = Date.now();
+          if (now - lastNetworkToastTime > 30000) {
+            if (quality === 'bad') {
+              toast.error("Your network connection is very unstable. You may experience audio/video dropouts. Consider enabling Low Bandwidth mode.", { duration: 5000 });
+              lastNetworkToastTime = now;
+            } else if (quality === 'poor') {
+              toast.warning("Network connection is weak. Media quality might be degraded.");
+              lastNetworkToastTime = now;
+            }
+          }
+        };
+
         client.onChatHistory = (messages) => {
           setChatMessages(messages.map((m: any) => ({
             id: m.id,
@@ -842,6 +933,14 @@ export function MeetingProvider({
             setIsAINoiseSuppressionEnabled(false);
           }
         },
+        isHDVideoEnabled,
+        setIsHDVideoEnabled: updateHDVideo,
+        isMirrorVideoEnabled,
+        setIsMirrorVideoEnabled: updateMirrorVideo,
+        isLowBandwidthEnabled,
+        setIsLowBandwidthEnabled: updateLowBandwidth,
+        isAlwaysMuteOnJoin,
+        setIsAlwaysMuteOnJoin: updateAlwaysMute,
       }}
     >
       {children}

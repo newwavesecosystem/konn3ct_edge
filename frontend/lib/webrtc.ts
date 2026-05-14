@@ -55,6 +55,13 @@ export class WebRTCClient {
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[]) => void;
 
+  // Network monitoring
+  public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
+  private networkInterval?: NodeJS.Timeout;
+
+  // Settings
+  public isHDVideo: boolean = true;
+
   constructor(private roomId: string, private token: string) {}
 
   public async connect() {
@@ -423,6 +430,44 @@ export class WebRTCClient {
         console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue)');
       }
     });
+
+    this.startNetworkMonitor();
+  }
+
+  private startNetworkMonitor() {
+    if (this.networkInterval) clearInterval(this.networkInterval);
+    
+    this.networkInterval = setInterval(async () => {
+      if (!this.sendTransport) return;
+      try {
+        const stats = await this.sendTransport.getStats();
+        let maxRtt = 0;
+        let maxPacketLoss = 0;
+
+        stats.forEach((stat: any) => {
+          if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
+            const rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : 0;
+            if (rtt > maxRtt) maxRtt = rtt;
+          }
+          if (stat.type === 'remote-inbound-rtp') {
+            const rtt = stat.roundTripTime ? stat.roundTripTime * 1000 : 0;
+            if (rtt > maxRtt) maxRtt = rtt;
+            const loss = stat.fractionLost ? stat.fractionLost * 100 : 0;
+            if (loss > maxPacketLoss) maxPacketLoss = loss;
+          }
+        });
+
+        if (maxRtt > 500 || maxPacketLoss > 10) {
+          this.onNetworkQualityChange?.('bad');
+        } else if (maxRtt > 250 || maxPacketLoss > 5) {
+          this.onNetworkQualityChange?.('poor');
+        } else {
+          this.onNetworkQualityChange?.('good');
+        }
+      } catch (e) {
+        // Ignore stats errors
+      }
+    }, 5000);
   }
 
   private async republishMedia() {
@@ -511,7 +556,10 @@ export class WebRTCClient {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
     const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } } 
+      video: { 
+        width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
+        height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
+      } 
     });
     const videoTrack = stream.getVideoTracks()[0];
     
@@ -606,7 +654,11 @@ export class WebRTCClient {
     if (kind === 'audio') {
       constraints.audio = { deviceId: { exact: deviceId } };
     } else {
-      constraints.video = { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } };
+      constraints.video = { 
+        deviceId: { exact: deviceId }, 
+        width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
+        height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
+      };
     }
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -747,6 +799,7 @@ export class WebRTCClient {
   public disconnect() {
     console.log('[WebRTC] Disconnecting gracefully...');
     this.isIntentionalDisconnect = true;
+    if (this.networkInterval) clearInterval(this.networkInterval);
     this.ws?.close();
     
     // Clear all pending requests and timeouts
