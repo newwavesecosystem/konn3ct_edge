@@ -7,6 +7,7 @@ import { db } from '../db';
 import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
+import crypto from 'crypto';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl, {
@@ -502,7 +503,34 @@ export function initializeSignaling(server: Server) {
       case 'createWebRtcTransport': {
         const transportParams = await createWebRtcTransport(roomId);
         client.transports.push(transportParams.id);
-        client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams, direction: data.direction }));
+
+        // Generate temporary TURN credentials for this client
+        const turnSecret = process.env.TURN_SECRET || 'my-super-strong-conn3ct-secret-123';
+        const turnDomain = process.env.TURN_DOMAIN || 'turnedge.konn3ct.net';
+        
+        // Credentials valid for 24 hours
+        const unixTime = Math.floor(Date.now() / 1000) + 86400; 
+        const username = `${unixTime}:${client.userId}`;
+        const password = crypto.createHmac('sha1', turnSecret).update(username).digest('base64');
+        
+        const iceServers = [
+          {
+            urls: [
+              `turn:${turnDomain}:443`,
+              `turn:${turnDomain}:3478`
+            ],
+            username,
+            credential: password
+          }
+        ];
+
+        // Attach iceServers into the transportParams
+        const fullTransportParams = {
+          ...transportParams,
+          iceServers
+        };
+
+        client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams: fullTransportParams, direction: data.direction }));
         break;
       }
 
