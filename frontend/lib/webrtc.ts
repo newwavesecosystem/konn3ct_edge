@@ -58,6 +58,7 @@ export class WebRTCClient {
   // Network monitoring
   public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
   private networkInterval?: NodeJS.Timeout;
+  public isAudioOnlyMode = false;
 
   // Settings
   public isHDVideo: boolean = true;
@@ -788,12 +789,41 @@ export class WebRTCClient {
     this.onNewConsumer?.(consumer, userId);
     
     // Tell the backend to resume sending media (unpause the consumer)
-    console.log(`[WebRTC] Resuming consumer ${id} on server...`);
-    this.request('resume', 'resumed', { consumerId: consumer.id }).then(() => {
-      console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
-    }).catch(err => {
-      console.error(`[WebRTC] Failed to resume consumer ${id}:`, err);
-    });
+    if (this.isAudioOnlyMode && consumerKind === 'video') {
+      console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
+    } else {
+      console.log(`[WebRTC] Resuming consumer ${id} on server...`);
+      this.request('resume', 'resumed', { consumerId: consumer.id }).then(() => {
+        console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
+      }).catch(err => {
+        console.error(`[WebRTC] Failed to resume consumer ${id}:`, err);
+      });
+    }
+  }
+
+  public enableAudioOnlyMode() {
+    this.isAudioOnlyMode = true;
+    this.pauseCamera();
+    
+    // Pause all existing video consumers locally and on server
+    for (const [id, consumer] of this.consumers.entries()) {
+      if (consumer.kind === 'video') {
+        this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
+        consumer.pause();
+      }
+    }
+  }
+
+  public disableAudioOnlyMode() {
+    this.isAudioOnlyMode = false;
+    
+    // Resume all existing video consumers
+    for (const [id, consumer] of this.consumers.entries()) {
+      if (consumer.kind === 'video') {
+        this.request('resume', 'resumed', { consumerId: id }).catch(console.error);
+        consumer.resume();
+      }
+    }
   }
 
   public disconnect() {

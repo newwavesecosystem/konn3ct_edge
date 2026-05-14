@@ -290,12 +290,40 @@ export function MeetingProvider({
         client.onNetworkQualityChange = (quality) => {
           const now = Date.now();
           if (now - lastNetworkToastTime > 30000) {
+            // Play Warning Sound
+            try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'triangle';
+              oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+              oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
+              oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
+              gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+              oscillator.start(audioCtx.currentTime);
+              oscillator.stop(audioCtx.currentTime + 0.5);
+            } catch(e) {}
+
             if (quality === 'bad') {
-              toast.error("Your network connection is very unstable. You may experience audio/video dropouts. Consider enabling Low Bandwidth mode.", { duration: 5000 });
+              if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
+                toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
+                webrtcClient.current.enableAudioOnlyMode();
+                webrtcClient.current.sendCameraState(false);
+                setIsCameraOn(false);
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false } : p));
+              }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
               toast.warning("Network connection is weak. Media quality might be degraded.");
               lastNetworkToastTime = now;
+            } else if (quality === 'good') {
+              if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
+                toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
+                webrtcClient.current.disableAudioOnlyMode();
+              }
             }
           }
         };
@@ -611,15 +639,14 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
-          const videoTrack = await client.enableCamera();
-          localCameraTrackRef.current = videoTrack;
+          // DO NOT auto-enable camera on join
           const audioTrack = await client.enableMic();
           localAudioTrackRef.current = audioTrack;
 
           setParticipants((prev) =>
             prev.map((p) => {
               if (p.id === currentUser.id) {
-                return { ...p, videoTrack, audioTrack, isCameraOn: true, isMuted: false };
+                return { ...p, audioTrack, isCameraOn: false, isMuted: false };
               }
               return p;
             })
