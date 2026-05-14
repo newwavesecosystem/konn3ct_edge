@@ -247,6 +247,14 @@ export function ParticipantTile({
         </div>
       )}
 
+      {/* Connecting Overlay */}
+      {participant.isConnecting && (
+        <div className="absolute inset-0 z-30 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
+          <div className="w-5 h-5 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
+          <span className="text-white text-[11px] font-medium tracking-wide animate-pulse">Connecting...</span>
+        </div>
+      )}
+
       {/* Hand raised indicator */}
       {participant.isHandRaised && (
         <div className="absolute top-3 right-3 z-10">

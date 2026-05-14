@@ -20,6 +20,7 @@ export interface Participant {
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
+  isConnecting?: boolean;
 }
 
 export interface ChatMessage {
