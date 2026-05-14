@@ -31,7 +31,7 @@ export function ParticipantTile({
   isLarge = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser } = useMeeting();
+  const { currentUser, selectedDevices, isMirrorVideoEnabled } = useMeeting();
 
   const initials = participant.name
     .split(" ")
@@ -82,19 +82,42 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
+    if (sinkId && typeof (el as any).setSinkId === "function") {
+      try {
+        await (el as any).setSinkId(sinkId);
+      } catch (e) {
+        console.warn("Failed to set audio output device:", e);
+      }
+    }
+  };
+
   const setAudioRef = React.useCallback(
     (el: HTMLAudioElement | null) => {
+      audioRef.current = el;
       if (el && participant.audioTrack) {
         if (el.srcObject) {
           const stream = el.srcObject as MediaStream;
-          if (stream.getAudioTracks()[0] === participant.audioTrack) return;
+          if (stream.getAudioTracks()[0] === participant.audioTrack) {
+            applyAudioSink(el, selectedDevices.audioOutput);
+            return;
+          }
         }
         el.srcObject = new MediaStream([participant.audioTrack]);
+        applyAudioSink(el, selectedDevices.audioOutput);
         el.play().catch((e) => console.warn("Audio play failed:", e));
       }
     },
-    [participant.audioTrack]
+    [participant.audioTrack, selectedDevices.audioOutput]
   );
+
+  React.useEffect(() => {
+    if (audioRef.current && selectedDevices.audioOutput) {
+      applyAudioSink(audioRef.current, selectedDevices.audioOutput);
+    }
+  }, [selectedDevices.audioOutput]);
 
   return (
     <div
@@ -168,7 +191,7 @@ export function ParticipantTile({
               className="w-full h-full object-cover"
               style={{
                 transform:
-                  participant.id === currentUser.id ? "scaleX(-1)" : "none",
+                  participant.id === currentUser.id && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
               }}
             />
           ) : (

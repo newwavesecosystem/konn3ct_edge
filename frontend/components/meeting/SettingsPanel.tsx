@@ -16,7 +16,21 @@ import {
 
 export function SettingsPanel() {
   const { theme, setTheme } = useMeetingTheme();
-  const { devices, selectedDevices, switchDevice, isAINoiseSuppressionEnabled, toggleAINoiseSuppression } = useMeeting();
+  const { 
+    devices, 
+    selectedDevices, 
+    switchDevice, 
+    isAINoiseSuppressionEnabled, 
+    toggleAINoiseSuppression,
+    isHDVideoEnabled,
+    setIsHDVideoEnabled,
+    isMirrorVideoEnabled,
+    setIsMirrorVideoEnabled,
+    isLowBandwidthEnabled,
+    setIsLowBandwidthEnabled,
+    isAlwaysMuteOnJoin,
+    setIsAlwaysMuteOnJoin
+  } = useMeeting();
 
   return (
     <div className="flex flex-col h-full">
@@ -93,8 +107,16 @@ export function SettingsPanel() {
             value={selectedDevices.videoInput}
             onChange={(val) => switchDevice('videoInput', val)}
           />
-          <SettingsToggle label="HD Video" checked={true} />
-          <SettingsToggle label="Mirror my video" checked={true} />
+          <SettingsToggle 
+            label="HD Video" 
+            checked={isHDVideoEnabled} 
+            onChange={setIsHDVideoEnabled}
+          />
+          <SettingsToggle 
+            label="Mirror my video" 
+            checked={isMirrorVideoEnabled} 
+            onChange={setIsMirrorVideoEnabled}
+          />
         </SettingsGroup>
 
         {/* General */}
@@ -111,8 +133,16 @@ export function SettingsPanel() {
             checked={isAINoiseSuppressionEnabled} 
             onChange={toggleAINoiseSuppression}
           />
-          <SettingsToggle label="Low bandwidth mode" checked={false} />
-          <SettingsToggle label="Always mute on join" checked={false} />
+          <SettingsToggle 
+            label="Low bandwidth mode" 
+            checked={isLowBandwidthEnabled} 
+            onChange={setIsLowBandwidthEnabled}
+          />
+          <SettingsToggle 
+            label="Always mute on join" 
+            checked={isAlwaysMuteOnJoin} 
+            onChange={setIsAlwaysMuteOnJoin}
+          />
         </SettingsGroup>
       </div>
     </div>
