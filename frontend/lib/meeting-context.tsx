@@ -444,6 +444,28 @@ export function MeetingProvider({
         client.onWaitingRoomRequest = (msg) => {
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
+
+            // Play Doorbell Sound (Ding-Dong)
+            try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'sine';
+              // Ding
+              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+              // Dong
+              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+              // Fade out smoothly to avoid popping
+              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+              oscillator.start(audioCtx.currentTime);
+              oscillator.stop(audioCtx.currentTime + 0.6);
+            } catch(e) {
+              console.warn("Failed to play doorbell sound", e);
+            }
+
             toast(`${msg.name} is waiting to join`, {
               action: {
                 label: 'Admit',
@@ -475,7 +497,11 @@ export function MeetingProvider({
                   isHandRaised: false,
                   isSpeaking: false,
                   joinedAt: new Date().toISOString(),
+                  isConnecting: true,
                 });
+                setTimeout(() => {
+                  setParticipants(curr => curr.map(u => u.id === p.userId ? { ...u, isConnecting: false } : u));
+                }, 4000);
               }
             }
             return newParticipants;
@@ -495,8 +521,14 @@ export function MeetingProvider({
               isHandRaised: false,
               isSpeaking: false,
               joinedAt: new Date().toISOString(),
+              isConnecting: true,
             }];
           });
+          
+          setTimeout(() => {
+            setParticipants(curr => curr.map(p => p.id === user.userId ? { ...p, isConnecting: false } : p));
+          }, 4000);
+
           toast.info(`${user.name} joined the meeting`);
         };
 
