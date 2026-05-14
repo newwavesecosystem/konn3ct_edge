@@ -98,6 +98,10 @@ spec:
               value: "85"
             - name: MAX_ACTIVE_CAMERAS
               value: "15"
+            - name: TURN_DOMAIN
+              value: "turnedge.konn3ct.net"
+            - name: TURN_SECRET
+              value: "my-super-strong-conn3ct-secret-123"
           resources:
             requests:
               cpu: "2000m"

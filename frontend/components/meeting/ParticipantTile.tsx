@@ -43,13 +43,19 @@ export function ParticipantTile({
   // Camera video ref
   const setVideoRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
-      if (el && participant.videoTrack) {
-        if (el.srcObject) {
-          const stream = el.srcObject as MediaStream;
-          if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+      if (el) {
+        if (participant.videoTrack) {
+          if (el.srcObject) {
+            const stream = el.srcObject as MediaStream;
+            if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+          }
+          el.srcObject = new MediaStream([participant.videoTrack]);
+          el.play().catch((e) => {
+            if (e.name !== 'AbortError') console.warn("Video play failed:", e);
+          });
+        } else {
+          el.srcObject = null;
         }
-        el.srcObject = new MediaStream([participant.videoTrack]);
-        el.play().catch((e) => console.warn("Video play failed:", e));
       }
     },
     [participant.videoTrack]
@@ -58,13 +64,19 @@ export function ParticipantTile({
   // Dedicated screen share ref — completely independent from camera
   const setScreenRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
-      if (el && participant.screenTrack) {
-        if (el.srcObject) {
-          const stream = el.srcObject as MediaStream;
-          if (stream.getVideoTracks()[0] === participant.screenTrack) return;
+      if (el) {
+        if (participant.screenTrack) {
+          if (el.srcObject) {
+            const stream = el.srcObject as MediaStream;
+            if (stream.getVideoTracks()[0] === participant.screenTrack) return;
+          }
+          el.srcObject = new MediaStream([participant.screenTrack]);
+          el.play().catch((e) => {
+            if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
+          });
+        } else {
+          el.srcObject = null;
         }
-        el.srcObject = new MediaStream([participant.screenTrack]);
-        el.play().catch((e) => console.warn("Screen share play failed:", e));
       }
     },
     [participant.screenTrack]
