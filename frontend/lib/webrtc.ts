@@ -62,6 +62,7 @@ export class WebRTCClient {
 
   // Settings
   public isHDVideo: boolean = true;
+  public isLowBandwidth: boolean = false;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -556,6 +557,18 @@ export class WebRTCClient {
   public async enableCamera(): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
+    // Cleanup existing camera producer if replacing
+    if (this.localVideoProducer) {
+      this.localVideoProducer.close();
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId: this.localVideoProducer.id,
+          appData: { source: 'camera' }
+        }));
+      }
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({ 
       video: { 
         width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
@@ -564,15 +577,22 @@ export class WebRTCClient {
     });
     const videoTrack = stream.getVideoTracks()[0];
     
+    const encodings = this.isLowBandwidth ? [
+      // Aggressively limit resolution and bitrate for bad networks
+      { scaleResolutionDownBy: 2, maxBitrate: 50000 },
+      { scaleResolutionDownBy: 1, maxBitrate: 150000 }
+    ] : [
+      // Standard HQ simulcast
+      { scaleResolutionDownBy: 4, maxBitrate: 100000 },
+      { scaleResolutionDownBy: 2, maxBitrate: 300000 },
+      { scaleResolutionDownBy: 1, maxBitrate: 900000 },
+    ];
+
     this.localVideoProducer = await this.sendTransport.produce({ 
       track: videoTrack,
       appData: { source: 'camera' }, // Tag so remote peers know this is a camera feed
-      encodings: [
-        { scaleResolutionDownBy: 4, maxBitrate: 100000 },
-        { scaleResolutionDownBy: 2, maxBitrate: 300000 },
-        { scaleResolutionDownBy: 1, maxBitrate: 900000 },
-      ],
-      codecOptions: { videoGoogleStartBitrate: 1000 }
+      encodings,
+      codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
     });
     return videoTrack;
   }

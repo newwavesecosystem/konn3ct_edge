@@ -217,6 +217,16 @@ export function MeetingProvider({
     setIsLowBandwidthEnabled(val);
     localStorage.setItem("mtg_lowBandwidth", String(val));
     toast.info(val ? "Low bandwidth mode active. Optimizing feeds..." : "Low bandwidth mode disabled.");
+
+    if (webrtcClient.current && webrtcClient.current.isLowBandwidth !== val) {
+      webrtcClient.current.isLowBandwidth = val;
+      if (isCameraOn) {
+        webrtcClient.current.enableCamera().then(track => {
+          localCameraTrackRef.current = track;
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: track } : p));
+        });
+      }
+    }
   };
 
   const updateAlwaysMute = (val: boolean) => {
@@ -269,6 +279,8 @@ export function MeetingProvider({
         }
 
         client = new WebRTCClient(roomSlug, data.token);
+        client.isHDVideo = isHDVideoEnabled;
+        client.isLowBandwidth = isLowBandwidthEnabled;
 
         // --- Collaboration Event Listeners ---
         client.onServerLoadHigh = () => {
