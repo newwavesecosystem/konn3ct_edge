@@ -533,7 +533,7 @@ export class WebRTCClient {
     
     const stream = await navigator.mediaDevices.getUserMedia({ 
       audio: { 
-        noiseSuppression: true, // Always keep native on as baseline
+        noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
         echoCancellation: true 
       } 
     });
@@ -548,7 +548,12 @@ export class WebRTCClient {
       activeTrack = denoisedStream.getAudioTracks()[0];
     }
     
-    this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack });
+    // Only produce if we haven't already produced, otherwise replace track
+    if (!this.localAudioProducer) {
+      this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack });
+    } else {
+      await this.localAudioProducer.replaceTrack({ track: activeTrack });
+    }
     return activeTrack;
   }
 
@@ -562,17 +567,36 @@ export class WebRTCClient {
     
     this.isAINoiseSuppressionEnabled = enable;
     
-    if (this.localAudioProducer && this.rawAudioTrack) {
+    if (this.localAudioProducer) {
+      // Clean up old tracks
+      if (this.localAudioProducer.track) {
+        this.localAudioProducer.track.stop();
+      }
+      if (this.rawAudioTrack) {
+        this.rawAudioTrack.stop();
+      }
+
+      // Re-acquire fresh microphone with correct constraints
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          noiseSuppression: !enable, // Turn off native if AI is active
+          echoCancellation: true 
+        } 
+      });
+      
+      this.rawAudioTrack = stream.getAudioTracks()[0];
+      let activeTrack = this.rawAudioTrack;
+
       if (enable) {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
-        const newTrack = denoisedStream.getAudioTracks()[0];
-        await this.localAudioProducer.replaceTrack({ track: newTrack });
-      } else {
-        // Revert to original raw track
-        await this.localAudioProducer.replaceTrack({ track: this.rawAudioTrack });
+        activeTrack = denoisedStream.getAudioTracks()[0];
       }
+
+      await this.localAudioProducer.replaceTrack({ track: activeTrack });
+      return activeTrack;
     }
+    return undefined;
   }
 
   public async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<MediaStreamTrack> {

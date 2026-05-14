@@ -818,7 +818,17 @@ export function MeetingProvider({
         toggleAINoiseSuppression: async (enable: boolean) => {
           try {
             const loadingToast = toast.loading(enable ? "Initializing AI Noise Suppression..." : "Disabling AI Noise Suppression...");
-            await webrtcClient.current?.setAINoiseSuppression(enable);
+            const newTrack = await webrtcClient.current?.setAINoiseSuppression(enable);
+            
+            if (newTrack) {
+              localAudioTrackRef.current = newTrack;
+              setParticipants((prev) =>
+                prev.map((p) =>
+                  p.id === currentUser.id ? { ...p, audioTrack: newTrack } : p
+                )
+              );
+            }
+
             setIsAINoiseSuppressionEnabled(enable);
             toast.dismiss(loadingToast);
             if (enable) {
