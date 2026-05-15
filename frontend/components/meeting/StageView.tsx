@@ -135,6 +135,19 @@ function ScreenShareLayout({
   const isMe =
     isCurrentUserSharing || screenSharer?.id === currentUserId;
 
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  React.useEffect(() => {
+    if (videoRef.current && screenSharer?.screenTrack) {
+      if (videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (stream.getVideoTracks()[0] === screenSharer.screenTrack) return;
+      }
+      videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
+      videoRef.current.play().catch((e) => console.warn("Screen share play failed:", e));
+    }
+  }, [screenSharer?.screenTrack]);
+
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
       {/* ── Shared screen area ──────────────────────── */}
@@ -194,57 +207,46 @@ function ScreenShareLayout({
             </div>
           </div>
 
-          {/* Screen content mock */}
+          {/* Screen content */}
           <div
-            className="flex-1 flex items-center justify-center"
-            style={{
-              background: `linear-gradient(to bottom right, var(--mt-bg-screen-grad1), var(--mt-bg-screen), var(--mt-bg-screen-grad2))`,
-            }}
+            className="flex-1 relative flex items-center justify-center overflow-hidden"
+            style={{ backgroundColor: "var(--mt-bg-screen)" }}
           >
-            <div className="flex flex-col items-center gap-3 sm:gap-4 text-center px-4 sm:px-6 max-w-lg">
-              {/* Mock presentation / desktop */}
-              <div
-                className="w-full max-w-md aspect-[16/10] rounded-xl p-4 sm:p-6 flex flex-col gap-2 sm:gap-3 shadow-2xl"
-                style={{
-                  backgroundColor: "var(--mt-bg-screen-content)",
-                  border: "1px solid var(--mt-border)",
-                }}
-              >
-                {/* Mock title bar */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-red-400/60" />
-                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-yellow-400/60" />
-                  <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-400/60" />
-                  <div
-                    className="ml-2 sm:ml-3 h-3 sm:h-4 w-24 sm:w-40 rounded"
-                    style={{ backgroundColor: "var(--mt-bg-control)" }}
-                  />
-                </div>
-                {/* Mock content lines */}
-                <div className="flex-1 flex flex-col gap-1.5 sm:gap-2 pt-1 sm:pt-2">
-                  <div className="h-4 sm:h-5 w-3/4 rounded" style={{ backgroundColor: "var(--mt-text-whisper)" }} />
-                  <div className="h-2.5 sm:h-3 w-full rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                  <div className="h-2.5 sm:h-3 w-5/6 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                  <div className="h-2.5 sm:h-3 w-2/3 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                  <div className="mt-2 sm:mt-3 flex gap-1.5 sm:gap-2">
-                    <div className="h-10 sm:h-16 flex-1 rounded-lg bg-blue-500/10 border border-blue-500/10" />
-                    <div className="h-10 sm:h-16 flex-1 rounded-lg bg-green-500/10 border border-green-500/10" />
-                    <div className="h-10 sm:h-16 flex-1 rounded-lg bg-purple-500/10 border border-purple-500/10" />
+            {isMe ? (
+              // Show mock UI for the person sharing (to avoid infinity mirror effect)
+              <div className="flex flex-col items-center gap-3 sm:gap-4 text-center px-4 sm:px-6 max-w-lg">
+                <div
+                  className="w-full max-w-md aspect-[16/10] rounded-xl p-4 sm:p-6 flex flex-col gap-2 sm:gap-3 shadow-2xl"
+                  style={{ backgroundColor: "var(--mt-bg-screen-content)", border: "1px solid var(--mt-border)" }}
+                >
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                    <div className="ml-3 h-4 w-40 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
                   </div>
-                  <div className="h-2.5 sm:h-3 w-1/2 rounded mt-1 sm:mt-2" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                  <div className="h-2.5 sm:h-3 w-3/4 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  <div className="flex-1 flex flex-col gap-2 pt-2">
+                    <div className="h-5 w-3/4 rounded" style={{ backgroundColor: "var(--mt-text-whisper)" }} />
+                    <div className="h-3 w-full rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                    <div className="h-3 w-5/6 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                    <div className="h-3 w-2/3 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2" style={{ color: "var(--mt-text-ghost)" }}>
+                  <MousePointerClick className="w-4 h-4" />
+                  <span className="text-xs">Your screen is being shared to the room</span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2" style={{ color: "var(--mt-text-ghost)" }}>
-                <MousePointerClick className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="text-[11px] sm:text-xs">
-                  {isMe
-                    ? "Your screen is being shared"
-                    : "Viewing shared screen"}
-                </span>
-              </div>
-            </div>
+            ) : (
+              // Show actual video feed for viewers
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-contain"
+              />
+            )}
           </div>
         </div>
       </div>

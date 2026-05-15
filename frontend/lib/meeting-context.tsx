@@ -366,6 +366,24 @@ export function MeetingProvider({
         };
 
         client.onChatMessage = (msg) => {
+          if (msg.userId !== currentUser.id) {
+            // Play Pop Sound
+            try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+              osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
+              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+              osc.start();
+              osc.stop(audioCtx.currentTime + 0.1);
+            } catch (e) { }
+          }
+
           setChatMessages((prev) => {
             if (msg.id && prev.some(m => m.id === msg.id)) return prev;
 
@@ -447,6 +465,22 @@ export function MeetingProvider({
         };
 
         client.onHandRaise = (msg) => {
+          if (msg.isHandRaised && msg.userId !== currentUser.id) {
+            // Play Ding Sound
+            try {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+              osc.start();
+              osc.stop(audioCtx.currentTime + 0.5);
+            } catch (e) { }
+          }
           setParticipants((prev) => prev.map(p =>
             p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
           ));
@@ -793,11 +827,27 @@ export function MeetingProvider({
 
   const toggleCamera = useCallback(() => {
     const newState = !isCameraOn;
-    if (!newState) webrtcClient.current?.pauseCamera();
-    else webrtcClient.current?.resumeCamera();
-    webrtcClient.current?.sendCameraState(newState);
-    setIsCameraOn(newState);
-    setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState } : p));
+    if (!newState) {
+      webrtcClient.current?.pauseCamera();
+      webrtcClient.current?.sendCameraState(newState);
+      setIsCameraOn(newState);
+      setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState } : p));
+    } else {
+      if (!localCameraTrackRef.current) {
+        // First time turning on camera
+        webrtcClient.current?.enableCamera().then(track => {
+          localCameraTrackRef.current = track;
+          webrtcClient.current?.sendCameraState(newState);
+          setIsCameraOn(newState);
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState, videoTrack: track } : p));
+        }).catch(err => console.error("Failed to enable camera:", err));
+      } else {
+        webrtcClient.current?.resumeCamera();
+        webrtcClient.current?.sendCameraState(newState);
+        setIsCameraOn(newState);
+        setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState } : p));
+      }
+    }
   }, [isCameraOn, currentUser.id]);
 
   const toggleScreenShare = useCallback(async () => {
