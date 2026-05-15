@@ -14,10 +14,6 @@ export default function CustomExcalidraw({ remoteElements, onChange }: Props) {
   useEffect(() => {
     if (!excalidrawAPI || !remoteElements || remoteElements.length === 0) return;
     
-    // Prevent interrupting local dragging/drawing
-    const appState = excalidrawAPI.getAppState();
-    if (appState && (appState.draggingElement || appState.editingElement || appState.resizingElement)) return;
-    
     // Check if the remote elements are actually different from our current local elements
     const remoteVersion = remoteElements.reduce((acc, el) => acc + (el.version || 0), 0);
     const localElements = excalidrawAPI.getSceneElements();
