@@ -368,7 +368,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               )}
             </button>
             <button
-              onClick={() => setECinemaLink(null)}
+              onClick={() => useMeeting().broadcastECinema(null)}
               className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
             >
               Stop
