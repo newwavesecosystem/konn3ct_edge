@@ -605,6 +605,20 @@ export function initializeSignaling(server: Server) {
         break;
       }
 
+      case 'reset_webrtc_state': {
+        logger.info(`User ${userId} requested WebRTC state reset (IP change detected)`);
+        for (const tid of client.transports) {
+          closeTransport(tid);
+        }
+        client.transports = [];
+        
+        const rp = roomProducers.get(roomId);
+        if (rp) {
+          roomProducers.set(roomId, rp.filter(p => p.userId !== userId));
+        }
+        break;
+      }
+
       case 'stop_producer': {
         // Client is explicitly closing a producer (e.g. stopped screen sharing)
         const { producerId: pidToStop, appData: stopAppData } = data;
