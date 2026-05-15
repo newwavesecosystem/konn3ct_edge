@@ -167,6 +167,9 @@ export function MeetingProvider({
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
 
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+
   // Load preferences from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -905,7 +908,70 @@ export function MeetingProvider({
     }
   }, [isScreenSharing, currentUser.id]);
 
-  const toggleRecording = useCallback(() => setIsRecording((v) => !v), []);
+  const toggleRecording = useCallback(async () => {
+    if (isRecording) {
+      // Stop recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+      }
+      setIsRecording(false);
+      toast.success("Recording stopped and downloaded");
+    } else {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "browser" },
+          audio: true,
+        });
+
+        const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp9')
+          ? 'video/webm; codecs=vp9'
+          : 'video/webm';
+
+        const recorder = new MediaRecorder(stream, { mimeType });
+        mediaRecorderRef.current = recorder;
+        recordedChunksRef.current = [];
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            recordedChunksRef.current.push(e.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `meeting-recording-${new Date().toISOString().slice(0,10)}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          setIsRecording(false);
+          stream.getTracks().forEach(t => t.stop());
+        };
+
+        // If user manually clicks "Stop sharing" on the browser banner
+        stream.getVideoTracks()[0].onended = () => {
+          if (recorder.state !== 'inactive') {
+            recorder.stop();
+          }
+        };
+
+        recorder.start(1000); // chunk every second
+        setIsRecording(true);
+        toast.success("Recording started. Please keep this tab open.");
+      } catch (e: any) {
+        if (e.name !== "NotAllowedError") {
+          console.error("Failed to start recording:", e);
+          toast.error("Failed to start recording. Please check permissions.");
+        }
+      }
+    }
+  }, [isRecording]);
   const toggleHandRaise = useCallback(() => {
     const newState = !isHandRaised;
     setIsHandRaised(newState);

@@ -62,7 +62,14 @@ export function DocsPanel() {
     if (state.doc !== localDoc) {
       setLocalDoc(state.doc);
     }
-  }, [state.doc]);
+    
+    if (state.excalidraw) {
+      const incomingVersion = state.excalidraw.reduce((acc, el) => acc + (el.version || 0), 0);
+      if (incomingVersion > lastExcalidrawVersion.current) {
+        lastExcalidrawVersion.current = incomingVersion;
+      }
+    }
+  }, [state.doc, state.excalidraw]);
 
   const handleDocChange = (content: string, delta: any, source: string) => {
     if (source === "user") {
