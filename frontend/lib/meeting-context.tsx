@@ -119,7 +119,7 @@ export function MeetingProvider({
     name: queryName,
     role: queryRole,
     isMuted: false,
-    isCameraOn: true,
+    isCameraOn: false,
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
@@ -145,7 +145,7 @@ export function MeetingProvider({
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("speaker");
   const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);

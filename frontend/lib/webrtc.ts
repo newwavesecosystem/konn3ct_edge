@@ -63,6 +63,7 @@ export class WebRTCClient {
   // Settings
   public isHDVideo: boolean = true;
   public isLowBandwidth: boolean = false;
+  private needsRepublish: boolean = false;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -116,6 +117,16 @@ export class WebRTCClient {
           if (!msg.recovered && this.device?.loaded) {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
             this.republishMedia().catch(console.error);
+            this.onConnectionStateChange?.('connected');
+          } else if (msg.recovered && this.device?.loaded) {
+            if (this.needsRepublish || this.sendTransport?.connectionState === 'disconnected' || this.sendTransport?.connectionState === 'failed') {
+               console.log("Session recovered by server, but WebRTC transport is dead (IP changed?). Executing Auto-Republish...");
+               this.needsRepublish = false;
+               if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                 this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+               }
+               this.republishMedia().catch(console.error);
+            }
             this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
             // First time active
@@ -228,6 +239,7 @@ export class WebRTCClient {
     this.ws.onclose = () => {
       if (!this.isIntentionalDisconnect) {
         this.onConnectionStateChange?.('disconnected');
+        this.needsRepublish = true;
         this.attemptReconnect();
       }
     };
