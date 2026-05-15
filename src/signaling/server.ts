@@ -37,6 +37,7 @@ const roomProducers = new Map<string, Array<{ producerId: string, userId: string
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 // Maps consumerId -> the client who owns that consumer (for producerclose forwarding)
 const consumerOwners = new Map<string, Client>();
+const roomECinema = new Map<string, string | null>();
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -235,6 +236,10 @@ export function initializeSignaling(server: Server) {
               if (noteHistory) {
                 ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
               }
+              const eCinemaLink = roomECinema.get(roomId);
+              if (eCinemaLink) {
+                ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
+              }
             }
           } catch (e) {
             logger.error("Failed to load history", e);
@@ -347,6 +352,55 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'kick_user':
+        if (client.role === 'host') {
+          const targetClient = rooms.get(roomId)?.get(data.userId);
+          // Don't allow kicking other hosts (or maybe we should? for now let's say only attendees)
+          if (targetClient && targetClient.role !== 'host') {
+            targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
+            targetClient.ws.close();
+            // Disconnect handlers will clean up their presence
+          }
+        }
+        break;
+
+      case 'force_mute':
+        if (client.role === 'host') {
+          if (data.userId) {
+            const targetClient = rooms.get(roomId)?.get(data.userId);
+            if (targetClient) {
+              targetClient.ws.send(JSON.stringify({ type: 'force_mute' }));
+            }
+          } else {
+            // Mute everyone else
+            const roomClients = rooms.get(roomId);
+            if (roomClients) {
+              for (const [id, c] of roomClients.entries()) {
+                if (c.role !== 'host' && c.status === 'active') {
+                  c.ws.send(JSON.stringify({ type: 'force_mute' }));
+                }
+              }
+            }
+          }
+        }
+        break;
+
+      case 'end_meeting':
+        if (client.role === 'host') {
+          logger.info(`Host ${userId} ended the meeting in room ${roomId}`);
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.userId !== userId) { // Don't send 'ended' to the host that just ended it
+                c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended' }));
+              }
+              c.ws.close();
+            }
+          }
+          // The socket close handlers will trigger full room cleanup
+        }
+        break;
+
       case 'chat':
         try {
           const newMsg = await db.chatMessage.create({
@@ -399,6 +453,16 @@ export function initializeSignaling(server: Server) {
           name: client.name, // Always include name so clients don't need to look it up
           reaction: data.reaction
         }, userId); // <-- userId as excludeUserId prevents the double-animation
+        break;
+
+      case 'ecinema_update':
+        if (client.role === 'host' || client.role === 'presenter') {
+          roomECinema.set(roomId, data.link || null);
+          broadcastToRoom(roomId, {
+            type: 'ecinema_update',
+            link: data.link || null
+          });
+        }
         break;
 
       case 'note_update':

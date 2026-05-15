@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   Check,
   X,
+  UserMinus,
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 
@@ -166,6 +167,10 @@ function ParticipantRow({
     .slice(0, 2)
     .toUpperCase();
 
+  const { currentUser, forceMuteUser, kickUser } = useMeeting();
+  const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
+  const canManage = isHost && !isMe && participant.role !== 'host';
+
   return (
     <div className="flex items-center gap-3 px-2 py-2 rounded-xl transition-colors group"
       style={{ cursor: "default" }}
@@ -229,11 +234,36 @@ function ParticipantRow({
         ) : (
           <VideoOff className="w-3.5 h-3.5 text-red-400/60" />
         )}
-        <button className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-          style={{ color: "var(--mt-text-faint)" }}
-        >
-          <MoreHorizontal className="w-3.5 h-3.5" />
-        </button>
+        
+        {canManage && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+            {!participant.isMuted && (
+              <button 
+                onClick={() => forceMuteUser(participant.id)}
+                title="Mute for everyone"
+                className="p-1 rounded-lg hover:bg-white/10"
+                style={{ color: "var(--mt-text-faint)" }}
+              >
+                <MicOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button 
+              onClick={() => kickUser(participant.id)}
+              title="Remove from meeting"
+              className="p-1 rounded-lg hover:bg-red-500/20 text-red-400"
+            >
+              <UserMinus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        
+        {!canManage && (
+          <button className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+            style={{ color: "var(--mt-text-faint)" }}
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
