@@ -11,6 +11,9 @@ import {
   Hand,
   Crown,
   Shield,
+  SignalHigh,
+  SignalMedium,
+  SignalLow
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -283,6 +286,15 @@ export function ParticipantTile({
             )}
             {!participant.isCameraOn && (
               <VideoOff className="w-3.5 h-3.5 text-red-400" />
+            )}
+            {participant.networkQuality === 'poor' && (
+              <SignalMedium className="w-3.5 h-3.5 text-yellow-400" title="Poor Connection" />
+            )}
+            {participant.networkQuality === 'bad' && (
+              <SignalLow className="w-3.5 h-3.5 text-red-500" title="Bad Connection" />
+            )}
+            {participant.networkQuality === 'good' && (
+              <SignalHigh className="w-3.5 h-3.5 text-brand-green" title="Good Connection" />
             )}
           </div>
         </div>

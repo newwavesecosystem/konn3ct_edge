@@ -21,6 +21,7 @@ export interface Participant {
   audioTrack?: MediaStreamTrack | null;
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
   isConnecting?: boolean;
+  networkQuality?: 'good' | 'poor' | 'bad';
 }
 
 export interface ChatMessage {

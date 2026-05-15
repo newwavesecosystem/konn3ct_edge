@@ -144,7 +144,9 @@ function ScreenShareLayout({
         if (stream.getVideoTracks()[0] === screenSharer.screenTrack) return;
       }
       videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
-      videoRef.current.play().catch((e) => console.warn("Screen share play failed:", e));
+      videoRef.current.play().catch((e) => {
+        if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
+      });
     }
   }, [screenSharer?.screenTrack]);
 
@@ -311,7 +313,7 @@ function GridLayout({ participants }: { participants: Participant[] }) {
 // ── eCinema Layout ──────────────────────────────────────
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const { setECinemaLink } = useMeeting();
+  const { broadcastECinema } = useMeeting();
 
   const getEmbedUrl = (url: string) => {
     try {
