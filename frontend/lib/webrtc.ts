@@ -48,6 +48,8 @@ export class WebRTCClient {
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
+  public onForceMute?: () => void;
+  public onECinemaUpdate?: (link: string | null) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -106,6 +108,18 @@ export class WebRTCClient {
         case 'session_status':
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
+            this.isIntentionalDisconnect = true;
+            this.disconnect();
+            return;
+          }
+          if (msg.status === 'kicked') {
+            this.onConnectionStateChange?.('kicked');
+            this.isIntentionalDisconnect = true;
+            this.disconnect();
+            return;
+          }
+          if (msg.status === 'ended') {
+            this.onConnectionStateChange?.('ended');
             this.isIntentionalDisconnect = true;
             this.disconnect();
             return;
@@ -228,6 +242,12 @@ export class WebRTCClient {
           if (msg.message && msg.message.includes("Maximum number of active cameras")) {
             this.onServerReject?.(msg.message);
           }
+          break;
+        case 'force_mute':
+          this.onForceMute?.();
+          break;
+        case 'ecinema_update':
+          this.onECinemaUpdate?.(msg.link);
           break;
       }
     };
@@ -884,5 +904,42 @@ export class WebRTCClient {
     this.stopScreenShareProducer();
     if (this.sendTransport) this.sendTransport.close();
     if (this.recvTransport) this.recvTransport.close();
+  }
+
+  // --- Host Controls ---
+  public sendAdmitUser(userId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'admit_user', userId }));
+    }
+  }
+
+  public sendDenyUser(userId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'deny_user', userId }));
+    }
+  }
+
+  public sendKickUser(userId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'kick_user', userId }));
+    }
+  }
+
+  public sendForceMute(userId?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId }));
+    }
+  }
+
+  public sendEndMeeting() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'end_meeting' }));
+    }
+  }
+
+  public sendECinemaUpdate(link: string | null) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ecinema_update', link }));
+    }
   }
 }

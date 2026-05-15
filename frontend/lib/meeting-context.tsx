@@ -65,6 +65,9 @@ interface MeetingContextValue {
   setIsMobilePanelOpen: (open: boolean) => void;
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
+  kickUser: (userId: string) => void;
+  forceMuteUser: (userId?: string) => void;
+  endMeetingForAll: () => void;
   setECinemaLink: (link: string | null) => void;
   
   // Device Management
@@ -543,7 +546,7 @@ export function MeetingProvider({
             toast(`${msg.name} is waiting to join`, {
               action: {
                 label: 'Admit',
-                onClick: () => webrtcClient.current?.admitUser(msg.userId)
+                onClick: () => webrtcClient.current?.sendAdmitUser(msg.userId)
               }
             });
             return [...prev, { userId: msg.userId, name: msg.name }];
@@ -553,7 +556,22 @@ export function MeetingProvider({
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
+            if (state === 'kicked') {
+              toast.error("You have been removed from the meeting by the host.");
+            } else if (state === 'denied') {
+              toast.error("Your request to join was denied by the host.");
+            } else if (state === 'ended') {
+              toast.info("The host has ended this meeting for everyone.");
+            }
           }
+        };
+
+        client.onForceMute = () => {
+          webrtcClient.current?.pauseMic();
+          webrtcClient.current?.sendMuteState(true);
+          setIsMuted(true);
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isMuted: true } : p));
+          toast.warning("The host has muted your microphone.");
         };
 
         client.onParticipantsList = (backendParticipants) => {
@@ -972,13 +990,25 @@ export function MeetingProvider({
   );
 
   const admitUser = useCallback((userId: string) => {
-    webrtcClient.current?.admitUser(userId);
+    webrtcClient.current?.sendAdmitUser(userId);
     setWaitingUsers(prev => prev.filter(u => u.userId !== userId));
   }, []);
 
   const denyUser = useCallback((userId: string) => {
-    webrtcClient.current?.denyUser(userId);
+    webrtcClient.current?.sendDenyUser(userId);
     setWaitingUsers(prev => prev.filter(u => u.userId !== userId));
+  }, []);
+
+  const kickUser = useCallback((userId: string) => {
+    webrtcClient.current?.sendKickUser(userId);
+  }, []);
+
+  const forceMuteUser = useCallback((userId?: string) => {
+    webrtcClient.current?.sendForceMute(userId);
+  }, []);
+
+  const endMeetingForAll = useCallback(() => {
+    webrtcClient.current?.sendEndMeeting();
   }, []);
 
   return (
@@ -1021,6 +1051,9 @@ export function MeetingProvider({
         setIsMobilePanelOpen,
         admitUser,
         denyUser,
+        kickUser,
+        forceMuteUser,
+        endMeetingForAll,
         eCinemaLink,
         setECinemaLink,
         devices,
