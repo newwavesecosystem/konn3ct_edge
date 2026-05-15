@@ -123,7 +123,11 @@ export class WebRTCClient {
               try {
                 const res = await this.request('getProducers', 'producersList');
                 for (const p of res.producers || []) {
-                  await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+                  try {
+                    await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+                  } catch (err) {
+                    console.error(`Failed to consume producer ${p.producerId}:`, err);
+                  }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
                 this.onConnectionStateChange?.('connected');
@@ -547,7 +551,11 @@ export class WebRTCClient {
     try {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
-        await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+        try {
+          await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+        } catch (err) {
+          console.error(`Failed to consume producer ${p.producerId}:`, err);
+        }
       }
     } catch (e) {
       console.error("Failed to re-sync producers after republish", e);
