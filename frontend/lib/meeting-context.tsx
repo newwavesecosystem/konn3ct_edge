@@ -68,7 +68,8 @@ interface MeetingContextValue {
   kickUser: (userId: string) => void;
   forceMuteUser: (userId?: string) => void;
   endMeetingForAll: () => void;
-  setECinemaLink: (link: string | null) => void;
+  broadcastECinema: (link: string | null) => void;
+  eCinemaLink: string | null;
   
   // Device Management
   devices: {
@@ -574,6 +575,13 @@ export function MeetingProvider({
           toast.warning("The host has muted your microphone.");
         };
 
+        client.onECinemaUpdate = (link) => {
+          setECinemaLink(link);
+          if (link) {
+            toast.success("eCinema broadcast has started!");
+          }
+        };
+
         client.onParticipantsList = (backendParticipants) => {
           setParticipants((prev) => {
             const newParticipants = [...prev];
@@ -1011,6 +1019,11 @@ export function MeetingProvider({
     webrtcClient.current?.sendEndMeeting();
   }, []);
 
+  const broadcastECinema = useCallback((link: string | null) => {
+    setECinemaLink(link); // Optimistic local update
+    webrtcClient.current?.sendECinemaUpdate(link);
+  }, []);
+
   return (
     <MeetingContext.Provider
       value={{
@@ -1054,8 +1067,8 @@ export function MeetingProvider({
         kickUser,
         forceMuteUser,
         endMeetingForAll,
+        broadcastECinema,
         eCinemaLink,
-        setECinemaLink,
         devices,
         selectedDevices,
         switchDevice,

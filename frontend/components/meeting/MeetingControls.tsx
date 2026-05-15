@@ -353,7 +353,7 @@ function ControlButton({
 
 // ── eCinema Dialog ─────────────────────────────────────
 function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { eCinemaLink, setECinemaLink } = useMeeting();
+  const { eCinemaLink, broadcastECinema } = useMeeting();
   const [linkInput, setLinkInput] = React.useState(eCinemaLink || "");
 
   React.useEffect(() => {
@@ -366,13 +366,13 @@ function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
 
   const handleBroadcast = () => {
     if (linkInput.trim()) {
-      setECinemaLink(linkInput.trim());
+      broadcastECinema(linkInput.trim());
       onClose();
     }
   };
 
   const handleStop = () => {
-    setECinemaLink(null);
+    broadcastECinema(null);
     setLinkInput("");
     onClose();
   };
