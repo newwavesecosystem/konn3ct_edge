@@ -50,6 +50,7 @@ export class WebRTCClient {
   public onServerReject?: (msg: string) => void;
   public onForceMute?: () => void;
   public onECinemaUpdate?: (link: string | null) => void;
+  public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -248,6 +249,9 @@ export class WebRTCClient {
           break;
         case 'ecinema_update':
           this.onECinemaUpdate?.(msg.link);
+          break;
+        case 'network_quality':
+          this.onParticipantNetworkQuality?.(msg.userId, msg.quality);
           break;
       }
     };
@@ -495,12 +499,16 @@ export class WebRTCClient {
           }
         });
 
-        if (maxRtt > 500 || maxPacketLoss > 10) {
-          this.onNetworkQualityChange?.('bad');
-        } else if (maxRtt > 250 || maxPacketLoss > 5) {
-          this.onNetworkQualityChange?.('poor');
-        } else {
-          this.onNetworkQualityChange?.('good');
+        let quality: 'good' | 'poor' | 'bad' = 'good';
+        if (maxRtt > 1000 || maxPacketLoss > 20) {
+          quality = 'bad';
+        } else if (maxRtt > 500 || maxPacketLoss > 10) {
+          quality = 'poor';
+        }
+
+        this.onNetworkQualityChange?.(quality);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'network_quality', quality }));
         }
       } catch (e) {
         // Ignore stats errors
@@ -830,34 +838,38 @@ export class WebRTCClient {
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
     console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${userId} (Producer ID: ${producerId})...`);
 
-    const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
-      transportId: this.recvTransport.id,
-      producerId,
-      rtpCapabilities: this.device.rtpCapabilities
-    });
-
-    console.log(`[WebRTC] Creating local consumer for ${kind} (source: ${source})... (Consumer ID: ${id})`);
-    const consumer = await this.recvTransport.consume({
-      id,
-      producerId,
-      kind: consumerKind,
-      rtpParameters,
-      appData: { source } // Carry source tag forward to onNewConsumer callback
-    });
-
-    this.consumers.set(consumer.id, consumer);
-    this.onNewConsumer?.(consumer, userId);
-    
-    // Tell the backend to resume sending media (unpause the consumer)
-    if (this.isAudioOnlyMode && consumerKind === 'video') {
-      console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
-    } else {
-      console.log(`[WebRTC] Resuming consumer ${id} on server...`);
-      this.request('resume', 'resumed', { consumerId: consumer.id }).then(() => {
-        console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
-      }).catch(err => {
-        console.error(`[WebRTC] Failed to resume consumer ${id}:`, err);
+    try {
+      const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
+        transportId: this.recvTransport.id,
+        producerId,
+        rtpCapabilities: this.device.rtpCapabilities
       });
+
+      console.log(`[WebRTC] Creating local consumer for ${kind} (source: ${source})... (Consumer ID: ${id})`);
+      const consumer = await this.recvTransport.consume({
+        id,
+        producerId,
+        kind: consumerKind,
+        rtpParameters,
+        appData: { source } // Carry source tag forward to onNewConsumer callback
+      });
+
+      this.consumers.set(consumer.id, consumer);
+      this.onNewConsumer?.(consumer, userId);
+      
+      // Tell the backend to resume sending media (unpause the consumer)
+      if (this.isAudioOnlyMode && consumerKind === 'video') {
+        console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
+      } else {
+        console.log(`[WebRTC] Resuming consumer ${id} on server...`);
+        this.request('resume', 'resumed', { consumerId: consumer.id }).then(() => {
+          console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
+        }).catch(err => {
+          console.error(`[WebRTC] Failed to resume consumer ${id}:`, err);
+        });
+      }
+    } catch (e) {
+      console.warn(`[WebRTC] Failed to consume stream (it may have been closed):`, e);
     }
   }
 

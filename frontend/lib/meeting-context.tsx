@@ -344,7 +344,14 @@ export function MeetingProvider({
                 webrtcClient.current.disableAudioOnlyMode();
               }
             }
+            
+            // Update local user's network quality indicator
+            setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, networkQuality: quality } : p));
           }
+        };
+
+        client.onParticipantNetworkQuality = (userId, quality) => {
+          setParticipants(prev => prev.map(p => p.id === userId ? { ...p, networkQuality: quality } : p));
         };
 
         client.onChatHistory = (messages) => {
@@ -599,6 +606,7 @@ export function MeetingProvider({
                   isScreenSharing: false,
                   isHandRaised: false,
                   isSpeaking: false,
+                  networkQuality: 'good',
                   joinedAt: new Date().toISOString(),
                   isConnecting: true,
                 });
@@ -623,6 +631,7 @@ export function MeetingProvider({
               isScreenSharing: false,
               isHandRaised: false,
               isSpeaking: false,
+              networkQuality: 'good',
               joinedAt: new Date().toISOString(),
               isConnecting: true,
             }];
