@@ -149,8 +149,12 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
   // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
   if (kind === 'audio' && roomId) {
     const observer = audioObservers.get(roomId);
-    if (observer) {
-      observer.addProducer({ producerId: producer.id }).catch(e => logger.error('AudioLevelObserver addProducer failed', e));
+    if (observer && !producer.closed) {
+      observer.addProducer({ producerId: producer.id }).catch(e => {
+        if (!producer.closed) {
+          logger.warn(`AudioLevelObserver addProducer failed for ${producer.id}:`, e.message);
+        }
+      });
     }
   }
 
