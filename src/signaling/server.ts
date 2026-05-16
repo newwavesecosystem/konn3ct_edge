@@ -192,7 +192,7 @@ export function initializeSignaling(server: Server) {
     const { userId, email, name, roomId, roomSlug, role, isWaitingRoomEnabled } = clientData;
 
     // Determine initial status
-    const initialStatus = (isWaitingRoomEnabled && role !== 'host') ? 'waiting' : 'active';
+    const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
     const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus, transports: [] };
 
@@ -670,6 +670,31 @@ export function initializeSignaling(server: Server) {
           userId,
           isHandRaised: data.isHandRaised
         });
+        break;
+
+      case 'start_recording':
+        if (role === 'host' || role === 'co-host') {
+          // Push job to redis queue
+          const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+          const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || request.headers.host;
+          const recordingUrl = `${protocol}://${domain}/meeting/${roomSlug}?bot=true`;
+          
+          redis.lpush('recorder:queue', JSON.stringify({
+            roomId,
+            roomSlug,
+            url: recordingUrl
+          })).catch(e => logger.error("Failed to push recording job to queue", e));
+
+          broadcastToRoom(roomId, { type: 'recording_started' });
+        }
+        break;
+
+      case 'stop_recording':
+        if (role === 'host' || role === 'co-host') {
+          // Publish stop event to the worker
+          redis.publish(`recorder:stop:${roomId}`, 'stop').catch(e => logger.error("Failed to publish stop recording", e));
+          broadcastToRoom(roomId, { type: 'recording_stopped' });
+        }
         break;
 
       // --- WebRTC Media Signaling ---
