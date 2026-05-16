@@ -66,6 +66,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: OPENAI_API_KEY
+            - name: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
           resources:
             requests:
               cpu: "100m"
