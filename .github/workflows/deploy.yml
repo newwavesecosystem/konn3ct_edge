@@ -34,7 +34,7 @@ jobs:
       - name: Build and Push Frontend Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
-          docker build -t $IMAGE_NAME:${{ github.sha }} ./frontend
+          docker build --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
