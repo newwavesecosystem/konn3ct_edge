@@ -44,6 +44,7 @@ interface MeetingContextValue {
   isHandRaised: boolean;
   showLeaveDialog: boolean;
   showReactionPicker: boolean;
+  showDonationModal: boolean;
   meetingDuration: number; // seconds
   isMobilePanelOpen: boolean;
   webrtcStatus: string;
@@ -52,6 +53,7 @@ interface MeetingContextValue {
   captions: CaptionMessage[];
   captionLanguage: string;
   translationLanguage: string;
+  isDonationActive: boolean;
 
   // Actions
   toggleMute: () => void;
@@ -60,6 +62,8 @@ interface MeetingContextValue {
   toggleRecording: () => void;
   toggleHandRaise: () => void;
   toggleCaptions: () => void;
+  toggleDonation: () => void;
+  sendDonationSuccess: (amount: number, currency: string) => void;
   setCaptionLanguage: (lang: string) => void;
   setTranslationLanguage: (lang: string) => void;
   setActivePanel: (panel: SidePanel) => void;
@@ -71,6 +75,7 @@ interface MeetingContextValue {
   updateSharedNote: (content: string) => void;
   setShowLeaveDialog: (show: boolean) => void;
   setShowReactionPicker: (show: boolean) => void;
+  setShowDonationModal: (show: boolean) => void;
   setIsMobilePanelOpen: (open: boolean) => void;
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
@@ -163,11 +168,13 @@ export function MeetingProvider({
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [showDonationModal, setShowDonationModal] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState(0);
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
   const [isCaptionsEnabled, setIsCaptionsEnabled] = useState(false);
+  const [isDonationActive, setIsDonationActive] = useState(false);
   const [captions, setCaptions] = useState<CaptionMessage[]>([]);
   const [captionLanguage, setCaptionLanguage] = useState("en-US");
   const [translationLanguage, setTranslationLanguage] = useState("original");
@@ -364,6 +371,24 @@ export function MeetingProvider({
             
             // Update local user's network quality indicator
             setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, networkQuality: quality } : p));
+          }
+        };
+
+        client.onDonationStatusReceived = (active) => {
+          setIsDonationActive(active);
+          if (active) {
+            toast.info("The host has enabled Donations/Offerings.");
+          } else {
+            toast.info("Donations/Offerings have been disabled.");
+          }
+        };
+
+        client.onDonationSuccessReceived = (userId, name, amount, currency) => {
+          if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+            toast.success(`${name} just donated ${currency} ${amount}!`, {
+              icon: "🎁",
+              duration: 5000,
+            });
           }
         };
 
@@ -1103,6 +1128,21 @@ export function MeetingProvider({
     });
   }, [startListening, stopListening]);
 
+  const toggleDonation = useCallback(() => {
+    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+      const newState = !isDonationActive;
+      setIsDonationActive(newState);
+      webrtcClient.current?.sendDonationStatus(newState);
+      toast.success(newState ? "Donations enabled for participants." : "Donations disabled.");
+    } else {
+      toast.error("Only the host can enable donations.");
+    }
+  }, [isDonationActive, currentUser.role]);
+
+  const sendDonationSuccess = useCallback((amount: number, currency: string) => {
+    webrtcClient.current?.sendDonationSuccess(amount, currency);
+  }, []);
+
   const sendReaction = useCallback(
     (emoji: string) => {
       webrtcClient.current?.sendReaction(emoji);
@@ -1215,6 +1255,7 @@ export function MeetingProvider({
         isHandRaised,
         showLeaveDialog,
         showReactionPicker,
+        showDonationModal,
         meetingDuration,
         isMobilePanelOpen,
         webrtcStatus,
@@ -1222,12 +1263,15 @@ export function MeetingProvider({
         captions,
         captionLanguage,
         translationLanguage,
+        isDonationActive,
         toggleMute,
         toggleCamera,
         toggleScreenShare,
         toggleRecording,
         toggleHandRaise,
         toggleCaptions,
+        toggleDonation,
+        sendDonationSuccess,
         setCaptionLanguage,
         setTranslationLanguage,
         setActivePanel: handleSetActivePanel,
@@ -1239,6 +1283,7 @@ export function MeetingProvider({
         updateSharedNote,
         setShowLeaveDialog,
         setShowReactionPicker,
+        setShowDonationModal,
         setIsMobilePanelOpen,
         admitUser,
         denyUser,

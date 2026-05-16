@@ -33,6 +33,7 @@ import {
   Play,
   ChevronUp,
   Subtitles,
+  Gift,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -61,6 +62,14 @@ export function MeetingControls() {
     setShowLeaveDialog,
     setShowReactionPicker,
     showReactionPicker,
+    isDonationActive,
+    toggleDonation,
+    setShowDonationModal,
+    currentUser,
+    selectedDevices,
+    devices,
+    switchDevice,
+    eCinemaLink,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -115,12 +124,12 @@ export function MeetingControls() {
             <div className="relative">
               <ChevronUp className="w-3 h-3 text-white/70 hover:text-white" />
               <select
-                value={useMeeting().selectedDevices.audioInput}
-                onChange={(e) => useMeeting().switchDevice('audioInput', e.target.value)}
+                value={selectedDevices.audioInput}
+                onChange={(e) => switchDevice('audioInput', e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer"
                 title="Select Microphone"
               >
-                {useMeeting().devices.audioInputs.map((d) => (
+                {devices.audioInputs.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>{d.label || 'Default Mic'}</option>
                 ))}
               </select>
@@ -137,12 +146,12 @@ export function MeetingControls() {
             <div className="relative">
               <ChevronUp className="w-3 h-3 text-white/70 hover:text-white" />
               <select
-                value={useMeeting().selectedDevices.videoInput}
-                onChange={(e) => useMeeting().switchDevice('videoInput', e.target.value)}
+                value={selectedDevices.videoInput}
+                onChange={(e) => switchDevice('videoInput', e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer"
                 title="Select Camera"
               >
-                {useMeeting().devices.videoInputs.map((d) => (
+                {devices.videoInputs.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>{d.label || 'Default Camera'}</option>
                 ))}
               </select>
@@ -159,7 +168,7 @@ export function MeetingControls() {
 
         {/* eCinema control */}
         <ControlButton
-          active={!!useMeeting().eCinemaLink}
+          active={!!eCinemaLink}
           onClick={() => setShowECinemaDialog(true)}
           label="eCinema"
           icon={<Film className="w-5 h-5" />}
@@ -169,6 +178,24 @@ export function MeetingControls() {
         <div className="w-px h-8 mx-1 hidden sm:block" style={{ backgroundColor: "var(--mt-border-strong)" }} />
 
         {/* Interaction controls */}
+        {(currentUser.role === 'host' || currentUser.role === 'co-host') && (
+          <ControlButton
+            active={isDonationActive}
+            onClick={() => toggleDonation()}
+            label={isDonationActive ? "Stop Offering" : "Start Offering"}
+            icon={<Gift className={cn("w-5 h-5", isDonationActive && "text-brand-green")} />}
+          />
+        )}
+
+        {isDonationActive && (
+          <ControlButton
+            active={false}
+            onClick={() => setShowDonationModal(true)}
+            label="Donate"
+            icon={<Gift className="w-5 h-5" />}
+            highlight={true}
+          />
+        )}
         <ControlButton
           active={isHandRaised}
           onClick={toggleHandRaise}

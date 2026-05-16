@@ -50,6 +50,8 @@ export class WebRTCClient {
   public onServerReject?: (msg: string) => void;
   public onForceMute?: () => void;
   public onECinemaUpdate?: (link: string | null) => void;
+  public onDonationStatusReceived?: (active: boolean) => void;
+  public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
   public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
   // Screen share state callbacks
@@ -256,6 +258,12 @@ export class WebRTCClient {
           break;
         case 'caption':
           this.onCaptionReceived?.(msg.userId, msg.text, msg.isFinal, msg.lang);
+          break;
+        case 'donation_status':
+          this.onDonationStatusReceived?.(msg.active);
+          break;
+        case 'donation_success':
+          this.onDonationSuccessReceived?.(msg.userId, msg.name, msg.amount, msg.currency);
           break;
       }
     };
@@ -962,6 +970,18 @@ export class WebRTCClient {
   public sendCaption(text: string, isFinal: boolean, lang: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'caption', text, isFinal, lang }));
+    }
+  }
+
+  public sendDonationStatus(active: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'donation_status', active }));
+    }
+  }
+
+  public sendDonationSuccess(amount: number, currency: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'donation_success', amount, currency }));
     }
   }
 }

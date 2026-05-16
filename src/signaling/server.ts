@@ -561,6 +561,25 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'donation_status':
+        if (client.role === 'host' || client.role === 'co-host') {
+          broadcastToRoom(roomId, {
+            type: 'donation_status',
+            active: data.active
+          }, userId);
+        }
+        break;
+
+      case 'donation_success':
+        broadcastToRoom(roomId, {
+          type: 'donation_success',
+          userId,
+          name: client.name,
+          amount: data.amount,
+          currency: data.currency
+        }, userId);
+        break;
+
       case 'note_update':
         try {
           await db.sharedNote.upsert({
