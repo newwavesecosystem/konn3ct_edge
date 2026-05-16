@@ -673,7 +673,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'sync_panel':
-        if (role === 'host' || role === 'co-host') {
+        if (client.role === 'host' || client.role === 'co-host') {
           broadcastToRoom(roomId, {
             type: 'sync_panel',
             panel: data.panel
@@ -682,24 +682,29 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'start_recording':
-        if (role === 'host' || role === 'co-host') {
+        if (client.role === 'host' || client.role === 'co-host') {
           // Push job to redis queue
           const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-          const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || request.headers.host;
-          const recordingUrl = `${protocol}://${domain}/meeting/${roomSlug}?bot=true`;
+          const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
           
-          redis.lpush('recorder:queue', JSON.stringify({
-            roomId,
-            roomSlug,
-            url: recordingUrl
-          })).catch(e => logger.error("Failed to push recording job to queue", e));
+          db.room.findUnique({ where: { id: roomId } }).then(room => {
+            if (room) {
+              const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true`;
+              
+              redis.lpush('recorder:queue', JSON.stringify({
+                roomId,
+                roomSlug: room.slug,
+                url: recordingUrl
+              })).catch(e => logger.error("Failed to push recording job to queue", e));
 
-          broadcastToRoom(roomId, { type: 'recording_started' });
+              broadcastToRoom(roomId, { type: 'recording_started' });
+            }
+          });
         }
         break;
 
       case 'stop_recording':
-        if (role === 'host' || role === 'co-host') {
+        if (client.role === 'host' || client.role === 'co-host') {
           // Publish stop event to the worker
           redis.publish(`recorder:stop:${roomId}`, 'stop').catch(e => logger.error("Failed to publish stop recording", e));
           broadcastToRoom(roomId, { type: 'recording_stopped' });
