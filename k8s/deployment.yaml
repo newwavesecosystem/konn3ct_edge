@@ -98,6 +98,11 @@ spec:
               value: "85"
             - name: MAX_ACTIVE_CAMERAS
               value: "15"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: OPENAI_API_KEY
             - name: TURN_DOMAIN
               value: "turnedge.konn3ct.net"
             - name: TURN_SECRET

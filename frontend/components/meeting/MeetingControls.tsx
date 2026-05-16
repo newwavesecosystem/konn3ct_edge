@@ -23,6 +23,7 @@ import {
   Circle,
   LayoutGrid,
   Presentation,
+  Sparkles,
   Focus,
   Sun,
   Moon,
@@ -226,6 +227,13 @@ export function MeetingControls() {
         <div className="w-px h-8 mx-1 hidden sm:block" style={{ backgroundColor: "var(--mt-border-strong)" }} />
 
         {/* Panel toggles */}
+        <ControlButton
+          active={activePanel === "ai"}
+          onClick={() => setActivePanel("ai")}
+          label="Konn3ct AI"
+          icon={<Sparkles className="w-5 h-5 text-brand-green" />}
+          highlight={activePanel === "ai"}
+        />
         <ControlButton
           active={activePanel === "chat"}
           onClick={() => setActivePanel("chat")}
