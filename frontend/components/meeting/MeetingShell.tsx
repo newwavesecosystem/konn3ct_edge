@@ -158,7 +158,6 @@ export function MeetingShell() {
         </div>
 
         {/* Desktop side panel */}
-        {!isBot && (
         <AnimatePresence mode="wait">
           {activePanel && (
             <motion.div
@@ -173,6 +172,7 @@ export function MeetingShell() {
                 borderLeft: "1px solid var(--mt-border)",
               }}
             >
+              {!isBot && (
               <div className="flex items-center justify-end p-2">
                 <button
                   onClick={() => setActivePanel(null)}
@@ -184,13 +184,13 @@ export function MeetingShell() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+              )}
               <div className="flex-1 overflow-hidden">
                 {panelContent[activePanel]}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-        )}
       </div>
 
       {/* Mobile bottom sheet panel */}

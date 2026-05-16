@@ -63,6 +63,7 @@ export class WebRTCClient {
   // Recording
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
+  public onSyncPanel?: (panel: string | null) => void;
 
   // Network monitoring
   public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
@@ -273,6 +274,9 @@ export class WebRTCClient {
           break;
         case 'recording_stopped':
           this.onRecordingStopped?.();
+          break;
+        case 'sync_panel':
+          this.onSyncPanel?.(msg.panel);
           break;
       }
     };
@@ -1003,6 +1007,12 @@ export class WebRTCClient {
   public sendStopRecording() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'stop_recording' }));
+    }
+  }
+
+  public sendSyncPanel(panel: string | null) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'sync_panel', panel }));
     }
   }
 }

@@ -672,6 +672,15 @@ export function initializeSignaling(server: Server) {
         });
         break;
 
+      case 'sync_panel':
+        if (role === 'host' || role === 'co-host') {
+          broadcastToRoom(roomId, {
+            type: 'sync_panel',
+            panel: data.panel
+          }, userId);
+        }
+        break;
+
       case 'start_recording':
         if (role === 'host' || role === 'co-host') {
           // Push job to redis queue

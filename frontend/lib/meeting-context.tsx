@@ -409,6 +409,11 @@ export function MeetingProvider({
           toast.info("Recording has stopped.");
         };
 
+        client.onSyncPanel = (panel: any) => {
+          // If we are the bot, or if we want all participants to sync with the host's view
+          setActivePanel(panel);
+        };
+
         client.onCaptionReceived = (userId, text, isFinal, lang) => {
           const tLang = translationLanguageRef.current;
           
@@ -1162,12 +1167,18 @@ export function MeetingProvider({
 
   const handleSetActivePanel = useCallback(
     (panel: SidePanel) => {
-      setActivePanel((prev) => (prev === panel ? null : panel));
-      if (panel !== null) {
+      const newPanel = activePanel === panel ? null : panel;
+      setActivePanel(newPanel);
+      if (newPanel !== null) {
         setIsMobilePanelOpen(true);
       }
+      
+      // If host, sync the panel state so the recorder bot captures it
+      if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+        webrtcClient.current?.sendSyncPanel(newPanel);
+      }
     },
-    []
+    [activePanel, currentUser.role]
   );
 
   const admitUser = useCallback((userId: string) => {
