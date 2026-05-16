@@ -14,6 +14,7 @@ import { Konn3ctAIPanel } from "./panels/Konn3ctAIPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
+import { DonationModal } from "./DonationModal";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,8 @@ export function MeetingShell() {
     meetingInfo,
     isRecording,
     webrtcStatus,
+    showDonationModal,
+    setShowDonationModal,
   } = useMeeting();
 
   const panelContent: Record<string, React.ReactNode> = {
@@ -245,6 +248,7 @@ export function MeetingShell() {
       {/* Floating layers */}
       <ReactionsLayer />
       <LeaveDialog />
+      {showDonationModal && <DonationModal onClose={() => setShowDonationModal(false)} />}
     </div>
   );
 }
