@@ -51,6 +51,7 @@ export class WebRTCClient {
   public onForceMute?: () => void;
   public onECinemaUpdate?: (link: string | null) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
+  public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -252,6 +253,9 @@ export class WebRTCClient {
           break;
         case 'network_quality':
           this.onParticipantNetworkQuality?.(msg.userId, msg.quality);
+          break;
+        case 'caption':
+          this.onCaptionReceived?.(msg.userId, msg.text, msg.isFinal, msg.lang);
           break;
       }
     };
@@ -952,6 +956,12 @@ export class WebRTCClient {
   public sendECinemaUpdate(link: string | null) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'ecinema_update', link }));
+    }
+  }
+
+  public sendCaption(text: string, isFinal: boolean, lang: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'caption', text, isFinal, lang }));
     }
   }
 }

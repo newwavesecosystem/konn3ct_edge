@@ -12,6 +12,7 @@ import { MeetingInfoPanel } from "./MeetingInfoPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
+import { CaptionsOverlay } from "./CaptionsOverlay";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -140,8 +141,9 @@ export function MeetingShell() {
       {/* Main content */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Video stage */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 relative">
           <StageView />
+          <CaptionsOverlay />
         </div>
 
         {/* Desktop side panel */}

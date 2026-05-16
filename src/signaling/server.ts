@@ -8,6 +8,11 @@ import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProdu
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || 'dummy_key_if_missing',
+});
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl, {
@@ -38,6 +43,65 @@ const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 // Maps consumerId -> the client who owns that consumer (for producerclose forwarding)
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
+const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
+
+async function generateMeetingSummary(roomId: string) {
+  try {
+    const transcripts = roomTranscripts.get(roomId);
+    if (!transcripts || transcripts.length === 0) return;
+
+    // Combine transcripts into one big text block
+    const fullText = transcripts
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(t => `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.name}: ${t.text}`)
+      .join('\n');
+
+    // Save full transcript to DB
+    await db.transcription.create({
+      data: {
+        roomId,
+        content: fullText,
+      }
+    });
+
+    if (process.env.OPENAI_API_KEY) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are an AI Meeting Assistant. Read the following meeting transcript and provide a very brief summary and a list of actionable items. Format your response clearly.",
+          },
+          {
+            role: "user",
+            content: fullText,
+          },
+        ],
+        temperature: 0.3,
+      });
+
+      const aiResponse = response.choices[0]?.message?.content?.trim();
+      if (aiResponse) {
+        // We will split the response naively or just store it all in 'summary'
+        const splitIndex = aiResponse.indexOf("Action");
+        const summaryText = splitIndex > -1 ? aiResponse.substring(0, splitIndex).trim() : aiResponse;
+        const actionItemsText = splitIndex > -1 ? aiResponse.substring(splitIndex).trim() : "";
+
+        await db.meetingSummary.upsert({
+          where: { roomId },
+          update: { summary: summaryText, actionItems: actionItemsText },
+          create: { roomId, summary: summaryText, actionItems: actionItemsText },
+        });
+        logger.info(`AI Summary generated and saved for room ${roomId}`);
+      }
+    }
+  } catch (error) {
+    logger.error(`Failed to generate summary for room ${roomId}:`, error);
+  } finally {
+    // Clean up memory
+    roomTranscripts.delete(roomId);
+  }
+}
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -397,6 +461,8 @@ export function initializeSignaling(server: Server) {
               c.ws.close();
             }
           }
+          // Fire off AI Summary generation in the background
+          generateMeetingSummary(roomId).catch(e => logger.error(e));
           // The socket close handlers will trigger full room cleanup
         }
         break;
@@ -460,6 +526,28 @@ export function initializeSignaling(server: Server) {
           type: 'network_quality',
           userId,
           quality: data.quality
+        }, userId);
+        break;
+
+      case 'caption':
+        if (data.isFinal) {
+          if (!roomTranscripts.has(roomId)) {
+            roomTranscripts.set(roomId, []);
+          }
+          roomTranscripts.get(roomId)!.push({
+            name: client.name,
+            text: data.text,
+            timestamp: Date.now()
+          });
+        }
+        
+        // In the future, we can append this to the MeetingTranscript in the database for AI Summary.
+        broadcastToRoom(roomId, {
+          type: 'caption',
+          userId,
+          text: data.text,
+          isFinal: data.isFinal,
+          lang: data.lang
         }, userId);
         break;
 

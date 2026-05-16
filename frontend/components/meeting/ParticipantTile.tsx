@@ -288,13 +288,13 @@ export function ParticipantTile({
               <VideoOff className="w-3.5 h-3.5 text-red-400" />
             )}
             {participant.networkQuality === 'poor' && (
-              <SignalMedium className="w-3.5 h-3.5 text-yellow-400" title="Poor Connection" />
+              <span title="Poor Connection"><SignalMedium className="w-3.5 h-3.5 text-yellow-400" /></span>
             )}
             {participant.networkQuality === 'bad' && (
-              <SignalLow className="w-3.5 h-3.5 text-red-500" title="Bad Connection" />
+              <span title="Bad Connection"><SignalLow className="w-3.5 h-3.5 text-red-500" /></span>
             )}
             {participant.networkQuality === 'good' && (
-              <SignalHigh className="w-3.5 h-3.5 text-brand-green" title="Good Connection" />
+              <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green" /></span>
             )}
           </div>
         </div>

@@ -12,6 +12,7 @@ import type {
   SidePanel,
   LayoutMode,
   ParticipantRole,
+  CaptionMessage,
 } from "@/lib/types/meeting";
 import {
   mockParticipants,
@@ -22,6 +23,7 @@ import {
   mockMeetingInfo,
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
 interface MeetingContextValue {
   // State
@@ -46,6 +48,10 @@ interface MeetingContextValue {
   isMobilePanelOpen: boolean;
   webrtcStatus: string;
   eCinemaLink: string | null;
+  isCaptionsEnabled: boolean;
+  captions: CaptionMessage[];
+  captionLanguage: string;
+  translationLanguage: string;
 
   // Actions
   toggleMute: () => void;
@@ -53,6 +59,9 @@ interface MeetingContextValue {
   toggleScreenShare: () => void;
   toggleRecording: () => void;
   toggleHandRaise: () => void;
+  toggleCaptions: () => void;
+  setCaptionLanguage: (lang: string) => void;
+  setTranslationLanguage: (lang: string) => void;
   setActivePanel: (panel: SidePanel) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
@@ -69,7 +78,6 @@ interface MeetingContextValue {
   forceMuteUser: (userId?: string) => void;
   endMeetingForAll: () => void;
   broadcastECinema: (link: string | null) => void;
-  eCinemaLink: string | null;
   
   // Device Management
   devices: {
@@ -159,7 +167,16 @@ export function MeetingProvider({
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
+  const [isCaptionsEnabled, setIsCaptionsEnabled] = useState(false);
+  const [captions, setCaptions] = useState<CaptionMessage[]>([]);
+  const [captionLanguage, setCaptionLanguage] = useState("en-US");
+  const [translationLanguage, setTranslationLanguage] = useState("original");
+  const translationLanguageRef = useRef("original");
   const [isAINoiseSuppressionEnabled, setIsAINoiseSuppressionEnabled] = useState(false);
+  
+  useEffect(() => {
+    translationLanguageRef.current = translationLanguage;
+  }, [translationLanguage]);
   
   // Settings State
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
@@ -352,6 +369,50 @@ export function MeetingProvider({
 
         client.onParticipantNetworkQuality = (userId, quality) => {
           setParticipants(prev => prev.map(p => p.id === userId ? { ...p, networkQuality: quality } : p));
+        };
+
+        client.onCaptionReceived = (userId, text, isFinal, lang) => {
+          const tLang = translationLanguageRef.current;
+          
+          const updateLocalCaption = (newText: string) => {
+            setParticipants((prev) => {
+              const sender = prev.find((p) => p.id === userId);
+              const senderName = sender?.name || `Participant ${userId.substring(5, 9)}`;
+              
+              setCaptions(currCaptions => {
+                const newCaptions = [...currCaptions];
+                const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
+                if (lastIdx >= 0) {
+                  newCaptions[lastIdx] = { userId, name: senderName, text: newText, isFinal, timestamp: Date.now() };
+                } else {
+                  newCaptions.push({ userId, name: senderName, text: newText, isFinal, timestamp: Date.now() });
+                }
+                if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
+                return newCaptions;
+              });
+              return prev;
+            });
+          };
+
+          // Immediately update with original text
+          updateLocalCaption(text);
+
+          // If final, check if we need to translate
+          if (isFinal && tLang !== 'original' && lang !== tLang) {
+            fetch('/api/translate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text, targetLanguage: tLang })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.translation) {
+                // Update the caption again but with the translated text
+                updateLocalCaption(data.translation);
+              }
+            })
+            .catch(err => console.error('Translation failed', err));
+          }
         };
 
         client.onChatHistory = (messages) => {
@@ -1007,6 +1068,41 @@ export function MeetingProvider({
     [currentUser]
   );
 
+  const { startListening, stopListening } = useSpeechRecognition({
+    language: captionLanguage,
+    onResult: (text, isFinal) => {
+      // Add locally
+      setCaptions(curr => {
+        const newCaptions = [...curr];
+        const lastIdx = newCaptions.findIndex(c => c.userId === currentUser.id && !c.isFinal);
+        if (lastIdx >= 0) {
+          newCaptions[lastIdx] = { userId: currentUser.id, name: currentUser.name, text, isFinal, timestamp: Date.now() };
+        } else {
+          newCaptions.push({ userId: currentUser.id, name: currentUser.name, text, isFinal, timestamp: Date.now() });
+        }
+        if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
+        return newCaptions;
+      });
+      // Broadcast
+      webrtcClient.current?.sendCaption(text, isFinal, captionLanguage);
+    }
+  });
+
+  const toggleCaptions = useCallback(() => {
+    setIsCaptionsEnabled(prev => {
+      const newState = !prev;
+      if (newState) {
+        startListening();
+        toast.success("Live Captions enabled");
+      } else {
+        stopListening();
+        setCaptions([]);
+        toast.info("Live Captions disabled");
+      }
+      return newState;
+    });
+  }, [startListening, stopListening]);
+
   const sendReaction = useCallback(
     (emoji: string) => {
       webrtcClient.current?.sendReaction(emoji);
@@ -1122,11 +1218,18 @@ export function MeetingProvider({
         meetingDuration,
         isMobilePanelOpen,
         webrtcStatus,
+        isCaptionsEnabled,
+        captions,
+        captionLanguage,
+        translationLanguage,
         toggleMute,
         toggleCamera,
         toggleScreenShare,
         toggleRecording,
         toggleHandRaise,
+        toggleCaptions,
+        setCaptionLanguage,
+        setTranslationLanguage,
         setActivePanel: handleSetActivePanel,
         setLayoutMode,
         sendMessage,
