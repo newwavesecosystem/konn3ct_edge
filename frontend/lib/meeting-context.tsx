@@ -290,14 +290,16 @@ export function MeetingProvider({
         setWebrtcStatus("fetching-token");
 
         // Call our new Next.js endpoint to get a secure JWT
+        const isBot = new URLSearchParams(window.location.search).get('bot') === 'true';
         const res = await fetch("/api/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId: roomSlug,
-            name: currentUser.name,
+            name: isBot ? "Recording Bot" : currentUser.name,
             email: "guest@conn3ct.com",
-            role: currentUser.role
+            role: currentUser.role,
+            isBot
           })
         });
 
@@ -395,6 +397,16 @@ export function MeetingProvider({
 
         client.onParticipantNetworkQuality = (userId, quality) => {
           setParticipants(prev => prev.map(p => p.id === userId ? { ...p, networkQuality: quality } : p));
+        };
+
+        client.onRecordingStarted = () => {
+          setIsRecording(true);
+          toast.info("This meeting is now being recorded.", { icon: "🔴" });
+        };
+
+        client.onRecordingStopped = () => {
+          setIsRecording(false);
+          toast.info("Recording has stopped.");
         };
 
         client.onCaptionReceived = (userId, text, isFinal, lang) => {
@@ -1008,66 +1020,13 @@ export function MeetingProvider({
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
-      // Stop recording
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-      }
+      webrtcClient.current?.sendStopRecording();
       setIsRecording(false);
-      toast.success("Recording stopped and downloaded");
+      toast.success("Recording stopped. It is being processed and will be saved to cloud.");
     } else {
-      // Start recording
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { displaySurface: "browser" },
-          audio: true,
-        });
-
-        const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp9')
-          ? 'video/webm; codecs=vp9'
-          : 'video/webm';
-
-        const recorder = new MediaRecorder(stream, { mimeType });
-        mediaRecorderRef.current = recorder;
-        recordedChunksRef.current = [];
-
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            recordedChunksRef.current.push(e.data);
-          }
-        };
-
-        recorder.onstop = () => {
-          const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `meeting-recording-${new Date().toISOString().slice(0,10)}.webm`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          
-          setIsRecording(false);
-          stream.getTracks().forEach(t => t.stop());
-        };
-
-        // If user manually clicks "Stop sharing" on the browser banner
-        stream.getVideoTracks()[0].onended = () => {
-          if (recorder.state !== 'inactive') {
-            recorder.stop();
-          }
-        };
-
-        recorder.start(1000); // chunk every second
-        setIsRecording(true);
-        toast.success("Recording started. Please keep this tab open.");
-      } catch (e: any) {
-        if (e.name !== "NotAllowedError") {
-          console.error("Failed to start recording:", e);
-          toast.error("Failed to start recording. Please check permissions.");
-        }
-      }
+      webrtcClient.current?.sendStartRecording();
+      setIsRecording(true);
+      toast.success("Recording started in the cloud.");
     }
   }, [isRecording]);
   const toggleHandRaise = useCallback(() => {

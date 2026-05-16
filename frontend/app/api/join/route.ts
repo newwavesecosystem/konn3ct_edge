@@ -18,7 +18,7 @@ redis.on("error", () => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email, role } = body;
+    const { roomId, name, email, role, isBot } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -56,10 +56,11 @@ export async function POST(request: Request) {
     // The backend's WebSocket verifier expects `userId` and `email`
     const token = jwt.sign(
       {
-        userId: `user_${Math.random().toString(36).substr(2, 9)}`,
+        userId: isBot ? "bot_recorder" : `user_${Math.random().toString(36).substr(2, 9)}`,
         email: email || "guest@conn3ct.com",
         name: name || "Guest",
-        role: role || "attendee",
+        role: isBot ? "bot" : (role || "attendee"),
+        isBot: !!isBot,
       },
       secret,
       { expiresIn: "24h" }

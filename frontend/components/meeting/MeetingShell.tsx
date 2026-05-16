@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { useSearchParams } from "next/navigation";
 import { StageView } from "./StageView";
 import { MeetingControls } from "./MeetingControls";
 import { ChatPanel } from "./ChatPanel";
@@ -31,6 +32,9 @@ export function MeetingShell() {
     showDonationModal,
     setShowDonationModal,
   } = useMeeting();
+
+  const searchParams = useSearchParams();
+  const isBot = searchParams?.get('bot') === 'true';
 
   const panelContent: Record<string, React.ReactNode> = {
     chat: <ChatPanel />,
@@ -87,6 +91,7 @@ export function MeetingShell() {
       style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}
     >
       {/* Top bar — minimal */}
+      {!isBot && (
       <div
         className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2"
         style={{
@@ -142,6 +147,7 @@ export function MeetingShell() {
           </span>
         </div>
       </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -152,6 +158,7 @@ export function MeetingShell() {
         </div>
 
         {/* Desktop side panel */}
+        {!isBot && (
         <AnimatePresence mode="wait">
           {activePanel && (
             <motion.div
@@ -183,9 +190,11 @@ export function MeetingShell() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
       </div>
 
       {/* Mobile bottom sheet panel */}
+      {!isBot && (
       <AnimatePresence>
         {activePanel && isMobilePanelOpen && (
           <>
@@ -241,9 +250,10 @@ export function MeetingShell() {
           </>
         )}
       </AnimatePresence>
+      )}
 
       {/* Meeting controls */}
-      <MeetingControls />
+      {!isBot && <MeetingControls />}
 
       {/* Floating layers */}
       <ReactionsLayer />

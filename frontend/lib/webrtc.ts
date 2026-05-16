@@ -60,6 +60,9 @@ export class WebRTCClient {
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[]) => void;
+  // Recording
+  public onRecordingStarted?: () => void;
+  public onRecordingStopped?: () => void;
 
   // Network monitoring
   public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
@@ -264,6 +267,12 @@ export class WebRTCClient {
           break;
         case 'donation_success':
           this.onDonationSuccessReceived?.(msg.userId, msg.name, msg.amount, msg.currency);
+          break;
+        case 'recording_started':
+          this.onRecordingStarted?.();
+          break;
+        case 'recording_stopped':
+          this.onRecordingStopped?.();
           break;
       }
     };
@@ -982,6 +991,18 @@ export class WebRTCClient {
   public sendDonationSuccess(amount: number, currency: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'donation_success', amount, currency }));
+    }
+  }
+
+  public sendStartRecording() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'start_recording' }));
+    }
+  }
+
+  public sendStopRecording() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'stop_recording' }));
     }
   }
 }

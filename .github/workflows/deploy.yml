@@ -39,6 +39,14 @@ jobs:
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
 
+      - name: Build and Push Recorder Docker Image
+        run: |
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
+          docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
       - name: Authenticate with Kubernetes Cluster
         run: |
           # IMPORTANT: Update 'conn3ct-cluster' to match the exact name of your cluster in DigitalOcean
@@ -67,6 +75,7 @@ jobs:
           # Tell Kubernetes to gracefully restart the pods so they download the new image we just pushed
           kubectl rollout restart deployment conn3ct-backend
           kubectl rollout restart deployment conn3ct-frontend
+          kubectl rollout restart deployment conn3ct-recorder
 
       # - name: Debugging - Print Pod Logs
       #   run: |
