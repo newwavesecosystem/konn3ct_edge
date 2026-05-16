@@ -333,24 +333,25 @@ export function MeetingProvider({
         client.onNetworkQualityChange = (quality) => {
           const now = Date.now();
           if (now - lastNetworkToastTime > 30000) {
-            // Play Warning Sound
-            try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              oscillator.type = 'triangle';
-              oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
-              oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
-              oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
-              gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-              oscillator.start(audioCtx.currentTime);
-              oscillator.stop(audioCtx.currentTime + 0.5);
-            } catch(e) {}
 
             if (quality === 'bad') {
+              // Play Warning Sound
+              try {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
+                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.5);
+              } catch(e) {}
+
               if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
                 toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
                 webrtcClient.current.enableAudioOnlyMode();
@@ -360,7 +361,7 @@ export function MeetingProvider({
               }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
-              toast.warning("Network connection is weak. Media quality might be degraded.");
+              toast.warning("Network connection is weak. Video or Audio quality might be degraded.");
               lastNetworkToastTime = now;
             } else if (quality === 'good') {
               if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
@@ -462,7 +463,9 @@ export function MeetingProvider({
         };
 
         client.onNoteUpdate = (msg) => {
-          setSharedNoteContent(msg.content);
+          if (msg.userId !== currentUser.id) {
+            setSharedNoteContent(msg.content);
+          }
         };
 
         client.onChatMessage = (msg) => {

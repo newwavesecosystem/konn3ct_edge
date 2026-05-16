@@ -85,6 +85,7 @@ export function DocsPanel() {
   };
 
   const lastExcalidrawVersion = React.useRef(0);
+  const excalidrawThrottleTimeout = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleExcalidrawChange = (elements: readonly any[], appState: any) => {
     // Only broadcast if the elements actually changed (calculate version sum)
@@ -94,7 +95,14 @@ export function DocsPanel() {
     if (currentVersion !== lastExcalidrawVersion.current) {
       lastExcalidrawVersion.current = currentVersion;
       state.excalidraw = elements;
-      updateSharedNote(JSON.stringify(state));
+      
+      // Throttle broadcast to max 10fps to avoid React infinite loops and WebRTC flooding
+      if (!excalidrawThrottleTimeout.current) {
+        excalidrawThrottleTimeout.current = setTimeout(() => {
+          updateSharedNote(JSON.stringify(state));
+          excalidrawThrottleTimeout.current = null;
+        }, 100);
+      }
     }
   };
 

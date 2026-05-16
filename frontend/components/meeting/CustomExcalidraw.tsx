@@ -11,6 +11,8 @@ interface Props {
 export default function CustomExcalidraw({ remoteElements, onChange }: Props) {
   const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
 
+  const isUpdatingRef = React.useRef(false);
+
   useEffect(() => {
     if (!excalidrawAPI || !remoteElements || remoteElements.length === 0) return;
     
@@ -20,7 +22,9 @@ export default function CustomExcalidraw({ remoteElements, onChange }: Props) {
     const localVersion = localElements.reduce((acc: number, el: any) => acc + (el.version || 0), 0);
     
     if (remoteVersion !== localVersion) {
+      isUpdatingRef.current = true;
       excalidrawAPI.updateScene({ elements: remoteElements });
+      setTimeout(() => { isUpdatingRef.current = false; }, 50);
     }
   }, [remoteElements, excalidrawAPI]);
 
@@ -50,10 +54,17 @@ export default function CustomExcalidraw({ remoteElements, onChange }: Props) {
       });
   }, [excalidrawAPI]);
 
+  const handleOnChange = (elements: readonly any[], appState: any) => {
+    if (isUpdatingRef.current) return;
+    if (onChange) {
+      onChange(elements, appState);
+    }
+  };
+
   return (
     <Excalidraw 
       excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
-      onChange={onChange}
+      onChange={handleOnChange}
     >
       <MainMenu>
         <MainMenu.DefaultItems.LoadScene />
