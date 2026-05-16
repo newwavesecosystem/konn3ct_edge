@@ -32,6 +32,7 @@
     "jsonwebtoken": "^9.0.2",
     "mediasoup": "^3.19.22",
     "nodemailer": "^7.0.3",
+    "openai": "^6.38.0",
     "puppeteer": "^24.43.0",
     "puppeteer-core": "^24.43.0",
     "puppeteer-stream": "^3.0.22",

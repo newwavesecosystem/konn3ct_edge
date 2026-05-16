@@ -37,6 +37,14 @@ export interface ChatMessage {
   fileUrl?: string;
 }
 
+export interface CaptionMessage {
+  userId: string;
+  name: string;
+  text: string;
+  isFinal: boolean;
+  timestamp: number;
+}
+
 export interface PollOption {
   id: string;
   text: string;

@@ -31,6 +31,7 @@ import {
   X,
   Play,
   ChevronUp,
+  Subtitles,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -48,6 +49,12 @@ export function MeetingControls() {
     toggleScreenShare,
     toggleRecording,
     toggleHandRaise,
+    isCaptionsEnabled,
+    toggleCaptions,
+    captionLanguage,
+    setCaptionLanguage,
+    translationLanguage,
+    setTranslationLanguage,
     setActivePanel,
     setLayoutMode,
     setShowLeaveDialog,
@@ -174,6 +181,47 @@ export function MeetingControls() {
           label="React"
           icon={<SmilePlus className="w-5 h-5" />}
         />
+        <div className="flex items-center">
+          <ControlButton
+            active={isCaptionsEnabled}
+            onClick={toggleCaptions}
+            label="Captions"
+            icon={<Subtitles className="w-5 h-5" />}
+          />
+          {isCaptionsEnabled && (
+            <div className="flex flex-col ml-1 gap-1">
+              <select
+                className="bg-transparent border border-[var(--mt-border-strong)] rounded-lg text-[10px] px-1 py-0.5 outline-none cursor-pointer hover:bg-[var(--mt-bg-hover)] transition-colors"
+                style={{ color: "var(--mt-text)" }}
+                value={captionLanguage}
+                onChange={(e) => setCaptionLanguage(e.target.value)}
+                title="Your Spoken Language"
+              >
+                <option value="en-US" className="bg-[#1a1a2e]">🗣️ English</option>
+                <option value="fr-FR" className="bg-[#1a1a2e]">🗣️ French</option>
+                <option value="es-ES" className="bg-[#1a1a2e]">🗣️ Spanish</option>
+                <option value="yo-NG" className="bg-[#1a1a2e]">🗣️ Yoruba</option>
+                <option value="ar-SA" className="bg-[#1a1a2e]">🗣️ Arabic</option>
+                <option value="zh-CN" className="bg-[#1a1a2e]">🗣️ Chinese</option>
+              </select>
+              <select
+                className="bg-transparent border border-[var(--mt-border-strong)] rounded-lg text-[10px] px-1 py-0.5 outline-none cursor-pointer hover:bg-[var(--mt-bg-hover)] transition-colors"
+                style={{ color: "var(--mt-text)" }}
+                value={translationLanguage}
+                onChange={(e) => setTranslationLanguage(e.target.value)}
+                title="Translate to"
+              >
+                <option value="original" className="bg-[#1a1a2e]">🌐 Original (No Translation)</option>
+                <option value="en" className="bg-[#1a1a2e]">🌐 English</option>
+                <option value="fr" className="bg-[#1a1a2e]">🌐 French</option>
+                <option value="es" className="bg-[#1a1a2e]">🌐 Spanish</option>
+                <option value="yo" className="bg-[#1a1a2e]">🌐 Yoruba</option>
+                <option value="ar" className="bg-[#1a1a2e]">🌐 Arabic</option>
+                <option value="zh" className="bg-[#1a1a2e]">🌐 Chinese</option>
+              </select>
+            </div>
+          )}
+        </div>
 
         <div className="w-px h-8 mx-1 hidden sm:block" style={{ backgroundColor: "var(--mt-border-strong)" }} />
 
