@@ -156,6 +156,7 @@ async function processRecordingJob(job) {
                 console.error('FFmpeg conversion error:', ffmpegErr);
                 resolve();
               });
+            });
               
           } catch (e) {
             console.error('Error during teardown:', e);
