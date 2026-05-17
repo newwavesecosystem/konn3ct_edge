@@ -24,6 +24,49 @@ const redis = new Redis(redisUrl, {
 });
 
 redis.on("error", () => { }); // Catch unhandled connection error events silently
+
+const redisSubscriber = new Redis(redisUrl, {
+  retryStrategy: (times) => {
+    if (process.env.NODE_ENV !== 'production') return null;
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 1
+});
+redisSubscriber.on("error", () => { });
+
+redisSubscriber.subscribe('recorder:completed').catch(e => logger.error('Failed to subscribe to recorder:completed', e));
+redisSubscriber.on('message', async (channel, message) => {
+  if (channel === 'recorder:completed') {
+    try {
+      const data = JSON.parse(message);
+      // Update room or recording entry
+      // For now, we will create a new recording record for the room
+      await db.recording.create({
+        data: {
+          roomId: data.roomId,
+          url: data.recordingUrl,
+          status: 'completed',
+          duration: 0, // Duration tracking can be enhanced later
+        }
+      });
+      logger.info(`Saved recording ${data.recordingUrl} to DB for room ${data.roomId}`);
+      
+      // Notify active users in the room that recording is fully ready
+      const clients = rooms.get(data.roomId);
+      if (clients) {
+        const payload = JSON.stringify({ type: 'recording_ready', url: data.recordingUrl });
+        for (const client of clients.values()) {
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(payload);
+          }
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to process recorder:completed event', e);
+    }
+  }
+});
+
 const POD_ID = process.env.POD_ID || 'pod-1';
 
 interface Client {

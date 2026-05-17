@@ -9,8 +9,11 @@ const ffmpeg = require('fluent-ffmpeg');
 require('dotenv').config();
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl);
-const pubsub = new Redis(redisUrl);
+const redis = new Redis(redisUrl, { retryStrategy: (times) => Math.min(times * 50, 2000) });
+const pubsub = new Redis(redisUrl, { retryStrategy: (times) => Math.min(times * 50, 2000) });
+
+redis.on("error", () => {}); // Suppress harmless reconnection errors
+pubsub.on("error", () => {});
 
 // Configure DO Spaces (S3 compatible)
 const s3 = new AWS.S3({
@@ -103,19 +106,21 @@ async function processRecordingJob(job) {
           pubsub.removeListener('message', stopHandler);
 
           try {
-            await stream.destroy();
-            fileStream.close();
-            await browser.close();
-
-            console.log('Browser closed. Converting to MP4...');
+            // Signal the stream to stop
+            stream.destroy();
+            fileStream.end();
             
-            // Convert WebM to MP4 using fluent-ffmpeg
-            ffmpeg(outputPathRaw)
-              .outputOptions([
-                '-preset veryfast',
-                '-c:v libx264',
-                '-c:a aac'
-              ])
+            fileStream.on('close', async () => {
+              console.log('File stream closed. Closing browser and converting to MP4...');
+              await browser.close();
+              
+              // Convert WebM to MP4 using fluent-ffmpeg
+              ffmpeg(outputPathRaw)
+                .outputOptions([
+                  '-preset veryfast',
+                  '-c:v libx264',
+                  '-c:a aac'
+                ])
               .save(outputPathMp4)
               .on('end', async () => {
                 console.log('Conversion finished. Uploading to Spaces...');

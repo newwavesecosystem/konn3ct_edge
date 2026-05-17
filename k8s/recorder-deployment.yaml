@@ -31,5 +31,5 @@ spec:
         env:
         - name: NODE_ENV
           value: "production"
-      imagePullSecrets:
-      - name: regcred
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"

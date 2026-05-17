@@ -1,4 +1,4 @@
-import { Device } from 'mediasoup-client';
+import type { Device } from 'mediasoup-client';
 // @ts-ignore
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 
@@ -414,7 +414,8 @@ export class WebRTCClient {
   public async createDevice() {
     console.log('[WebRTC] Creating Mediasoup Device...');
     const routerRtpCapabilities = await this.getRouterRtpCapabilities();
-    this.device = new Device();
+    const mediasoupClient = await import('mediasoup-client');
+    this.device = new mediasoupClient.Device();
     await this.device.load({ routerRtpCapabilities });
     console.log('[WebRTC] Mediasoup Device loaded successfully. Client RTP Capabilities:', this.device.rtpCapabilities);
   }
