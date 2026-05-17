@@ -111,7 +111,25 @@ async function processRecordingJob(job) {
             fileStream.end();
             
             fileStream.on('close', async () => {
-              console.log('File stream closed. Closing browser and converting to MP4...');
+              console.log('File stream closed. Checking raw file size...');
+              
+              try {
+                const stats = fs.statSync(outputPathRaw);
+                console.log(`Raw WebM size: ${stats.size} bytes`);
+                
+                if (stats.size < 10000) {
+                  console.error('Recording file is too small (less than 10KB). The recording was likely stopped too quickly or failed to capture frames.');
+                  fs.unlinkSync(outputPathRaw);
+                  await browser.close();
+                  return resolve();
+                }
+              } catch (statErr) {
+                console.error('Could not stat raw file:', statErr);
+                await browser.close();
+                return resolve();
+              }
+
+              console.log('Closing browser and converting to MP4...');
               await browser.close();
               
               // Convert WebM to MP4 using fluent-ffmpeg
