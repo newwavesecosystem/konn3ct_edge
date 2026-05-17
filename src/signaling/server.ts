@@ -41,15 +41,20 @@ redisSubscriber.on('message', async (channel, message) => {
       const data = JSON.parse(message);
       // Update room or recording entry
       // For now, we will create a new recording record for the room
-      await db.recording.create({
-        data: {
-          roomId: data.roomId,
-          url: data.recordingUrl,
-          status: 'completed',
-          duration: 0, // Duration tracking can be enhanced later
-        }
-      });
-      logger.info(`Saved recording ${data.recordingUrl} to DB for room ${data.roomId}`);
+      const room = await db.room.findUnique({ where: { id: data.roomId } });
+      if (room) {
+        await db.recording.create({
+          data: {
+            ownerId: room.ownerId,
+            title: `${room.name} Recording`,
+            roomId: data.roomId,
+            url: data.recordingUrl,
+            status: 'completed',
+            duration: 0, // Duration tracking can be enhanced later
+          }
+        });
+        logger.info(`Saved recording ${data.recordingUrl} to DB for room ${data.roomId}`);
+      }
       
       // Notify active users in the room that recording is fully ready
       const clients = rooms.get(data.roomId);
