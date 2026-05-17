@@ -50,7 +50,7 @@ This document describes the product requirements, APIs, data concepts, and secur
   - Specific users (via email)
   - Anyone with link
   - Only meeting participants
-- Architecture: Bundled with the main frontend Next.js directory to reuse authentication state and components. Handled via dynamic public routes (e.g., `/recordings/[recordingId]`).
+- Architecture: Bundled with the main project Next.js directory to reuse authentication state and components. Handled via dynamic public routes (e.g., `/recordings/[recordingId]`).
 - Free recording access: immediate playback based on access settings
 - Paid recording access:
   - Configure price
