@@ -63,8 +63,8 @@ export function StageView() {
   // Default: speaker layout
   return (
     <div className="flex-1 flex flex-col gap-2 p-2 sm:p-3 overflow-hidden">
-      {/* Main speaker — 50% on mobile, flex-1 on desktop */}
-      <div className="h-1/2 sm:flex-1 sm:h-auto min-h-0 shrink-0 sm:shrink">
+      {/* Main speaker — 70% on mobile, flex-1 on desktop */}
+      <div className="h-[65%] sm:flex-1 sm:h-auto min-h-0 shrink-0 sm:shrink">
         <ParticipantTile
           participant={activeSpeaker}
           isLarge
@@ -73,7 +73,7 @@ export function StageView() {
       </div>
       {/* Filmstrip — 50% on mobile (grid), horizontal scroll on desktop */}
       {others.length > 0 && (
-        <div className="h-1/2 sm:h-auto sm:shrink-0 min-h-0 overflow-hidden">
+        <div className="h-[35%] sm:h-auto sm:shrink-0 min-h-0 overflow-hidden">
           {/* Mobile: 2-column grid, scrollable */}
           <div className="grid grid-cols-2 gap-2 h-full overflow-y-auto no-scrollbar sm:hidden">
             {others.slice(0, 6).map((p) => (

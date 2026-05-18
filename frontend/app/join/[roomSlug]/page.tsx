@@ -216,8 +216,8 @@ export default function JoinPage({
                   serverStatus === "online"
                     ? "bg-brand-green/10 border-brand-green/20 text-brand-green"
                     : serverStatus === "offline"
-                    ? "bg-red-500/10 border-red-500/20 text-red-400"
-                    : "bg-white/5 border-white/10 text-white/40"
+                      ? "bg-red-500/10 border-red-500/20 text-red-400"
+                      : "bg-white/5 border-white/10 text-white/40"
                 )}>
                   {serverStatus === "checking" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   {serverStatus === "online" && <Wifi className="w-3.5 h-3.5" />}

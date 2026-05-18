@@ -66,12 +66,12 @@ export function ParticipantTile({
         "relative rounded-2xl overflow-hidden group transition-all duration-300",
         participant.isSpeaking &&
           "ring-2 ring-brand-green ring-offset-2",
-        isLarge ? "aspect-video" : "aspect-video",
+        "aspect-video",
         className
       )}
       style={{
         backgroundColor: "var(--mt-bg-tile)",
-        ...(participant.isSpeaking ? { ringOffsetColor: "var(--mt-bg)" } as React.CSSProperties : {}),
+        ...(participant.isSpeaking ? { ['--tw-ring-offset-color' as string]: "var(--mt-ring-offset)" } : {}),
       }}
     >
       {/* Mock video area / avatar fallback */}
@@ -161,7 +161,10 @@ export function ParticipantTile({
       )}
 
       {/* Bottom overlay with name & controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+      <div
+        className="absolute bottom-0 left-0 right-0 p-3"
+        style={{ background: `linear-gradient(to top, var(--mt-tile-overlay, rgba(0,0,0,0.65)), transparent)` }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             {roleIcon[participant.role] && (
@@ -170,6 +173,9 @@ export function ParticipantTile({
             <span className="text-white text-xs font-medium truncate">
               {participant.name}
             </span>
+            {participant.id === currentUser.id && (
+              <span className="text-white/50 text-[10px]">(You)</span>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {participant.isMuted ? (
