@@ -1,5 +1,4 @@
-const puppeteer = require('puppeteer');
-const { getStream } = require('puppeteer-stream');
+const { launch, getStream } = require('puppeteer-stream');
 const fs = require('fs');
 const path = require('path');
 const Redis = require('ioredis');
@@ -58,7 +57,7 @@ async function processRecordingJob(job) {
   const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
   
   try {
-    browser = await puppeteer.launch({
+    browser = await launch({
       headless: false, // Required by puppeteer-stream and extension APIs
       defaultViewport: {
         width: 1280,
