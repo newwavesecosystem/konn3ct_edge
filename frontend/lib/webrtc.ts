@@ -414,16 +414,30 @@ export class WebRTCClient {
     });
     const videoTrack = stream.getVideoTracks()[0];
     
-    this.localVideoProducer = await this.sendTransport.produce({ 
-      track: videoTrack,
-      encodings: [
-        { scaleResolutionDownBy: 4, maxBitrate: 100000 },
-        { scaleResolutionDownBy: 2, maxBitrate: 300000 },
-        { scaleResolutionDownBy: 1, maxBitrate: 900000 },
-      ],
-      codecOptions: { videoGoogleStartBitrate: 1000 }
-    });
+    if (this.localVideoProducer && !this.localVideoProducer.closed) {
+      await this.localVideoProducer.replaceTrack({ track: videoTrack });
+      this.localVideoProducer.resume();
+    } else {
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: videoTrack,
+        encodings: [
+          { scaleResolutionDownBy: 4, maxBitrate: 100000 },
+          { scaleResolutionDownBy: 2, maxBitrate: 300000 },
+          { scaleResolutionDownBy: 1, maxBitrate: 900000 },
+        ],
+        codecOptions: { videoGoogleStartBitrate: 1000 }
+      });
+    }
     return videoTrack;
+  }
+
+  public disableCamera() {
+    if (this.localVideoProducer) {
+      if (this.localVideoProducer.track) {
+        this.localVideoProducer.track.stop();
+      }
+      this.localVideoProducer.pause();
+    }
   }
 
   public async enableMic(): Promise<MediaStreamTrack> {
@@ -490,10 +504,9 @@ export class WebRTCClient {
       await this.localVideoProducer.replaceTrack({ track: cameraTrack });
       return cameraTrack;
     } else {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const newTrack = stream.getVideoTracks()[0];
-      await this.localVideoProducer.replaceTrack({ track: newTrack });
-      return newTrack;
+      this.localVideoProducer.close();
+      this.localVideoProducer = null;
+      return undefined;
     }
   }
 
