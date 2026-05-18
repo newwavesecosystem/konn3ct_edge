@@ -90,7 +90,7 @@ export default function JoinPage({
     streamRef.current = null;
     // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
     router.push(
-      `/meeting/${resolvedParams.roomSlug}?name=${encodeURIComponent(name.trim())}&role=${role}`
+      `/meeting/${resolvedParams.roomSlug}?name=${encodeURIComponent(name.trim())}&role=${role}&camera=${isCameraOn}&mic=${!isMuted}`
     );
   };
 

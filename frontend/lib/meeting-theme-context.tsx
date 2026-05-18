@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 
-export type MeetingTheme = "midnight" | "soft" | "slate";
+export type MeetingTheme = "midnight" | "soft" | "slate" | "sage";
 
 interface MeetingThemeContextValue {
   theme: MeetingTheme;
@@ -28,6 +28,47 @@ export function useMeetingTheme() {
  * - "slate"    = cool blue-gray premium dark (like VS Code / Discord)
  */
 const themeTokens: Record<MeetingTheme, Record<string, string>> = {
+  sage: {
+    /* Soft sage green — inspired by modern video-call UI with warm white bg and muted green tiles */
+    "--mt-bg":              "#F2F5F2",
+    "--mt-bg-elevated":     "#FFFFFF",
+    "--mt-bg-tile":         "#9DB8A3",
+    "--mt-bg-tile-alt":     "#8EAD96",
+    "--mt-bg-tile-alt2":    "#A7BFAd",
+    "--mt-bg-tile-camera":  "#92AC99",
+    "--mt-bg-hover":        "rgba(0,0,0,0.05)",
+    "--mt-bg-active":       "rgba(32,116,80,0.14)",
+    "--mt-bg-control":      "rgba(0,0,0,0.07)",
+    "--mt-bg-control-hover":"rgba(0,0,0,0.12)",
+    "--mt-bg-input":        "#FFFFFF",
+    "--mt-bg-screen":       "#D8E4DA",
+    "--mt-bg-screen-content":"#FFFFFF",
+    "--mt-bg-screen-grad1": "#E4EDE6",
+    "--mt-bg-screen-grad2": "#D4E0D6",
+    "--mt-border":          "rgba(0,0,0,0.10)",
+    "--mt-border-strong":   "rgba(0,0,0,0.18)",
+    "--mt-text":            "#1A2B1F",
+    "--mt-text-secondary":  "#2E4035",
+    "--mt-text-muted":      "#566B5C",
+    "--mt-text-faint":      "#8BA090",
+    "--mt-text-ghost":      "#B8CCBF",
+    "--mt-text-whisper":    "#D8E4DA",
+    "--mt-ring-offset":     "#F2F5F2",
+    "--mt-overlay":         "rgba(0,0,0,0.32)",
+    "--mt-dialog-bg":       "#FFFFFF",
+    "--mt-reaction-picker": "rgba(255,255,255,0.97)",
+    "--mt-option-bg":       "#FFFFFF",
+    "--mt-scrollbar-thumb": "rgba(0,0,0,0.15)",
+    "--mt-scrollbar-track": "transparent",
+    "--mt-shadow":          "0 1px 4px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.05)",
+    "--mt-control-bar":     "#FFFFFF",
+    "--mt-control-pill":    "rgba(0,0,0,0.05)",
+    "--mt-tile-overlay":    "rgba(0,0,0,0.45)",
+    "--mt-is-dark":         "0",
+    /* Sage-specific: avatar circle background inside a tile */
+    "--mt-avatar-bg":       "#7A9E86",
+    "--mt-avatar-text":     "#FFFFFF",
+  },
   midnight: {
     /* Neutral charcoal — Zoom / Teams inspired */
     "--mt-bg":              "#18181B",
@@ -65,6 +106,8 @@ const themeTokens: Record<MeetingTheme, Record<string, string>> = {
     "--mt-control-pill":    "rgba(255,255,255,0.06)",
     "--mt-tile-overlay":    "rgba(0,0,0,0.65)",
     "--mt-is-dark":         "1",
+    "--mt-avatar-bg":       "#3F3F46",
+    "--mt-avatar-text":     "#FAFAFA",
   },
   soft: {
     /* Warm, high-contrast light — Google Meet / Figma light mode inspired */
@@ -103,6 +146,8 @@ const themeTokens: Record<MeetingTheme, Record<string, string>> = {
     "--mt-control-pill":    "rgba(0,0,0,0.05)",
     "--mt-tile-overlay":    "rgba(0,0,0,0.50)",
     "--mt-is-dark":         "0",
+    "--mt-avatar-bg":       "#C8C7C1",
+    "--mt-avatar-text":     "#3D3D3A",
   },
   slate: {
     /* Cool blue-gray premium dark — VS Code / Discord inspired */
@@ -141,11 +186,13 @@ const themeTokens: Record<MeetingTheme, Record<string, string>> = {
     "--mt-control-pill":    "rgba(255,255,255,0.05)",
     "--mt-tile-overlay":    "rgba(0,0,0,0.60)",
     "--mt-is-dark":         "1",
+    "--mt-avatar-bg":       "#283548",
+    "--mt-avatar-text":     "#F1F5F9",
   },
 };
 
 export function MeetingThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<MeetingTheme>("slate");
+  const [theme, setThemeState] = useState<MeetingTheme>("sage");
 
   const setTheme = useCallback((t: MeetingTheme) => {
     setThemeState(t);
@@ -153,7 +200,7 @@ export function MeetingThemeProvider({ children }: { children: React.ReactNode }
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
-      const order: MeetingTheme[] = ["midnight", "soft", "slate"];
+      const order: MeetingTheme[] = ["sage", "midnight", "soft", "slate"];
       const idx = order.indexOf(prev);
       return order[(idx + 1) % order.length];
     });

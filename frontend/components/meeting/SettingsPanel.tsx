@@ -2,6 +2,8 @@
 
 import React from "react";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
+import { useMeeting } from "@/lib/meeting-context";
+import type { GridOverflowMode } from "@/lib/types/meeting";
 import {
   Speaker,
   Mic,
@@ -12,10 +14,14 @@ import {
   Sun,
   Cloudy,
   Palette,
+  Leaf,
+  LayoutGrid,
+  ArrowLeftRight,
 } from "lucide-react";
 
 export function SettingsPanel() {
   const { theme, setTheme } = useMeetingTheme();
+  const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
   return (
     <div className="flex flex-col h-full">
@@ -31,18 +37,26 @@ export function SettingsPanel() {
               <Palette className="w-4 h-4 inline mr-2" style={{ verticalAlign: "text-bottom" }} />
               Meeting Theme
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
+              <ThemeOption
+                themeName="sage"
+                label="Sage"
+                icon={<Leaf className="w-4 h-4" />}
+                description="Fresh"
+                active={theme === "sage"}
+                onSelect={() => setTheme("sage")}
+              />
               <ThemeOption
                 themeName="midnight"
                 label="Midnight"
                 icon={<Moon className="w-4 h-4" />}
-                description="Default"
+                description="Dark"
                 active={theme === "midnight"}
                 onSelect={() => setTheme("midnight")}
               />
               <ThemeOption
                 themeName="soft"
-                label="Soft Light"
+                label="Soft"
                 icon={<Sun className="w-4 h-4" />}
                 description="Light"
                 active={theme === "soft"}
@@ -101,6 +115,45 @@ export function SettingsPanel() {
           <SettingsToggle label="Low bandwidth mode" checked={false} />
           <SettingsToggle label="Always mute on join" checked={false} />
         </SettingsGroup>
+
+        {/* Display / Grid settings */}
+        <SettingsGroup label="Display">
+          <div>
+            <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
+              <LayoutGrid className="w-4 h-4" />
+              <span className="text-xs font-medium">Grid Overflow</span>
+            </div>
+            <p className="text-[10px] mb-2.5" style={{ color: "var(--mt-text-faint)" }}>
+              How to handle many participants in grid view
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setGridOverflowMode("scroll")}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-200"
+                style={{
+                  backgroundColor: gridOverflowMode === "scroll" ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+                  border: gridOverflowMode === "scroll" ? "2px solid var(--color-brand-green)" : "2px solid var(--mt-border)",
+                }}
+              >
+                <ArrowLeftRight className="w-4 h-4 rotate-90" style={{ color: gridOverflowMode === "scroll" ? "var(--mt-text)" : "var(--mt-text-muted)" }} />
+                <span className="text-xs font-semibold" style={{ color: gridOverflowMode === "scroll" ? "var(--mt-text)" : "var(--mt-text-muted)" }}>Scroll</span>
+                <span className="text-[10px]" style={{ color: "var(--mt-text-faint)" }}>Scrollbar</span>
+              </button>
+              <button
+                onClick={() => setGridOverflowMode("paginate")}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all duration-200"
+                style={{
+                  backgroundColor: gridOverflowMode === "paginate" ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+                  border: gridOverflowMode === "paginate" ? "2px solid var(--color-brand-green)" : "2px solid var(--mt-border)",
+                }}
+              >
+                <LayoutGrid className="w-4 h-4" style={{ color: gridOverflowMode === "paginate" ? "var(--mt-text)" : "var(--mt-text-muted)" }} />
+                <span className="text-xs font-semibold" style={{ color: gridOverflowMode === "paginate" ? "var(--mt-text)" : "var(--mt-text-muted)" }}>Pages</span>
+                <span className="text-[10px]" style={{ color: "var(--mt-text-faint)" }}>Dot pagination</span>
+              </button>
+            </div>
+          </div>
+        </SettingsGroup>
       </div>
     </div>
   );
@@ -134,6 +187,7 @@ function ThemeOption({
         className="w-full aspect-[16/10] rounded-lg flex items-center justify-center"
         style={{
           backgroundColor:
+            themeName === "sage" ? "#F2F5F2" :
             themeName === "midnight" ? "#18181B" :
             themeName === "slate" ? "#0F172A" : "#F0EFE9",
           border: "1px solid var(--mt-border)",
@@ -144,6 +198,7 @@ function ThemeOption({
             className="w-6 h-4 rounded"
             style={{
               backgroundColor:
+                themeName === "sage" ? "#9DB8A3" :
                 themeName === "midnight" ? "#27272A" :
                 themeName === "slate" ? "#1E293B" : "#E3E2DC",
             }}
@@ -152,6 +207,7 @@ function ThemeOption({
             className="w-6 h-4 rounded"
             style={{
               backgroundColor:
+                themeName === "sage" ? "#9DB8A3" :
                 themeName === "midnight" ? "#27272A" :
                 themeName === "slate" ? "#1E293B" : "#E3E2DC",
             }}

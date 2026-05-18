@@ -11,6 +11,7 @@ import type {
   Reaction,
   SidePanel,
   LayoutMode,
+  GridOverflowMode,
   ParticipantRole,
 } from "@/lib/types/meeting";
 import {
@@ -35,6 +36,7 @@ interface MeetingContextValue {
   reactions: Reaction[];
   activePanel: SidePanel;
   layoutMode: LayoutMode;
+  gridOverflowMode: GridOverflowMode;
   isMuted: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
@@ -55,6 +57,7 @@ interface MeetingContextValue {
   toggleHandRaise: () => void;
   setActivePanel: (panel: SidePanel) => void;
   setLayoutMode: (mode: LayoutMode) => void;
+  setGridOverflowMode: (mode: GridOverflowMode) => void;
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
@@ -87,14 +90,16 @@ export function MeetingProvider({
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const queryName = searchParams.get("name") || "Guest";
   const queryRole = (searchParams.get("role") as ParticipantRole) || "attendee";
+  const initialCameraOn = searchParams.get("camera") !== "false";
+  const initialMuted = searchParams.get("mic") === "false";
 
   // ── State ────────────────────────────────────────────
   const [currentUser] = useState<Participant>({
     id: `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
-    isMuted: false,
-    isCameraOn: true,
+    isMuted: initialMuted,
+    isCameraOn: initialCameraOn,
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
@@ -118,9 +123,10 @@ export function MeetingProvider({
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("speaker");
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("grid");
+  const [gridOverflowMode, setGridOverflowMode] = useState<GridOverflowMode>("paginate");
+  const [isMuted, setIsMuted] = useState(initialMuted);
+  const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
@@ -424,15 +430,24 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
-          const videoTrack = await client.enableCamera();
-          localCameraTrackRef.current = videoTrack;
-          const audioTrack = await client.enableMic();
+          let videoTrack: MediaStreamTrack | null = null;
+          let audioTrack: MediaStreamTrack | null = null;
+
+          if (isCameraOn) {
+            videoTrack = await client.enableCamera();
+            localCameraTrackRef.current = videoTrack;
+          }
+          
+          audioTrack = await client.enableMic();
           localAudioTrackRef.current = audioTrack;
+          if (isMuted) {
+            client.pauseMic();
+          }
 
           setParticipants((prev) =>
             prev.map((p) => {
               if (p.id === currentUser.id) {
-                return { ...p, videoTrack, audioTrack, isCameraOn: true, isMuted: false };
+                return { ...p, videoTrack: videoTrack || undefined, audioTrack: audioTrack || undefined, isCameraOn, isMuted };
               }
               return p;
             })
@@ -512,26 +527,54 @@ export function MeetingProvider({
     setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isMuted: newState } : p));
   }, [isMuted, currentUser.id]);
 
-  const toggleCamera = useCallback(() => {
-    if (isCameraOn) webrtcClient.current?.pauseCamera();
-    else webrtcClient.current?.resumeCamera();
-    setIsCameraOn((v) => !v);
-  }, [isCameraOn]);
+  const toggleCamera = useCallback(async () => {
+    if (isCameraOn) {
+      webrtcClient.current?.disableCamera();
+      if (localCameraTrackRef.current) {
+        localCameraTrackRef.current.stop();
+        localCameraTrackRef.current = null;
+      }
+      setIsCameraOn(false);
+      setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, videoTrack: undefined } : p));
+    } else {
+      try {
+        const track = await webrtcClient.current?.enableCamera();
+        if (track) {
+          localCameraTrackRef.current = track;
+          setIsCameraOn(true);
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: true, videoTrack: track } : p));
+        }
+      } catch (e) {
+        console.error("Failed to enable camera", e);
+      }
+    }
+  }, [isCameraOn, currentUser.id]);
 
   const toggleScreenShare = useCallback(async () => {
     try {
       if (isScreenSharing) {
         const newTrack = await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current || undefined);
-        if (newTrack) localCameraTrackRef.current = newTrack;
+        if (newTrack) {
+          localCameraTrackRef.current = newTrack;
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: newTrack } : p));
+        } else {
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: undefined } : p));
+        }
         setIsScreenSharing(false);
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
           setIsScreenSharing(true);
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: screenTrack } : p));
           // Listen for native "Stop sharing" button built into browsers
           screenTrack.onended = async () => {
             const newTrack = await webrtcClient.current?.disableScreenShare(localCameraTrackRef.current || undefined);
-            if (newTrack) localCameraTrackRef.current = newTrack;
+            if (newTrack) {
+              localCameraTrackRef.current = newTrack;
+              setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: newTrack } : p));
+            } else {
+              setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: undefined } : p));
+            }
             setIsScreenSharing(false);
           };
         }
@@ -539,7 +582,7 @@ export function MeetingProvider({
     } catch (e) {
       console.error("Screen share error:", e);
     }
-  }, [isScreenSharing]);
+  }, [isScreenSharing, currentUser.id]);
 
   const toggleRecording = useCallback(() => setIsRecording((v) => !v), []);
   const toggleHandRaise = useCallback(() => {
@@ -656,6 +699,7 @@ export function MeetingProvider({
         reactions,
         activePanel,
         layoutMode,
+        gridOverflowMode,
         isMuted,
         isCameraOn,
         isScreenSharing,
@@ -673,6 +717,7 @@ export function MeetingProvider({
         toggleHandRaise,
         setActivePanel: handleSetActivePanel,
         setLayoutMode,
+        setGridOverflowMode,
         sendMessage,
         sendReaction,
         votePoll,
