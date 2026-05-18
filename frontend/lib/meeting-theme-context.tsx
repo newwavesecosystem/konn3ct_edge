@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 
-export type MeetingTheme = "emerald" | "konn3ct" | "dark";
+export type MeetingTheme = "midnight" | "soft" | "slate";
 
 interface MeetingThemeContextValue {
   theme: MeetingTheme;
@@ -20,117 +20,132 @@ export function useMeetingTheme() {
 
 /**
  * Theme tokens for the meeting UI.
- * - "emerald" = rich green backgrounds with white text — the default (green/white inverted)
- * - "konn3ct" = light theme matching the dashboard / landing page brand
- * - "dark"    = the cinematic dark theme option
+ * Inspired by Zoom / Google Meet / Microsoft Teams — neutral backgrounds,
+ * brand-green accent only on interactive elements.
+ *
+ * - "midnight" = neutral charcoal (like Zoom) — DEFAULT
+ * - "soft"     = warm off-white with subtle depth (like Notion / Linear light)
+ * - "slate"    = cool blue-gray premium dark (like VS Code / Discord)
  */
 const themeTokens: Record<MeetingTheme, Record<string, string>> = {
-  emerald: {
-    /* Deep green backgrounds, white text — brand-green inverted */
-    "--mt-bg":              "#0B2B1E",
-    "--mt-bg-elevated":     "#0F3527",
-    "--mt-bg-tile":         "#14412F",
-    "--mt-bg-tile-alt":     "#184D38",
-    "--mt-bg-tile-alt2":    "#1C5940",
-    "--mt-bg-tile-camera":  "#143E2D",
+  midnight: {
+    /* Neutral charcoal — Zoom / Teams inspired */
+    "--mt-bg":              "#18181B",
+    "--mt-bg-elevated":     "#1F1F23",
+    "--mt-bg-tile":         "#27272A",
+    "--mt-bg-tile-alt":     "#2C2C31",
+    "--mt-bg-tile-alt2":    "#313136",
+    "--mt-bg-tile-camera":  "#232328",
     "--mt-bg-hover":        "rgba(255,255,255,0.06)",
-    "--mt-bg-active":       "rgba(255,255,255,0.15)",
+    "--mt-bg-active":       "rgba(255,255,255,0.12)",
     "--mt-bg-control":      "rgba(255,255,255,0.07)",
     "--mt-bg-control-hover":"rgba(255,255,255,0.12)",
     "--mt-bg-input":        "rgba(255,255,255,0.07)",
-    "--mt-bg-screen":       "#091F15",
-    "--mt-bg-screen-content":"#0F3024",
-    "--mt-bg-screen-grad1": "#0C2A1C",
-    "--mt-bg-screen-grad2": "#0B2518",
-    "--mt-border":          "rgba(255,255,255,0.07)",
-    "--mt-border-strong":   "rgba(255,255,255,0.12)",
-    "--mt-text":            "#FFFFFF",
+    "--mt-bg-screen":       "#141417",
+    "--mt-bg-screen-content":"#1F1F23",
+    "--mt-bg-screen-grad1": "#18181B",
+    "--mt-bg-screen-grad2": "#141417",
+    "--mt-border":          "rgba(255,255,255,0.08)",
+    "--mt-border-strong":   "rgba(255,255,255,0.14)",
+    "--mt-text":            "#FAFAFA",
     "--mt-text-secondary":  "rgba(255,255,255,0.82)",
     "--mt-text-muted":      "rgba(255,255,255,0.55)",
-    "--mt-text-faint":      "rgba(255,255,255,0.32)",
+    "--mt-text-faint":      "rgba(255,255,255,0.35)",
     "--mt-text-ghost":      "rgba(255,255,255,0.20)",
-    "--mt-text-whisper":    "rgba(255,255,255,0.10)",
-    "--mt-ring-offset":     "#0B2B1E",
-    "--mt-overlay":         "rgba(0,0,0,0.55)",
-    "--mt-dialog-bg":       "#14412F",
-    "--mt-reaction-picker": "rgba(20,65,47,0.95)",
-    "--mt-option-bg":       "#14412F",
-    "--mt-scrollbar-thumb": "rgba(255,255,255,0.14)",
+    "--mt-text-whisper":    "rgba(255,255,255,0.08)",
+    "--mt-ring-offset":     "#18181B",
+    "--mt-overlay":         "rgba(0,0,0,0.60)",
+    "--mt-dialog-bg":       "#27272A",
+    "--mt-reaction-picker": "rgba(39,39,42,0.95)",
+    "--mt-option-bg":       "#27272A",
+    "--mt-scrollbar-thumb": "rgba(255,255,255,0.12)",
     "--mt-scrollbar-track": "transparent",
     "--mt-shadow":          "none",
+    "--mt-control-bar":     "#141417",
+    "--mt-control-pill":    "rgba(255,255,255,0.06)",
+    "--mt-tile-overlay":    "rgba(0,0,0,0.65)",
+    "--mt-is-dark":         "1",
   },
-  konn3ct: {
-    /* Matches dashboard/landing page: white surfaces, #FCFCFC page bg, brand greens & blues */
-    "--mt-bg":              "#FCFCFC",
-    "--mt-bg-elevated":     "#FFFFFF",
-    "--mt-bg-tile":         "#F0F5F2",
-    "--mt-bg-tile-alt":     "#E0ECE4",
-    "--mt-bg-tile-alt2":    "#D5E5DA",
-    "--mt-bg-tile-camera":  "#E8EFEB",
-    "--mt-bg-hover":        "rgba(0,0,0,0.03)",
+  soft: {
+    /* Warm, high-contrast light — Google Meet / Figma light mode inspired */
+    "--mt-bg":              "#F0EFE9",
+    "--mt-bg-elevated":     "#FAFAF7",
+    "--mt-bg-tile":         "#E3E2DC",
+    "--mt-bg-tile-alt":     "#D6D5CF",
+    "--mt-bg-tile-alt2":    "#CDCCC6",
+    "--mt-bg-tile-camera":  "#DDDCD6",
+    "--mt-bg-hover":        "rgba(0,0,0,0.05)",
     "--mt-bg-active":       "rgba(32,116,80,0.12)",
-    "--mt-bg-control":      "rgba(0,0,0,0.04)",
-    "--mt-bg-control-hover":"rgba(0,0,0,0.07)",
-    "--mt-bg-input":        "#F8F8F8",
-    "--mt-bg-screen":       "#F0F3F1",
-    "--mt-bg-screen-content":"#FFFFFF",
-    "--mt-bg-screen-grad1": "#E8EFEB",
-    "--mt-bg-screen-grad2": "#E0ECE4",
-    "--mt-border":          "#D9D9D9",
-    "--mt-border-strong":   "rgba(0,0,0,0.12)",
-    "--mt-text":            "#000000",
-    "--mt-text-secondary":  "#343030",
-    "--mt-text-muted":      "#A0A0A0",
-    "--mt-text-faint":      "rgba(0,0,0,0.30)",
-    "--mt-text-ghost":      "rgba(0,0,0,0.20)",
-    "--mt-text-whisper":    "rgba(0,0,0,0.08)",
-    "--mt-ring-offset":     "#FCFCFC",
-    "--mt-overlay":         "rgba(0,0,0,0.40)",
-    "--mt-dialog-bg":       "#FFFFFF",
-    "--mt-reaction-picker": "rgba(255,255,255,0.95)",
-    "--mt-option-bg":       "#FFFFFF",
-    "--mt-scrollbar-thumb": "rgba(32,116,80,0.25)",
+    "--mt-bg-control":      "rgba(0,0,0,0.06)",
+    "--mt-bg-control-hover":"rgba(0,0,0,0.10)",
+    "--mt-bg-input":        "#FAFAF7",
+    "--mt-bg-screen":       "#E3E2DC",
+    "--mt-bg-screen-content":"#FAFAF7",
+    "--mt-bg-screen-grad1": "#E8E7E1",
+    "--mt-bg-screen-grad2": "#E0DFD9",
+    "--mt-border":          "#C8C7C1",
+    "--mt-border-strong":   "#9E9D97",
+    "--mt-text":            "#1C1C1A",
+    "--mt-text-secondary":  "#3D3D3A",
+    "--mt-text-muted":      "#6B6B66",
+    "--mt-text-faint":      "#9E9D97",
+    "--mt-text-ghost":      "#C8C7C1",
+    "--mt-text-whisper":    "#E3E2DC",
+    "--mt-ring-offset":     "#F0EFE9",
+    "--mt-overlay":         "rgba(0,0,0,0.35)",
+    "--mt-dialog-bg":       "#FAFAF7",
+    "--mt-reaction-picker": "rgba(250,250,247,0.97)",
+    "--mt-option-bg":       "#FAFAF7",
+    "--mt-scrollbar-thumb": "rgba(0,0,0,0.18)",
     "--mt-scrollbar-track": "transparent",
-    "--mt-shadow":          "0 2px 8px rgba(0,0,0,0.06)",
+    "--mt-shadow":          "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04)",
+    "--mt-control-bar":     "#FAFAF7",
+    "--mt-control-pill":    "rgba(0,0,0,0.05)",
+    "--mt-tile-overlay":    "rgba(0,0,0,0.50)",
+    "--mt-is-dark":         "0",
   },
-  dark: {
-    /* The original cinematic dark theme */
-    "--mt-bg":              "#0d0d1a",
-    "--mt-bg-elevated":     "#111128",
-    "--mt-bg-tile":         "#1a1a2e",
-    "--mt-bg-tile-alt":     "#1e293b",
-    "--mt-bg-tile-alt2":    "#2d1f3d",
-    "--mt-bg-tile-camera":  "#1a2a3a",
+  slate: {
+    /* Cool blue-gray premium dark — VS Code / Discord inspired */
+    "--mt-bg":              "#0F172A",
+    "--mt-bg-elevated":     "#1E293B",
+    "--mt-bg-tile":         "#1E293B",
+    "--mt-bg-tile-alt":     "#283548",
+    "--mt-bg-tile-alt2":    "#334155",
+    "--mt-bg-tile-camera":  "#1A2536",
     "--mt-bg-hover":        "rgba(255,255,255,0.05)",
-    "--mt-bg-active":       "rgba(255,255,255,0.15)",
-    "--mt-bg-control":      "rgba(255,255,255,0.05)",
+    "--mt-bg-active":       "rgba(255,255,255,0.12)",
+    "--mt-bg-control":      "rgba(255,255,255,0.06)",
     "--mt-bg-control-hover":"rgba(255,255,255,0.10)",
-    "--mt-bg-input":        "rgba(255,255,255,0.05)",
-    "--mt-bg-screen":       "#0a0a18",
-    "--mt-bg-screen-content":"#141428",
-    "--mt-bg-screen-grad1": "#0e1525",
-    "--mt-bg-screen-grad2": "#0e0e24",
-    "--mt-border":          "rgba(255,255,255,0.05)",
-    "--mt-border-strong":   "rgba(255,255,255,0.10)",
-    "--mt-text":            "#ffffff",
-    "--mt-text-secondary":  "rgba(255,255,255,0.80)",
-    "--mt-text-muted":      "rgba(255,255,255,0.50)",
-    "--mt-text-faint":      "rgba(255,255,255,0.30)",
-    "--mt-text-ghost":      "rgba(255,255,255,0.20)",
-    "--mt-text-whisper":    "rgba(255,255,255,0.10)",
-    "--mt-ring-offset":     "#0d0d1a",
-    "--mt-overlay":         "rgba(0,0,0,0.60)",
-    "--mt-dialog-bg":       "#1a1a2e",
-    "--mt-reaction-picker": "rgba(26,26,46,0.95)",
-    "--mt-option-bg":       "#1a1a2e",
+    "--mt-bg-input":        "rgba(255,255,255,0.06)",
+    "--mt-bg-screen":       "#0B1120",
+    "--mt-bg-screen-content":"#1E293B",
+    "--mt-bg-screen-grad1": "#0F172A",
+    "--mt-bg-screen-grad2": "#0B1120",
+    "--mt-border":          "rgba(255,255,255,0.07)",
+    "--mt-border-strong":   "rgba(255,255,255,0.12)",
+    "--mt-text":            "#F1F5F9",
+    "--mt-text-secondary":  "rgba(241,245,249,0.82)",
+    "--mt-text-muted":      "rgba(241,245,249,0.55)",
+    "--mt-text-faint":      "rgba(241,245,249,0.35)",
+    "--mt-text-ghost":      "rgba(241,245,249,0.20)",
+    "--mt-text-whisper":    "rgba(241,245,249,0.08)",
+    "--mt-ring-offset":     "#0F172A",
+    "--mt-overlay":         "rgba(0,0,0,0.55)",
+    "--mt-dialog-bg":       "#1E293B",
+    "--mt-reaction-picker": "rgba(30,41,59,0.95)",
+    "--mt-option-bg":       "#1E293B",
     "--mt-scrollbar-thumb": "rgba(255,255,255,0.10)",
     "--mt-scrollbar-track": "transparent",
     "--mt-shadow":          "none",
+    "--mt-control-bar":     "#0B1120",
+    "--mt-control-pill":    "rgba(255,255,255,0.05)",
+    "--mt-tile-overlay":    "rgba(0,0,0,0.60)",
+    "--mt-is-dark":         "1",
   },
 };
 
 export function MeetingThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<MeetingTheme>("emerald");
+  const [theme, setThemeState] = useState<MeetingTheme>("slate");
 
   const setTheme = useCallback((t: MeetingTheme) => {
     setThemeState(t);
@@ -138,7 +153,7 @@ export function MeetingThemeProvider({ children }: { children: React.ReactNode }
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {
-      const order: MeetingTheme[] = ["emerald", "konn3ct", "dark"];
+      const order: MeetingTheme[] = ["midnight", "soft", "slate"];
       const idx = order.indexOf(prev);
       return order[(idx + 1) % order.length];
     });

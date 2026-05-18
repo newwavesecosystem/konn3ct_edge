@@ -8,8 +8,9 @@ import {
   Video,
   Globe,
   Volume2,
-  Sun,
   Moon,
+  Sun,
+  Cloudy,
   Palette,
 } from "lucide-react";
 
@@ -32,28 +33,28 @@ export function SettingsPanel() {
             </p>
             <div className="grid grid-cols-3 gap-2">
               <ThemeOption
-                themeName="emerald"
-                label="Emerald"
-                icon={<Palette className="w-4 h-4" />}
+                themeName="midnight"
+                label="Midnight"
+                icon={<Moon className="w-4 h-4" />}
                 description="Default"
-                active={theme === "emerald"}
-                onSelect={() => setTheme("emerald")}
+                active={theme === "midnight"}
+                onSelect={() => setTheme("midnight")}
               />
               <ThemeOption
-                themeName="konn3ct"
-                label="Konn3ct"
+                themeName="soft"
+                label="Soft Light"
                 icon={<Sun className="w-4 h-4" />}
                 description="Light"
-                active={theme === "konn3ct"}
-                onSelect={() => setTheme("konn3ct")}
+                active={theme === "soft"}
+                onSelect={() => setTheme("soft")}
               />
               <ThemeOption
-                themeName="dark"
-                label="Dark"
-                icon={<Moon className="w-4 h-4" />}
-                description="Cinematic"
-                active={theme === "dark"}
-                onSelect={() => setTheme("dark")}
+                themeName="slate"
+                label="Slate"
+                icon={<Cloudy className="w-4 h-4" />}
+                description="Premium"
+                active={theme === "slate"}
+                onSelect={() => setTheme("slate")}
               />
             </div>
           </div>
@@ -133,8 +134,8 @@ function ThemeOption({
         className="w-full aspect-[16/10] rounded-lg flex items-center justify-center"
         style={{
           backgroundColor:
-            themeName === "emerald" ? "#0B2B1E" :
-            themeName === "dark" ? "#0d0d1a" : "#FCFCFC",
+            themeName === "midnight" ? "#18181B" :
+            themeName === "slate" ? "#0F172A" : "#F0EFE9",
           border: "1px solid var(--mt-border)",
         }}
       >
@@ -143,16 +144,16 @@ function ThemeOption({
             className="w-6 h-4 rounded"
             style={{
               backgroundColor:
-                themeName === "emerald" ? "#14412F" :
-                themeName === "dark" ? "#1a1a2e" : "#F0F5F2",
+                themeName === "midnight" ? "#27272A" :
+                themeName === "slate" ? "#1E293B" : "#E3E2DC",
             }}
           />
           <div
             className="w-6 h-4 rounded"
             style={{
               backgroundColor:
-                themeName === "emerald" ? "#14412F" :
-                themeName === "dark" ? "#1a1a2e" : "#F0F5F2",
+                themeName === "midnight" ? "#27272A" :
+                themeName === "slate" ? "#1E293B" : "#E3E2DC",
             }}
           />
         </div>

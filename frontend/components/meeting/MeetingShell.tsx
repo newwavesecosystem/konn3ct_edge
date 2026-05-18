@@ -23,6 +23,7 @@ export function MeetingShell() {
     isMobilePanelOpen,
     setIsMobilePanelOpen,
     meetingInfo,
+    participants,
     isRecording,
     webrtcStatus,
   } = useMeeting();
@@ -132,7 +133,7 @@ export function MeetingShell() {
             style={{ color: "var(--mt-text-faint)" }}
           >
             {meetingInfo.roomType === "webinar" ? "Webinar" : "Meeting"} ·{" "}
-            {meetingInfo.participantCount} participants
+            {participants.length} participants
           </span>
         </div>
       </div>
