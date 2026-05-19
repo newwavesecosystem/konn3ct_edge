@@ -58,6 +58,7 @@ async function processRecordingJob(job) {
   
   try {
     browser = await launch({
+      executablePath: '/usr/bin/google-chrome',
       headless: false, // Required by puppeteer-stream and extension APIs
       defaultViewport: {
         width: 1280,
