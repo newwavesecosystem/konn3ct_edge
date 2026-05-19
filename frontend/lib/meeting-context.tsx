@@ -11,6 +11,7 @@ import type {
   Reaction,
   SidePanel,
   LayoutMode,
+  GridOverflowMode,
   ParticipantRole,
   CaptionMessage,
 } from "@/lib/types/meeting";
@@ -37,6 +38,7 @@ interface MeetingContextValue {
   reactions: Reaction[];
   activePanel: SidePanel;
   layoutMode: LayoutMode;
+  gridOverflowMode: GridOverflowMode;
   isMuted: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
@@ -68,6 +70,7 @@ interface MeetingContextValue {
   setTranslationLanguage: (lang: string) => void;
   setActivePanel: (panel: SidePanel) => void;
   setLayoutMode: (mode: LayoutMode) => void;
+  setGridOverflowMode: (mode: GridOverflowMode) => void;
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
@@ -129,14 +132,16 @@ export function MeetingProvider({
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const queryName = searchParams.get("name") || "Guest";
   const queryRole = (searchParams.get("role") as ParticipantRole) || "attendee";
+  const initialCameraOn = searchParams.get("camera") !== "false";
+  const initialMuted = searchParams.get("mic") === "false";
 
   // ── State ────────────────────────────────────────────
   const [currentUser] = useState<Participant>({
     id: `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
-    isMuted: false,
-    isCameraOn: false,
+    isMuted: initialMuted,
+    isCameraOn: initialCameraOn,
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
@@ -160,9 +165,10 @@ export function MeetingProvider({
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("speaker");
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("grid");
+  const [gridOverflowMode, setGridOverflowMode] = useState<GridOverflowMode>("paginate");
+  const [isMuted, setIsMuted] = useState(initialMuted);
+  const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
@@ -829,14 +835,24 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
-          // DO NOT auto-enable camera on join
-          const audioTrack = await client.enableMic();
+          let videoTrack: MediaStreamTrack | null = null;
+          let audioTrack: MediaStreamTrack | null = null;
+
+          if (isCameraOn) {
+            videoTrack = await client.enableCamera();
+            localCameraTrackRef.current = videoTrack;
+          }
+          
+          audioTrack = await client.enableMic();
           localAudioTrackRef.current = audioTrack;
+          if (isMuted) {
+            client.pauseMic();
+          }
 
           setParticipants((prev) =>
             prev.map((p) => {
               if (p.id === currentUser.id) {
-                return { ...p, audioTrack, isCameraOn: false, isMuted: false };
+                return { ...p, videoTrack: videoTrack || undefined, audioTrack: audioTrack || undefined, isCameraOn, isMuted };
               }
               return p;
             })
@@ -1221,6 +1237,7 @@ export function MeetingProvider({
         reactions,
         activePanel,
         layoutMode,
+        gridOverflowMode,
         isMuted,
         isCameraOn,
         isScreenSharing,
@@ -1249,6 +1266,7 @@ export function MeetingProvider({
         setTranslationLanguage,
         setActivePanel: handleSetActivePanel,
         setLayoutMode,
+        setGridOverflowMode,
         sendMessage,
         sendReaction,
         votePoll,

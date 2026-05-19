@@ -2,9 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { Avatar } from "@/components/ui/Avatar";
 import {
-  Mic,
   MicOff,
   VideoOff,
   MonitorUp,
@@ -21,6 +19,8 @@ import { useMeeting } from "@/lib/meeting-context";
 interface ParticipantTileProps {
   participant: Participant;
   isLarge?: boolean;
+  /** When true, the tile constrains itself to 16:9 (used in filmstrips). */
+  fixedAspect?: boolean;
   className?: string;
 }
 
@@ -29,9 +29,21 @@ const roleIcon: Record<string, React.ReactNode> = {
   "co-host": <Shield className="w-3 h-3 text-blue-400" />,
 };
 
+/**
+ * A single participant tile.
+ *
+ * The tile is *fluid* by default — it fills 100% of its parent on both axes.
+ * The parent layout decides the shape (tall, wide, square). This is the key
+ * difference from the old version, which forced every tile to `aspect-video`
+ * regardless of context.
+ *
+ * Pass `fixedAspect` to opt into a 16:9 box (used in filmstrips / spotlight
+ * thumbnails, where a uniform tile shape matters).
+ */
 export function ParticipantTile({
   participant,
   isLarge = false,
+  fixedAspect = false,
   className,
 }: ParticipantTileProps) {
   const { currentUser, selectedDevices, isMirrorVideoEnabled } = useMeeting();
@@ -122,6 +134,9 @@ export function ParticipantTile({
     }
   }, [selectedDevices.audioOutput]);
 
+
+  const isSelf = participant.id === currentUser.id;
+
   return (
     <div
       className={cn(
@@ -178,11 +193,24 @@ export function ParticipantTile({
       )}
 
       {/* ── Normal Camera View ────────────────────────────────────────────── */}
+      {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
+      {participant.isSpeaking && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-2xl z-20"
+          style={{
+            boxShadow:
+              "inset 0 0 0 3px var(--color-brand-green, #207450), 0 0 24px -4px rgba(32,116,80,0.55)",
+          }}
+        />
+      )}
+
+      {/* ── Video / avatar area ── */}
       {participant.isCameraOn ? (
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={{
-            background: `linear-gradient(to bottom right, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))`,
+            background:
+              "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
           }}
         >
           {participant.videoTrack && !participant.isScreenSharing ? (
@@ -199,33 +227,33 @@ export function ParticipantTile({
             />
           ) : (
             <div className="relative flex flex-col items-center gap-2">
-              <Avatar
-                fallback={initials}
-                alt={participant.name}
+              <div
                 className={cn(
-                  "border-2",
+                  "rounded-full flex items-center justify-center font-bold shadow-lg border-2",
                   isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
                 )}
-                style={
-                  { borderColor: "var(--mt-border-strong)" } as React.CSSProperties
-                }
-              />
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2">
-                {participant.isSpeaking && (
-                  <div className="flex items-center gap-[2px]">
-                    {[...Array(4)].map((_, i) => (
-                      <span
-                        key={i}
-                        className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
-                        style={{
-                          height: `${[12, 18, 10, 16][i]}px`,
-                          animationDelay: `${i * 0.15}s`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
+                style={{
+                  backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
+                  color: "var(--mt-avatar-text, var(--mt-text))",
+                  borderColor: "var(--mt-border-strong)",
+                }}
+              >
+                {initials}
               </div>
+              {participant.isSpeaking && (
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-[2px]">
+                  {[12, 18, 10, 16].map((h, i) => (
+                    <span
+                      key={i}
+                      className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
+                      style={{
+                        height: `${h}px`,
+                        animationDelay: `${i * 0.15}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -233,32 +261,28 @@ export function ParticipantTile({
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={{
-            background: `linear-gradient(to bottom right, var(--mt-bg-tile-alt), var(--mt-bg-tile), var(--mt-bg-tile-alt2))`,
+            background:
+              "linear-gradient(135deg, var(--mt-bg-tile-alt), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
           }}
         >
-          <Avatar
-            fallback={initials}
-            alt={participant.name}
+          {/* Larger circular avatar — matches the image style */}
+          <div
             className={cn(
-              "border-2",
-              isLarge ? "w-24 h-24 text-3xl" : "w-14 h-14 text-lg"
+              "rounded-full flex items-center justify-center font-bold shadow-lg",
+              isLarge ? "w-32 h-32 text-5xl" : "w-28 h-28 text-3xl",
             )}
-            style={
-              { borderColor: "var(--mt-border-strong)" } as React.CSSProperties
-            }
-          />
+            style={{
+              backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
+              color: "var(--mt-avatar-text, var(--mt-text))",
+              border: "3px solid var(--mt-border-strong)",
+            }}
+          >
+            {initials}
+          </div>
         </div>
       )}
 
-      {/* Connecting Overlay */}
-      {participant.isConnecting && (
-        <div className="absolute inset-0 z-30 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
-          <div className="w-5 h-5 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
-          <span className="text-white text-[11px] font-medium tracking-wide animate-pulse">Connecting...</span>
-        </div>
-      )}
-
-      {/* Hand raised indicator */}
+      {/* ── Hand raised ── */}
       {participant.isHandRaised && (
         <div className="absolute top-3 right-3 z-10">
           <div className="bg-yellow-500/90 backdrop-blur-sm rounded-full p-1.5 animate-bounce shadow-lg">
@@ -267,41 +291,59 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* Bottom overlay with name & status icons */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 z-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 min-w-0">
-            {roleIcon[participant.role] && (
-              <span className="shrink-0">{roleIcon[participant.role]}</span>
-            )}
-            <span className="text-white text-xs font-medium truncate">
-              {participant.name}
-            </span>
+      {/* ── Screen sharing badge ── */}
+      {participant.isScreenSharing && (
+        <div className="absolute top-3 left-3 z-10">
+          <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
+            <MonitorUp className="w-3 h-3" />
+            Sharing
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {participant.isMuted ? (
-              <MicOff className="w-3.5 h-3.5 text-red-400" />
-            ) : (
-              <Mic className="w-3.5 h-3.5 text-white/80" />
-            )}
-            {!participant.isCameraOn && (
-              <VideoOff className="w-3.5 h-3.5 text-red-400" />
-            )}
-            {participant.networkQuality === 'poor' && (
-              <span title="Poor Connection"><SignalMedium className="w-3.5 h-3.5 text-yellow-400" /></span>
-            )}
-            {participant.networkQuality === 'bad' && (
-              <span title="Bad Connection"><SignalLow className="w-3.5 h-3.5 text-red-500" /></span>
-            )}
-            {participant.networkQuality === 'good' && (
-              <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green" /></span>
-            )}
+        </div>
+      )}
+
+      {/* ── Muted mic pill (Google Meet style, top-right) ── */}
+      {participant.isMuted && !participant.isHandRaised && (
+        <div className="absolute top-3 right-3 z-10">
+          <div className="bg-black/55 backdrop-blur-md rounded-full p-1.5 shadow-md">
+            <MicOff className="w-3.5 h-3.5 text-white" />
           </div>
+        </div>
+      )}
+
+      {/* ── Name pill (bottom-left, no full-width gradient strip) ── */}
+      <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-2 pointer-events-none">
+        <div
+          className="flex items-center gap-1.5 min-w-0 max-w-full px-2.5 py-1 rounded-lg backdrop-blur-md"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+        >
+          {roleIcon[participant.role] && (
+            <span className="shrink-0">{roleIcon[participant.role]}</span>
+          )}
+          <span className="text-white text-xs font-medium truncate">
+            {participant.name}
+          </span>
+          {isSelf && (
+            <span className="text-white/60 text-[10px] shrink-0">(You)</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {!participant.isCameraOn && (
+            <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
+          )}
+          {participant.networkQuality === 'poor' && (
+            <span title="Poor Connection"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'bad' && (
+            <span title="Bad Connection"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'good' && (
+            <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green drop-shadow-md" /></span>
+          )}
         </div>
       </div>
 
       {/* Hidden audio element for remote participants */}
-      {participant.audioTrack && participant.id !== currentUser.id && (
+      {participant.audioTrack && !isSelf && (
         <audio autoPlay playsInline ref={setAudioRef} />
       )}
     </div>

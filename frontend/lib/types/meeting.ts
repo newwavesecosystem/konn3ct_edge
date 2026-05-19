@@ -5,6 +5,7 @@ export type MediaState = "on" | "off" | "disabled";
 export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended";
 export type RoomType = "meeting" | "webinar";
 export type LayoutMode = "speaker" | "grid" | "spotlight";
+export type GridOverflowMode = "scroll" | "paginate";
 
 export interface Participant {
   id: string;

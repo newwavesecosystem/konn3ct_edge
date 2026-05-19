@@ -668,7 +668,30 @@ export class WebRTCClient {
       encodings,
       codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
     });
+    if (this.localVideoProducer && !this.localVideoProducer.closed) {
+      await this.localVideoProducer.replaceTrack({ track: videoTrack });
+      this.localVideoProducer.resume();
+    } else {
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: videoTrack,
+        encodings: [
+          { scaleResolutionDownBy: 4, maxBitrate: 100000 },
+          { scaleResolutionDownBy: 2, maxBitrate: 300000 },
+          { scaleResolutionDownBy: 1, maxBitrate: 900000 },
+        ],
+        codecOptions: { videoGoogleStartBitrate: 1000 }
+      });
+    }
     return videoTrack;
+  }
+
+  public disableCamera() {
+    if (this.localVideoProducer) {
+      if (this.localVideoProducer.track) {
+        this.localVideoProducer.track.stop();
+      }
+      this.localVideoProducer.pause();
+    }
   }
 
   public async enableMic(): Promise<MediaStreamTrack> {
