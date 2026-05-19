@@ -134,22 +134,18 @@ export function ParticipantTile({
     }
   }, [selectedDevices.audioOutput]);
 
-
   const isSelf = participant.id === currentUser.id;
 
   return (
     <div
       className={cn(
-        "relative rounded-2xl overflow-hidden group transition-all duration-300",
-        participant.isSpeaking && "ring-2 ring-brand-green ring-offset-2",
-        "aspect-video",
-        className
+        "relative w-full h-full rounded-2xl overflow-hidden group",
+        "transition-shadow duration-300",
+        fixedAspect && "aspect-video",
+        className,
       )}
       style={{
         backgroundColor: "var(--mt-bg-tile)",
-        ...(participant.isSpeaking
-          ? ({ ringOffsetColor: "var(--mt-bg)" } as React.CSSProperties)
-          : {}),
       }}
     >
       {/* ── Screen Share Overlay ──────────────────────────────────────────────
@@ -192,7 +188,6 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Normal Camera View ────────────────────────────────────────────── */}
       {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
       {participant.isSpeaking && (
         <div
@@ -213,7 +208,7 @@ export function ParticipantTile({
               "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
           }}
         >
-          {participant.videoTrack && !participant.isScreenSharing ? (
+          {participant.videoTrack ? (
             <video
               ref={setVideoRef}
               autoPlay
@@ -222,20 +217,21 @@ export function ParticipantTile({
               className="w-full h-full object-cover"
               style={{
                 transform:
-                  participant.id === currentUser.id && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
+                  isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
               }}
             />
           ) : (
             <div className="relative flex flex-col items-center gap-2">
+              {/* Camera on but no track yet — show circular avatar */}
               <div
                 className={cn(
-                  "rounded-full flex items-center justify-center font-bold shadow-lg border-2",
-                  isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
+                  "rounded-full flex items-center justify-center font-bold shadow-lg",
+                  isLarge ? "w-32 h-32 text-5xl" : "w-28 h-28 text-3xl",
                 )}
                 style={{
                   backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
                   color: "var(--mt-avatar-text, var(--mt-text))",
-                  borderColor: "var(--mt-border-strong)",
+                  border: "3px solid rgba(255,255,255,0.18)",
                 }}
               >
                 {initials}
@@ -274,7 +270,7 @@ export function ParticipantTile({
             style={{
               backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
               color: "var(--mt-avatar-text, var(--mt-text))",
-              border: "3px solid var(--mt-border-strong)",
+              border: "3px solid rgba(255,255,255,0.18)",
             }}
           >
             {initials}
@@ -326,6 +322,7 @@ export function ParticipantTile({
             <span className="text-white/60 text-[10px] shrink-0">(You)</span>
           )}
         </div>
+        {/* Network quality + camera off indicators */}
         <div className="flex items-center gap-1 shrink-0">
           {!participant.isCameraOn && (
             <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
