@@ -994,7 +994,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
             <button
-              onClick={() => useMeeting().broadcastECinema(null)}
+              onClick={() => broadcastECinema(null)}
               className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
             >
               Stop
