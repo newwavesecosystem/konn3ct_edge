@@ -59,6 +59,10 @@ RUN npm install
 
 COPY . .
 
+# Add Chrome policy to re-enable Manifest V2 extensions (required for puppeteer-stream)
+RUN mkdir -p /etc/opt/chrome/policies/managed/
+RUN echo '{ "ExtensionManifestV2Availability": 2 }' > /etc/opt/chrome/policies/managed/policy.json
+
 # Add a script to run Xvfb and Node together
 RUN echo '#!/bin/bash\nxvfb-run --server-args="-screen 0 1280x720x24" node index.js' > start.sh
 RUN chmod +x start.sh
