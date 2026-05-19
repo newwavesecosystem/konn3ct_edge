@@ -58,8 +58,16 @@ async function processRecordingJob(job) {
   const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
   
   try {
+    const puppeteer = require('puppeteer');
+    let chromePath = '/usr/bin/google-chrome';
+    try {
+      chromePath = puppeteer.executablePath();
+    } catch (e) {
+      console.log('Puppeteer bundled Chrome not found, falling back to system Chrome.');
+    }
+    
     browser = await launch({
-      executablePath: '/usr/bin/google-chrome',
+      executablePath: chromePath,
       headless: false, // Required by puppeteer-stream and extension APIs
       defaultViewport: { width: 1280, height: 720 },
       ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
@@ -77,6 +85,7 @@ async function processRecordingJob(job) {
 
     const pages = await browser.pages();
     const page = pages[0];
+    await page.bringToFront();
 
     // Navigate to the meeting URL with bot flag
     console.log(`Navigating to ${url}`);
