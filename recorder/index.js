@@ -60,16 +60,17 @@ async function processRecordingJob(job) {
     browser = await launch({
       executablePath: '/usr/bin/google-chrome',
       headless: false, // Required by puppeteer-stream and extension APIs
-      defaultViewport: {
-        width: 1280,
-        height: 720,
-      },
+      defaultViewport: { width: 1280, height: 720 },
+      ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
       args: [
         '--window-size=1280,720',
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--autoplay-policy=no-user-gesture-required',
         '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-notifications',
       ],
     });
 
