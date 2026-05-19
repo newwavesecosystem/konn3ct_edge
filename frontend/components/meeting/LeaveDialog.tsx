@@ -7,7 +7,7 @@ import { LogOut, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function LeaveDialog() {
-  const { showLeaveDialog, setShowLeaveDialog, currentUser } = useMeeting();
+  const { currentUser, showLeaveDialog, setShowLeaveDialog, endMeetingForAll } = useMeeting();
   const router = useRouter();
 
   const handleLeave = () => {
@@ -16,11 +16,12 @@ export function LeaveDialog() {
   };
 
   const handleEndForAll = () => {
+    endMeetingForAll();
     setShowLeaveDialog(false);
     router.push("/dashboard");
   };
 
-  const isHost = currentUser.role === "host" || currentUser.role === "co-host";
+  const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
 
   return (
     <AnimatePresence>

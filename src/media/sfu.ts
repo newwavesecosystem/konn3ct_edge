@@ -1,5 +1,5 @@
 import * as mediasoup from 'mediasoup';
-import { Worker, Router, Transport, Producer, Consumer } from 'mediasoup/node/lib/types';
+import { Worker, Router, Transport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
 import { config } from './config';
 import { logger } from '../logger';
 
@@ -11,6 +11,7 @@ const routers = new Map<string, Router>();
 const transports = new Map<string, Transport>();
 const producers = new Map<string, Producer>();
 const consumers = new Map<string, Consumer>();
+const audioObservers = new Map<string, AudioLevelObserver>();
 
 /**
  * Initialize mediasoup workers based on CPU cores
@@ -100,14 +101,62 @@ export async function connectTransport(transportId: string, dtlsParameters: any)
 }
 
 /**
+ * Setup Audio Level Observer for a room
+ */
+export async function setupAudioObserver(roomId: string, onSpeaking: (producerIds: string[]) => void) {
+  if (audioObservers.has(roomId)) return;
+  const router = await getOrCreateRouter(roomId);
+  
+  const observer = await router.createAudioLevelObserver({
+    maxEntries: 100,
+    threshold: -60, // dBov (typical silence is below -60)
+    interval: 300   // Trigger every 300ms
+  });
+
+  observer.on('volumes', (volumes) => {
+    // volumes is array of { producer, volume }
+    onSpeaking(volumes.map(v => v.producer.id));
+  });
+  
+  observer.on('silence', () => {
+    onSpeaking([]); // No one is talking
+  });
+
+  audioObservers.set(roomId, observer);
+}
+
+/**
+ * Clean up Audio Observer
+ */
+export function cleanupAudioObserver(roomId: string) {
+  const observer = audioObservers.get(roomId);
+  if (observer) {
+    observer.close();
+    audioObservers.delete(roomId);
+  }
+}
+
+/**
  * Create a Producer (client sending media)
  */
-export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any) {
+export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
   const producer = await transport.produce({ kind, rtpParameters });
   producers.set(producer.id, producer);
+
+  // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
+  if (kind === 'audio' && roomId) {
+    const observer = audioObservers.get(roomId);
+    if (observer && !producer.closed) {
+      observer.addProducer({ producerId: producer.id }).catch(e => {
+        if (!producer.closed) {
+          logger.warn(`AudioLevelObserver addProducer failed for ${producer.id}:`, e.message);
+        }
+      });
+    }
+  }
 
   producer.on('transportclose', () => {
     producer.close();
@@ -161,5 +210,80 @@ export async function resumeConsumer(consumerId: string) {
   const consumer = consumers.get(consumerId);
   if (consumer) {
     await consumer.resume();
+  }
+}
+
+/**
+ * Close a specific producer by ID (used when a client stops screen sharing)
+ */
+export function closeProducer(producerId: string) {
+  const producer = producers.get(producerId);
+  if (producer && !producer.closed) {
+    producer.close();
+    producers.delete(producerId);
+  }
+}
+
+/**
+ * Create a Consumer with an optional producerclose callback so the signaling
+ * server can notify the receiving client when the remote producer stops.
+ */
+export async function createConsumerWithCallback(
+  transportId: string,
+  producerId: string,
+  rtpCapabilities: any,
+  router: Router,
+  onProducerClose: (consumerId: string) => void
+) {
+  const transport = transports.get(transportId);
+  if (!transport) throw new Error(`Transport ${transportId} not found`);
+
+  if (!router.canConsume({ producerId, rtpCapabilities })) {
+    throw new Error('Client cannot consume this producer');
+  }
+
+  const consumer = await transport.consume({
+    producerId,
+    rtpCapabilities,
+    paused: true
+  });
+
+  consumers.set(consumer.id, consumer);
+
+  consumer.on('transportclose', () => {
+    consumer.close();
+    consumers.delete(consumer.id);
+  });
+
+  consumer.on('producerclose', () => {
+    consumer.close();
+    consumers.delete(consumer.id);
+    onProducerClose(consumer.id); // Notify signaling server to forward event to client
+  });
+
+  return {
+    id: consumer.id,
+    producerId,
+    kind: consumer.kind,
+    rtpParameters: consumer.rtpParameters
+  };
+}
+
+/**
+ * Close a specific transport by ID. This will automatically trigger 'transportclose'
+ * on all its associated producers and consumers, cleaning them up cleanly.
+ */
+export function closeTransport(transportId: string) {
+  const transport = transports.get(transportId);
+  if (transport && !transport.closed) {
+    transport.close();
+    transports.delete(transportId);
+  }
+}
+
+export async function pauseConsumer(consumerId: string) {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.paused) {
+    await consumer.pause();
   }
 }

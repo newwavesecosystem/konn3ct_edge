@@ -87,6 +87,7 @@ model Room {
   chatMessages ChatMessage[]
   polls MeetingPoll[]
   sharedNote SharedNote?
+  paymentTransactions PaymentTransaction[]
 
   @@index([ownerId])
   @@index([teamId])
@@ -199,18 +200,23 @@ model PaymentTransaction {
   kind        String
   planId      String?
   recordingId String?
+  roomId      String?
   reference   String   @unique
   amountKobo  Int
+  currency    String   @default("NGN")
   status      String   @default("initialized")
+  metadata    Json?
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
   plan Plan? @relation(fields: [planId], references: [id])
   recording Recording? @relation(fields: [recordingId], references: [id])
+  room Room? @relation(fields: [roomId], references: [id])
 
   @@index([userId])
   @@index([planId])
   @@index([recordingId])
+  @@index([roomId])
 }
 
 model Transcription {

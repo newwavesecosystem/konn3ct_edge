@@ -18,7 +18,7 @@ redis.on("error", () => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email, role } = body;
+    const { roomId, name, email, role, isBot } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -38,7 +38,8 @@ export async function POST(request: Request) {
         console.log(`pod:${mappedPod}:cpu cpuStr`, cpuStr);
         if (cpuStr) {
           const cpuUsage = parseFloat(cpuStr);
-          if (cpuUsage > 90) {
+          const maxRejectionLoad = parseFloat(process.env.MAX_REJECTION_CPU_LOAD || "90");
+          if (cpuUsage > maxRejectionLoad) {
             return NextResponse.json({
               error: "This meeting is currently at maximum capacity (Server Overload). Please wait for someone to leave."
             }, { status: 503 });
@@ -55,10 +56,11 @@ export async function POST(request: Request) {
     // The backend's WebSocket verifier expects `userId` and `email`
     const token = jwt.sign(
       {
-        userId: `user_${Math.random().toString(36).substr(2, 9)}`,
+        userId: isBot ? "bot_recorder" : `user_${Math.random().toString(36).substr(2, 9)}`,
         email: email || "guest@conn3ct.com",
         name: name || "Guest",
-        role: role || "attendee",
+        role: isBot ? "bot" : (role || "attendee"),
+        isBot: !!isBot,
       },
       secret,
       { expiresIn: "24h" }

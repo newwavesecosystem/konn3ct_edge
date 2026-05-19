@@ -58,6 +58,56 @@ paymentsRouter.post('/initialize', requireAuth, async (req: Request, res: Respon
   }
 });
 
+const verifyDonationSchema = z.object({
+  reference: z.string(),
+  amountKobo: z.number(),
+  currency: z.string(),
+  roomId: z.string(),
+});
+
+paymentsRouter.post('/donate/verify', async (req: Request, res: Response) => {
+  try {
+    const { reference, amountKobo, currency, roomId } = verifyDonationSchema.parse(req.body);
+
+    const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
+    if (paystackSecret) {
+      const pRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+        headers: {
+          Authorization: `Bearer ${paystackSecret}`,
+        },
+      });
+      const pData = (await pRes.json()) as any;
+      if (!pData.status || pData.data.status !== "success") {
+        return res.status(400).json({ error: "Payment verification failed" });
+      }
+    }
+
+    const room = await db.room.findUnique({ where: { slug: roomId } });
+
+    if (room) {
+      // For anonymous donations, use the room owner's ID or a generic logic.
+      // In a real app, you'd extract the user ID from the JWT.
+      const userId = room.ownerId; 
+      await db.paymentTransaction.create({
+        data: {
+          userId,
+          kind: "donation",
+          roomId: room.id,
+          reference,
+          amountKobo,
+          currency,
+          status: "success",
+        }
+      });
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    logger.error('Error verifying donation', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Paystack Webhook (No Auth, relies on Paystack signature)
 paymentsRouter.post('/webhook', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
   try {
