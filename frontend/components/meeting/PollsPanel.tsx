@@ -158,13 +158,22 @@ export function PollsPanel() {
                           : "cursor-default"
                       )}
                     >
-                      {/* Progress bar */}
+                      {/* Progress bar fill */}
+                      <div
+                        className="absolute inset-0 transition-all duration-700 rounded-xl"
+                        style={{
+                          backgroundColor: "var(--mt-bg-control)",
+                        }}
+                      />
                       <div
                         className={cn(
-                          "absolute inset-0 transition-all duration-500",
-                          isMyVote ? "bg-brand-green/20" : ""
+                          "absolute inset-y-0 left-0 transition-all duration-700 rounded-xl",
+                          isMyVote ? "bg-brand-green/25" : ""
                         )}
-                        style={!isMyVote ? { backgroundColor: "var(--mt-bg-control)" } : undefined}
+                        style={{
+                          width: `${pct}%`,
+                          ...(!isMyVote ? { backgroundColor: "var(--mt-bg-active)" } : {}),
+                        }}
                       />
                       <div className="relative flex items-center justify-between px-3 py-2">
                         <div className="flex items-center gap-2">

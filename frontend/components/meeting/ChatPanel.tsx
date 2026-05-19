@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { cn } from "@/lib/utils";
-import { Send, Crown, Shield, User, Paperclip, Smile, Lock } from "lucide-react";
+import { Send, Crown, Shield, User, Paperclip, Smile, Lock, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { REACTION_EMOJIS } from "@/lib/mock/meeting";
 
@@ -100,6 +100,13 @@ export function ChatPanel() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 no-scrollbar">
+        {chatMessages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <MessageSquare className="w-10 h-10 mb-3" style={{ color: "var(--mt-text-whisper)" }} />
+            <p className="text-sm" style={{ color: "var(--mt-text-faint)" }}>No messages yet</p>
+            <p className="text-xs mt-1" style={{ color: "var(--mt-text-ghost)" }}>Start the conversation!</p>
+          </div>
+        )}
         {chatMessages.map((msg) => {
           if (msg.isSystem) {
             return (
@@ -149,13 +156,17 @@ export function ChatPanel() {
                   color: "var(--mt-text-secondary)",
                 } : undefined}
               >
-                {/* Basic Mention Highlighting */}
-                <span dangerouslySetInnerHTML={{ 
-                  __html: msg.content.replace(/(@\w+)/g, '<span class="text-brand-green-soft font-semibold">$1</span>') 
-                }} />
+                {/* Safe mention highlighting — no dangerouslySetInnerHTML */}
+                {msg.content.split(/(@\w+)/g).map((part, i) =>
+                  part.startsWith("@") ? (
+                    <span key={i} className="text-brand-green-soft font-semibold">{part}</span>
+                  ) : (
+                    <span key={i}>{part}</span>
+                  )
+                )}
                 
                 {msg.fileUrl && (
-                  <div className="mt-2 pt-2 border-t border-black/10 dark:border-white/10">
+                  <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--mt-border)" }}>
                     {msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
                       <a href={msg.fileUrl} target="_blank" rel="noreferrer">
                         <img src={msg.fileUrl} alt="attachment" className="max-w-full rounded-lg max-h-48 object-cover" />
@@ -180,8 +191,8 @@ export function ChatPanel() {
           <select
             value={targetUserId}
             onChange={(e) => setTargetUserId(e.target.value)}
-            className="text-[10px] bg-transparent outline-none px-1 py-0.5 rounded"
-            style={{ color: "var(--mt-text-muted)" }}
+            className="text-[10px] outline-none px-2 py-1 rounded-lg appearance-none"
+            style={{ color: "var(--mt-text-muted)", backgroundColor: "var(--mt-bg-control)", border: "1px solid var(--mt-border)" }}
           >
             <option value="everyone">To: Everyone</option>
             {participants.filter(p => p.id !== currentUser.id).map(p => (
@@ -217,13 +228,15 @@ export function ChatPanel() {
             {showEmojiPicker && (
               <div 
                 className="absolute bottom-full mb-2 left-0 w-48 p-2 rounded-xl shadow-lg grid grid-cols-6 gap-1"
-                style={{ backgroundColor: "var(--mt-bg-panel)", border: "1px solid var(--mt-border)" }}
+                style={{ backgroundColor: "var(--mt-dialog-bg)", border: "1px solid var(--mt-border)" }}
               >
                 {CHAT_EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => insertEmoji(emoji)}
-                    className="text-lg hover:bg-black/5 dark:hover:bg-white/5 rounded p-1 transition-colors"
+                    className="text-lg rounded p-1 transition-colors"
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                   >
                     {emoji}
                   </button>

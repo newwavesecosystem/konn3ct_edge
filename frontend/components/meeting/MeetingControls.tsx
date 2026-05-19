@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
-import { useMeetingTheme } from "@/lib/meeting-theme-context";
+import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
 import { cn } from "@/lib/utils";
 import {
   Mic,
@@ -34,6 +34,9 @@ import {
   ChevronUp,
   Subtitles,
   Gift,
+  MoreVertical,
+  Cloudy,
+  PhoneOff,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -69,45 +72,233 @@ export function MeetingControls() {
     selectedDevices,
     devices,
     switchDevice,
+    meetingInfo,
     eCinemaLink,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showECinemaDialog, setShowECinemaDialog] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
-  const formatDuration = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    if (showMoreMenu) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showMoreMenu]);
+
+  const formatDuration = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
-  const [showECinemaDialog, setShowECinemaDialog] = React.useState(false);
-
   const layoutModes: { mode: typeof layoutMode; icon: React.ReactNode; label: string }[] = [
-    { mode: "speaker", icon: <Presentation className="w-4 h-4" />, label: "Speaker" },
-    { mode: "grid", icon: <LayoutGrid className="w-4 h-4" />, label: "Grid" },
-    { mode: "spotlight", icon: <Focus className="w-4 h-4" />, label: "Spotlight" },
+    { mode: "speaker", icon: <Presentation className="w-3.5 h-3.5" />, label: "Speaker" },
+    { mode: "grid", icon: <LayoutGrid className="w-3.5 h-3.5" />, label: "Grid" },
+    { mode: "spotlight", icon: <Focus className="w-3.5 h-3.5" />, label: "Spotlight" },
   ];
 
+  const themeIcon =
+    theme === "midnight" ? <Moon className="w-4 h-4" /> :
+    theme === "soft" ? <Sun className="w-4 h-4" /> :
+    <Cloudy className="w-4 h-4" />;
+
+  const themeLabel =
+    theme === "midnight" ? "Midnight" :
+    theme === "soft" ? "Soft Light" : "Slate";
+
   return (
-    <div
-      className="relative shrink-0"
-      style={{
-        backgroundColor: "var(--mt-bg)",
-        borderTop: "1px solid var(--mt-border)",
-      }}
-    >
-      {/* Duration bar */}
-      <div className="flex items-center justify-center py-1">
-        <div className="flex items-center gap-2 text-xs" style={{ color: "var(--mt-text-muted)" }}>
+    <>
+      <div
+        className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 gap-3"
+        style={{
+          backgroundColor: "var(--mt-control-bar)",
+          borderTop: "1px solid var(--mt-border)",
+        }}
+      >
+        {/* ── Left: Meeting info ────────────────────── */}
+        <div className="flex items-center gap-2.5 min-w-0 shrink">
+          <span
+            className="text-xs font-mono tabular-nums shrink-0"
+            style={{ color: "var(--mt-text-muted)" }}
+          >
+            {formatDuration(meetingDuration)}
+          </span>
           {isRecording && (
-            <span className="flex items-center gap-1 text-red-400">
+            <span className="hidden sm:flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/15 px-2 py-0.5 rounded-full shrink-0">
               <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
               REC
             </span>
           )}
-          <span className="font-mono">{formatDuration(meetingDuration)}</span>
+          <span
+            className="hidden lg:block text-[11px] truncate max-w-[160px]"
+            style={{ color: "var(--mt-text-faint)" }}
+          >
+            {meetingInfo.roomName}
+          </span>
+        </div>
+
+        {/* ── Center: Controls pill ─────────────────── */}
+        <div
+          className="flex items-center gap-0.5 rounded-2xl px-1.5 py-1"
+          style={{
+            backgroundColor: "var(--mt-control-pill)",
+            border: "1px solid var(--mt-border)",
+          }}
+        >
+          {/* Mic */}
+          <ControlBtn
+            icon={isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            danger={isMuted}
+            onClick={toggleMute}
+            tooltip={isMuted ? "Unmute" : "Mute"}
+          />
+          {/* Camera */}
+          <ControlBtn
+            icon={isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+            danger={!isCameraOn}
+            onClick={toggleCamera}
+            tooltip={isCameraOn ? "Camera off" : "Camera on"}
+          />
+
+          <PillDivider />
+
+          {/* Screen share — desktop */}
+          <ControlBtn
+            icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
+            active={isScreenSharing}
+            onClick={toggleScreenShare}
+            tooltip="Share screen"
+            className="hidden sm:flex"
+          />
+          {/* React */}
+          <ControlBtn
+            icon={<SmilePlus className="w-5 h-5" />}
+            active={showReactionPicker}
+            onClick={() => setShowReactionPicker(!showReactionPicker)}
+            tooltip="React"
+          />
+          {/* Hand */}
+          <ControlBtn
+            icon={<Hand className="w-5 h-5" />}
+            highlight={isHandRaised}
+            onClick={toggleHandRaise}
+            tooltip={isHandRaised ? "Lower hand" : "Raise hand"}
+          />
+
+          <PillDivider />
+
+          {/* More menu */}
+          <div ref={moreRef} className="relative">
+            <ControlBtn
+              icon={<MoreVertical className="w-5 h-5" />}
+              active={showMoreMenu}
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              tooltip="More"
+            />
+            {showMoreMenu && (
+              <div
+                className="absolute bottom-full mb-2 right-0 w-56 rounded-xl py-1.5 shadow-2xl z-50 overflow-hidden"
+                style={{
+                  backgroundColor: "var(--mt-dialog-bg)",
+                  border: "1px solid var(--mt-border-strong)",
+                }}
+              >
+                <MoreMenuItem
+                  icon={<BarChart3 className="w-4 h-4" />}
+                  label="Polls"
+                  onClick={() => { setActivePanel("polls"); setShowMoreMenu(false); }}
+                />
+                <MoreMenuItem
+                  icon={<FileText className="w-4 h-4" />}
+                  label="Workspace"
+                  onClick={() => { setActivePanel("docs"); setShowMoreMenu(false); }}
+                />
+                <MoreMenuItem
+                  icon={<Film className="w-4 h-4" />}
+                  label="eCinema Broadcast"
+                  badge={eCinemaLink ? "Live" : undefined}
+                  onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
+                />
+                <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
+                <MoreMenuItem
+                  icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
+                  label={isRecording ? "Stop Recording" : "Record Meeting"}
+                  danger={isRecording}
+                  onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
+                />
+                <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
+                <MoreMenuItem
+                  icon={<Info className="w-4 h-4" />}
+                  label="Meeting Info"
+                  onClick={() => { setActivePanel("info"); setShowMoreMenu(false); }}
+                />
+                <MoreMenuItem
+                  icon={<Settings className="w-4 h-4" />}
+                  label="Settings"
+                  onClick={() => { setActivePanel("settings"); setShowMoreMenu(false); }}
+                />
+                <MoreMenuItem
+                  icon={themeIcon}
+                  label={`Theme: ${themeLabel}`}
+                  onClick={() => { toggleTheme(); }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* End call pill */}
+          <button
+            onClick={() => setShowLeaveDialog(true)}
+            className="flex items-center gap-1.5 ml-1 px-3.5 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-red-500/25 active:scale-95"
+          >
+            <PhoneOff className="w-4 h-4" />
+            <span className="hidden sm:inline">End</span>
+          </button>
+        </div>
+
+        {/* ── Right: Panel toggles + Layout ─────────── */}
+        <div className="flex items-center gap-1 shrink">
+          {/* Layout switcher — desktop */}
+          <div
+            className="hidden md:flex items-center gap-0.5 rounded-xl px-1 py-1 mr-1"
+            style={{ backgroundColor: "var(--mt-bg-control)" }}
+          >
+            {layoutModes.map((l) => (
+              <button
+                key={l.mode}
+                onClick={() => setLayoutMode(l.mode)}
+                className={cn(
+                  "p-1.5 rounded-lg transition-all duration-200",
+                  layoutMode === l.mode ? "bg-brand-green text-white" : ""
+                )}
+                style={layoutMode !== l.mode ? { color: "var(--mt-text-faint)" } : undefined}
+                title={l.label}
+              >
+                {l.icon}
+              </button>
+            ))}
+          </div>
+
+          <PanelBtn
+            icon={<MessageSquare className="w-[18px] h-[18px]" />}
+            active={activePanel === "chat"}
+            onClick={() => setActivePanel("chat")}
+            tooltip="Chat"
+          />
+          <PanelBtn
+            icon={<Users className="w-[18px] h-[18px]" />}
+            active={activePanel === "participants"}
+            onClick={() => setActivePanel("participants")}
+            tooltip="People"
+          />
         </div>
       </div>
 
@@ -309,13 +500,13 @@ export function MeetingControls() {
           active={false}
           onClick={toggleTheme}
           label={
-            theme === "emerald" ? "Switch to Konn3ct" :
-              theme === "konn3ct" ? "Switch to Dark" : "Switch to Emerald"
+            theme === "midnight" ? "Switch to Soft Light" :
+              theme === "soft" ? "Switch to Slate" : "Switch to Midnight"
           }
           icon={
-            theme === "emerald" ? <Sun className="w-5 h-5" /> :
-              theme === "konn3ct" ? <Moon className="w-5 h-5" /> :
-                <Leaf className="w-5 h-5" />
+            theme === "midnight" ? <Moon className="w-5 h-5" /> :
+              theme === "soft" ? <Sun className="w-5 h-5" /> :
+                <Cloudy className="w-5 h-5" />
           }
           className="hidden sm:flex"
         />
@@ -345,8 +536,8 @@ export function MeetingControls() {
         className="hidden md:flex items-center justify-center gap-1 absolute -top-9 left-1/2 -translate-x-1/2 backdrop-blur-sm rounded-full px-1 py-1"
         style={{
           backgroundColor:
-            theme === "konn3ct" ? "rgba(255,255,255,0.90)" :
-              theme === "emerald" ? "rgba(11,43,30,0.90)" :
+            theme === "soft" ? "rgba(255,255,255,0.90)" :
+              theme === "slate" ? "rgba(11,43,30,0.90)" :
                 "rgba(26,26,46,0.90)",
           border: "1px solid var(--mt-border)",
         }}
@@ -374,7 +565,7 @@ export function MeetingControls() {
         isOpen={showECinemaDialog} 
         onClose={() => setShowECinemaDialog(false)} 
       />
-    </div>
+    </>
   );
 }
 
@@ -434,15 +625,99 @@ function ControlButton({
   );
 }
 
-// ── eCinema Dialog ─────────────────────────────────────
+/* ── Control Button (center pill) ──────────────────── */
+function ControlBtn({
+  icon, danger, active, highlight, onClick, tooltip, className,
+}: {
+  icon: React.ReactNode; danger?: boolean; active?: boolean;
+  highlight?: boolean; onClick: () => void; tooltip: string; className?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={tooltip}
+      className={cn(
+        "relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 active:scale-90",
+        danger && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
+        highlight && "ring-2 ring-yellow-400/50",
+        className
+      )}
+      style={
+        !danger
+          ? {
+              backgroundColor: active ? "var(--mt-bg-active)" : "transparent",
+              color: active ? "var(--mt-text)" : "var(--mt-text-muted)",
+            }
+          : undefined
+      }
+      onMouseEnter={(e) => { if (!danger) e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"; }}
+      onMouseLeave={(e) => { if (!danger) e.currentTarget.style.backgroundColor = active ? "var(--mt-bg-active)" : "transparent"; }}
+    >
+      {icon}
+    </button>
+  );
+}
+
+/* ── Panel toggle button (right zone) ──────────────── */
+function PanelBtn({
+  icon, active, onClick, tooltip,
+}: {
+  icon: React.ReactNode; active: boolean; onClick: () => void; tooltip: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={tooltip}
+      className={cn(
+        "flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 active:scale-90",
+      )}
+      style={{
+        backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
+        color: active ? "var(--mt-text)" : "var(--mt-text-muted)",
+      }}
+    >
+      {icon}
+    </button>
+  );
+}
+
+/* ── Pill divider ──────────────────────────────────── */
+function PillDivider() {
+  return <div className="w-px h-6 mx-0.5 shrink-0" style={{ backgroundColor: "var(--mt-border-strong)" }} />;
+}
+
+/* ── More menu item ────────────────────────────────── */
+function MoreMenuItem({
+  icon, label, onClick, danger, badge,
+}: {
+  icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean; badge?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors text-left"
+      style={{ color: danger ? "#f87171" : "var(--mt-text-secondary)" }}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+    >
+      <span className="shrink-0" style={{ color: danger ? "#f87171" : "var(--mt-text-faint)" }}>{icon}</span>
+      <span className="flex-1">{label}</span>
+      {badge && (
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/* ── eCinema Dialog ────────────────────────────────── */
 function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { eCinemaLink, broadcastECinema } = useMeeting();
   const [linkInput, setLinkInput] = React.useState(eCinemaLink || "");
 
   React.useEffect(() => {
-    if (isOpen) {
-      setLinkInput(eCinemaLink || "");
-    }
+    if (isOpen) setLinkInput(eCinemaLink || "");
   }, [isOpen, eCinemaLink]);
 
   if (!isOpen) return null;
@@ -462,44 +737,28 @@ function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "var(--mt-overlay)" }}>
-      <div 
-        className="w-full max-w-md rounded-2xl p-6 shadow-2xl" 
-        style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}
+      <div
+        className="w-full max-w-md rounded-2xl p-6 shadow-2xl"
+        style={{ backgroundColor: "var(--mt-dialog-bg)", border: "1px solid var(--mt-border-strong)" }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold" style={{ color: "var(--mt-text)" }}>eCinema Broadcast</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg transition-colors"
-            style={{ color: "var(--mt-text-faint)" }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-          >
+          <h2 className="text-lg font-semibold" style={{ color: "var(--mt-text)" }}>eCinema Broadcast</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg transition-colors" style={{ color: "var(--mt-text-faint)" }}>
             <X className="w-5 h-5" />
           </button>
         </div>
-        
         <div className="mb-6">
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--mt-text)" }}>
-            Add link
-          </label>
+          <label className="block text-sm font-medium mb-2" style={{ color: "var(--mt-text)" }}>Video link</label>
           <input
-            type="text"
-            value={linkInput}
-            onChange={(e) => setLinkInput(e.target.value)}
+            type="text" value={linkInput} onChange={(e) => setLinkInput(e.target.value)}
             placeholder="https://www.youtube.com/watch?v=..."
-            className="w-full px-4 py-2.5 rounded-xl text-sm"
-            style={{
-              backgroundColor: "var(--mt-bg)",
-              color: "var(--mt-text)",
-              border: "1px solid var(--mt-border)",
-            }}
+            className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+            style={{ backgroundColor: "var(--mt-bg-input)", color: "var(--mt-text)", border: "1px solid var(--mt-border)" }}
           />
           <p className="mt-2 text-xs" style={{ color: "var(--mt-text-faint)" }}>
-            Paste a supported video link to broadcast it to all meeting participants.
+            Paste a YouTube or video link to broadcast to all participants.
           </p>
         </div>
-
         <div className="flex justify-end gap-3">
           {eCinemaLink && (
             <button
@@ -511,12 +770,10 @@ function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
             </button>
           )}
           <button
-            onClick={handleBroadcast}
-            disabled={!linkInput.trim()}
+            onClick={handleBroadcast} disabled={!linkInput.trim()}
             className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-green text-white text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-brand-green/90"
           >
-            <Play className="w-4 h-4 fill-current" />
-            Broadcast
+            <Play className="w-4 h-4 fill-current" /> Broadcast
           </button>
         </div>
       </div>

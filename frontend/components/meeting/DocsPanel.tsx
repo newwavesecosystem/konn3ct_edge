@@ -209,9 +209,9 @@ export function DocsPanel() {
       </div>
 
       {/* Editor Canvas */}
-      <div className="flex-1 relative overflow-auto bg-white">
+      <div className="flex-1 relative overflow-auto" style={{ backgroundColor: "var(--mt-bg-elevated)" }}>
         {activeTab === "doc" && (
-          <div className="h-full quill-wrapper text-black">
+          <div className="h-full quill-wrapper" style={{ color: "var(--mt-text)" }}>
             <ReactQuill
               theme="snow"
               value={localDoc}
@@ -223,13 +223,13 @@ export function DocsPanel() {
         )}
 
         {activeTab === "sheet" && (
-          <div className="p-4 h-full text-black">
+          <div className="p-4 h-full" style={{ color: "var(--mt-text)" }}>
             <Spreadsheet data={state.sheet} onChange={handleSheetChange} />
           </div>
         )}
 
         {activeTab === "slide" && (
-          <div className="absolute inset-0 w-full h-full bg-white z-[0]">
+          <div className="absolute inset-0 w-full h-full z-[0]" style={{ backgroundColor: "var(--mt-bg-elevated)" }}>
             <ExcalidrawWrapper 
               remoteElements={state.excalidraw} 
               onChange={handleExcalidrawChange} 
