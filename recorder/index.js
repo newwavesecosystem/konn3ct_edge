@@ -78,8 +78,9 @@ async function processRecordingJob(job) {
         '--autoplay-policy=no-user-gesture-required',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--disable-software-rasterizer',
         '--disable-notifications',
+        '--auto-select-tab-capture-source-by-title=BotRecord',
+        '--enable-usermedia-screen-capturing'
       ],
     });
 
@@ -89,6 +90,19 @@ async function processRecordingJob(job) {
 
     // Navigate to the meeting URL with bot flag
     console.log(`Navigating to ${url}`);
+    
+    // Auto-grant permissions for capturing
+    const context = browser.defaultBrowserContext();
+    await context.overridePermissions(new URL(url).origin, ['camera', 'microphone', 'display-capture']);
+
+    // Set a dummy title before navigation so auto-select knows what to look for
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(document, 'title', {
+        get: () => 'BotRecord',
+        set: () => {}
+      });
+    });
+    
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
     // Wait a bit for React to render and WebRTC to connect
@@ -98,9 +112,41 @@ async function processRecordingJob(job) {
     const fileStream = fs.createWriteStream(outputPathRaw);
 
     // Get the stream from the page
-    console.log('Starting puppeteer-stream...');
-    stream = await getStream(page, { audio: true, video: true, frameSize: 1000 });
-    stream.pipe(fileStream);
+    console.log('Starting native MediaRecorder...');
+
+    // Expose a function to write chunks from browser to the Node.js file stream
+    await page.exposeFunction('writeChunk', (chunkStr) => {
+      const buffer = Buffer.from(chunkStr, 'base64');
+      fileStream.write(buffer);
+    });
+
+    // Inject recording logic directly into the browser context
+    await page.evaluate(() => {
+      return new Promise(async (resolve, reject) => {
+        try {
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: "browser" },
+            audio: true
+          });
+          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+          recorder.ondataavailable = async (e) => {
+            if (e.data.size > 0) {
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64 = reader.result.split(',')[1];
+                await window.writeChunk(base64);
+              };
+              reader.readAsDataURL(e.data);
+            }
+          };
+          recorder.start(1000); // 1 chunk per second
+          window.recorder = recorder;
+          resolve();
+        } catch (e) {
+          reject(e.toString());
+        }
+      });
+    });
 
     console.log(`Recording started for ${roomId}`);
 
@@ -117,8 +163,16 @@ async function processRecordingJob(job) {
           pubsub.removeListener('message', stopHandler);
 
           try {
-            // Signal the stream to stop
-            stream.destroy();
+            // Signal the browser stream to stop
+            await page.evaluate(() => {
+              if (window.recorder) {
+                window.recorder.stop();
+              }
+            });
+
+            // Allow chunks to finish writing
+            await new Promise(r => setTimeout(r, 1500));
+            
             fileStream.end();
             
             fileStream.on('close', async () => {
