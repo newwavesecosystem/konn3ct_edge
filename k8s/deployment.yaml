@@ -94,6 +94,24 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: MAX_DEGRADATION_CPU_LOAD
+              value: "85"
+            - name: MAX_ACTIVE_CAMERAS
+              value: "15"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: OPENAI_API_KEY
+            - name: PAYSTACK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: PAYSTACK_SECRET_KEY
+            - name: TURN_DOMAIN
+              value: "turnedge.konn3ct.net"
+            - name: TURN_SECRET
+              value: "my-super-strong-conn3ct-secret-123"
           resources:
             requests:
               cpu: "2000m"

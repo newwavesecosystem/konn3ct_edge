@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { useSearchParams } from "next/navigation";
 import { StageView } from "./StageView";
 import { MeetingControls } from "./MeetingControls";
 import { ChatPanel } from "./ChatPanel";
@@ -10,8 +11,11 @@ import { PollsPanel } from "./PollsPanel";
 import { DocsPanel } from "./DocsPanel";
 import { MeetingInfoPanel } from "./MeetingInfoPanel";
 import { SettingsPanel } from "./SettingsPanel";
+import { Konn3ctAIPanel } from "./panels/Konn3ctAIPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
+import { CaptionsOverlay } from "./CaptionsOverlay";
+import { DonationModal } from "./DonationModal";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,7 +30,12 @@ export function MeetingShell() {
     participants,
     isRecording,
     webrtcStatus,
+    showDonationModal,
+    setShowDonationModal,
   } = useMeeting();
+
+  const searchParams = useSearchParams();
+  const isBot = searchParams?.get('bot') === 'true';
 
   const panelContent: Record<string, React.ReactNode> = {
     chat: <ChatPanel />,
@@ -35,6 +44,7 @@ export function MeetingShell() {
     docs: <DocsPanel />,
     info: <MeetingInfoPanel />,
     settings: <SettingsPanel />,
+    ai: <Konn3ctAIPanel />,
   };
 
   if (webrtcStatus === 'waiting') {
@@ -82,6 +92,7 @@ export function MeetingShell() {
       style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}
     >
       {/* Top bar — minimal */}
+      {!isBot && (
       <div
         className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2"
         style={{
@@ -137,12 +148,14 @@ export function MeetingShell() {
           </span>
         </div>
       </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Video stage */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 relative">
           <StageView />
+          <CaptionsOverlay />
         </div>
 
         {/* Desktop side panel */}
@@ -160,6 +173,7 @@ export function MeetingShell() {
                 borderLeft: "1px solid var(--mt-border)",
               }}
             >
+              {!isBot && (
               <div className="flex items-center justify-end p-2">
                 <button
                   onClick={() => setActivePanel(null)}
@@ -171,6 +185,7 @@ export function MeetingShell() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+              )}
               <div className="flex-1 overflow-hidden">
                 {panelContent[activePanel]}
               </div>
@@ -180,6 +195,7 @@ export function MeetingShell() {
       </div>
 
       {/* Mobile bottom sheet panel */}
+      {!isBot && (
       <AnimatePresence>
         {activePanel && isMobilePanelOpen && (
           <>
@@ -235,13 +251,15 @@ export function MeetingShell() {
           </>
         )}
       </AnimatePresence>
+      )}
 
       {/* Meeting controls */}
-      <MeetingControls />
+      {!isBot && <MeetingControls />}
 
       {/* Floating layers */}
       <ReactionsLayer />
       <LeaveDialog />
+      {showDonationModal && <DonationModal onClose={() => setShowDonationModal(false)} />}
     </div>
   );
 }

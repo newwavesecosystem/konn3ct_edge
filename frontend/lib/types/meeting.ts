@@ -20,6 +20,9 @@ export interface Participant {
   joinedAt: string;
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
+  screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
+  isConnecting?: boolean;
+  networkQuality?: 'good' | 'poor' | 'bad';
 }
 
 export interface ChatMessage {
@@ -33,6 +36,14 @@ export interface ChatMessage {
   targetUserId?: string;
   isPrivate?: boolean;
   fileUrl?: string;
+}
+
+export interface CaptionMessage {
+  userId: string;
+  name: string;
+  text: string;
+  isFinal: boolean;
+  timestamp: number;
 }
 
 export interface PollOption {
@@ -83,4 +94,4 @@ export interface DocNote {
   lastEditedAt: string;
 }
 
-export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | null;
+export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | null;

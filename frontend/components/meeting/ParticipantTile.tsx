@@ -4,10 +4,14 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import {
   MicOff,
+  VideoOff,
   MonitorUp,
   Hand,
   Crown,
   Shield,
+  SignalHigh,
+  SignalMedium,
+  SignalLow
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -42,7 +46,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser } = useMeeting();
+  const { currentUser, selectedDevices, isMirrorVideoEnabled } = useMeeting();
 
   const initials = participant.name
     .split(" ")
@@ -51,46 +55,144 @@ export function ParticipantTile({
     .slice(0, 2)
     .toUpperCase();
 
+  // Camera video ref
   const setVideoRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
-      if (el && participant.videoTrack) {
-        if (el.srcObject) {
-          const stream = el.srcObject as MediaStream;
-          if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+      if (el) {
+        if (participant.videoTrack) {
+          if (el.srcObject) {
+            const stream = el.srcObject as MediaStream;
+            if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+          }
+          el.srcObject = new MediaStream([participant.videoTrack]);
+          el.play().catch((e) => {
+            if (e.name !== 'AbortError') console.warn("Video play failed:", e);
+          });
+        } else {
+          el.srcObject = null;
         }
-        el.srcObject = new MediaStream([participant.videoTrack]);
       }
     },
-    [participant.videoTrack],
+    [participant.videoTrack]
   );
+
+  // Dedicated screen share ref — completely independent from camera
+  const setScreenRef = React.useCallback(
+    (el: HTMLVideoElement | null) => {
+      if (el) {
+        if (participant.screenTrack) {
+          if (el.srcObject) {
+            const stream = el.srcObject as MediaStream;
+            if (stream.getVideoTracks()[0] === participant.screenTrack) return;
+          }
+          el.srcObject = new MediaStream([participant.screenTrack]);
+          el.play().catch((e) => {
+            if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
+          });
+        } else {
+          el.srcObject = null;
+        }
+      }
+    },
+    [participant.screenTrack]
+  );
+
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
+    if (sinkId && typeof (el as any).setSinkId === "function") {
+      try {
+        await (el as any).setSinkId(sinkId);
+      } catch (e) {
+        console.warn("Failed to set audio output device:", e);
+      }
+    }
+  };
 
   const setAudioRef = React.useCallback(
     (el: HTMLAudioElement | null) => {
+      audioRef.current = el;
       if (el && participant.audioTrack) {
         if (el.srcObject) {
           const stream = el.srcObject as MediaStream;
-          if (stream.getAudioTracks()[0] === participant.audioTrack) return;
+          if (stream.getAudioTracks()[0] === participant.audioTrack) {
+            applyAudioSink(el, selectedDevices.audioOutput);
+            return;
+          }
         }
         el.srcObject = new MediaStream([participant.audioTrack]);
+        applyAudioSink(el, selectedDevices.audioOutput);
+        el.play().catch((e) => console.warn("Audio play failed:", e));
       }
     },
-    [participant.audioTrack],
+    [participant.audioTrack, selectedDevices.audioOutput]
   );
+
+  React.useEffect(() => {
+    if (audioRef.current && selectedDevices.audioOutput) {
+      applyAudioSink(audioRef.current, selectedDevices.audioOutput);
+    }
+  }, [selectedDevices.audioOutput]);
+
 
   const isSelf = participant.id === currentUser.id;
 
   return (
     <div
       className={cn(
-        "relative w-full h-full rounded-2xl overflow-hidden group",
-        "transition-shadow duration-300",
-        fixedAspect && "aspect-video",
-        className,
+        "relative rounded-2xl overflow-hidden group transition-all duration-300",
+        participant.isSpeaking && "ring-2 ring-brand-green ring-offset-2",
+        "aspect-video",
+        className
       )}
       style={{
         backgroundColor: "var(--mt-bg-tile)",
+        ...(participant.isSpeaking
+          ? ({ ringOffsetColor: "var(--mt-bg)" } as React.CSSProperties)
+          : {}),
       }}
     >
+      {/* ── Screen Share Overlay ──────────────────────────────────────────────
+          Renders on TOP of the camera tile when screensharing is active.
+          Camera feed stays alive underneath and shows as a PiP corner bubble.
+      ──────────────────────────────────────────────────────────────────────── */}
+      {participant.screenTrack && participant.isScreenSharing && (
+        <div className="absolute inset-0 z-20 bg-black flex items-center justify-center">
+          {/* Full screen content — object-contain preserves aspect ratio */}
+          <video
+            ref={setScreenRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-contain"
+          />
+
+          {/* Screen-share badge */}
+          <div className="absolute top-3 left-3 z-30 bg-blue-600/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium shadow-lg">
+            <MonitorUp className="w-3 h-3" />
+            Screen
+          </div>
+
+          {/* PiP camera bubble — bottom-right corner */}
+          {participant.videoTrack && (
+            <div className="absolute bottom-3 right-3 z-30 w-24 h-16 rounded-xl overflow-hidden border-2 border-white/20 shadow-xl">
+              <video
+                ref={setVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+                style={{
+                  transform:
+                    participant.id === currentUser.id ? "scaleX(-1)" : "none",
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Normal Camera View ────────────────────────────────────────────── */}
       {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
       {participant.isSpeaking && (
         <div
@@ -111,27 +213,29 @@ export function ParticipantTile({
               "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
           }}
         >
-          {participant.videoTrack ? (
+          {participant.videoTrack && !participant.isScreenSharing ? (
             <video
               ref={setVideoRef}
               autoPlay
               playsInline
               muted
               className="w-full h-full object-cover"
-              style={{ transform: isSelf ? "scaleX(-1)" : "none" }}
+              style={{
+                transform:
+                  participant.id === currentUser.id && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
+              }}
             />
           ) : (
             <div className="relative flex flex-col items-center gap-2">
-              {/* Camera on but no track yet — show circular avatar */}
               <div
                 className={cn(
-                  "rounded-full flex items-center justify-center font-bold shadow-lg",
-                  isLarge ? "w-32 h-32 text-5xl" : "w-28 h-28 text-3xl",
+                  "rounded-full flex items-center justify-center font-bold shadow-lg border-2",
+                  isLarge ? "w-20 h-20 text-2xl" : "w-14 h-14 text-lg"
                 )}
                 style={{
                   backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
                   color: "var(--mt-avatar-text, var(--mt-text))",
-                  border: "3px solid rgba(255,255,255,0.18)",
+                  borderColor: "var(--mt-border-strong)",
                 }}
               >
                 {initials}
@@ -170,7 +274,7 @@ export function ParticipantTile({
             style={{
               backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
               color: "var(--mt-avatar-text, var(--mt-text))",
-              border: "3px solid rgba(255,255,255,0.18)",
+              border: "3px solid var(--mt-border-strong)",
             }}
           >
             {initials}
@@ -220,6 +324,20 @@ export function ParticipantTile({
           </span>
           {isSelf && (
             <span className="text-white/60 text-[10px] shrink-0">(You)</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {!participant.isCameraOn && (
+            <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
+          )}
+          {participant.networkQuality === 'poor' && (
+            <span title="Poor Connection"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'bad' && (
+            <span title="Bad Connection"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'good' && (
+            <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green drop-shadow-md" /></span>
           )}
         </div>
       </div>
