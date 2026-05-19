@@ -2,7 +2,8 @@ const { launch, getStream } = require('puppeteer-stream');
 const fs = require('fs');
 const path = require('path');
 const Redis = require('ioredis');
-const AWS = require('aws-sdk');
+const { S3Client } = require('@aws-sdk/client-s3');
+const { Upload } = require('@aws-sdk/lib-storage');
 const ffmpeg = require('fluent-ffmpeg');
 
 require('dotenv').config();
@@ -15,13 +16,13 @@ redis.on("error", () => {}); // Suppress harmless reconnection errors
 pubsub.on("error", () => {});
 
 // Configure DO Spaces (S3 compatible)
-const s3 = new AWS.S3({
-  endpoint: new AWS.Endpoint(process.env.DO_SPACES_ENDPOINT || 'sfo3.digitaloceanspaces.com'),
+const s3Client = new S3Client({
+  endpoint: `https://${process.env.DO_SPACES_ENDPOINT || 'sfo3.digitaloceanspaces.com'}`,
   region: process.env.DO_SPACES_REGION || 'sfo3',
-  credentials: new AWS.Credentials({
+  credentials: {
     accessKeyId: process.env.DO_SPACES_KEY || '',
     secretAccessKey: process.env.DO_SPACES_SECRET || '',
-  }),
+  },
 });
 
 const BUCKET_NAME = process.env.DO_SPACES_BUCKET || 'konn3ct-assets';
@@ -144,16 +145,20 @@ async function processRecordingJob(job) {
               .on('end', async () => {
                 console.log('Conversion finished. Uploading to Spaces...');
                 try {
-                  const fileContent = fs.readFileSync(outputPathMp4);
+                  const fileStreamForUpload = fs.createReadStream(outputPathMp4);
                   const uploadParams = {
-                    Bucket: BUCKET_NAME,
-                    Key: `recordings/${roomId}/${Date.now()}.mp4`,
-                    Body: fileContent,
-                    ACL: 'public-read',
-                    ContentType: 'video/mp4',
+                    client: s3Client,
+                    params: {
+                      Bucket: BUCKET_NAME,
+                      Key: `recordings/${roomId}/${Date.now()}.mp4`,
+                      Body: fileStreamForUpload,
+                      ACL: 'public-read',
+                      ContentType: 'video/mp4',
+                    },
                   };
                   
-                  const data = await s3.upload(uploadParams).promise();
+                  const uploader = new Upload(uploadParams);
+                  const data = await uploader.done();
                   console.log(`Upload successful: ${data.Location}`);
                   
                   // Publish completion back to signaling server so it can update DB
