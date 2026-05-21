@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim
+FROM node:22-bullseye-slim
 
 # Install latest chrome dev package and fonts to support major charsets (Chinese, Japanese, Arabic, Hebrew, Thai and a few others)
 # Note: this installs the necessary libs to make the bundled version of Chromium that Puppeteer installs, work.
@@ -60,8 +60,10 @@ RUN npm install
 COPY . .
 
 # Add Chrome policy to re-enable Manifest V2 extensions (required for puppeteer-stream)
-RUN mkdir -p /etc/opt/chrome/policies/managed/
-RUN echo '{ "ExtensionManifestV2Availability": 2 }' > /etc/opt/chrome/policies/managed/policy.json
+RUN mkdir -p /etc/opt/chrome/policies/managed/ && \
+    mkdir -p /etc/chromium/policies/managed/ && \
+    echo '{ "ExtensionManifestV2Availability": 2 }' > /etc/opt/chrome/policies/managed/policy.json && \
+    echo '{ "ExtensionManifestV2Availability": 2 }' > /etc/chromium/policies/managed/policy.json
 
 # Add a script to run Xvfb and Node together
 RUN echo '#!/bin/bash\nxvfb-run --server-args="-screen 0 1280x720x24" node index.js' > start.sh
