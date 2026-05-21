@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { StageView } from "./StageView";
 import { MeetingControls } from "./MeetingControls";
 import { ChatPanel } from "./ChatPanel";
@@ -29,12 +29,22 @@ export function MeetingShell() {
     meetingInfo,
     participants,
     isRecording,
+    meetingDuration,
     webrtcStatus,
     showDonationModal,
     setShowDonationModal,
   } = useMeeting();
 
+  const formatDuration = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
+
   const searchParams = useSearchParams();
+  const router = useRouter();
   const isBot = searchParams?.get('bot') === 'true';
 
   const panelContent: Record<string, React.ReactNode> = {
@@ -70,17 +80,30 @@ export function MeetingShell() {
     );
   }
 
-  if (webrtcStatus === 'denied') {
+  if (['denied', 'kicked', 'failed', 'ended'].includes(webrtcStatus)) {
+    const errorDetails = {
+      denied: { title: "Entry Denied", desc: "The host has declined your request to join this meeting." },
+      kicked: { title: "Removed from Meeting", desc: "You have been removed from this meeting by the host." },
+      failed: { title: "Connection Failed", desc: "We couldn't connect you to the meeting. Please try again." },
+      ended:  { title: "Meeting Ended", desc: "The host has ended this meeting for everyone." },
+    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'ended'];
+
     return (
       <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
-        <div className="p-8 rounded-2xl max-w-md w-full text-center" style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}>
-          <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center mx-auto mb-6">
+        <div className="p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col items-center" style={{ backgroundColor: "var(--mt-dialog-bg)", border: "1px solid var(--mt-border-strong)" }}>
+          <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-5 ring-8 ring-red-500/5">
             <X className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-semibold mb-2">Entry Denied</h2>
-          <p style={{ color: "var(--mt-text-faint)" }}>
-            The host has declined your request to join this meeting.
+          <h2 className="text-xl font-bold mb-2" style={{ color: "var(--mt-text)" }}>{errorDetails.title}</h2>
+          <p className="text-sm mb-8" style={{ color: "var(--mt-text-muted)" }}>
+            {errorDetails.desc}
           </p>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20"
+          >
+            Return to Dashboard
+          </button>
         </div>
       </div>
     );
@@ -112,6 +135,18 @@ export function MeetingShell() {
               {meetingInfo.roomName}
             </span>
           </div>
+
+          {/* Mobile-only timer badge — shown here to avoid overlap in bottom bar */}
+          <span
+            className="flex sm:hidden items-center gap-1.5 text-[10px] font-mono tabular-nums px-2 py-0.5 rounded-full shrink-0"
+            style={{
+              color: "var(--mt-text-muted)",
+              backgroundColor: "var(--mt-bg-control, rgba(255,255,255,0.06))",
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
+            {formatDuration(meetingDuration)}
+          </span>
           {isRecording && (
             <span className="hidden sm:flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded-full">
               <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
