@@ -119,14 +119,14 @@ export function MeetingControls() {
   return (
     <>
       <div
-        className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 gap-3"
+        className="shrink-0 flex items-center justify-center sm:justify-between px-2 sm:px-4 py-1.5 sm:py-2 gap-1.5 sm:gap-3"
         style={{
           backgroundColor: "var(--mt-control-bar)",
           borderTop: "1px solid var(--mt-border)",
         }}
       >
-        {/* ── Left: Meeting info + quick toggles ────────────────────── */}
-        <div className="flex items-center gap-2.5 min-w-0 shrink">
+        {/* ── Left: Meeting info + quick toggles (hidden on mobile — timer is in top bar) ── */}
+        <div className="hidden sm:flex items-center gap-2.5 min-w-0 shrink">
           <span
             className="text-xs font-mono tabular-nums shrink-0"
             style={{ color: "var(--mt-text-muted)" }}
@@ -134,7 +134,7 @@ export function MeetingControls() {
             {formatDuration(meetingDuration)}
           </span>
           {isRecording && (
-            <span className="hidden sm:flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/15 px-2 py-0.5 rounded-full shrink-0">
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/15 px-2 py-0.5 rounded-full shrink-0">
               <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
               REC
             </span>
@@ -152,7 +152,6 @@ export function MeetingControls() {
             active={isCaptionsEnabled}
             onClick={toggleCaptions}
             tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-            className="hidden sm:flex"
           />
 
           {/* Donation controls — left side for host */}
@@ -162,7 +161,6 @@ export function MeetingControls() {
               active={isDonationActive}
               onClick={() => toggleDonation()}
               tooltip={isDonationActive ? "Stop Offering" : "Start Offering"}
-              className="hidden sm:flex"
             />
           )}
           {isDonationActive && (
@@ -171,14 +169,13 @@ export function MeetingControls() {
               highlight
               onClick={() => setShowDonationModal(true)}
               tooltip="Donate"
-              className="hidden sm:flex"
             />
           )}
         </div>
 
         {/* ── Center: Controls pill ─────────────────── */}
         <div
-          className="flex items-center gap-0.5 rounded-2xl px-1.5 py-1"
+          className="flex items-center gap-0.5 rounded-2xl px-1 sm:px-1.5 py-1"
           style={{
             backgroundColor: "var(--mt-control-pill)",
             border: "1px solid var(--mt-border)",
@@ -199,9 +196,9 @@ export function MeetingControls() {
             tooltip={isCameraOn ? "Camera off" : "Camera on"}
           />
 
-          <PillDivider />
+          <PillDivider className="hidden sm:block" />
 
-          {/* Screen share — desktop */}
+          {/* Screen share — desktop only */}
           <ControlBtn
             icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
             active={isScreenSharing}
@@ -215,6 +212,7 @@ export function MeetingControls() {
             active={showReactionPicker}
             onClick={() => setShowReactionPicker(!showReactionPicker)}
             tooltip="React"
+            className="hidden sm:flex"
           />
           {/* Hand */}
           <ControlBtn
@@ -222,6 +220,7 @@ export function MeetingControls() {
             highlight={isHandRaised}
             onClick={toggleHandRaise}
             tooltip={isHandRaised ? "Lower hand" : "Raise hand"}
+            className="hidden sm:flex"
           />
 
           <PillDivider />
@@ -236,12 +235,51 @@ export function MeetingControls() {
             />
             {showMoreMenu && (
               <div
-                className="absolute bottom-full mb-2 right-0 w-56 rounded-xl py-1.5 shadow-2xl z-50 overflow-hidden"
+                className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 sm:translate-x-0 sm:left-auto sm:right-0 w-56 rounded-xl py-1.5 shadow-2xl z-50 overflow-hidden max-h-[70vh] overflow-y-auto"
                 style={{
                   backgroundColor: "var(--mt-dialog-bg)",
                   border: "1px solid var(--mt-border-strong)",
                 }}
               >
+                {/* Mobile-only actions (hidden on desktop where they have dedicated buttons) */}
+                <div className="sm:hidden">
+                  <MoreMenuItem
+                    icon={<SmilePlus className="w-4 h-4" />}
+                    label="React"
+                    onClick={() => { setShowReactionPicker(!showReactionPicker); setShowMoreMenu(false); }}
+                  />
+                  <MoreMenuItem
+                    icon={<Hand className="w-4 h-4" />}
+                    label={isHandRaised ? "Lower Hand" : "Raise Hand"}
+                    onClick={() => { toggleHandRaise(); setShowMoreMenu(false); }}
+                  />
+                  <MoreMenuItem
+                    icon={isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <MonitorUp className="w-4 h-4" />}
+                    label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                    onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                  />
+                  <MoreMenuItem
+                    icon={<Subtitles className="w-4 h-4" />}
+                    label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+                    onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
+                  />
+                  {isHost && (
+                    <MoreMenuItem
+                      icon={<Gift className="w-4 h-4" />}
+                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  {isDonationActive && (
+                    <MoreMenuItem
+                      icon={<Gift className="w-4 h-4" />}
+                      label="Donate"
+                      onClick={() => { setShowDonationModal(true); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
+                </div>
+
                 <MoreMenuItem
                   icon={<BarChart3 className="w-4 h-4" />}
                   label="Polls"
@@ -265,18 +303,21 @@ export function MeetingControls() {
                   danger={isRecording}
                   onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
                 />
-                <MoreMenuItem
-                  icon={<Subtitles className="w-4 h-4" />}
-                  label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-                  onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
-                />
-                {isHost && (
+                {/* Desktop-only: captions & donation already shown above on mobile */}
+                <div className="hidden sm:block">
                   <MoreMenuItem
-                    icon={<Gift className="w-4 h-4" />}
-                    label={isDonationActive ? "Stop Offering" : "Start Offering"}
-                    onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
+                    icon={<Subtitles className="w-4 h-4" />}
+                    label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+                    onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
                   />
-                )}
+                  {isHost && (
+                    <MoreMenuItem
+                      icon={<Gift className="w-4 h-4" />}
+                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                </div>
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 <MoreMenuItem
                   icon={<Info className="w-4 h-4" />}
@@ -300,7 +341,7 @@ export function MeetingControls() {
           {/* End call pill */}
           <button
             onClick={() => setShowLeaveDialog(true)}
-            className="flex items-center gap-1.5 ml-1 px-3.5 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-red-500/25 active:scale-95"
+            className="flex items-center gap-1.5 ml-0.5 sm:ml-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs sm:text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-red-500/25 active:scale-95"
           >
             <PhoneOff className="w-4 h-4" />
             <span className="hidden sm:inline">End</span>
@@ -308,7 +349,7 @@ export function MeetingControls() {
         </div>
 
         {/* ── Right: Panel toggles + Layout ─────────── */}
-        <div className="flex items-center gap-1 shrink">
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           {/* Layout switcher — desktop */}
           <div
             className="hidden md:flex items-center gap-0.5 rounded-xl px-1 py-1 mr-1"
@@ -332,19 +373,19 @@ export function MeetingControls() {
 
           {/* Konn3ct AI panel toggle */}
           <PanelBtn
-            icon={<Sparkles className="w-[18px] h-[18px] text-brand-green" />}
+            icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
             active={activePanel === "ai"}
             onClick={() => setActivePanel("ai")}
             tooltip="Konn3ct AI"
           />
           <PanelBtn
-            icon={<MessageSquare className="w-[18px] h-[18px]" />}
+            icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}
             onClick={() => setActivePanel("chat")}
             tooltip="Chat"
           />
           <PanelBtn
-            icon={<Users className="w-[18px] h-[18px]" />}
+            icon={<Users className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "participants"}
             onClick={() => setActivePanel("participants")}
             tooltip="People"
@@ -401,7 +442,7 @@ function PanelBtn({
       onClick={onClick}
       title={tooltip}
       className={cn(
-        "flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 active:scale-90",
+        "flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-200 active:scale-90",
       )}
       style={{
         backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
@@ -413,9 +454,9 @@ function PanelBtn({
   );
 }
 
-/* ── Pill divider ──────────────────────────────────── */
-function PillDivider() {
-  return <div className="w-px h-6 mx-0.5 shrink-0" style={{ backgroundColor: "var(--mt-border-strong)" }} />;
+/* ── Pill divider ──────────────────────────────── */
+function PillDivider({ className }: { className?: string }) {
+  return <div className={cn("w-px h-6 mx-0.5 shrink-0", className)} style={{ backgroundColor: "var(--mt-border-strong)" }} />;
 }
 
 /* ── More menu item ────────────────────────────────── */
