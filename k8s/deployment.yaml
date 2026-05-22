@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-backend
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: Recreate
   selector:
@@ -114,8 +114,8 @@ spec:
               value: "my-super-strong-conn3ct-secret-123"
           resources:
             requests:
-              cpu: "2000m"
-              memory: "4Gi"
+              cpu: "3000m"
+              memory: "6Gi"
             limits:
               cpu: "4000m"
               memory: "8Gi"
