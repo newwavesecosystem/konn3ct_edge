@@ -114,11 +114,11 @@ spec:
               value: "my-super-strong-conn3ct-secret-123"
           resources:
             requests:
-              cpu: "3000m"
-              memory: "6Gi"
+              cpu: "1500m"
+              memory: "2Gi"
             limits:
-              cpu: "4000m"
-              memory: "8Gi"
+              cpu: "3500m"
+              memory: "6Gi"
           readinessProbe:
             httpGet:
               path: /health
