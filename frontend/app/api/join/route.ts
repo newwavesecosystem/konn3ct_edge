@@ -18,7 +18,7 @@ redis.on("error", () => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email, role, isBot } = body;
+    const { roomId, name, email, role, userId, isBot } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -52,11 +52,14 @@ export async function POST(request: Request) {
 
     const secret = process.env.JWT_SECRET || "fallback-secret-key";
 
+    // Use the provided userId, or generate a fallback
+    const finalUserId = userId || (isBot ? "bot_recorder" : `user_${Math.random().toString(36).substr(2, 9)}`);
+
     // Generate a secure JWT that the Kubernetes backend will accept
     // The backend's WebSocket verifier expects `userId` and `email`
     const token = jwt.sign(
       {
-        userId: isBot ? "bot_recorder" : `user_${Math.random().toString(36).substr(2, 9)}`,
+        userId: finalUserId,
         email: email || "guest@conn3ct.com",
         name: name || "Guest",
         role: isBot ? "bot" : (role || "attendee"),
