@@ -305,6 +305,7 @@ export function MeetingProvider({
             name: isBot ? "Recording Bot" : currentUser.name,
             email: "guest@conn3ct.com",
             role: currentUser.role,
+            userId: currentUser.id,
             isBot
           })
         });
