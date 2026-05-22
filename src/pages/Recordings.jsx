@@ -6,6 +6,13 @@ import {
   TableRow,
   TableCell,
 } from "../components/ui/table";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "../components/ui/pagination";
 import { Button } from "../components/ui/button";
 import React, { useEffect, useMemo, useState } from "react";
 import StatCard from "../components/StatCard";
@@ -44,9 +51,11 @@ const Recordings = () => {
   const [recordIdToDelete, setRecordIdToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     if (!openDeleteDialog) setRecordIdToDelete(null);
@@ -76,6 +85,21 @@ const Recordings = () => {
       }) || []
     );
   }, [recordingQuery.data, searchTerm, selectedDate]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRecordings.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedRecordings = filteredRecordings.slice(
+    pageStart,
+    pageStart + PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedDate]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   /* =========================
      Handlers
@@ -181,7 +205,7 @@ const Recordings = () => {
           </TableHeader>
 
           <TableBody>
-            {filteredRecordings.map(
+            {paginatedRecordings.map(
               ({ name, recordID, participants, startTime, endTime, size }) => (
                 <TableRow key={recordID}>
                   <TableCell>{name}</TableCell>
@@ -256,6 +280,36 @@ const Recordings = () => {
         {filteredRecordings.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p>{t("recordings.filters.noMatch")}</p>
+          </div>
+        )}
+
+        {filteredRecordings.length > 0 && totalPages > 1 && (
+          <div className="border-t px-4 py-4">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    type="button"
+                    onClick={() =>
+                      setCurrentPage((page) => Math.max(1, page - 1))
+                    }
+                    disabled={currentPage === 1}
+                  />
+                </PaginationItem>
+                <PaginationItem className="px-2 text-sm text-muted-foreground">
+                  {currentPage} / {totalPages}
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    type="button"
+                    onClick={() =>
+                      setCurrentPage((page) => Math.min(totalPages, page + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         )}
 

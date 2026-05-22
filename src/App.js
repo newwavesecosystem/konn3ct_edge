@@ -37,6 +37,7 @@ import Attendance from "./pages/Attendance";
 import ViewAttendance from "./pages/ViewAttendance";
 import EventParticipants from "./pages/EventParticipants";
 import Events from "./pages/Events";
+import ViewProfile from "./pages/view-profile/ViewProfile";
 import EventIcon from "./assets/components/EventIcon";
 import HomeIcon from "./assets/components/HomeIcon";
 import CardIcon from "./assets/components/CardIcon";
@@ -162,6 +163,10 @@ const router = createBrowserRouter([
             <JoinRoom />
           </>
         ),
+      },
+      {
+        path: "view-profile",
+        element: <ViewProfile />,
       },
       {
         element: <AuthenticatedAppLayout />,

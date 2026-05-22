@@ -81,9 +81,17 @@ const Dashboard = () => {
         <Card className="flex flex-col">
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
             <Avatar className="h-[78px] w-[78px] rounded-lg">
-              <AvatarImage src={userQuery[0]?.data?.user?.profile_photo_url} />
-              <AvatarFallback>AJ</AvatarFallback>
-            </Avatar>
+                <AvatarImage src={userQuery[0]?.data?.user?.profile_photo_url} />
+                <AvatarFallback>AJ</AvatarFallback>
+              </Avatar>
+            {/* <Link
+              to="/view-profile"
+              aria-label="View profile"
+              title="View profile"
+              className="cursor-pointer"
+            >
+              
+            </Link> */}
             <CardHeader className="p-0 sm:p-6">
               <CardTitle className="text-center text-2xl sm:text-left">
                 {userQuery[0]?.data?.user?.lastname}{" "}
