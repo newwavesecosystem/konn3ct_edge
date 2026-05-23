@@ -146,7 +146,7 @@ export function MeetingControls() {
             {meetingInfo.roomName}
           </span>
 
-          {/* Captions toggle — left side quick access */}
+          {/* 
           <ControlBtn
             icon={<Subtitles className="w-5 h-5" />}
             active={isCaptionsEnabled}
@@ -154,7 +154,6 @@ export function MeetingControls() {
             tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
           />
 
-          {/* Donation controls — left side for host */}
           {isHost && (
             <ControlBtn
               icon={<Gift className={cn("w-5 h-5", isDonationActive && "text-brand-green")} />}
@@ -170,7 +169,8 @@ export function MeetingControls() {
               onClick={() => setShowDonationModal(true)}
               tooltip="Donate"
             />
-          )}
+          )} 
+          */}
         </div>
 
         {/* ── Center: Controls pill ─────────────────── */}
@@ -258,6 +258,7 @@ export function MeetingControls() {
                     label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
                     onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
                   />
+                  {/* 
                   <MoreMenuItem
                     icon={<Subtitles className="w-4 h-4" />}
                     label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
@@ -269,7 +270,8 @@ export function MeetingControls() {
                       label={isDonationActive ? "Stop Offering" : "Start Offering"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
-                  )}
+                  )} 
+                  */}
                   {isDonationActive && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
@@ -285,17 +287,21 @@ export function MeetingControls() {
                   label="Polls"
                   onClick={() => { setActivePanel("polls"); setShowMoreMenu(false); }}
                 />
+                {/* 
                 <MoreMenuItem
                   icon={<FileText className="w-4 h-4" />}
                   label="Workspace"
                   onClick={() => { setActivePanel("docs"); setShowMoreMenu(false); }}
-                />
-                <MoreMenuItem
-                  icon={<Film className="w-4 h-4" />}
-                  label="eCinema Broadcast"
-                  badge={eCinemaLink ? "Live" : undefined}
-                  onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
-                />
+                /> 
+                */}
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Film className="w-4 h-4" />}
+                    label="eCinema Broadcast"
+                    badge={eCinemaLink ? "Live" : undefined}
+                    onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
+                  />
+                )}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 <MoreMenuItem
                   icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
@@ -305,6 +311,7 @@ export function MeetingControls() {
                 />
                 {/* Desktop-only: captions & donation already shown above on mobile */}
                 <div className="hidden sm:block">
+                  {/* 
                   <MoreMenuItem
                     icon={<Subtitles className="w-4 h-4" />}
                     label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
@@ -316,7 +323,8 @@ export function MeetingControls() {
                       label={isDonationActive ? "Stop Offering" : "Start Offering"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
-                  )}
+                  )} 
+                  */}
                 </div>
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 <MoreMenuItem
@@ -371,13 +379,14 @@ export function MeetingControls() {
             ))}
           </div>
 
-          {/* Konn3ct AI panel toggle */}
+          {/* Konn3ct AI panel toggle 
           <PanelBtn
             icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
             active={activePanel === "ai"}
             onClick={() => setActivePanel("ai")}
             tooltip="Konn3ct AI"
           />
+          */}
           <PanelBtn
             icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}

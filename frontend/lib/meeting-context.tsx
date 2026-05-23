@@ -545,17 +545,20 @@ export function MeetingProvider({
         };
 
         client.onPollCreate = (msg) => {
-          setPolls((prev) => [
-            ...prev,
-            {
-              id: msg.pollId,
-              question: msg.question,
-              options: msg.options,
-              createdBy: msg.userId,
-              isActive: true,
-              totalVotes: 0,
-            },
-          ]);
+          setPolls((prev) => {
+            if (prev.some(p => p.id === msg.pollId)) return prev;
+            return [
+              ...prev,
+              {
+                id: msg.pollId,
+                question: msg.question,
+                options: msg.options,
+                createdBy: msg.userId,
+                isActive: true,
+                totalVotes: 0,
+              },
+            ];
+          });
         };
 
         client.onPollVote = (msg) => {
