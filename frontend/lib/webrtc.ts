@@ -145,14 +145,12 @@ export class WebRTCClient {
             this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
           } else if (msg.recovered && this.device?.loaded) {
-            if (this.needsRepublish || this.sendTransport?.connectionState === 'disconnected' || this.sendTransport?.connectionState === 'failed') {
-               console.log("Session recovered by server, but WebRTC transport is dead (IP changed?). Executing Auto-Republish...");
-               this.needsRepublish = false;
-               if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                 this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-               }
-               this.republishMedia().catch(console.error);
+            console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes (e.g. WiFi to Mobile)...");
+            this.needsRepublish = false;
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
             }
+            this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
             // First time active
