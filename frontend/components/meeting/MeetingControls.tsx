@@ -198,11 +198,17 @@ export function MeetingControls() {
 
           <PillDivider className="hidden sm:block" />
 
-          {/* Screen share — desktop only */}
+          {/* Screen share */}
           <ControlBtn
             icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
             active={isScreenSharing}
-            onClick={toggleScreenShare}
+            onClick={() => {
+              if (currentUser.isMobile) {
+                toast.error("Screen sharing is not supported on mobile. Please join with a PC to share your screen.");
+                return;
+              }
+              toggleScreenShare();
+            }}
             tooltip="Share screen"
             className="hidden sm:flex"
           />

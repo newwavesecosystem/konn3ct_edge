@@ -732,6 +732,7 @@ export function MeetingProvider({
                   networkQuality: 'good',
                   joinedAt: new Date().toISOString(),
                   isConnecting: true,
+                  isMobile: p.isMobile,
                 });
                 setTimeout(() => {
                   setParticipants(curr => curr.map(u => u.id === p.userId ? { ...u, isConnecting: false } : u));
@@ -758,6 +759,7 @@ export function MeetingProvider({
               networkQuality: 'good',
               joinedAt: new Date().toISOString(),
               isConnecting: true,
+              isMobile: user.isMobile,
             }];
           });
           

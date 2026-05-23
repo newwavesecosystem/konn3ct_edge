@@ -15,6 +15,7 @@ import {
   Check,
   X,
   UserMinus,
+  Smartphone,
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 
@@ -209,6 +210,11 @@ function ParticipantRow({
               )}
             >
               {roleLabel[participant.role]}
+            </span>
+          )}
+          {participant.isMobile && (
+            <span className="text-[10px] flex items-center gap-0.5" style={{ color: "var(--mt-text-faint)" }} title="Joined from Mobile">
+              <Smartphone className="w-3 h-3" />
             </span>
           )}
           {participant.isScreenSharing && (

@@ -81,9 +81,12 @@ export class WebRTCClient {
   public async connect() {
     this.onConnectionStateChange?.('connecting');
     
+    // Detect mobile
+    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    
     // Connect WebSocket
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}`;
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {

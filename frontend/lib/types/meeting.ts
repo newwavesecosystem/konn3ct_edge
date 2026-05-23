@@ -23,6 +23,7 @@ export interface Participant {
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
+  isMobile?: boolean;
 }
 
 export interface ChatMessage {
