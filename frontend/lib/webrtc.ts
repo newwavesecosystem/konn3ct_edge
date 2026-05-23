@@ -29,9 +29,9 @@ export class WebRTCClient {
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
-  public onUserJoined?: (user: { userId: string, name: string, role: string }) => void;
+  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean }) => void;
   public onUserLeft?: (userId: string) => void;
-  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string }>) => void;
+  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean }>) => void;
   
   // Collaboration Callbacks
   public onChatMessage?: (msg: any) => void;
