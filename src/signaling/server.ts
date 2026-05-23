@@ -389,7 +389,15 @@ export function initializeSignaling(server: Server) {
     });
 
     ws.on('close', () => {
-      logger.info(`User ${userId} disconnected from room ${roomId}. Starting 60s grace period...`);
+      // If the user already explicitly left (via leave_meeting), they are no longer in the room map.
+      // Do not trigger the grace period in this case.
+      const stillInRoom = rooms.get(roomId)?.has(userId);
+      if (!stillInRoom) {
+        logger.info(`User ${userId} disconnected from room ${roomId} after explicit leave.`);
+        return;
+      }
+
+      logger.info(`User ${userId} disconnected from room ${roomId}. Starting 30s grace period...`);
 
       // IMMEDAITELY clean up Mediasoup transports for this connection.
       // If the client reconnects, they will create new WebRTC transports anyway.
@@ -425,7 +433,7 @@ export function initializeSignaling(server: Server) {
           }
         }
         disconnectTimeouts.delete(userId);
-      }, 60000); // 60 seconds
+      }, 30000); // 30 seconds
 
       disconnectTimeouts.set(userId, timeout);
     });
@@ -499,6 +507,30 @@ export function initializeSignaling(server: Server) {
             }
           }
         }
+        break;
+
+      case 'leave_meeting':
+        logger.info(`User ${userId} explicitly left room ${roomId}. Skipping grace period.`);
+        const rc = rooms.get(roomId);
+        if (rc) {
+          rc.delete(userId);
+          if (rc.size === 0) {
+            rooms.delete(roomId);
+            roomProducers.delete(roomId);
+            cleanupAudioObserver(roomId);
+            redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+          } else {
+            const producers = roomProducers.get(roomId) || [];
+            roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
+            broadcastToRoom(roomId, { type: 'user_left', userId });
+          }
+        }
+        // If there's an existing disconnect timeout, clear it so it doesn't fire later
+        if (disconnectTimeouts.has(userId)) {
+          clearTimeout(disconnectTimeouts.get(userId)!);
+          disconnectTimeouts.delete(userId);
+        }
+        try { client.ws.close(); } catch(e){}
         break;
 
       case 'end_meeting':
