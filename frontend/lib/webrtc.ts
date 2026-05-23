@@ -50,6 +50,7 @@ export class WebRTCClient {
   public onServerReject?: (msg: string) => void;
   public onForceMute?: () => void;
   public onECinemaUpdate?: (link: string | null) => void;
+  public onECinemaAction?: (msg: any) => void;
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
@@ -224,6 +225,9 @@ export class WebRTCClient {
         case 'note_update':
           this.onNoteUpdate?.(msg);
           break;
+        case 'ecinema_action':
+          this.onECinemaAction?.(msg);
+          break;
         case 'screen_share_started':
           this.onScreenShareStarted?.(msg.userId, msg.producerId);
           break;
@@ -359,6 +363,12 @@ export class WebRTCClient {
   public sendNoteUpdate(content: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'note_update', content }));
+    }
+  }
+
+  public sendECinemaAction(action: 'play' | 'pause', time?: number) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ecinema_action', action, time }));
     }
   }
 

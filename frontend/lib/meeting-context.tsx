@@ -86,6 +86,8 @@ interface MeetingContextValue {
   forceMuteUser: (userId?: string) => void;
   endMeetingForAll: () => void;
   broadcastECinema: (link: string | null) => void;
+  ecinemaAction: { action: 'play' | 'pause'; time?: number } | null;
+  sendECinemaAction: (action: 'play' | 'pause', time?: number) => void;
   
   // Device Management
   devices: {
@@ -179,6 +181,7 @@ export function MeetingProvider({
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
+  const [ecinemaAction, setEcinemaAction] = useState<{ action: 'play' | 'pause'; time?: number } | null>(null);
   const [isCaptionsEnabled, setIsCaptionsEnabled] = useState(false);
   const [isDonationActive, setIsDonationActive] = useState(false);
   const [captions, setCaptions] = useState<CaptionMessage[]>([]);
@@ -588,6 +591,10 @@ export function MeetingProvider({
           });
         };
 
+        client.onECinemaAction = (msg) => {
+          setEcinemaAction({ action: msg.action, time: msg.time });
+        };
+
         client.onCameraState = (msg) => {
           setParticipants((prev) => prev.map(p =>
             p.id === msg.userId ? { ...p, isCameraOn: msg.isCameraOn } : p
@@ -736,6 +743,7 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
+          setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) return prev;
             return [...prev, {
@@ -1228,6 +1236,11 @@ export function MeetingProvider({
     webrtcClient.current?.sendECinemaUpdate(link);
   }, []);
 
+  const sendECinemaAction = useCallback((action: 'play' | 'pause', time?: number) => {
+    // We don't optimistically update here because the YouTube player handles its own state for the host
+    webrtcClient.current?.sendECinemaAction(action, time);
+  }, []);
+
   return (
     <MeetingContext.Provider
       value={{
@@ -1287,6 +1300,8 @@ export function MeetingProvider({
         endMeetingForAll,
         broadcastECinema,
         eCinemaLink,
+        ecinemaAction,
+        sendECinemaAction,
         devices,
         selectedDevices,
         switchDevice,

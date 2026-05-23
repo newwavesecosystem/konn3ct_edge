@@ -16,6 +16,8 @@ import {
   ChevronRight,
   Users,
 } from "lucide-react";
+import { StageParticipants } from "./StageParticipants";
+import YouTube from "react-youtube";
 
 export function StageView() {
   const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
@@ -946,25 +948,51 @@ function ScreenShareLayout({
 
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const { broadcastECinema, currentUser } = useMeeting();
+  const { broadcastECinema, currentUser, sendECinemaAction, ecinemaAction } = useMeeting();
+  const playerRef = React.useRef<any>(null);
 
-  const getEmbedUrl = (url: string) => {
+  const extractVideoId = (url: string) => {
     try {
       if (url.includes("youtube.com/watch")) {
-        const videoId = new URL(url).searchParams.get("v");
-        if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+        return new URL(url).searchParams.get("v");
       }
       if (url.includes("youtu.be/")) {
-        const videoId = new URL(url).pathname.slice(1);
-        if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+        return new URL(url).pathname.slice(1);
       }
-      return url;
+      return null;
     } catch {
-      return url;
+      return null;
     }
   };
 
-  const embedUrl = getEmbedUrl(eCinemaLink);
+  const videoId = extractVideoId(eCinemaLink);
+
+  // Sync player when receiving actions
+  React.useEffect(() => {
+    if (ecinemaAction && playerRef.current) {
+      if (ecinemaAction.action === 'play') {
+        playerRef.current.playVideo();
+      } else if (ecinemaAction.action === 'pause') {
+        playerRef.current.pauseVideo();
+      }
+      if (ecinemaAction.time !== undefined) {
+        // Optional: seekTo if you want to sync time later, but sticking to play/pause for now
+        // playerRef.current.seekTo(ecinemaAction.time, true);
+      }
+    }
+  }, [ecinemaAction]);
+
+  const handlePlay = (e: any) => {
+    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+      sendECinemaAction('play', e.target.getCurrentTime());
+    }
+  };
+
+  const handlePause = (e: any) => {
+    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+      sendECinemaAction('pause', e.target.getCurrentTime());
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
@@ -979,13 +1007,13 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         }}
       >
         <div
-          className="flex items-center justify-between px-3 py-2 backdrop-blur-sm shrink-0 z-10 absolute top-0 w-full"
+          className="flex items-center justify-between px-3 py-2 backdrop-blur-sm shrink-0 z-10 absolute top-0 w-full pointer-events-none"
           style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)" }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pointer-events-auto">
             <span className="text-white text-xs font-semibold drop-shadow-md">eCinema Broadcast</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 pointer-events-auto">
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="p-1.5 rounded-lg transition-colors text-white hover:bg-white/20"
@@ -1005,12 +1033,31 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         </div>
 
         <div className="flex-1 w-full h-full bg-black">
-          <iframe
-            src={embedUrl}
-            className="w-full h-full border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+          {videoId ? (
+            <YouTube
+              videoId={videoId}
+              opts={{
+                width: '100%',
+                height: '100%',
+                playerVars: {
+                  autoplay: 1,
+                  controls: currentUser.role === 'host' || currentUser.role === 'co-host' ? 1 : 0, // Only hosts see controls
+                  disablekb: currentUser.role === 'host' || currentUser.role === 'co-host' ? 0 : 1, // Disable keyboard for non-hosts
+                  rel: 0,
+                  modestbranding: 1
+                },
+              }}
+              className="w-full h-full"
+              iframeClassName="w-full h-full border-0 pointer-events-auto"
+              onReady={(e) => { playerRef.current = e.target; }}
+              onPlay={handlePlay}
+              onPause={handlePause}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-white">
+              Invalid Video Link
+            </div>
+          )}
         </div>
       </div>
 

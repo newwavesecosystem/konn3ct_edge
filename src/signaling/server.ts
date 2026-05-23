@@ -609,6 +609,16 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'ecinema_action':
+        if (client.role === 'host' || client.role === 'presenter') {
+          broadcastToRoom(roomId, {
+            type: 'ecinema_action',
+            action: data.action,
+            time: data.time
+          }, userId);
+        }
+        break;
+
       case 'donation_status':
         if (client.role === 'host' || client.role === 'co-host') {
           broadcastToRoom(roomId, {
