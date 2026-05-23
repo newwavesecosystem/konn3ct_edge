@@ -536,9 +536,11 @@ export class WebRTCClient {
         });
 
         let quality: 'good' | 'poor' | 'bad' = 'good';
-        if (maxRtt > 1000 || maxPacketLoss > 20) {
+        // Zoom and modern platforms are highly tolerant due to FEC.
+        // We relax the thresholds so users don't get unnecessary warnings.
+        if (maxRtt > 1500 || maxPacketLoss > 25) {
           quality = 'bad';
-        } else if (maxRtt > 500 || maxPacketLoss > 10) {
+        } else if (maxRtt > 800 || maxPacketLoss > 15) {
           quality = 'poor';
         }
 
@@ -549,7 +551,7 @@ export class WebRTCClient {
       } catch (e) {
         // Ignore stats errors
       }
-    }, 5000);
+    }, 15000);
   }
 
   private async republishMedia() {
