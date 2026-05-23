@@ -141,6 +141,9 @@ export function MeetingProvider({
   const initialMuted = searchParams.get("mic") === "false";
 
   // ── State ────────────────────────────────────────────
+  const isMobileClient = typeof navigator !== 'undefined' ? 
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
+
   const [currentUser] = useState<Participant>({
     id: `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
@@ -151,6 +154,7 @@ export function MeetingProvider({
     isHandRaised: false,
     isSpeaking: false,
     joinedAt: new Date().toISOString(),
+    isMobile: isMobileClient,
   });
 
   // Start with only the current user, so real users are dynamically added
@@ -296,6 +300,7 @@ export function MeetingProvider({
   const webrtcClient = useRef<WebRTCClient | null>(null);
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
@@ -426,8 +431,10 @@ export function MeetingProvider({
         };
 
         client.onSyncPanel = (panel: any) => {
-          // If we are the bot, or if we want all participants to sync with the host's view
-          setActivePanel(panel);
+          // Only sync the panel view for the recording bot so it matches the host's screen
+          if (currentUser.role === 'bot') {
+            setActivePanel(panel);
+          }
         };
 
         client.onCaptionReceived = (userId, text, isFinal, lang) => {
@@ -578,6 +585,9 @@ export function MeetingProvider({
               },
             ];
           });
+          
+          // Automatically open the polls panel for everyone when a new poll is created
+          setActivePanel("polls");
         };
 
         client.onPollVote = (msg) => {
@@ -669,36 +679,44 @@ export function MeetingProvider({
         };
 
         client.onWaitingRoomRequest = (msg) => {
+          if (notifiedWaitingUsersRef.current.has(msg.userId)) {
+            return;
+          }
+          notifiedWaitingUsersRef.current.add(msg.userId);
+
+          // Play Doorbell Sound (Ding-Dong)
+          try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            // Ding
+            oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+            // Dong
+            oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+            // Fade out smoothly to avoid popping
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.6);
+          } catch(e) {
+            console.warn("Failed to play doorbell sound", e);
+          }
+
+          toast(`${msg.name} is waiting to join`, {
+            action: {
+              label: 'Admit',
+              onClick: () => {
+                webrtcClient.current?.sendAdmitUser(msg.userId);
+                notifiedWaitingUsersRef.current.delete(msg.userId);
+              }
+            }
+          });
+
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
-
-            // Play Doorbell Sound (Ding-Dong)
-            try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              oscillator.type = 'sine';
-              // Ding
-              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-              // Dong
-              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
-              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
-              // Fade out smoothly to avoid popping
-              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-              oscillator.start(audioCtx.currentTime);
-              oscillator.stop(audioCtx.currentTime + 0.6);
-            } catch(e) {
-              console.warn("Failed to play doorbell sound", e);
-            }
-
-            toast(`${msg.name} is waiting to join`, {
-              action: {
-                label: 'Admit',
-                onClick: () => webrtcClient.current?.sendAdmitUser(msg.userId)
-              }
-            });
             return [...prev, { userId: msg.userId, name: msg.name }];
           });
         };
