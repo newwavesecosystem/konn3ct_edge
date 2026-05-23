@@ -1,6 +1,6 @@
 // ── Meeting Types ──────────────────────────────────────
 
-export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest";
+export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot";
 export type MediaState = "on" | "off" | "disabled";
 export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended";
 export type RoomType = "meeting" | "webinar";
