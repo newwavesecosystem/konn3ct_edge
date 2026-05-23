@@ -85,6 +85,7 @@ interface MeetingContextValue {
   kickUser: (userId: string) => void;
   forceMuteUser: (userId?: string) => void;
   endMeetingForAll: () => void;
+  leaveMeeting: () => void;
   broadcastECinema: (link: string | null) => void;
   ecinemaAction: { action: 'play' | 'pause'; time?: number } | null;
   sendECinemaAction: (action: 'play' | 'pause', time?: number) => void;
@@ -1233,6 +1234,10 @@ export function MeetingProvider({
     webrtcClient.current?.sendEndMeeting();
   }, []);
 
+  const leaveMeeting = useCallback(() => {
+    webrtcClient.current?.sendLeaveMeeting();
+  }, []);
+
   const broadcastECinema = useCallback((link: string | null) => {
     setECinemaLink(link); // Optimistic local update
     webrtcClient.current?.sendECinemaUpdate(link);
@@ -1300,6 +1305,7 @@ export function MeetingProvider({
         kickUser,
         forceMuteUser,
         endMeetingForAll,
+        leaveMeeting,
         broadcastECinema,
         eCinemaLink,
         ecinemaAction,

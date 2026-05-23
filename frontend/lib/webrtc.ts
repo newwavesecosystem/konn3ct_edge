@@ -417,6 +417,12 @@ export class WebRTCClient {
     }
   }
 
+  public sendLeaveMeeting() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'leave_meeting' }));
+    }
+  }
+
   public async getRouterRtpCapabilities() {
     console.log('[WebRTC] Requesting Router RTP Capabilities from server...');
     const res = await this.request('getRouterRtpCapabilities', 'routerCapabilities');
