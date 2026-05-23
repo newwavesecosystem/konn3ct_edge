@@ -584,9 +584,6 @@ export function initializeSignaling(server: Server) {
               if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
                 targetClient.ws.send(JSON.stringify(msgPayload));
               }
-              if (client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(JSON.stringify(msgPayload));
-              }
             }
           } else {
             broadcastToRoom(roomId, msgPayload, userId);
