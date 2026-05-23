@@ -82,13 +82,14 @@ export function MeetingShell() {
     );
   }
 
-  if (['denied', 'kicked', 'failed', 'ended'].includes(webrtcStatus)) {
+  if (['denied', 'kicked', 'failed', 'ended', 'invalid-session'].includes(webrtcStatus)) {
     const errorDetails = {
       denied: { title: "Entry Denied", desc: "The host has declined your request to join this meeting." },
       kicked: { title: "Removed from Meeting", desc: "You have been removed from this meeting by the host." },
       failed: { title: "Connection Failed", desc: "We couldn't connect you to the meeting. Please try again." },
       ended:  { title: "Meeting Ended", desc: "The host has ended this meeting for everyone." },
-    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'ended'];
+      'invalid-session': { title: "Invalid Session", desc: "Your join session is invalid or expired. Please start over from the join page." },
+    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'ended' | 'invalid-session'];
 
     return (
       <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
@@ -101,10 +102,17 @@ export function MeetingShell() {
             {errorDetails.desc}
           </p>
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => {
+              if (webrtcStatus === 'invalid-session') {
+                const slug = window.location.pathname.split('/').pop();
+                router.push(`/join/${slug}`);
+              } else {
+                router.push('/dashboard');
+              }
+            }}
             className="w-full px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20"
           >
-            Return to Dashboard
+            {webrtcStatus === 'invalid-session' ? 'Return to Join Page' : 'Return to Dashboard'}
           </button>
         </div>
       </div>

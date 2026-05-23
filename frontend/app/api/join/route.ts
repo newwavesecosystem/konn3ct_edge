@@ -18,10 +18,58 @@ redis.on("error", () => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email, role, userId, isBot, isMobile } = body;
+    const { roomId, sessionToken, isBot } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
+    }
+
+    // Default values if no session (only for bots or fallback)
+    let finalUserId = `user_${Math.random().toString(36).substr(2, 9)}`;
+    let finalEmail = "guest@conn3ct.com";
+    let finalName = "Guest";
+    let finalRole = isBot ? "bot" : "attendee";
+    let finalIsMobile = false;
+
+    if (isBot) {
+      finalUserId = "bot_recorder";
+    } else {
+      if (!sessionToken) {
+        return NextResponse.json({ error: "Missing session token" }, { status: 403 });
+      }
+
+      try {
+        const sessionDataStr = await redis.get(`prejoin_session:${sessionToken}`);
+        if (!sessionDataStr) {
+          // If Redis failed in local dev, try fallback memory
+          const fallbackData = (global as any)._fallbackSessions?.get(sessionToken);
+          if (fallbackData) {
+            if (fallbackData.roomId !== roomId) {
+              return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
+            }
+            finalName = fallbackData.name;
+            finalEmail = fallbackData.email;
+            finalRole = fallbackData.role;
+            finalIsMobile = fallbackData.isMobile;
+          } else {
+            return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
+          }
+        } else {
+          const sessionData = JSON.parse(sessionDataStr);
+          if (sessionData.roomId !== roomId) {
+            return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
+          }
+          finalName = sessionData.name;
+          finalEmail = sessionData.email;
+          finalRole = sessionData.role;
+          finalIsMobile = sessionData.isMobile;
+          // Note: we can optionally delete the session here: await redis.del(...)
+          // But keeping it for 2 hours allows easy page refreshes
+        }
+      } catch (e) {
+        console.warn("Redis is unreachable during token generation.", e);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+      }
     }
 
     // Method 1: Redis Pre-flight Rejection (Option A)
@@ -52,19 +100,16 @@ export async function POST(request: Request) {
 
     const secret = process.env.JWT_SECRET || "fallback-secret-key";
 
-    // Use the provided userId, or generate a fallback
-    const finalUserId = userId || (isBot ? "bot_recorder" : `user_${Math.random().toString(36).substr(2, 9)}`);
-
     // Generate a secure JWT that the Kubernetes backend will accept
     // The backend's WebSocket verifier expects `userId` and `email`
     const token = jwt.sign(
       {
         userId: finalUserId,
-        email: email || "guest@conn3ct.com",
-        name: name || "Guest",
-        role: isBot ? "bot" : (role || "attendee"),
+        email: finalEmail,
+        name: finalName,
+        role: finalRole,
         isBot: !!isBot,
-        isMobile: !!isMobile,
+        isMobile: finalIsMobile,
       },
       secret,
       { expiresIn: "24h" }

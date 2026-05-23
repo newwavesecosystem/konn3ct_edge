@@ -2,7 +2,7 @@
 
 export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot";
 export type MediaState = "on" | "off" | "disabled";
-export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended";
+export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended" | "fetching-token" | "failed" | "denied" | "kicked" | "invalid-session";
 export type RoomType = "meeting" | "webinar";
 export type LayoutMode = "speaker" | "grid" | "spotlight";
 export type GridOverflowMode = "scroll" | "paginate";

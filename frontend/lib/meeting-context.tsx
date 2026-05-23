@@ -130,15 +130,24 @@ export function MeetingProvider({
   children,
   roomSlug,
 }: {
-  children: React.ReactNode;
-  roomSlug: string;
-}) {
-  // Extract user info from URL (passed from Join or Dashboard)
+  // Extract user info from sessionStorage (passed from Join screen)
+  let storedJoinInfo = null;
+  if (typeof window !== "undefined") {
+    try {
+      const storedStr = sessionStorage.getItem("conn3ct_join_info");
+      if (storedStr) storedJoinInfo = JSON.parse(storedStr);
+    } catch (e) {
+      console.error("Failed to parse join info", e);
+    }
+  }
+
+  // For the initial render, use URL search params as a fallback for backwards compatibility
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  const queryName = searchParams.get("name") || "Guest";
-  const queryRole = (searchParams.get("role") as ParticipantRole) || "attendee";
-  const initialCameraOn = searchParams.get("camera") !== "false";
-  const initialMuted = searchParams.get("mic") === "false";
+  const queryName = storedJoinInfo?.name || searchParams.get("name") || "Guest";
+  const queryEmail = storedJoinInfo?.email || "guest@conn3ct.com";
+  const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
+  const initialCameraOn = storedJoinInfo ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
+  const initialMuted = storedJoinInfo ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
 
   // ── State ────────────────────────────────────────────
   const isMobileClient = typeof navigator !== 'undefined' ? 
@@ -311,21 +320,25 @@ export function MeetingProvider({
 
         // Call our new Next.js endpoint to get a secure JWT
         const isBot = new URLSearchParams(window.location.search).get('bot') === 'true';
+        const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+
         const res = await fetch("/api/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId: roomSlug,
-            name: isBot ? "Recording Bot" : currentUser.name,
-            email: "guest@conn3ct.com",
-            role: currentUser.role,
-            userId: currentUser.id,
-            isBot,
-            isMobile: currentUser.isMobile,
+            sessionToken,
+            isBot
           })
         });
 
         const data = await res.json();
+
+        if (res.status === 403) {
+          toast.error("Your join session is invalid or expired. Please join again.");
+          setWebrtcStatus("invalid-session");
+          return;
+        }
 
         if (!res.ok || !data.token) {
           toast.error(data.error || "Failed to get connection token");
