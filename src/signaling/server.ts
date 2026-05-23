@@ -83,6 +83,7 @@ interface Client {
   role: string;
   status: 'waiting' | 'active';
   transports: string[];
+  isMobile: boolean;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -192,6 +193,7 @@ export function initializeSignaling(server: Server) {
 
       const token = url.searchParams.get('token');
       const roomSlug = url.searchParams.get('roomId');
+      const isMobile = url.searchParams.get('isMobile') === 'true';
 
       if (!token || !roomSlug) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -227,6 +229,7 @@ export function initializeSignaling(server: Server) {
           roomSlug,
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
+          isMobile,
         });
       });
     } catch (error) {
@@ -237,12 +240,12 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomSlug, role, isWaitingRoomEnabled } = clientData;
+    const { userId, email, name, roomId, roomSlug, role, isWaitingRoomEnabled, isMobile } = clientData;
 
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus, transports: [] };
+    const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus, transports: [], isMobile };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -302,7 +305,8 @@ export function initializeSignaling(server: Server) {
           type: 'user_joined',
           userId,
           name,
-          role
+          role,
+          isMobile: client.isMobile
         });
 
         // Send existing waiting users to the host that just joined
@@ -326,7 +330,7 @@ export function initializeSignaling(server: Server) {
           try {
             const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
               .filter(c => c.status === 'active')
-              .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
+              .map(c => ({ userId: c.userId, name: c.name, role: c.role, isMobile: c.isMobile }));
             ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
             const chatHistory = await db.chatMessage.findMany({
