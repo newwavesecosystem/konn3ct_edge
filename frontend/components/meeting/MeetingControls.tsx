@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Mic,
