@@ -18,7 +18,7 @@ redis.on("error", () => {});
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, name, email, role, userId, isBot } = body;
+    const { roomId, name, email, role, userId, isBot, isMobile } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
         name: name || "Guest",
         role: isBot ? "bot" : (role || "attendee"),
         isBot: !!isBot,
+        isMobile: !!isMobile,
       },
       secret,
       { expiresIn: "24h" }

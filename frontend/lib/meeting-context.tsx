@@ -320,7 +320,8 @@ export function MeetingProvider({
             email: "guest@conn3ct.com",
             role: currentUser.role,
             userId: currentUser.id,
-            isBot
+            isBot,
+            isMobile: currentUser.isMobile,
           })
         });
 
@@ -588,6 +589,7 @@ export function MeetingProvider({
           
           // Automatically open the polls panel for everyone when a new poll is created
           setActivePanel("polls");
+          setIsMobilePanelOpen(true);
         };
 
         client.onPollVote = (msg) => {
@@ -1242,8 +1244,14 @@ export function MeetingProvider({
       }
       
       // If host, sync the panel state so the recorder bot captures it
+      // Don't sync 'participants' or 'settings' as those are private to the host
       if (currentUser.role === 'host' || currentUser.role === 'co-host') {
-        webrtcClient.current?.sendSyncPanel(newPanel);
+        if (newPanel !== 'participants' && newPanel !== 'settings') {
+          webrtcClient.current?.sendSyncPanel(newPanel);
+        } else {
+          // If the host opened a private panel, tell the bot to close its panel so it doesn't get stuck
+          webrtcClient.current?.sendSyncPanel(null);
+        }
       }
     },
     [activePanel, currentUser.role]
