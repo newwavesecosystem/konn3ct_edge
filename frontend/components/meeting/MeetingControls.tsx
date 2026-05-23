@@ -74,6 +74,7 @@ export function MeetingControls() {
     switchDevice,
     meetingInfo,
     eCinemaLink,
+    hasUnreadChat,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -398,6 +399,7 @@ export function MeetingControls() {
             active={activePanel === "chat"}
             onClick={() => setActivePanel("chat")}
             tooltip="Chat"
+            hasNotification={hasUnreadChat}
           />
           <PanelBtn
             icon={<Users className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
@@ -448,16 +450,16 @@ function ControlBtn({
 
 /* ── Panel toggle button (right zone) ──────────────── */
 function PanelBtn({
-  icon, active, onClick, tooltip,
+  icon, active, onClick, tooltip, hasNotification
 }: {
-  icon: React.ReactNode; active: boolean; onClick: () => void; tooltip: string;
+  icon: React.ReactNode; active: boolean; onClick: () => void; tooltip: string; hasNotification?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       title={tooltip}
       className={cn(
-        "flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-200 active:scale-90",
+        "relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-200 active:scale-90",
       )}
       style={{
         backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
@@ -465,6 +467,12 @@ function PanelBtn({
       }}
     >
       {icon}
+      {hasNotification && (
+        <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+        </span>
+      )}
     </button>
   );
 }

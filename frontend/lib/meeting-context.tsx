@@ -37,6 +37,7 @@ interface MeetingContextValue {
   meetingInfo: MeetingInfo;
   reactions: Reaction[];
   activePanel: SidePanel;
+  hasUnreadChat: boolean;
   layoutMode: LayoutMode;
   gridOverflowMode: GridOverflowMode;
   isMuted: boolean;
@@ -69,6 +70,7 @@ interface MeetingContextValue {
   setCaptionLanguage: (lang: string) => void;
   setTranslationLanguage: (lang: string) => void;
   setActivePanel: (panel: SidePanel) => void;
+  setHasUnreadChat: (has: boolean) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setGridOverflowMode: (mode: GridOverflowMode) => void;
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
@@ -168,6 +170,9 @@ export function MeetingProvider({
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
+  const activePanelRef = useRef<SidePanel>(null);
+  useEffect(() => { activePanelRef.current = activePanel; }, [activePanel]);
+  const [hasUnreadChat, setHasUnreadChat] = useState<boolean>(false);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("grid");
   const [gridOverflowMode, setGridOverflowMode] = useState<GridOverflowMode>("paginate");
   const [isMuted, setIsMuted] = useState(initialMuted);
@@ -498,21 +503,31 @@ export function MeetingProvider({
 
         client.onChatMessage = (msg) => {
           if (msg.userId !== currentUser.id) {
-            // Play Pop Sound
+            // Play a prominent "Ding-Ding" notification sound for chat
             try {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const osc = audioCtx.createOscillator();
-              const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = 'sine';
-              osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-              osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
-              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-              osc.start();
-              osc.stop(audioCtx.currentTime + 0.1);
+              
+              const playBeep = (timeOffset: number) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime + timeOffset);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + timeOffset + 0.1);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime + timeOffset);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + timeOffset + 0.1);
+                osc.start(audioCtx.currentTime + timeOffset);
+                osc.stop(audioCtx.currentTime + timeOffset + 0.15);
+              };
+
+              playBeep(0);
+              playBeep(0.2);
             } catch (e) { }
+
+            if (activePanelRef.current !== "chat") {
+              setHasUnreadChat(true);
+            }
           }
 
           setChatMessages((prev) => {
@@ -1204,6 +1219,10 @@ export function MeetingProvider({
         setIsMobilePanelOpen(true);
       }
       
+      if (newPanel === "chat") {
+        setHasUnreadChat(false);
+      }
+      
       // If host, sync the panel state so the recorder bot captures it
       if (currentUser.role === 'host' || currentUser.role === 'co-host') {
         webrtcClient.current?.sendSyncPanel(newPanel);
@@ -1260,6 +1279,7 @@ export function MeetingProvider({
         meetingInfo,
         reactions,
         activePanel,
+        hasUnreadChat,
         layoutMode,
         gridOverflowMode,
         isMuted,
@@ -1289,6 +1309,7 @@ export function MeetingProvider({
         setCaptionLanguage,
         setTranslationLanguage,
         setActivePanel: handleSetActivePanel,
+        setHasUnreadChat,
         setLayoutMode,
         setGridOverflowMode,
         sendMessage,
