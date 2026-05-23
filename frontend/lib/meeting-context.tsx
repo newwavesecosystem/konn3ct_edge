@@ -1343,7 +1343,54 @@ export function MeetingProvider({
         setIsAlwaysMuteOnJoin: updateAlwaysMute,
       }}
     >
+      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} />
       {children}
     </MeetingContext.Provider>
   );
+}
+
+function GlobalAudioRenderer({ participants, currentUserId }: { participants: Participant[]; currentUserId: string }) {
+  const { selectedDevices } = useMeeting();
+  return (
+    <>
+      {participants.map((p) => (
+        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} />
+      ))}
+    </>
+  );
+}
+
+function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
+    if (sinkId && typeof (el as any).setSinkId === "function") {
+      try {
+        await (el as any).setSinkId(sinkId);
+      } catch (e) {
+        console.warn("Failed to set audio output device:", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (audioRef.current && track && !isLocal) {
+      if (audioRef.current.srcObject) {
+        const stream = audioRef.current.srcObject as MediaStream;
+        if (stream.getAudioTracks()[0] === track) {
+          applyAudioSink(audioRef.current, audioOutput);
+          return;
+        }
+      }
+      audioRef.current.srcObject = new MediaStream([track]);
+      applyAudioSink(audioRef.current, audioOutput);
+      audioRef.current.play().catch((e) => {
+        if (e.name !== 'AbortError') console.warn("Global audio play failed:", e);
+      });
+    } else if (audioRef.current && (!track || isLocal)) {
+      audioRef.current.srcObject = null;
+    }
+  }, [track, isLocal, audioOutput]);
+
+  return <audio ref={audioRef} autoPlay muted={isLocal} style={{ display: 'none' }} />;
 }

@@ -15,7 +15,9 @@ import { Konn3ctAIPanel } from "./panels/Konn3ctAIPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
-import { DonationModal } from "./DonationModal";
+import dynamic from "next/dynamic";
+
+const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
