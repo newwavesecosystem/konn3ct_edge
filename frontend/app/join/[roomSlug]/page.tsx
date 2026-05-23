@@ -27,6 +27,7 @@ export default function JoinPage({
   const resolvedParams = React.use(params);
   const router = useRouter();
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [role, setRole] = useState<"host" | "attendee">("attendee");
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
@@ -82,16 +83,42 @@ export default function JoinPage({
     };
   }, [isCameraOn]);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!name.trim() || isJoining) return;
     setIsJoining(true);
     // Stop the preview stream so it doesn't block camera in the meeting
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
-    // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
-    router.push(
-      `/meeting/${resolvedParams.roomSlug}?name=${encodeURIComponent(name.trim())}&role=${role}&camera=${isCameraOn}&mic=${!isMuted}`
-    );
+    
+    try {
+      const res = await fetch("/api/prejoin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId: resolvedParams.roomSlug,
+          name: name.trim(),
+          email: email.trim(),
+          isMobile: typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+          camera: isCameraOn,
+          mic: !isMuted
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.sessionToken) {
+        throw new Error(data.error || "Failed to create join session");
+      }
+
+      // Save the secure session token to navigate with
+      sessionStorage.setItem("conn3ct_session_token", data.sessionToken);
+
+      // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
+      router.push(`/meeting/${resolvedParams.roomSlug}`);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || "Failed to join. Please try again.");
+      setIsJoining(false);
+    }
   };
 
   return (
@@ -243,31 +270,21 @@ export default function JoinPage({
                   />
                 </div>
 
-                {/* Role picker */}
+                {/* Email input */}
                 <div>
-                  <label className="block text-xs text-white/40 mb-2 font-medium">Join as</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["attendee", "host"] as const).map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setRole(r)}
-                        className={cn(
-                          "py-2.5 rounded-xl text-sm font-medium border transition-all duration-200",
-                          role === r
-                            ? "bg-brand-green/10 border-brand-green/40 text-brand-green"
-                            : "bg-white/5 border-white/10 text-white/40 hover:border-white/20"
-                        )}
-                      >
-                        {r === "host" ? "🎙️ Host" : "👤 Attendee"}
-                      </button>
-                    ))}
-                  </div>
-                  {role === "host" && (
-                    <p className="text-[11px] text-amber-400/70 mt-1.5">
-                      As host you can admit/deny participants from the waiting room.
-                    </p>
-                  )}
+                  <label className="block text-xs text-white/40 mb-2 font-medium">Your email</label>
+                  <input
+                    id="join-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none focus:border-brand-green/40 focus:bg-white/[0.07] transition-colors"
+                    onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+                  />
                 </div>
+
+                {/* Role picker removed as it is now securely forced to attendee by the backend. Hosts will use the dashboard. */}
 
                 {/* Join button */}
                 <button
