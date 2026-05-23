@@ -804,6 +804,8 @@ export class WebRTCClient {
     const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
 
     if (producer) {
+      const oldTrack = producer.track;
+
       if (kind === 'audio') {
         this.rawAudioTrack = newTrack;
         if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
@@ -816,7 +818,9 @@ export class WebRTCClient {
       // Replace the track in the Mediasoup producer
       await producer.replaceTrack({ track: newTrack });
       // Stop the old track to release the hardware
-      producer.track?.stop();
+      if (oldTrack) {
+        oldTrack.stop();
+      }
     }
 
     return newTrack;
