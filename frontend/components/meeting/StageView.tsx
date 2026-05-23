@@ -16,7 +16,7 @@ import {
   ChevronRight,
   Users,
 } from "lucide-react";
-import { StageParticipants } from "./StageParticipants";
+
 import YouTube from "react-youtube";
 
 export function StageView() {
