@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { CheckCircle2, BarChart3 } from "lucide-react";
 
 export function PollsPanel() {
-  const { polls, votePoll, createPoll } = useMeeting();
+  const { polls, votePoll, createPoll, participants, currentUser } = useMeeting();
   const [isCreating, setIsCreating] = React.useState(false);
   const [question, setQuestion] = React.useState("");
   const [options, setOptions] = React.useState(["", ""]);
@@ -28,12 +28,14 @@ export function PollsPanel() {
         style={{ borderBottom: "1px solid var(--mt-border)" }}
       >
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Polls</h3>
-        <button 
-          onClick={() => setIsCreating(true)}
-          className="text-xs text-brand-green-soft hover:text-brand-green transition-colors font-medium"
-        >
-          + Create Poll
-        </button>
+        {currentUser.role === "host" && (
+          <button 
+            onClick={() => setIsCreating(true)}
+            className="text-xs text-brand-green-soft hover:text-brand-green transition-colors font-medium"
+          >
+            + Create Poll
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-3 space-y-4">
@@ -198,7 +200,7 @@ export function PollsPanel() {
 
               <p className="text-[10px] mt-2" style={{ color: "var(--mt-text-ghost)" }}>
                 {poll.totalVotes} vote{poll.totalVotes !== 1 && "s"} · by{" "}
-                {poll.createdBy}
+                {participants.find(p => p.id === poll.createdBy)?.name || "Host"}
               </p>
             </div>
           ))

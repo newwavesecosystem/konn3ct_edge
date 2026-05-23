@@ -663,7 +663,7 @@ export function initializeSignaling(server: Server) {
               question: newPoll.question,
               options: newPoll.options,
               userId
-            });
+            }, userId);
           } catch (e) {
             logger.error("Failed to create poll", e);
           }

@@ -946,7 +946,7 @@ function ScreenShareLayout({
 
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const { broadcastECinema } = useMeeting();
+  const { broadcastECinema, currentUser } = useMeeting();
 
   const getEmbedUrl = (url: string) => {
     try {
@@ -993,12 +993,14 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
-            <button
-              onClick={() => broadcastECinema(null)}
-              className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
-            >
-              Stop
-            </button>
+            {currentUser.role === 'host' && (
+              <button
+                onClick={() => broadcastECinema(null)}
+                className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+              >
+                Stop
+              </button>
+            )}
           </div>
         </div>
 
