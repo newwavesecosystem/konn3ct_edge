@@ -80,6 +80,7 @@ interface Client {
   email: string;
   name: string;
   roomId: string;
+  roomSlug: string;
   role: string;
   status: 'waiting' | 'active';
   transports: string[];
@@ -245,7 +246,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, role, status: initialStatus, transports: [], isMobile };
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
