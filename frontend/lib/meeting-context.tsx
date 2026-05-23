@@ -130,8 +130,11 @@ export function MeetingProvider({
   children,
   roomSlug,
 }: {
+  children: React.ReactNode;
+  roomSlug: string;
+}) {
   // Extract user info from sessionStorage (passed from Join screen)
-  let storedJoinInfo = null;
+  let storedJoinInfo: any = null;
   if (typeof window !== "undefined") {
     try {
       const storedStr = sessionStorage.getItem("conn3ct_join_info");
