@@ -90,10 +90,40 @@ interface Client {
 const rooms = new Map<string, Map<string, Client>>();
 const roomProducers = new Map<string, Array<{ producerId: string, userId: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
-// Maps consumerId -> the client who owns that consumer (for producerclose forwarding)
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
 const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
+
+async function syncRoomStateToRedis(roomId: string, roomSlug: string) {
+  try {
+    const clients = rooms.get(roomId);
+    if (!clients || clients.size === 0) {
+      await redis.del(`room:${roomSlug}:participants`);
+      return;
+    }
+    
+    const participants = [];
+    for (const client of clients.values()) {
+      if (client.status === 'active') {
+        participants.push({
+          userId: client.userId,
+          name: client.name,
+          email: client.email,
+          role: client.role,
+          isMobile: client.isMobile
+        });
+      }
+    }
+    
+    if (participants.length > 0) {
+      await redis.set(`room:${roomSlug}:participants`, JSON.stringify(participants), "EX", 86400); // 24 hours expiry
+    } else {
+      await redis.del(`room:${roomSlug}:participants`);
+    }
+  } catch (e) {
+    logger.error('Failed to sync room state to Redis', e);
+  }
+}
 
 async function generateMeetingSummary(roomId: string) {
   try {
@@ -309,6 +339,8 @@ export function initializeSignaling(server: Server) {
           role,
           isMobile: client.isMobile
         });
+        
+        syncRoomStateToRedis(roomId, roomSlug);
 
         // Send existing waiting users to the host that just joined
         if (client.role === 'host') {
@@ -422,6 +454,7 @@ export function initializeSignaling(server: Server) {
             roomProducers.delete(roomId); // Clean up producers array when room empties
             cleanupAudioObserver(roomId); // Clean up talking indicator
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            syncRoomStateToRedis(roomId, roomSlug);
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
@@ -431,6 +464,7 @@ export function initializeSignaling(server: Server) {
               type: 'user_left',
               userId
             });
+            syncRoomStateToRedis(roomId, roomSlug);
           }
         }
         disconnectTimeouts.delete(userId);
@@ -462,6 +496,7 @@ export function initializeSignaling(server: Server) {
               .filter(c => c.status === 'active')
               .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
             targetClient.ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+            syncRoomStateToRedis(roomId, client.roomSlug);
           }
         }
         break;
@@ -520,10 +555,12 @@ export function initializeSignaling(server: Server) {
             roomProducers.delete(roomId);
             cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            syncRoomStateToRedis(roomId, client.roomSlug);
           } else {
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
             broadcastToRoom(roomId, { type: 'user_left', userId });
+            syncRoomStateToRedis(roomId, client.roomSlug);
           }
         }
         // If there's an existing disconnect timeout, clear it so it doesn't fire later
