@@ -418,7 +418,7 @@ const PlanCard = ({ plan, currentPlanName, paystackBaseProps }) => {
         </div>
 
         <div className="mb-6">
-          <span className="text-4xl font-extrabold text-foreground">{isCustomPrice ? plan.price : `NGN ${plan.price}`}</span>
+          <span className="text-4xl font-extrabold text-foreground">{isCustomPrice ? plan.price : `NGN ${new Intl.NumberFormat(ENGLISH_LOCALE).format(Number(plan.price))}`}</span>
           {!isCustomPrice && <span className="text-muted-foreground text-sm"> / {plan.category === "monthly" ? "mo" : "yr"}</span>}
         </div>
 
