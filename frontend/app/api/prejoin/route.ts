@@ -1,18 +1,5 @@
 import { NextResponse } from "next/server";
-import Redis from "ioredis";
-import { randomUUID } from "crypto";
-
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-const redis = new Redis(redisUrl, {
-  retryStrategy: (times) => {
-    if (process.env.NODE_ENV !== "production") return null;
-    return Math.min(times * 50, 2000);
-  },
-  maxRetriesPerRequest: 1
-});
-
-// Swallow the unhandled error event so it doesn't spam the console in local dev
-redis.on("error", () => {});
+import jwt from "jsonwebtoken";
 
 export async function POST(request: Request) {
   try {
@@ -41,22 +28,12 @@ export async function POST(request: Request) {
       isMobile: !!isMobile,
       camera: !!camera,
       mic: !!mic,
-      createdAt: Date.now()
     };
 
-    // Generate a secure, unguessable token
-    const sessionToken = randomUUID();
-
-    try {
-      // Store in Redis with a 2-hour (7200 seconds) expiration
-      await redis.set(`prejoin_session:${sessionToken}`, JSON.stringify(sessionData), "EX", 7200);
-    } catch (e) {
-      console.warn("Redis is unreachable. Using fallback in-memory cache for local dev.");
-      // In a real production app without Redis, this would fail.
-      // But we degrade gracefully for local testing if Redis is down.
-      (global as any)._fallbackSessions = (global as any)._fallbackSessions || new Map();
-      (global as any)._fallbackSessions.set(sessionToken, sessionData);
-    }
+    // Encrypt the locked-down payload into a secure, stateless JWT token
+    // This allows it to work seamlessly across Serverless / Kubernetes pods without Redis
+    const secret = process.env.JWT_SECRET || "fallback-secret-key";
+    const sessionToken = jwt.sign(sessionData, secret, { expiresIn: "2h" });
 
     return NextResponse.json({ sessionToken });
   } catch (error) {

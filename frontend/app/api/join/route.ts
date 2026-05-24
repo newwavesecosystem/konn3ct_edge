@@ -9,7 +9,8 @@ const redis = new Redis(redisUrl, {
     if (process.env.NODE_ENV !== "production") return null;
     return Math.min(times * 50, 2000);
   },
-  maxRetriesPerRequest: 1
+  maxRetriesPerRequest: 1,
+  connectTimeout: 2000,
 });
 
 // Swallow the unhandled error event so it doesn't spam the console in local dev
@@ -39,36 +40,20 @@ export async function POST(request: Request) {
       }
 
       try {
-        const sessionDataStr = await redis.get(`prejoin_session:${sessionToken}`);
-        if (!sessionDataStr) {
-          // If Redis failed in local dev, try fallback memory
-          const fallbackData = (global as any)._fallbackSessions?.get(sessionToken);
-          if (fallbackData) {
-            if (fallbackData.roomId !== roomId) {
-              return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
-            }
-            finalName = fallbackData.name;
-            finalEmail = fallbackData.email;
-            finalRole = fallbackData.role;
-            finalIsMobile = fallbackData.isMobile;
-          } else {
-            return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
-          }
-        } else {
-          const sessionData = JSON.parse(sessionDataStr);
-          if (sessionData.roomId !== roomId) {
-            return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
-          }
-          finalName = sessionData.name;
-          finalEmail = sessionData.email;
-          finalRole = sessionData.role;
-          finalIsMobile = sessionData.isMobile;
-          // Note: we can optionally delete the session here: await redis.del(...)
-          // But keeping it for 2 hours allows easy page refreshes
+        const secret = process.env.JWT_SECRET || "fallback-secret-key";
+        const sessionData = jwt.verify(sessionToken, secret) as any;
+
+        if (sessionData.roomId !== roomId) {
+          return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
         }
-      } catch (e) {
-        console.warn("Redis is unreachable during token generation.", e);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+
+        finalName = sessionData.name;
+        finalEmail = sessionData.email;
+        finalRole = sessionData.role;
+        finalIsMobile = sessionData.isMobile;
+      } catch (err) {
+        console.error("JWT Verification failed", err);
+        return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
       }
     }
 
