@@ -45,10 +45,11 @@ export default function JoinPage({
   useEffect(() => {
     const checkServer = async () => {
       try {
+        // Ping the server to check if it's reachable. We use isBot: true to bypass the pre-join session requirement for this simple ping.
         const res = await fetch("/api/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId: resolvedParams.roomSlug, name: "ping", role: "attendee" }),
+          body: JSON.stringify({ roomId: resolvedParams.roomSlug, isBot: true }),
           signal: AbortSignal.timeout(5000),
         });
         const data = await res.json();
