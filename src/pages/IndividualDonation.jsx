@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { User } from "lucide-react";
+import { User, ChevronLeft, UploadCloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { fetchKyc, getBankList, submitKyc, verifyBank } from "../api/donationApi";
@@ -95,109 +95,132 @@ export default function IndividualDonation({ onComplete }) {
   };
 
   return (
-    <div className="mt-14 flex flex-1 items-center justify-center py-10">
+    <div className="w-full flex items-center justify-center animate-in fade-in duration-500">
       {step === "card" && (
-        <Card className="w-[320px] rounded-2xl border border-gray-200 shadow-md dark:border-border md:w-[380px] lg:w-[320px]">
-          <CardContent className="flex flex-col items-center p-6 text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/15">
-              <User className="h-7 w-7 text-green-600 dark:text-green-300" />
+        <Card className="w-full max-w-[380px] rounded-2xl border-border/60 bg-surface shadow-md hover:shadow-lg transition-shadow">
+          <CardContent className="flex flex-col items-center p-8 text-center">
+            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-green/10">
+              <User className="h-8 w-8 text-brand-green" />
             </div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">
-              {t("donations.individual.card.title")}
+            <h2 className="text-xl font-bold text-foreground">
+              {t("donations.individual.card.title", "Individual Account")}
             </h2>
-            <p className="mt-1 text-sm text-gray-500 dark:text-muted-foreground">
-              {t("donations.individual.card.description")}
+            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+              {t("donations.individual.card.description", "Verify your identity to start receiving donations as an individual.")}
             </p>
-            <ul className="mt-3 space-y-1 text-sm text-gray-600 dark:text-muted-foreground">
-              <li>&bull; {t("donations.individual.card.features.bvn")}</li>
-              <li>&bull; {t("donations.individual.card.features.bank")}</li>
-              <li>&bull; {t("donations.individual.card.features.idUpload")}</li>
-            </ul>
-            <Button className="mt-6" onClick={() => setStep("form")}>
-              {t("donations.actions.startVerification")}
+            
+            <div className="w-full mt-6 mb-8 rounded-xl bg-black/[0.02] border border-border/60 p-4 text-left">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Requirements</p>
+              <ul className="space-y-2 text-sm font-medium text-foreground">
+                <li className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-brand-green"></div>
+                  {t("donations.individual.card.features.bvn", "Bank Verification Number (BVN)")}
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-brand-green"></div>
+                  {t("donations.individual.card.features.bank", "Valid Bank Account Details")}
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-brand-green"></div>
+                  {t("donations.individual.card.features.idUpload", "Government Issued ID")}
+                </li>
+              </ul>
+            </div>
+            <Button 
+              className="w-full h-11 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-[0_6px_20px_rgba(32,116,80,0.2)] font-semibold transition-all" 
+              onClick={() => setStep("form")}
+            >
+              {t("donations.actions.startVerification", "Start Verification")}
             </Button>
           </CardContent>
         </Card>
       )}
 
       {step === "form" && (
-        <Card className="w-full max-w-3xl rounded-2xl border border-gray-200 shadow-md dark:border-border">
-          <CardHeader className="flex items-center justify-between border-b pb-4 dark:border-border">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/15">
-                <User className="text-green-600 dark:text-green-300" />
+        <Card className="w-full max-w-3xl rounded-2xl border-border/60 bg-surface shadow-md overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 bg-black/[0.01] p-6">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-green/10 shrink-0">
+                <User className="h-6 w-6 text-brand-green" />
               </div>
               <div>
-                <CardTitle className="text-lg">
-                  {t("donations.individual.form.title")}
+                <CardTitle className="text-xl font-bold text-foreground">
+                  {t("donations.individual.form.title", "Individual Verification")}
                 </CardTitle>
-                <p className="text-sm text-gray-500 dark:text-muted-foreground">
-                  {t("donations.individual.form.description")}
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {t("donations.individual.form.description", "Provide your personal and banking details securely.")}
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setStep("card")}>
-              {t("common.actions.goBack")}
+            <Button variant="outline" className="h-10 rounded-xl hidden sm:flex" onClick={() => setStep("card")}>
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              {t("common.actions.goBack", "Back")}
             </Button>
           </CardHeader>
 
-          <CardContent className="space-y-8 p-6">
+          <CardContent className="space-y-10 p-6 sm:p-8">
             <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.individual.sections.personalInformation")}
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2">
+                {t("donations.individual.sections.personalInformation", "1. Personal Information")}
               </h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label>{t("common.forms.firstName")}</Label>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("common.forms.firstName", "First Name")}</Label>
                   <Input
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 focus-visible:border-brand-green/50"
                     value={formData.first_name}
                     onChange={(e) => handleChange("first_name", e.target.value)}
                   />
                 </div>
-                <div>
-                  <Label>{t("common.forms.lastName")}</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("common.forms.lastName", "Last Name")}</Label>
                   <Input
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 focus-visible:border-brand-green/50"
                     value={formData.last_name}
                     onChange={(e) => handleChange("last_name", e.target.value)}
                   />
                 </div>
-                <div>
-                  <Label>{t("common.forms.email")}</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("common.forms.email", "Email Address")}</Label>
                   <Input
+                    type="email"
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 focus-visible:border-brand-green/50"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <Label>{t("common.forms.address")}</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("donations.common.bvn", "BVN")}</Label>
                   <Input
-                    value={formData.address}
-                    onChange={(e) => handleChange("address", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label>{t("donations.common.bvn")}</Label>
-                  <Input
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 focus-visible:border-brand-green/50"
                     value={formData.bvn}
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder={t("donations.common.placeholders.enterBvn")}
+                    placeholder={t("donations.common.placeholders.enterBvn", "10 digit BVN")}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, "");
                       handleChange("bvn", digits.slice(0, 10));
                     }}
                   />
                 </div>
+                <div className="md:col-span-2 space-y-2">
+                  <Label className="text-sm font-semibold">{t("common.forms.address", "Residential Address")}</Label>
+                  <Input
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 focus-visible:border-brand-green/50"
+                    value={formData.address}
+                    onChange={(e) => handleChange("address", e.target.value)}
+                  />
+                </div>
               </div>
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.common.sections.bankDetails")}
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2">
+                {t("donations.common.sections.bankDetails", "2. Settlement Bank Details")}
               </h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label>{t("donations.common.bank")}</Label>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("donations.common.bank", "Select Bank")}</Label>
                   <Select
                     value={bankCode?.name}
                     onValueChange={(value) => {
@@ -205,32 +228,30 @@ export default function IndividualDonation({ onComplete }) {
                       setBankSearch("");
                     }}
                   >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={t("donations.common.placeholders.selectBank")}
-                      />
+                    <SelectTrigger className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus:ring-brand-green/30">
+                      <SelectValue placeholder={t("donations.common.placeholders.selectBank", "Choose a bank")} />
                     </SelectTrigger>
-                    <SelectContent>
-                      <div className="sticky top-0 z-10 bg-white p-2 dark:bg-popover">
+                    <SelectContent className="rounded-xl border-border/60">
+                      <div className="sticky top-0 z-10 bg-surface p-2 border-b border-border/40">
                         <Input
-                          placeholder={t("donations.common.placeholders.searchBank")}
+                          className="h-9 rounded-lg"
+                          placeholder={t("donations.common.placeholders.searchBank", "Search bank name...")}
                           value={bankSearch}
                           onChange={(e) => setBankSearch(e.target.value)}
                         />
                       </div>
-
-                      <div className="grid max-h-[300px] grid-cols-1 gap-2 overflow-y-auto p-2 md:grid-cols-2">
+                      <div className="grid max-h-[250px] grid-cols-1 gap-1 overflow-y-auto p-1.5 md:grid-cols-2">
                         {filteredBanks.length > 0 ? (
                           filteredBanks.map((bank) => (
-                            <SelectItem key={bank.code} value={bank}>
-                              <div className="!static whitespace-normal px-2 py-1 text-sm">
+                            <SelectItem key={bank.code} value={bank} className="rounded-lg">
+                              <div className="whitespace-normal px-1 py-0.5 text-sm font-medium">
                                 {bank.name}
                               </div>
                             </SelectItem>
                           ))
                         ) : (
-                          <p className="col-span-2 px-2 py-1 text-sm text-gray-500 dark:text-muted-foreground">
-                            {t("donations.common.states.noBankFound")}
+                          <p className="col-span-2 p-3 text-center text-sm text-muted-foreground">
+                            {t("donations.common.states.noBankFound", "No banks found.")}
                           </p>
                         )}
                       </div>
@@ -238,15 +259,14 @@ export default function IndividualDonation({ onComplete }) {
                   </Select>
                 </div>
 
-                <div>
-                  <Label>{t("donations.common.accountNumber")}</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("donations.common.accountNumber", "Account Number")}</Label>
                   <Input
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 focus-visible:border-brand-green/50"
                     value={formData.account_number}
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder={t(
-                      "donations.common.placeholders.enterAccountNumber"
-                    )}
+                    placeholder={t("donations.common.placeholders.enterAccountNumber", "10 digit account number")}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, "");
                       handleChange("account_number", digits.slice(0, 10));
@@ -254,11 +274,12 @@ export default function IndividualDonation({ onComplete }) {
                   />
                 </div>
 
-                <div className="md:col-span-2">
-                  <Label>{t("donations.common.accountName")}</Label>
+                <div className="md:col-span-2 space-y-2">
+                  <Label className="text-sm font-semibold">{t("donations.common.accountName", "Account Name")}</Label>
                   <Input
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 disabled:opacity-70 disabled:bg-black/5"
                     value={accountName}
-                    placeholder={t("donations.common.placeholders.autoFilled")}
+                    placeholder={t("donations.common.placeholders.autoFilled", "Auto-filled upon verification")}
                     disabled
                   />
                 </div>
@@ -266,56 +287,57 @@ export default function IndividualDonation({ onComplete }) {
             </section>
 
             <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.individual.sections.governmentId")}
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2">
+                {t("donations.individual.sections.governmentId", "3. Identity Document")}
               </h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label>{t("donations.common.idType")}</Label>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 items-end">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("donations.common.idType", "Document Type")}</Label>
                   <Select
                     value={formData.id_type}
                     onValueChange={(value) => handleChange("id_type", value)}
                   >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={t("donations.common.placeholders.selectIdType")}
-                      />
+                    <SelectTrigger className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus:ring-brand-green/30">
+                      <SelectValue placeholder={t("donations.common.placeholders.selectIdType", "Select ID Type")} />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NIN">
-                        {t("donations.common.idTypes.nin")}
-                      </SelectItem>
-                      <SelectItem value="Passport">
-                        {t("donations.common.idTypes.passport")}
-                      </SelectItem>
-                      <SelectItem value="Driver's License">
-                        {t("donations.common.idTypes.driversLicense")}
-                      </SelectItem>
-                      <SelectItem value="Voter's Card">
-                        {t("donations.common.idTypes.votersCard")}
-                      </SelectItem>
+                    <SelectContent className="rounded-xl border-border/60">
+                      <SelectItem value="NIN" className="rounded-lg">{t("donations.common.idTypes.nin", "National ID (NIN)")}</SelectItem>
+                      <SelectItem value="Passport" className="rounded-lg">{t("donations.common.idTypes.passport", "International Passport")}</SelectItem>
+                      <SelectItem value="Driver's License" className="rounded-lg">{t("donations.common.idTypes.driversLicense", "Driver's License")}</SelectItem>
+                      <SelectItem value="Voter's Card" className="rounded-lg">{t("donations.common.idTypes.votersCard", "Voter's Card")}</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("donations.individual.sections.uploadIdDocument", "Upload Document")}</Label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      onChange={(e) => handleChange("id_document", e.target.files?.[0] || null)}
+                    />
+                    <div className="h-11 w-full rounded-xl border border-border/60 bg-black/[0.02] hover:bg-black/[0.04] transition-colors flex items-center px-4">
+                      <UploadCloud className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <span className="text-sm font-medium text-muted-foreground truncate">
+                        {formData.id_document ? formData.id_document.name : t("common.actions.uploadFile", "Choose file...")}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
 
-            <section>
-              <h3 className="mb-4 text-md font-semibold">
-                {t("donations.individual.sections.uploadIdDocument")}
-              </h3>
-              <input
-                type="file"
-                className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-muted file:px-4 file:py-2 file:text-foreground hover:file:bg-accent"
-                onChange={(e) =>
-                  handleChange("id_document", e.target.files?.[0] || null)
-                }
-              />
-            </section>
-
-            <div className="flex justify-center">
-              <Button onClick={handleSubmit}>
-                {t("donations.actions.completeVerification")}
+            <div className="pt-6 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <Button variant="ghost" className="hidden sm:flex rounded-xl" onClick={() => setStep("card")}>
+                {t("common.actions.cancel", "Cancel")}
+              </Button>
+              <Button 
+                className="w-full sm:w-auto h-12 px-8 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-[0_6px_20px_rgba(32,116,80,0.2)] font-semibold transition-all"
+                onClick={handleSubmit}
+                disabled={!accountName || !formData.id_document}
+              >
+                {t("donations.actions.completeVerification", "Submit Verification")}
               </Button>
             </div>
           </CardContent>

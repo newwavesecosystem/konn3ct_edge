@@ -1,9 +1,32 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { 
+  ArrowLeft, 
+  Copy, 
+  Table as TableIcon, 
+  Printer, 
+  Search, 
+  BellRing, 
+  Users, 
+  User, 
+  CalendarDays,
+  Phone,
+  Mail
+} from "lucide-react";
 
 import { getPreRegParticipants, sendReminder } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "../components/ui/pagination";
 
 function escapeHtml(str = "") {
   return String(str)
@@ -90,14 +113,30 @@ function printHTML(title, html) {
   }
 
   printWindow.document.open();
-  printWindow.document.write(html);
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #222; }
+          h1 { text-align: center; margin-bottom: 5px; }
+          .subtitle { text-align: center; margin-bottom: 30px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #333; padding: 8px; text-align: left; font-size: 13px; }
+          th { background: #f3f3f3; }
+        </style>
+      </head>
+      <body>
+        <h1>Konn3ct</h1>
+        <p class="subtitle">${escapeHtml(title)}</p>
+        ${html.split('<body>')[1].split('</body>')[0]}
+        <script>
+          window.onload = function () { window.print(); };
+        </script>
+      </body>
+    </html>
+  `);
   printWindow.document.close();
-
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-    printWindow.close();
-  }, 250);
 }
 
 const EventParticipants = () => {
@@ -108,21 +147,21 @@ const EventParticipants = () => {
 
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
+  
   const getParticipantsTitle = (count) =>
-    t("events.participants.title", { count });
+    t("events.participants.title", { count }) || `Event Participants (${count})`;
 
-  const getShowingText = (from, to, total) =>
-    t("events.participants.showing", { from, to, total });
   const headers = useMemo(
     () => [
-      t("events.participants.table.serial"),
-      t("events.participants.table.name"),
-      t("events.participants.table.email"),
-      t("events.participants.table.phone"),
-      t("events.participants.table.dateTime"),
+      t("events.participants.table.serial", "#"),
+      t("events.participants.table.name", "Name"),
+      t("events.participants.table.email", "Email"),
+      t("events.participants.table.phone", "Phone"),
+      t("events.participants.table.dateTime", "Registration Date"),
     ],
     [t]
   );
@@ -147,19 +186,19 @@ const EventParticipants = () => {
 
   const sendReminderNow = async () => {
     try {
-      setLoading(true);
+      setActionLoading(true);
       const response = await sendReminder(reference);
       toast({
-        description: response?.message || t("events.participants.toasts.reminderSent"),
+        description: response?.message || t("events.participants.toasts.reminderSent", "Reminder sent successfully!"),
       });
     } catch (error) {
       console.error("Error sending reminder:", error);
       toast({
-        description: t("events.participants.toasts.reminderFailed"),
+        description: t("events.participants.toasts.reminderFailed", "Failed to send reminder."),
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -193,9 +232,6 @@ const EventParticipants = () => {
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const pageStart = (currentPage - 1) * PAGE_SIZE;
   const paginatedRows = filteredRows.slice(pageStart, pageStart + PAGE_SIZE);
-  const showingFrom = filteredRows.length === 0 ? 0 : pageStart + 1;
-  const showingTo =
-    filteredRows.length === 0 ? 0 : pageStart + paginatedRows.length;
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -205,11 +241,11 @@ const EventParticipants = () => {
     try {
       const tsv = rowsToTSV(headers, filteredRows);
       await navigator.clipboard.writeText(tsv);
-      toast({ description: t("events.participants.toasts.copied") });
+      toast({ description: t("events.participants.toasts.copied", "Copied to clipboard!") });
     } catch (error) {
       console.error(error);
       toast({
-        description: t("events.participants.toasts.copyFailed"),
+        description: t("events.participants.toasts.copyFailed", "Failed to copy."),
         variant: "destructive",
       });
     }
@@ -221,7 +257,7 @@ const EventParticipants = () => {
       `participants-${reference || "export"}.csv`,
       new Blob([csv], { type: "text/csv;charset=utf-8" })
     );
-    toast({ description: t("events.participants.toasts.csvDownloaded") });
+    toast({ description: t("events.participants.toasts.csvDownloaded", "CSV Downloaded") });
   };
 
   const handleExcel = () => {
@@ -236,7 +272,7 @@ const EventParticipants = () => {
         type: "application/vnd.ms-excel;charset=utf-8",
       })
     );
-    toast({ description: t("events.participants.toasts.excelDownloaded") });
+    toast({ description: t("events.participants.toasts.excelDownloaded", "Excel Downloaded") });
   };
 
   const handlePrint = () => {
@@ -245,160 +281,183 @@ const EventParticipants = () => {
       headers,
       filteredRows
     );
-    printHTML(t("events.participants.actions.print"), html);
+    printHTML(t("events.participants.actions.print", "Print"), html);
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">
+          {t("events.participants.states.loading", "Loading participants...")}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto mt-16 w-full max-w-5xl rounded-2xl bg-white p-6 shadow-sm dark:border dark:border-border dark:bg-card">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:flex-col md:items-start lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleCopy}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
+    <div className="w-full flex-1 p-4 md:p-6 lg:p-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+        <div>
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/events")}
+            className="mb-4 h-8 px-2 text-muted-foreground hover:text-foreground -ml-2"
           >
-            {t("events.participants.actions.copy")}
-          </button>
-          <button
-            onClick={handleCSV}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
-          >
-            {t("events.participants.actions.csv")}
-          </button>
-          <button
-            onClick={handleExcel}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
-          >
-            {t("events.participants.actions.excel")}
-          </button>
-          <button
-            onClick={handlePrint}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-accent dark:hover:text-accent-foreground"
-          >
-            {t("events.participants.actions.print")}
-          </button>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t("common.actions.goBack", "Back to Events")}
+          </Button>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Users className="h-6 w-6 text-brand-blue" />
+            {getParticipantsTitle(filteredRows.length)}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Review who has registered for your event and send reminders.
+          </p>
         </div>
 
-        <button
-          onClick={sendReminderNow}
-          className="rounded-full bg-[#227451] px-5 py-2 text-sm text-white transition-all hover:bg-green-700"
-        >
-          {t("events.participants.actions.sendReminder")}
-        </button>
-      </div>
-
-      <div className="mb-5">
-        <input
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setCurrentPage(1);
-          }}
-          type="text"
-          placeholder={t("events.participants.filters.search")}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring sm:w-64 md:w-full lg:w-64"
-        />
-      </div>
-
-      <div className="mb-3 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-        <h2 className="text-md font-semibold text-gray-800 dark:text-foreground">
-          {getParticipantsTitle(filteredRows.length)}
-        </h2>
-        <button
-          onClick={() => navigate("/events")}
-          className="rounded-full bg-[#227451] px-4 py-2 text-xs text-white transition-all hover:bg-green-700"
-        >
-          {t("common.actions.goBack")}
-        </button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="min-w-[720px] overflow-hidden rounded-xl border border-gray-100 dark:border-border lg:min-w-full">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-600 dark:bg-muted/70 dark:text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium">{headers[0]}</th>
-              <th className="px-4 py-3 text-left font-medium">{headers[1]}</th>
-              <th className="px-4 py-3 text-left font-medium">{headers[2]}</th>
-              <th className="px-4 py-3 text-left font-medium">{headers[3]}</th>
-              <th className="px-4 py-3 text-left font-medium">{headers[4]}</th>
-            </tr>
-          </thead>
-
-          <tbody className="text-sm text-gray-700 dark:text-foreground">
-            {loading ? (
-              <tr>
-                <td
-                  colSpan="5"
-                  className="py-6 text-center text-gray-500 dark:text-muted-foreground"
-                >
-                  {t("events.participants.states.loading")}
-                </td>
-              </tr>
-            ) : paginatedRows.length > 0 ? (
-              paginatedRows.map((row, index) => (
-                <tr
-                  key={`${row[headers[0]]}-${index}`}
-                  className={`border-t transition dark:border-border dark:hover:bg-muted/60 ${
-                    (pageStart + index) % 2 === 0
-                      ? "bg-white dark:bg-background/30"
-                      : "bg-gray-50 dark:bg-muted/40"
-                  }`}
-                >
-                  <td className="px-4 py-3">{row[headers[0]]}</td>
-                  <td className="px-4 py-3">{row[headers[1]]}</td>
-                  <td className="px-4 py-3">{row[headers[2]]}</td>
-                  <td className="px-4 py-3">{row[headers[3]]}</td>
-                  <td className="px-4 py-3">{row[headers[4]]}</td>
-                </tr>
-              ))
+        <div className="flex flex-col gap-3">
+          <Button
+            onClick={sendReminderNow}
+            disabled={actionLoading || participants.length === 0}
+            className="h-10 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-[0_4px_14px_rgba(32,116,80,0.2)] font-semibold transition-all"
+          >
+            {actionLoading ? (
+               <div className="flex items-center gap-2">
+                 <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                 Sending...
+               </div>
             ) : (
-              <tr>
-                <td
-                  colSpan="5"
-                  className="py-6 text-center text-gray-500 dark:text-muted-foreground"
-                >
-                  {t("events.participants.states.empty")}
-                </td>
-              </tr>
+              <>
+                <BellRing className="mr-2 h-4 w-4" />
+                {t("events.participants.actions.sendReminder", "Send Reminder to All")}
+              </>
             )}
-          </tbody>
-        </table>
+          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 rounded-lg border-border/60">
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              {t("events.participants.actions.copy", "Copy")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCSV} className="h-9 rounded-lg border-border/60">
+              <TableIcon className="mr-2 h-3.5 w-3.5" />
+              CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExcel} className="h-9 rounded-lg border-border/60">
+              <TableIcon className="mr-2 h-3.5 w-3.5" />
+              Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={handlePrint} className="h-9 rounded-lg border-border/60">
+              <Printer className="mr-2 h-3.5 w-3.5" />
+              Print
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-muted-foreground md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-        <span>{getShowingText(showingFrom, showingTo, filteredRows.length)}</span>
-        <div className="flex space-x-1">
-          <button
-            type="button"
-            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-            disabled={loading || currentPage === 1}
-            aria-label={t("components.pagination.previousAriaLabel")}
-            className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
-              loading || currentPage === 1
-                ? "cursor-not-allowed opacity-50"
-                : "hover:bg-gray-100 dark:hover:bg-accent dark:hover:text-accent-foreground"
-            }`}
-          >
-            &lt;
-          </button>
-          <span className="px-1 py-1">
-            {currentPage}/{totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              setCurrentPage((page) => Math.min(totalPages, page + 1))
-            }
-            disabled={loading || currentPage === totalPages}
-            aria-label={t("components.pagination.nextAriaLabel")}
-            className={`rounded-md border border-gray-300 px-2 py-1 dark:border-border dark:bg-background ${
-              loading || currentPage === totalPages
-                ? "cursor-not-allowed opacity-50"
-                : "hover:bg-gray-100 dark:hover:bg-accent dark:hover:text-accent-foreground"
-            }`}
-          >
-            &gt;
-          </button>
+      <div className="rounded-2xl border-border/60 bg-surface shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border/40 bg-black/[0.01]">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder={t("events.participants.filters.search", "Search participants by name, email, phone...")}
+              className="pl-9 h-10 rounded-xl bg-background border-border/60 focus-visible:ring-brand-green/30"
+            />
+          </div>
         </div>
+
+        <div className="overflow-x-auto">
+          <div className="min-w-[900px]">
+            <div className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center px-6 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 bg-black/[0.02]">
+              <span>{headers[0]}</span>
+              <span>{headers[1]}</span>
+              <span>{headers[2]}</span>
+              <span>{headers[3]}</span>
+              <span>{headers[4]}</span>
+            </div>
+
+            <div className="divide-y divide-border/40">
+              {paginatedRows.length === 0 ? (
+                <div className="py-16 text-center text-sm text-muted-foreground">
+                  {t("events.participants.states.empty", "No participants found matching your criteria.")}
+                </div>
+              ) : (
+                paginatedRows.map((row, index) => (
+                  <div
+                    key={`${row[headers[0]]}-${index}`}
+                    className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center px-6 py-4 text-sm text-foreground hover:bg-black/[0.01] transition-colors"
+                  >
+                    <span className="font-medium text-muted-foreground">{row[headers[0]]}</span>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-brand-green/10 flex items-center justify-center shrink-0">
+                        <User className="h-4 w-4 text-brand-green" />
+                      </div>
+                      <span className="font-semibold">{row[headers[1]]}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Mail className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                      <span className="truncate pr-4" title={row[headers[2]]}>
+                        {row[headers[2]]}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {row[headers[3]] !== "-" && <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-50" />}
+                      <span className="text-muted-foreground">{row[headers[3]]}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <Badge variant="secondary" className="bg-black/[0.03] text-foreground border-0 font-medium">
+                        {row[headers[4]]}
+                      </Badge>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {(filteredRows.length > 0 || totalPages > 1) && (
+          <div className="flex items-center justify-center py-4 border-t border-border/40 bg-black/[0.01]">
+            <Pagination className="w-auto bg-background rounded-full border border-border/60 shadow-sm px-2 py-1">
+              <PaginationContent className="flex items-center space-x-1">
+                <PaginationItem>
+                  <PaginationPrevious
+                    className="h-8 w-8 rounded-full p-0 flex items-center justify-center hover:bg-black/5 cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage((prev) => Math.max(1, prev - 1));
+                    }}
+                    disabled={currentPage === 1}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="text-sm font-medium text-foreground px-3">
+                    {currentPage} <span className="text-muted-foreground font-normal">/ {totalPages}</span>
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    className="h-8 w-8 rounded-full p-0 flex items-center justify-center hover:bg-black/5 cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+                    }}
+                    disabled={currentPage === totalPages}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </div>
     </div>
   );

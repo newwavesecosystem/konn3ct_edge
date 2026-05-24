@@ -1,24 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Badge } from "../components/ui/badge";
-import { Card } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import React, { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogTrigger,
-} from "../components/ui/dialog";
-import { Separator } from "../components/ui/separator";
-import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableCell,
-  TableHead,
-  TableBody,
-} from "../components/ui/table";
-import { Check } from "lucide-react";
+import React from "react";
+import { Check, Crown, Zap, Shield, ArrowRight, FileText } from "lucide-react";
 import { getList, getPlans } from "../api/plansApi";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { TabsContent } from "@radix-ui/react-tabs";
@@ -29,6 +13,7 @@ import { PaystackButton } from "react-paystack";
 import { format } from "date-fns";
 import { contactSalesUrl } from "../lib/externalLinks";
 import { useTranslation } from "react-i18next";
+import { Skeleton } from "../components/ui/skeleton";
 
 const ENGLISH_LOCALE = "en-NG";
 
@@ -143,21 +128,13 @@ const transformPlans = (data, t) => {
   const no = t("payments.features.no");
 
   const buildFeatures = (plan) => [
-    t("payments.features.recording", {
-      value: plan.recording ? yes : no,
-    }),
+    t("payments.features.recording", { value: plan.recording ? yes : no }),
     t("payments.features.duration", { value: plan.duration }),
     t("payments.features.participants", { value: plan.participant }),
     t("payments.features.rooms", { value: plan.rooms }),
-    t("payments.features.customizeLink", {
-      value: plan.customize_link ? yes : no,
-    }),
-    t("payments.features.breakoutRooms", {
-      value: plan.breakout_rooms ? yes : no,
-    }),
-    t("payments.features.accessCode", {
-      value: plan.access_code ? yes : no,
-    }),
+    t("payments.features.customizeLink", { value: plan.customize_link ? yes : no }),
+    t("payments.features.breakoutRooms", { value: plan.breakout_rooms ? yes : no }),
+    t("payments.features.accessCode", { value: plan.access_code ? yes : no }),
     t("payments.features.dialIn", { value: plan.dialin ? yes : no }),
   ];
 
@@ -167,10 +144,7 @@ const transformPlans = (data, t) => {
     target: t("payments.planCard.targetIndividuals"),
     category: "monthly",
     features: buildFeatures(plan),
-    cta:
-      plan.name === "basic"
-        ? t("payments.planCard.free")
-        : t("payments.planCard.upgrade"),
+    cta: plan.name === "basic" ? t("payments.planCard.free") : t("payments.planCard.upgrade"),
   }));
 
   const yearlyPlans = planList.map((plan) => ({
@@ -179,14 +153,10 @@ const transformPlans = (data, t) => {
     target: t("payments.planCard.targetIndividuals"),
     category: "yearly",
     features: buildFeatures(plan),
-    cta:
-      plan.name === "basic"
-        ? t("payments.planCard.free")
-        : t("payments.planCard.upgrade"),
+    cta: plan.name === "basic" ? t("payments.planCard.free") : t("payments.planCard.upgrade"),
   }));
 
-  const hasEnterprise = (arr) =>
-    arr.some((p) => String(p.name).toLowerCase() === "enterprise");
+  const hasEnterprise = (arr) => arr.some((p) => String(p.name).toLowerCase() === "enterprise");
 
   const enterprisePlan = {
     name: "enterprise",
@@ -208,231 +178,78 @@ const transformPlans = (data, t) => {
 
 const formatPaymentDate = (value) => {
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? null
-    : format(parsed, "PPP");
+  return Number.isNaN(parsed.getTime()) ? null : format(parsed, "PPP");
+};
+
+const getPlanStyles = (planName) => {
+  const lower = planName?.toLowerCase() || "";
+  if (lower.includes("basic") || lower.includes("free")) {
+    return { color: "border-border", icon: Zap };
+  } else if (lower.includes("enterprise") || lower.includes("custom")) {
+    return { color: "border-brand-blue", icon: Shield };
+  } else {
+    // Default / Pro styles
+    return { color: "border-brand-green", icon: Crown, popular: true };
+  }
 };
 
 const Payments = () => {
   const { t } = useTranslation();
-  const [openDialog, setOpenDialog] = useState(false);
   const { toast } = useToast();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data: plansData, isLoading: plansLoading, isError: plansError } = useQuery({
     queryKey: ["plans"],
     queryFn: getPlans,
     select: (response) => transformPlans(response.data, t),
   });
 
-  const {
-    data: userData,
-    isLoading: userLoading,
-    isError: userError,
-  } = useQuery({
+  const { data: userData, isLoading: userLoading, isError: userError } = useQuery({
     queryKey: ["profile-dashboard"],
     queryFn: getUser,
   });
 
-  const {
-    data: paymentData,
-    isLoading: paymentsLoading,
-  } = useQuery({
+  const { data: paymentData, isLoading: paymentsLoading } = useQuery({
     queryKey: ["payments"],
     queryFn: getList,
   });
 
-  const currentPlan = capitalize(userData?.user_plan?.name || "Basic");
-  const paymentRows = Array.isArray(paymentData?.payments?.data)
-    ? paymentData.payments.data
-    : [];
+  if (plansLoading || userLoading || paymentsLoading) {
+    return (
+      <div className="p-6">
+        <Skeleton className="w-full h-32 rounded-2xl mb-8" />
+        <div className="grid gap-5 md:grid-cols-3 mb-8">
+          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-96 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
 
-  if (isLoading || userLoading) return <div>{t("payments.loadingPlans")}</div>;
-
-  if (isError || userError) {
+  if (plansError || userError) {
     return (
       <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
-        <Card className="p-6">
+        <Card className="p-6 rounded-2xl">
           <p className="font-medium">{t("payments.states.loadErrorTitle")}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("payments.states.loadErrorDescription")}
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">{t("payments.states.loadErrorDescription")}</p>
         </Card>
       </section>
     );
   }
 
-  return (
-    <section className="page container mx-auto !px-4 sm:!px-6 lg:!px-[33px]">
-      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <div className="mb-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-x-5">
-          <Card className="h-[200px] w-full max-w-[260px] border-slate-200 bg-white text-slate-900 dark:border-border dark:bg-card dark:text-foreground lg:w-[260px]">
-            <Badge
-              variant="outline"
-              className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 dark:border-border dark:bg-muted dark:text-muted-foreground dark:hover:bg-muted"
-            >
-              {t("payments.currentPlan")}
-            </Badge>
-            <div className="flex h-full items-center justify-center">
-              <p className="text-4xl font-medium text-slate-900 dark:text-foreground">
-                {currentPlan.toUpperCase()}
-              </p>
-            </div>
-          </Card>
-
-          <div className="flex w-full flex-col gap-y-3 lg:w-auto">
-            {currentPlan.toLowerCase() !== "basic" && (
-              <DialogTrigger asChild>
-                <Button className="w-full bg-muted text-foreground hover:bg-muted/80 lg:w-auto">
-                  {t("payments.actions.renewSubscriptions")}
-                </Button>
-              </DialogTrigger>
-            )}
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full lg:w-auto">
-                {t("payments.actions.changePlan")}
-              </Button>
-            </DialogTrigger>
-          </div>
-        </div>
-
-        <Card className="mb-20">
-          <div className="p-4 pt-10">
-            <h3 className="font-medium text-xl">{t("payments.listTitle")}</h3>
-          </div>
-          <Separator />
-
-          <div className="w-full overflow-x-auto">
-            <Table className="min-w-[760px] lg:min-w-0">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>{t("payments.table.type")}</TableHead>
-                  <TableHead>{t("payments.table.plan")}</TableHead>
-                  <TableHead>{t("payments.table.issuedTo")}</TableHead>
-                  <TableHead>{t("payments.table.paymentMethod")}</TableHead>
-                  <TableHead>{t("payments.table.reference")}</TableHead>
-                  <TableHead>{t("payments.table.paymentDate")}</TableHead>
-                  <TableHead>{t("payments.table.amount")}</TableHead>
-                  <TableHead>{t("payments.table.action")}</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {paymentRows.map(
-                  (
-                    {
-                      type,
-                      gateway,
-                      date,
-                      plan_details,
-                      currency,
-                      amount,
-                      reference,
-                    },
-                    id
-                  ) => (
-                    <TableRow key={reference}>
-                      <TableCell>{id + 1}</TableCell>
-                      <TableCell>{type}</TableCell>
-                      <TableCell>{plan_details?.name?.toUpperCase()}</TableCell>
-                      <TableCell>
-                        {userData?.user?.lastname} {userData?.user?.firstname}
-                      </TableCell>
-                      <TableCell>{gateway}</TableCell>
-                      <TableCell>{reference}</TableCell>
-                      <TableCell>
-                        {formatPaymentDate(date) || t("payments.states.notAvailable")}
-                      </TableCell>
-                      <TableCell>
-                        {currency}{" "}
-                        {new Intl.NumberFormat(ENGLISH_LOCALE).format(amount)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            generateReceipt(
-                              {
-                                type,
-                                plan: plan_details?.name?.toUpperCase(),
-                                method: gateway,
-                                reference,
-                                date,
-                                currency,
-                                amount,
-                              },
-                              userData?.user ?? {},
-                              toast,
-                              t
-                            )
-                          }
-                        >
-                          {t("payments.actions.receipt")}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                )}
-
-                {!paymentsLoading && !paymentRows.length && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="py-6 text-center">
-                      {t("payments.empty")}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
-
-        <DialogContent className="w-[calc(100%-2rem)] py-6 md:w-[calc(100%-4rem)] md:max-w-5xl lg:max-w-[95%]">
-          <DialogTitle>{t("payments.dialogTitle")}</DialogTitle>
-          <PaymentsDialog plans={data} setOpenDialog={setOpenDialog} />
-        </DialogContent>
-      </Dialog>
-    </section>
-  );
-};
-
-export default Payments;
-
-const PaymentsDialog = ({ plans, setOpenDialog }) => {
-  const { t } = useTranslation();
-  const { data, isSuccess, isLoading, isError } = useQuery({
-    queryKey: ["profile"],
-    queryFn: getUser,
-  });
-
-  const { toast } = useToast();
-
-  if (isError) {
-    return (
-      <div className="py-10 text-center text-sm text-muted-foreground">
-        {t("payments.checkoutProfileError")}
-      </div>
-    );
-  }
-
-  if (isLoading || !isSuccess) {
-    return <div className="py-10 text-center">{t("payments.loadingUser")}</div>;
-  }
-
-  const profileUser = data?.user ?? {};
+  const currentPlanName = userData?.user_plan?.name || "Basic";
+  const { icon: PlanIcon } = getPlanStyles(currentPlanName);
+  
+  const paymentRows = Array.isArray(paymentData?.payments?.data) ? paymentData.payments.data : [];
+  const profileUser = userData?.user ?? {};
   const email = profileUser.email ?? "";
   const lastName = profileUser.lastName ?? profileUser.lastname ?? "";
   const phone = profileUser.phone ?? "";
   const publicKey = process.env.REACT_APP_PAYSTACK_KEY;
-  const monthlyPlans = Array.isArray(plans?.monthly) ? plans.monthly : [];
-  const yearlyPlans = Array.isArray(plans?.yearly) ? plans.yearly : [];
 
-  const componentProps = {
+  const paystackBaseProps = {
     email,
-    metadata: {
-      name: lastName,
-      phone,
-    },
+    metadata: { name: lastName, phone },
     publicKey,
     text: t("payments.actions.payNow"),
     onSuccess: () => toast({ description: t("payments.toasts.purchaseSuccessful") }),
@@ -440,160 +257,209 @@ const PaymentsDialog = ({ plans, setOpenDialog }) => {
   };
 
   return (
-    <div>
-      <Tabs defaultValue="monthly" className="flex flex-col">
-        <TabsList className="mx-auto mb-6 grid w-[300px] grid-cols-2 rounded-full border-2 bg-muted p-0 shadow-md">
-          <TabsTrigger className="rounded-full" value="monthly">
-            {t("payments.billingCycle.monthly")}
-          </TabsTrigger>
-          <TabsTrigger className="rounded-full" value="yearly">
-            {t("payments.billingCycle.yearly")}
-          </TabsTrigger>
-        </TabsList>
+    <div className="flex flex-col gap-8 pb-10 px-4 sm:px-6 lg:px-[33px] animate-in fade-in duration-500">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{t("payments.listTitle", "Billing")}</h1>
+        <p className="text-muted-foreground mt-1">{t("payments.listSubtitle", "Manage your subscription and billing details.")}</p>
+      </div>
 
-        <TabsContent
-          value="monthly"
-          className="flex flex-col items-center gap-4 md:grid md:w-full md:grid-cols-2 md:items-stretch lg:flex lg:flex-row lg:justify-evenly lg:gap-x-6"
-        >
-          {monthlyPlans.map((plan, index) => (
-            <PlanCard
-              key={index}
-              {...plan}
-              setOpenDialog={setOpenDialog}
-              paystackProps={
-                isNaN(Number(plan.price))
-                  ? undefined
-                  : {
-                      ...componentProps,
-                      amount: Number(plan.price) * 100,
-                      metadata: {
-                        ...componentProps.metadata,
-                        custom_fields: [
-                          {
-                            display_name: "paymenttype",
-                            variable_name: "paymenttype",
-                            value: "subscription",
-                          },
-                          {
-                            display_name: "plantype",
-                            variable_name: "plantype",
-                            value: plan.category,
-                          },
-                          {
-                            display_name: "planname",
-                            variable_name: "planname",
-                            value: plan.name,
-                          },
-                          {
-                            display_name: "planprice",
-                            variable_name: "planprice",
-                            value: plan.price,
-                          },
-                        ],
-                      },
-                    }
-              }
-            />
-          ))}
-        </TabsContent>
+      {/* Current Plan Banner */}
+      <Card className="rounded-2xl border-brand-green/30 bg-brand-green/5 overflow-hidden">
+        <CardContent className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-green text-white shadow-md">
+              <PlanIcon className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-foreground">{capitalize(currentPlanName)} Plan</h2>
+                <span className="px-2 py-0.5 rounded-md bg-brand-green/10 text-brand-green text-[11px] font-bold uppercase">{t("payments.currentPlan", "Active")}</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-0.5">{profileUser.email}</p>
+            </div>
+          </div>
+          <Button variant="outline" className="h-11 rounded-xl px-4 border-brand-green/30 text-brand-green hover:bg-brand-green hover:text-white transition-all">
+            {t("payments.actions.manageSubscription", "Manage Subscription")}
+          </Button>
+        </CardContent>
+      </Card>
 
-        <TabsContent
-          value="yearly"
-          className="flex flex-col items-center gap-4 md:grid md:w-full md:grid-cols-2 md:items-stretch lg:flex lg:flex-row lg:justify-evenly lg:gap-x-6"
-        >
-          {yearlyPlans.map((plan, index) => (
-            <PlanCard
-              key={index}
-              {...plan}
-              setOpenDialog={setOpenDialog}
-              paystackProps={
-                isNaN(Number(plan.price))
-                  ? undefined
-                  : {
-                      ...componentProps,
-                      amount: Number(plan.price) * 100,
-                      metadata: {
-                        ...componentProps.metadata,
-                        custom_fields: [
-                          {
-                            display_name: "paymenttype",
-                            variable_name: "paymenttype",
-                            value: "subscription",
-                          },
-                          {
-                            display_name: "plantype",
-                            variable_name: "plantype",
-                            value: plan.category,
-                          },
-                          {
-                            display_name: "planname",
-                            variable_name: "planname",
-                            value: plan.name,
-                          },
-                          {
-                            display_name: "planprice",
-                            variable_name: "planprice",
-                            value: plan.price,
-                          },
-                        ],
-                      },
-                    }
-              }
-            />
-          ))}
-        </TabsContent>
-      </Tabs>
+      {/* Plans Section */}
+      <div>
+        <h2 className="text-xl font-bold text-foreground mb-5">{t("payments.actions.changePlan", "Choose a Plan")}</h2>
+        
+        <Tabs defaultValue="monthly" className="flex flex-col">
+          <TabsList className="mb-6 self-start grid w-[300px] grid-cols-2 rounded-xl bg-black/[0.04] p-1 h-12">
+            <TabsTrigger className="rounded-lg h-full data-[state=active]:bg-surface data-[state=active]:shadow-sm transition-all" value="monthly">
+              {t("payments.billingCycle.monthly")}
+            </TabsTrigger>
+            <TabsTrigger className="rounded-lg h-full data-[state=active]:bg-surface data-[state=active]:shadow-sm transition-all" value="yearly">
+              {t("payments.billingCycle.yearly")}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="monthly" className="grid gap-5 md:grid-cols-3">
+            {plansData?.monthly.map((plan, i) => (
+              <PlanCard 
+                key={i} 
+                plan={plan} 
+                currentPlanName={currentPlanName}
+                paystackBaseProps={paystackBaseProps}
+              />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="yearly" className="grid gap-5 md:grid-cols-3">
+            {plansData?.yearly.map((plan, i) => (
+              <PlanCard 
+                key={i} 
+                plan={plan} 
+                currentPlanName={currentPlanName}
+                paystackBaseProps={paystackBaseProps}
+              />
+            ))}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Invoice History */}
+      <div>
+        <h2 className="text-xl font-bold text-foreground mb-5">{t("payments.listTitle", "Invoice History")}</h2>
+        <Card className="rounded-2xl border-border/60 bg-surface overflow-hidden">
+          <CardContent className="p-0">
+            <div className="hidden sm:grid grid-cols-5 gap-4 px-6 py-4 border-b border-border/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div>{t("payments.table.paymentDate")}</div>
+              <div>{t("payments.table.plan")}</div>
+              <div>{t("payments.table.reference")}</div>
+              <div>{t("payments.table.amount")}</div>
+              <div className="text-right">{t("payments.table.action")}</div>
+            </div>
+            
+            {paymentRows.map((row, i) => (
+              <div key={row.reference} className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-4 items-center px-6 py-4 border-b border-border/30 last:border-b-0 hover:bg-black/[0.015] transition-colors">
+                <span className="text-sm font-medium text-foreground">{formatPaymentDate(row.date) || t("payments.states.notAvailable")}</span>
+                <span className="text-sm text-muted-foreground">{row.plan_details?.name?.toUpperCase()}</span>
+                <span className="text-sm text-muted-foreground truncate">{row.reference}</span>
+                <span className="text-sm font-semibold text-foreground">{row.currency} {new Intl.NumberFormat(ENGLISH_LOCALE).format(row.amount)}</span>
+                <span className="text-right flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs font-semibold rounded-lg hover:bg-brand-blue/10 hover:text-brand-blue transition-colors"
+                    onClick={() => generateReceipt({
+                        type: row.type,
+                        plan: row.plan_details?.name?.toUpperCase(),
+                        method: row.gateway,
+                        reference: row.reference,
+                        date: row.date,
+                        currency: row.currency,
+                        amount: row.amount,
+                      }, profileUser, toast, t)}
+                  >
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                    {t("payments.actions.receipt", "Receipt")}
+                  </Button>
+                </span>
+              </div>
+            ))}
+
+            {!paymentRows.length && (
+              <div className="py-10 text-center text-muted-foreground text-sm">
+                {t("payments.empty")}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
 
-const PlanCard = ({
-  name,
-  target,
-  price,
-  features = [],
-  paystackProps,
-  setOpenDialog,
-  cta,
-}) => {
-  const planFeatures = Array.isArray(features) ? features : [];
+export default Payments;
+
+const PlanCard = ({ plan, currentPlanName, paystackBaseProps }) => {
+  const { color, icon: Icon, popular } = getPlanStyles(plan.name);
+  const isCurrent = currentPlanName.toLowerCase() === plan.name.toLowerCase();
+  
+  const isCustomPrice = isNaN(Number(plan.price));
+  const fullPaystackProps = isCustomPrice ? undefined : {
+    ...paystackBaseProps,
+    amount: Number(plan.price) * 100,
+    metadata: {
+      ...paystackBaseProps.metadata,
+      custom_fields: [
+        { display_name: "paymenttype", variable_name: "paymenttype", value: "subscription" },
+        { display_name: "plantype", variable_name: "plantype", value: plan.category },
+        { display_name: "planname", variable_name: "planname", value: plan.name },
+        { display_name: "planprice", variable_name: "planprice", value: plan.price },
+      ],
+    },
+  };
 
   return (
-    <Card className="mx-auto w-full max-w-[350px] flex-1 rounded-2xl bg-muted px-[30px] py-[20px] md:max-w-none lg:mx-0 lg:max-w-[350px]">
-      <h3 className="mb-1 text-2xl font-medium">{capitalize(name)}</h3>
-      <p className="mb-4">{target}</p>
-      <p className="mb-2 text-center text-2xl font-bold">
-        {isNaN(price) ? price : `NGN ${price}`}
-      </p>
-
-      <div className="mb-6 flex justify-center">
-        {paystackProps ? (
-          <div onClick={() => setOpenDialog(false)}>
-            <PaystackButton
-              className="rounded-full bg-primary px-4 py-1 text-primary-foreground shadow"
-              {...paystackProps}
-            />
+    <Card className={`rounded-2xl ${color} bg-surface overflow-hidden relative h-full flex flex-col ${popular ? "shadow-lg shadow-brand-green/10" : ""}`}>
+      {popular && (
+        <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl bg-brand-green text-white text-[11px] font-bold uppercase">
+          Popular
+        </div>
+      )}
+      <CardContent className="p-6 flex flex-col flex-1">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+            isCurrent ? "bg-black/[0.04] text-muted-foreground" : popular ? "bg-brand-green text-white" : "bg-brand-blue/10 text-brand-blue"
+          }`}>
+            <Icon className="h-5 w-5" />
           </div>
-        ) : (
-          <Button
-            onClick={() =>
-              contactSalesUrl &&
-              window.open(contactSalesUrl, "_blank", "noopener,noreferrer")
-            }
-          >
-            {cta}
-          </Button>
-        )}
-      </div>
-
-      <div className="mb-6">
-        {planFeatures.map((feature, index) => (
-          <div key={index} className="flex items-center gap-x-2 gap-y-1">
-            <Check className="h-4 w-4" />
-            <p>{feature}</p>
+          <div>
+            <h3 className="text-lg font-bold text-foreground">{capitalize(plan.name)}</h3>
+            <p className="text-xs text-muted-foreground">{plan.target}</p>
           </div>
-        ))}
-      </div>
+        </div>
+
+        <div className="mb-6">
+          <span className="text-4xl font-extrabold text-foreground">{isCustomPrice ? plan.price : `NGN ${plan.price}`}</span>
+          {!isCustomPrice && <span className="text-muted-foreground text-sm"> / {plan.category === "monthly" ? "mo" : "yr"}</span>}
+        </div>
+
+        <ul className="space-y-3 flex-1 mb-6">
+          {plan.features.map((feature, j) => (
+            <li key={j} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+              <div className={`flex h-5 w-5 items-center justify-center rounded-full shrink-0 ${
+                popular ? "bg-brand-green/10 text-brand-green" : "bg-black/[0.04] text-muted-foreground"
+              }`}>
+                <Check className="h-3 w-3" />
+              </div>
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-auto">
+          {isCurrent ? (
+            <Button disabled className="w-full h-11 rounded-xl font-semibold opacity-60">
+              Current Plan
+            </Button>
+          ) : fullPaystackProps ? (
+            <div className="w-full">
+              <PaystackButton
+                className={`w-full h-11 rounded-xl font-semibold transition-all inline-flex items-center justify-center text-sm ${
+                  popular ? "bg-brand-green hover:bg-[#287854] text-white shadow-[0_6px_20px_rgba(32,116,80,0.2)]" : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                }`}
+                {...fullPaystackProps}
+              />
+            </div>
+          ) : (
+            <Button
+              className="w-full h-11 rounded-xl font-semibold bg-brand-blue hover:bg-[#0047E1] text-white"
+              onClick={() => contactSalesUrl && window.open(contactSalesUrl, "_blank", "noopener,noreferrer")}
+            >
+              {plan.cta}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
     </Card>
   );
 };

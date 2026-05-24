@@ -1,17 +1,30 @@
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-} from "../components/ui/table";
 import React, { useMemo, useState } from "react";
-import { Card } from "../components/ui/card";
-import { Separator } from "../components/ui/separator";
-import { Button } from "../components/ui/button";
-import { getInvites, resendInvite, sendInvite } from "../api/invitesApi";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { 
+  CalendarIcon, 
+  Check, 
+  ChevronsUpDown, 
+  Send, 
+  History,
+  MapPin,
+  Mail,
+  RefreshCcw,
+  Clock,
+  Video
+} from "lucide-react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import { getInvites, resendInvite, sendInvite } from "../api/invitesApi";
+import HistoryIcon from "../assets/components/HistoryIcon";
+import { getRooms } from "../api/roomsApi";
+import { useToast } from "../hooks/use-toast";
+import { capitalize, cn, formatDate } from "../lib/utils";
+
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
 import {
   Pagination,
   PaginationContent,
@@ -20,9 +33,6 @@ import {
   PaginationLink,
   PaginationNext,
 } from "../components/ui/pagination";
-import { capitalize, cn, formatDate } from "../lib/utils";
-import { useToast } from "../hooks/use-toast";
-import { CalendarIcon, Check, ChevronsUpDown, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -38,9 +48,6 @@ import {
   FormMessage,
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Popover,
   PopoverContent,
@@ -48,27 +55,15 @@ import {
 } from "../components/ui/popover";
 import { Textarea } from "../components/ui/textarea";
 import { Calendar } from "../components/ui/calendar";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "../components/ui/command";
-import { Skeleton } from "../components/ui/skeleton";
-import { getRooms } from "../api/roomsApi";
-import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 const formatInviteDate = (date) => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
     return "";
   }
-
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 };
 
@@ -80,10 +75,7 @@ const normalizeGuestEmails = (value = "") =>
     .join(",");
 
 const hasValidGuestEmails = (value = "") => {
-  const emails = normalizeGuestEmails(value)
-    .split(",")
-    .filter(Boolean);
-
+  const emails = normalizeGuestEmails(value).split(",").filter(Boolean);
   return (
     emails.length > 0 &&
     emails.every((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
@@ -103,7 +95,6 @@ const buildTimezoneOptions = () =>
     const parts = formatter.formatToParts(date);
     const timezoneOffset =
       parts.find((part) => part.type === "timeZoneName")?.value ?? "";
-
     return {
       label: timezoneOffset ? `${timezone} (${timezoneOffset})` : timezone,
       value: timezone,
@@ -112,10 +103,10 @@ const buildTimezoneOptions = () =>
 
 const InviteHistory = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [openDialog, setOpenDialog] = useState(false);
 
   const inviteQuery = useQuery({
     queryKey: ["invite", { page }],
@@ -127,556 +118,201 @@ const InviteHistory = () => {
     mutationFn: resendInvite,
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["invite"] });
-      toast({ description: response.message });
+      toast({ description: response.message || t("inviteHistory.toasts.resendSuccess", "Invite resent successfully") });
     },
+    onError: () => {
+      toast({ 
+        description: t("inviteHistory.toasts.resendFailed", "Failed to resend invite"), 
+        variant: "destructive" 
+      });
+    }
   });
 
   if (inviteQuery.isLoading) {
     return (
-      <div className="page container mx-auto">
-        <Skeleton className="relative min-h-full w-full" />
+      <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">
+          {t("inviteHistory.states.loading", "Loading history...")}
+        </p>
       </div>
     );
   }
 
   if (inviteQuery.isError) {
     return (
-      <section className="page container mx-auto">
-        <Card className="p-6">
-          <p className="font-medium">{t("inviteHistory.states.loadErrorTitle")}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("inviteHistory.states.loadErrorDescription")}
+      <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
+        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 p-4 border border-red-200 dark:border-red-900/50 text-center">
+          <p className="font-semibold text-red-600 dark:text-red-400">{t("inviteHistory.states.loadErrorTitle", "Error Loading History")}</p>
+          <p className="mt-2 text-sm text-red-500/80 dark:text-red-400/80">
+            {t("inviteHistory.states.loadErrorDescription", "Please try refreshing the page.")}
           </p>
-        </Card>
-      </section>
+        </div>
+      </div>
     );
   }
 
   const inviteData = inviteQuery.data ?? {};
   const inviteRows = Array.isArray(inviteData.data) ? inviteData.data : [];
   const currentPage =
-    Number.isFinite(Number(inviteData.current_page)) &&
-    Number(inviteData.current_page) > 0
+    Number.isFinite(Number(inviteData.current_page)) && Number(inviteData.current_page) > 0
       ? Number(inviteData.current_page)
       : 1;
   const lastPage =
-    Number.isFinite(Number(inviteData.last_page)) &&
-    Number(inviteData.last_page) > 0
+    Number.isFinite(Number(inviteData.last_page)) && Number(inviteData.last_page) > 0
       ? Number(inviteData.last_page)
       : 1;
 
   return (
-    <section className="page container mx-auto">
-      <Card className="relative min-h-full w-full pb-6 lg:pb-16">
-        <div className="flex items-center gap-5 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-5 lg:pt-10">
-          <Button onClick={() => setOpenDialog(true)}>
-            <Send /> {t("inviteHistory.actions.sendInvite")}
-          </Button>
-          <h3 className="text-xl font-medium">{t("inviteHistory.title")}</h3>
+    <div className="w-full flex-1 p-4 md:p-6 lg:p-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
+              <HistoryIcon className="h-5 w-5" />
+            </div>
+            {t("inviteHistory.title", "Invite History")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Review past meeting invitations and easily resend them to your guests.
+          </p>
         </div>
-        <Separator />
-        <Table className="min-w-[760px] lg:min-w-0">
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>{t("inviteHistory.table.type")}</TableHead>
-              <TableHead>{t("inviteHistory.table.roomName")}</TableHead>
-              <TableHead>{t("inviteHistory.table.guest")}</TableHead>
-              <TableHead>{t("inviteHistory.table.dateSent")}</TableHead>
-              <TableHead>{t("inviteHistory.table.action")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {inviteRows.map(({ type, roomname, guest, date, id }) => (
-              <TableRow key={roomname + date + id}>
-                <TableCell>{id + 1}</TableCell>
-                <TableCell>{capitalize(type)}</TableCell>
-                <TableCell>{roomname}</TableCell>
-                <TableCell className="flex flex-col gap-y-1">
-                  {String(guest ?? "")
-                    .split(",")
-                    .filter(Boolean)
-                    .map((email, index) => (
-                      <p key={email + index}>{email}</p>
-                    ))}
-                </TableCell>
-                <TableCell>{formatDate(date, false)}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="outline"
-                    onClick={() => resendInviteMutation.mutate(id)}
-                  >
-                    {t("inviteHistory.actions.resendInvite")}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {inviteRows.length === 0 && (
-          <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center">
-            <p>{t("inviteHistory.states.noData")}</p>
+
+        <Button 
+          onClick={() => navigate("/history/new")}
+          className="w-full md:w-auto h-11 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-[0_6px_20px_rgba(32,116,80,0.2)] font-semibold transition-all"
+        >
+          <Send className="mr-2 h-4 w-4" />
+          {t("inviteHistory.actions.sendInvite", "Send New Invite")}
+        </Button>
+      </div>
+
+      <div className="rounded-2xl border border-border/60 bg-surface shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <div className="min-w-[800px]">
+            <div className="grid grid-cols-[60px_1fr_1.5fr_2fr_1fr_100px] items-center px-6 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 bg-black/[0.02]">
+              <span>#</span>
+              <span>{t("inviteHistory.table.type", "Type")}</span>
+              <span>{t("inviteHistory.table.roomName", "Room Name")}</span>
+              <span>{t("inviteHistory.table.guest", "Guests")}</span>
+              <span>{t("inviteHistory.table.dateSent", "Date Sent")}</span>
+              <span className="text-right">{t("inviteHistory.table.action", "Action")}</span>
+            </div>
+
+            <div className="divide-y divide-border/40">
+              {inviteRows.length === 0 ? (
+                <div className="py-20 text-center">
+                  <div className="h-16 w-16 mx-auto rounded-full bg-brand-blue/10 flex items-center justify-center mb-4">
+                    <History className="h-8 w-8 text-brand-blue/50" />
+                  </div>
+                  <p className="text-base font-semibold text-foreground">
+                    {t("inviteHistory.states.noData", "No invites found.")}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your sent meeting invitations will appear here.
+                  </p>
+                </div>
+              ) : (
+                inviteRows.map(({ type, roomname, guest, date, id }, index) => {
+                  const emails = String(guest ?? "").split(",").filter(Boolean);
+                  const isWebinar = String(type).toLowerCase() === "webinar";
+
+                  return (
+                    <div
+                      key={`${roomname}-${date}-${id}-${index}`}
+                      className="grid grid-cols-[60px_1fr_1.5fr_2fr_1fr_100px] items-center px-6 py-4 text-sm text-foreground hover:bg-black/[0.01] transition-colors"
+                    >
+                      <span className="font-medium text-muted-foreground">{(currentPage - 1) * 10 + index + 1}</span>
+                      
+                      <div>
+                        <Badge variant="outline" className={`border-0 ${isWebinar ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'}`}>
+                          <Video className="mr-1 h-3 w-3" />
+                          {capitalize(type)}
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center gap-2 pr-4">
+                        <MapPin className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+                        <span className="font-medium truncate" title={roomname}>{roomname}</span>
+                      </div>
+
+                      <div className="flex flex-col gap-1 pr-4">
+                        {emails.length > 0 ? emails.map((email, i) => (
+                          <div key={`${email}-${i}`} className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                            <Mail className="h-3 w-3 shrink-0 opacity-50" />
+                            <span className="truncate" title={email}>{email}</span>
+                          </div>
+                        )) : (
+                          <span className="text-muted-foreground text-xs italic">No guests</span>
+                        )}
+                      </div>
+
+                      <div className="text-muted-foreground font-medium">
+                        {formatDate(date, false)}
+                      </div>
+
+                      <div className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={resendInviteMutation.isPending && resendInviteMutation.variables === id}
+                          onClick={() => resendInviteMutation.mutate(id)}
+                          className="h-8 rounded-lg border-brand-green/30 text-brand-green hover:bg-brand-green/10"
+                        >
+                          {resendInviteMutation.isPending && resendInviteMutation.variables === id ? (
+                            <div className="h-3 w-3 border-2 border-brand-green/30 border-t-brand-green rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <RefreshCcw className="mr-1.5 h-3 w-3" />
+                              {t("inviteHistory.actions.resend", "Resend")}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {lastPage > 1 && (
+          <div className="flex items-center justify-center py-4 border-t border-border/40 bg-black/[0.01]">
+            <Pagination className="w-auto bg-background rounded-full border border-border/60 shadow-sm px-2 py-1">
+              <PaginationContent className="flex items-center space-x-1">
+                <PaginationItem>
+                  <PaginationPrevious
+                    className="h-8 w-8 rounded-full p-0 flex items-center justify-center hover:bg-black/5 cursor-pointer"
+                    disabled={inviteData.prev_page_url === null || currentPage <= 1}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) setPage((p) => Math.max(1, p - 1));
+                    }}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="text-sm font-medium text-foreground px-3">
+                    {currentPage} <span className="text-muted-foreground font-normal">/ {lastPage}</span>
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    className="h-8 w-8 rounded-full p-0 flex items-center justify-center hover:bg-black/5 cursor-pointer"
+                    disabled={inviteData.next_page_url == null || currentPage >= lastPage}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < lastPage) setPage((p) => Math.min(lastPage, p + 1));
+                    }}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         )}
-        <Pagination className="mt-4 flex items-center justify-center lg:absolute lg:bottom-0 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                disabled={inviteData.prev_page_url === null || currentPage <= 1}
-                onClick={() => setPage((previousPage) => Math.max(1, previousPage - 1))}
-              />
-            </PaginationItem>
-            {Array.from({ length: lastPage }, (_, index) => index + 1).map(
-              (index) => (
-                <PaginationItem key={index}>
-                  <PaginationLink
-                    disabled={index === currentPage}
-                    onClick={() => setPage(index)}
-                  >
-                    {index}
-                  </PaginationLink>
-                </PaginationItem>
-              )
-            )}
-            <PaginationItem>
-              <PaginationNext
-                disabled={inviteData.next_page_url == null || currentPage >= lastPage}
-                onClick={() =>
-                  setPage((previousPage) => Math.min(lastPage, previousPage + 1))
-                }
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </Card>
-      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent className="top-[50%] h-[90%] w-[calc(100%-2rem)] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-2xl lg:w-[50%]">
-          <DialogTitle>{t("inviteHistory.dialog.title")}</DialogTitle>
-          <DialogDescription>
-            {t("inviteHistory.dialog.description")}
-          </DialogDescription>
-          <MeetingForm setOpenDialog={setOpenDialog} />
-        </DialogContent>
-      </Dialog>
-    </section>
+      </div>
+
+    </div>
   );
 };
 
 export default InviteHistory;
-
-export const MeetingForm = ({ setOpenDialog }) => {
-  const { t } = useTranslation();
-  const [timezoneOpen, setTimezoneOpen] = useState(false);
-  const [roomOpen, setRoomOpen] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const roomQuery = useQuery({
-    queryKey: ["rooms"],
-    queryFn: getRooms,
-  });
-
-  const formSchema = z.object({
-    room_id: z
-      .string()
-      .trim()
-      .min(1, { message: t("inviteHistory.meetingForm.validation.roomRequired") }),
-    hostname: z
-      .string()
-      .trim()
-      .min(1, { message: t("inviteHistory.meetingForm.validation.hostnameRequired") }),
-    title: z
-      .string()
-      .trim()
-      .min(1, { message: t("inviteHistory.meetingForm.validation.titleRequired") }),
-    date: z
-      .date({ required_error: t("inviteHistory.meetingForm.validation.dateRequired") })
-      .nullable()
-      .refine(
-      (value) => value instanceof Date && !Number.isNaN(value.getTime()),
-      {
-        message: t("inviteHistory.meetingForm.validation.dateRequired"),
-      }
-    ),
-    time: z
-      .string()
-      .trim()
-      .min(1, { message: t("inviteHistory.meetingForm.validation.timeRequired") }),
-    timezone: z
-      .string()
-      .trim()
-      .min(1, { message: t("inviteHistory.meetingForm.validation.timezoneRequired") }),
-    additional: z
-      .string()
-      .trim()
-      .min(1, {
-        message: t("inviteHistory.meetingForm.validation.additionalRequired"),
-      }),
-    guest: z
-      .string()
-      .trim()
-      .min(1, { message: t("inviteHistory.meetingForm.validation.guestRequired") })
-      .refine((value) => hasValidGuestEmails(value), {
-        message: t("inviteHistory.meetingForm.validation.guestInvalid"),
-      }),
-  });
-
-  const form = useForm({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      room_id: "",
-      hostname: "",
-      title: "",
-      date: null,
-      time: "",
-      timezone: "",
-      additional: "",
-      guest: "",
-    },
-  });
-
-  const timezones = useMemo(() => buildTimezoneOptions(), []);
-
-  const sendInviteMutation = useMutation({
-    mutationFn: sendInvite,
-    onSuccess: (response) => {
-      if (response?.success === false) {
-        toast({
-          variant: "destructive",
-          title: t("common.status.error"),
-          description: getInviteErrorMessage(
-            response,
-            t("inviteHistory.meetingForm.toasts.retry")
-          ),
-        });
-        return;
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["invite"] });
-      queryClient.invalidateQueries({ queryKey: ["meetings"] });
-      toast({
-        description: response?.message || t("inviteHistory.meetingForm.toasts.sent"),
-      });
-      form.reset();
-      setOpenDialog(false);
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: t("common.status.error"),
-        description: getInviteErrorMessage(
-          error,
-          t("inviteHistory.meetingForm.toasts.retry")
-        ),
-      });
-    },
-  });
-
-  const onSubmit = (data) => {
-    sendInviteMutation.mutate({
-      room_id: data.room_id.trim(),
-      hostname: data.hostname.trim(),
-      title: data.title.trim(),
-      date: formatInviteDate(data.date),
-      time: data.time.trim(),
-      timezone: data.timezone.trim(),
-      additional: data.additional.trim(),
-      guest: normalizeGuestEmails(data.guest),
-    });
-  };
-
-  if (!roomQuery.isSuccess) {
-    return <></>;
-  }
-
-  const rooms = roomQuery.data?.rooms || [];
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="room_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="mt-5 block">
-                  {t("inviteHistory.meetingForm.labels.roomName")}
-                </FormLabel>
-                <FormControl>
-                  <Popover open={roomOpen} onOpenChange={setRoomOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={roomOpen}
-                        className="w-[300px] justify-between md:w-[320px] lg:w-[300px]"
-                      >
-                        {field.value
-                          ? rooms.find((room) => room.id === Number(field.value))
-                              ?.name
-                          : t("inviteHistory.meetingForm.placeholders.selectRoom")}
-                        <ChevronsUpDown className="ml-2 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] p-0">
-                      <Command>
-                        <CommandInput
-                          placeholder={t("inviteHistory.meetingForm.placeholders.searchRoom")}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>
-                            {t("inviteHistory.meetingForm.placeholders.noRoomFound")}
-                          </CommandEmpty>
-                          <CommandGroup>
-                            {rooms.map((room) => (
-                              <CommandItem
-                                key={room.id}
-                                value={String(room.name ?? "").toLowerCase()}
-                                onSelect={() => {
-                                  const newValue =
-                                    String(room.id) === field.value
-                                      ? ""
-                                      : String(room.id);
-                                  field.onChange(newValue);
-                                  setRoomOpen(false);
-                                }}
-                              >
-                                {room.name}
-                                <Check
-                                  className={cn(
-                                    "ml-auto",
-                                    field.value === String(room.id)
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="hostname"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("inviteHistory.meetingForm.labels.hostname")}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={t("inviteHistory.meetingForm.placeholders.hostname")}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="title"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("inviteHistory.meetingForm.labels.title")}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={t("inviteHistory.meetingForm.placeholders.title")}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("inviteHistory.meetingForm.labels.date")}</FormLabel>
-                <FormControl>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {field.value
-                          ? field.value.toLocaleDateString("en-US")
-                          : t("inviteHistory.meetingForm.placeholders.pickDate")}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={field.value ?? undefined}
-                        onSelect={(date) => field.onChange(date ?? null)}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="time"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("inviteHistory.meetingForm.labels.time")}</FormLabel>
-                <FormControl>
-                  <Input type="time" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="timezone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="mt-5 block">
-                  {t("inviteHistory.meetingForm.labels.timezone")}
-                </FormLabel>
-                <FormControl>
-                  <Popover open={timezoneOpen} onOpenChange={setTimezoneOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={timezoneOpen}
-                        className="w-[300px] justify-between md:w-[320px] lg:w-[300px]"
-                      >
-                        {field.value
-                          ? timezones.find(
-                              (timezone) => timezone.value === field.value
-                            )?.label
-                          : t("inviteHistory.meetingForm.placeholders.selectTimezone")}
-                        <ChevronsUpDown className="ml-2 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-[min(40rem,calc(100vw-2rem))] p-0"
-                      side="left"
-                      align="start"
-                    >
-                      <Command>
-                        <CommandInput
-                          placeholder={t(
-                            "inviteHistory.meetingForm.placeholders.searchTimezone"
-                          )}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>
-                            {t("inviteHistory.meetingForm.placeholders.noTimezoneFound")}
-                          </CommandEmpty>
-                          <CommandGroup>
-                            {timezones.map((timezone) => (
-                              <CommandItem
-                                key={timezone.value}
-                                value={timezone.value}
-                                onSelect={(currentValue) => {
-                                  field.onChange(
-                                    currentValue === field.value
-                                      ? ""
-                                      : currentValue
-                                  );
-                                  setTimezoneOpen(false);
-                                }}
-                              >
-                                {timezone.label}
-                                <Check
-                                  className={cn(
-                                    "ml-auto",
-                                    field.value === timezone.value
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="additional"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t("inviteHistory.meetingForm.labels.additionalInformation")}
-                </FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder={t(
-                      "inviteHistory.meetingForm.placeholders.additionalInformation"
-                    )}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="guest"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("inviteHistory.meetingForm.labels.guestEmails")}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={t("inviteHistory.meetingForm.placeholders.guestEmails")}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex justify-center">
-            <Button
-              size="lg"
-              type="submit"
-              disabled={sendInviteMutation.isPending}
-            >
-              {sendInviteMutation.isPending
-                ? t("inviteHistory.meetingForm.actions.submitting")
-                : t("common.actions.submit")}
-            </Button>
-          </div>
-        </div>
-      </form>
-    </Form>
-  );
-};

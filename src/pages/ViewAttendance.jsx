@@ -2,12 +2,27 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  ArrowLeft,
+  Copy,
+  FileText,
+  Table as TableIcon,
+  Printer,
+  Search,
+  MessageSquare,
+  Sparkles,
+  Zap,
+  X,
+  Users,
+  CalendarDays,
+  ShieldAlert,
+  User,
+} from "lucide-react";
+import {
   getAttendanceDetails,
   getMeetingSummary,
   getMeetingHighlights,
   getMeetingMinutes,
 } from "../api/attendanceApi";
-import { ArrowLeft } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import {
   Pagination,
@@ -16,6 +31,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "../components/ui/pagination";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
 
 const NAVBAR_HEIGHT = 72;
 
@@ -125,58 +143,27 @@ function printTableLikePayments(
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
-          body {
-            font-family: Arial, sans-serif;
-            padding: 40px;
-            color: #222;
-          }
-          h1 {
-            text-align: center;
-            margin-bottom: 5px;
-          }
-          .subtitle {
-            text-align: center;
-            margin-bottom: 30px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-          }
-          th, td {
-            border: 1px solid #333;
-            padding: 8px;
-            text-align: left;
-            font-size: 13px;
-          }
-          th {
-            background: #f3f3f3;
-          }
-          .footer {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 12px;
-            color: #777;
-          }
+          body { font-family: Arial, sans-serif; padding: 40px; color: #222; }
+          h1 { text-align: center; margin-bottom: 5px; }
+          .subtitle { text-align: center; margin-bottom: 30px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #333; padding: 8px; text-align: left; font-size: 13px; }
+          th { background: #f3f3f3; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #777; }
         </style>
       </head>
       <body>
         <h1>Konn3ct</h1>
         <p class="subtitle">${escapeHtml(title)}</p>
-
         <table>
           <thead>${thead}</thead>
           <tbody>${tbody}</tbody>
         </table>
-
         <div class="footer">
           <p>${escapeHtml(footerLabel)}</p>
         </div>
-
         <script>
-          window.onload = function () {
-            window.print();
-          };
+          window.onload = function () { window.print(); };
         </script>
       </body>
     </html>
@@ -225,11 +212,6 @@ const normalizeStatus = (status) => {
   ) {
     return "moderator";
   }
-
-  if (normalizedStatus === "joined") {
-    return "participant";
-  }
-
   return "participant";
 };
 
@@ -262,14 +244,14 @@ const ViewAttendance = () => {
         setAttendanceData(data);
       } catch (fetchError) {
         console.error(fetchError);
-        setError(t("attendance.details.states.loadError"));
+        setError(t("attendance.details.states.loadError", "Failed to load attendance details."));
       } finally {
         setLoading(false);
       }
     };
 
     if (!meeting_id || !identifier) {
-      setError(t("attendance.details.states.missingParams"));
+      setError(t("attendance.details.states.missingParams", "Missing parameters."));
       setLoading(false);
       return;
     }
@@ -317,55 +299,55 @@ const ViewAttendance = () => {
       let result = "";
 
       if (type === "minutes") {
-        setPanelTitle(t("attendance.details.panel.minutesTitle"));
+        setPanelTitle(t("attendance.details.panel.minutesTitle", "AI Meeting Minutes"));
         result = await getMeetingMinutes(meeting_id);
       }
 
       if (type === "highlights") {
-        setPanelTitle(t("attendance.details.panel.highlightsTitle"));
+        setPanelTitle(t("attendance.details.panel.highlightsTitle", "AI Highlights"));
         result = await getMeetingHighlights(meeting_id);
       }
 
       if (type === "summary") {
-        setPanelTitle(t("attendance.details.panel.summaryTitle"));
+        setPanelTitle(t("attendance.details.panel.summaryTitle", "AI Summary"));
         result = await getMeetingSummary(meeting_id);
       }
 
-      setPanelContent(result || t("attendance.details.panel.noDataReturned"));
+      setPanelContent(result || t("attendance.details.panel.noDataReturned", "No data available."));
     } catch (panelError) {
       console.error(panelError);
-      setPanelContent(t("attendance.details.panel.loadFailed"));
+      setPanelContent(t("attendance.details.panel.loadFailed", "Failed to load data."));
     } finally {
       setPanelLoading(false);
     }
   };
 
   const getMeetingAttendanceTitle = (count) =>
-    t("attendance.details.export.title", { count });
+    t("attendance.details.export.title", { count }) || `Attendance Report (${count} participants)`;
 
-  const serialHeader = t("attendance.details.table.serial");
-  const nameHeader = t("attendance.details.table.name");
-  const emailHeader = t("attendance.details.table.email");
-  const statusHeader = t("attendance.details.table.status");
-  const dateTimeHeader = t("attendance.details.table.dateTime");
+  const serialHeader = t("attendance.details.table.serial", "#");
+  const nameHeader = t("attendance.details.table.name", "Name");
+  const emailHeader = t("attendance.details.table.email", "Email");
+  const statusHeader = t("attendance.details.table.status", "Status");
+  const dateTimeHeader = t("attendance.details.table.dateTime", "Date & Time");
 
   const exportRows = useMemo(
     () =>
       attendanceRows.map((row, index) => ({
         [serialHeader]: rowStart + index,
         [nameHeader]:
-          row.name || row.attendee_name || t("attendance.common.notAvailable"),
+          row.name || row.attendee_name || t("attendance.common.notAvailable", "N/A"),
         [emailHeader]:
-          row.email || row.attendee_email || t("attendance.common.notAvailable"),
+          row.email || row.attendee_email || t("attendance.common.notAvailable", "N/A"),
         [statusHeader]:
           normalizeStatus(row.status) === "moderator"
-            ? t("attendance.details.status.moderator")
-            : t("attendance.details.status.participant"),
+            ? t("attendance.details.status.moderator", "Moderator")
+            : t("attendance.details.status.participant", "Participant"),
         [dateTimeHeader]: row.created_at
           ? new Date(row.created_at).toLocaleString("en-US")
           : row.date
             ? row.date + (row.time ? ` | ${row.time}` : "")
-            : t("attendance.common.notAvailable"),
+            : t("attendance.common.notAvailable", "N/A"),
       })),
     [
       attendanceRows,
@@ -386,10 +368,7 @@ const ViewAttendance = () => {
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
-
-    if (!query) {
-      return exportRows;
-    }
+    if (!query) return exportRows;
 
     return exportRows.filter((row) =>
       Object.values(row).some((value) =>
@@ -409,7 +388,7 @@ const ViewAttendance = () => {
     }
 
     toast({
-      description: t("attendance.details.toasts.copyFailed"),
+      description: t("attendance.details.toasts.copyFailed", "Failed to copy to clipboard."),
       variant: "destructive",
     });
   };
@@ -440,10 +419,10 @@ const ViewAttendance = () => {
       getMeetingAttendanceTitle(filteredRows.length),
       headers,
       filteredRows,
-      t("attendance.details.export.printFooter"),
+      t("attendance.details.export.printFooter", "Generated by Konn3ct"),
       () =>
         toast({
-          description: t("attendance.details.toasts.allowPopups"),
+          description: t("attendance.details.toasts.allowPopups", "Please allow popups to print."),
           variant: "destructive",
         })
     );
@@ -451,9 +430,9 @@ const ViewAttendance = () => {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-sm text-gray-600 dark:text-muted-foreground">
-          {t("attendance.details.states.loading")}
+      <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">
+          {t("attendance.details.states.loading", "Loading details...")}
         </p>
       </div>
     );
@@ -461,212 +440,236 @@ const ViewAttendance = () => {
 
   if (error) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-sm text-red-500">{error}</p>
+      <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
+        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 p-4 border border-red-200 dark:border-red-900/50">
+          <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="m-auto flex min-h-screen items-center justify-center px-4 py-20 md:px-6 lg:px-4">
-        <div className="w-full max-w-6xl rounded-2xl border bg-white p-8 shadow-sm dark:border-border dark:bg-card">
-          <div className="mb-6 flex items-center justify-between md:flex-col md:items-stretch md:gap-4 lg:flex-row lg:items-center">
-            <div>
-              <div className="mb-3 flex gap-3 md:flex-wrap lg:flex-nowrap">
-                <button
-                  onClick={handleCopy}
-                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
-                >
-                  {copied
-                    ? t("attendance.details.actions.copied")
-                    : t("attendance.details.actions.copy")}
-                </button>
-                <button
-                  onClick={handleCSV}
-                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
-                >
-                  {t("attendance.details.actions.csv")}
-                </button>
-                <button
-                  onClick={handleExcel}
-                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
-                >
-                  {t("attendance.details.actions.excel")}
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="rounded-md border px-4 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
-                >
-                  {t("attendance.details.actions.print")}
-                </button>
-              </div>
+    <div className="w-full flex-1 p-4 md:p-6 lg:p-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+        <div>
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/attendance")}
+            className="mb-4 h-8 px-2 text-muted-foreground hover:text-foreground -ml-2"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t("attendance.details.actions.back", "Back to Attendance")}
+          </Button>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <Users className="h-6 w-6 text-brand-blue" />
+            {t("attendance.details.title", "Participant Details")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            View attendee list, generate AI summaries, and export data.
+          </p>
+        </div>
 
-              <div className="flex gap-3 md:flex-wrap lg:flex-nowrap">
-                <button
-                  onClick={() => openPanel("minutes")}
-                  className="rounded-md bg-blue-100 px-4 py-2 text-xs text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
-                >
-                  {t("attendance.details.actions.sendMinutes")}
-                </button>
-                <button
-                  onClick={() => openPanel("highlights")}
-                  className="rounded-md bg-yellow-100 px-4 py-2 text-xs text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200"
-                >
-                  {t("attendance.details.actions.sendHighlights")}
-                </button>
-                <button
-                  onClick={() => openPanel("summary")}
-                  className="rounded-md bg-purple-100 px-4 py-2 text-xs text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
-                >
-                  {t("attendance.details.actions.sendSummary")}
-                </button>
-              </div>
-            </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openPanel("minutes")}
+              className="h-9 rounded-lg border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 dark:border-blue-900/50 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              {t("attendance.details.actions.sendMinutes", "AI Minutes")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openPanel("highlights")}
+              className="h-9 rounded-lg border-amber-200 bg-amber-50/50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:border-amber-900/50 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/20"
+            >
+              <Zap className="mr-2 h-4 w-4" />
+              {t("attendance.details.actions.sendHighlights", "AI Highlights")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openPanel("summary")}
+              className="h-9 rounded-lg border-purple-200 bg-purple-50/50 text-purple-700 hover:bg-purple-100 hover:text-purple-800 dark:border-purple-900/50 dark:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-500/20"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              {t("attendance.details.actions.sendSummary", "AI Summary")}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleCopy} className="h-9 rounded-lg border-border/60">
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              {copied ? t("attendance.details.actions.copied", "Copied!") : t("attendance.details.actions.copy", "Copy")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCSV} className="h-9 rounded-lg border-border/60">
+              <TableIcon className="mr-2 h-3.5 w-3.5" />
+              CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExcel} className="h-9 rounded-lg border-border/60">
+              <TableIcon className="mr-2 h-3.5 w-3.5" />
+              Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={handlePrint} className="h-9 rounded-lg border-border/60">
+              <Printer className="mr-2 h-3.5 w-3.5" />
+              Print
+            </Button>
+          </div>
+        </div>
+      </div>
 
-            <input
+      <div className="rounded-2xl border-border/60 bg-surface shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border/40 bg-black/[0.01]">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              type="text"
-              placeholder={t("attendance.details.filters.search")}
-              className="w-64 rounded-full border border-input bg-white px-4 py-2 text-sm shadow-sm dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground md:w-full lg:w-64"
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("attendance.details.filters.search", "Search participants...")}
+              className="pl-9 h-10 rounded-xl bg-background border-border/60 focus-visible:ring-brand-green/30"
             />
           </div>
-
-          <div className="mb-4 flex items-center justify-between md:flex-col md:items-start md:gap-3 lg:flex-row lg:items-center">
-            <h2 className="text-base font-semibold">
-              {t("attendance.details.title")}
-            </h2>
-            <button
-              onClick={() => navigate("/attendance")}
-              className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm dark:border-border dark:bg-background dark:hover:bg-accent dark:hover:text-accent-foreground"
-            >
-              <ArrowLeft size={16} />
-              {t("attendance.details.actions.back")}
-            </button>
-          </div>
-
-          <div className="md:overflow-x-auto lg:overflow-visible">
-            <div className="md:min-w-[760px] lg:min-w-0">
-              <div className="mb-2 grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] text-sm font-medium text-gray-500 dark:text-muted-foreground">
-                <span>{serialHeader}</span>
-                <span>{nameHeader}</span>
-                <span>{emailHeader}</span>
-                <span>{statusHeader}</span>
-                <span>{dateTimeHeader}</span>
-              </div>
-
-              <div className="space-y-3">
-                {filteredRows.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-gray-500 dark:text-muted-foreground">
-                    {t("attendance.details.states.empty")}
-                  </div>
-                ) : (
-                  filteredRows.map((row, index) => (
-                    <div
-                      key={`${row[serialHeader]}-${index}`}
-                      className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 transition hover:bg-gray-100 dark:bg-background/40 dark:text-foreground dark:hover:bg-muted/70"
-                    >
-                      <span>{row[serialHeader]}</span>
-                      <span>{row[nameHeader]}</span>
-                      <span className="truncate" title={row[emailHeader]}>
-                        {row[emailHeader]}
-                      </span>
-                      <span>
-                        <span
-                          className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
-                            String(row[statusHeader]).toLowerCase() ===
-                            "moderator"
-                              ? "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200"
-                              : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
-                          }`}
-                        >
-                          {row[statusHeader]}
-                        </span>
-                      </span>
-                      <span>{row[dateTimeHeader]}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {(attendanceRows.length > 0 || lastPage > 1) && (
-            <div className="mt-6 flex items-center justify-center border-t pt-4 dark:border-border">
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      disabled={
-                        attendanceData?.prev_page_url === null || currentPage <= 1
-                      }
-                      onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    />
-                  </PaginationItem>
-                  <PaginationItem>
-                    <span className="px-2 text-sm text-gray-700 dark:text-muted-foreground">
-                      {currentPage} / {lastPage}
-                    </span>
-                  </PaginationItem>
-                  <PaginationItem>
-                    <PaginationNext
-                      disabled={
-                        attendanceData?.next_page_url == null ||
-                        currentPage >= lastPage
-                      }
-                      onClick={() =>
-                        setPage((prev) => Math.min(lastPage, prev + 1))
-                      }
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          )}
         </div>
+
+        <div className="overflow-x-auto">
+          <div className="min-w-[800px]">
+            <div className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center px-6 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 bg-black/[0.02]">
+              <span>{serialHeader}</span>
+              <span>{nameHeader}</span>
+              <span>{emailHeader}</span>
+              <span>{statusHeader}</span>
+              <span>{dateTimeHeader}</span>
+            </div>
+
+            <div className="divide-y divide-border/40">
+              {filteredRows.length === 0 ? (
+                <div className="py-16 text-center text-sm text-muted-foreground">
+                  {t("attendance.details.states.empty", "No participants found.")}
+                </div>
+              ) : (
+                filteredRows.map((row, index) => (
+                  <div
+                    key={`${row[serialHeader]}-${index}`}
+                    className="grid grid-cols-[60px_1.5fr_2fr_1fr_1.5fr] items-center px-6 py-4 text-sm text-foreground hover:bg-black/[0.01] transition-colors"
+                  >
+                    <span className="font-medium text-muted-foreground">{row[serialHeader]}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-brand-blue/10 flex items-center justify-center shrink-0">
+                        <User className="h-4 w-4 text-brand-blue" />
+                      </div>
+                      <span className="font-semibold">{row[nameHeader]}</span>
+                    </div>
+                    <span className="truncate text-muted-foreground pr-4" title={row[emailHeader]}>
+                      {row[emailHeader]}
+                    </span>
+                    <span>
+                      <Badge 
+                        variant="outline" 
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md font-semibold text-xs border-0 ${
+                          String(row[statusHeader]).toLowerCase() === "moderator"
+                            ? "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"
+                            : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
+                        }`}
+                      >
+                        {String(row[statusHeader]).toLowerCase() === "moderator" ? (
+                          <ShieldAlert className="mr-1 h-3 w-3" />
+                        ) : (
+                          <User className="mr-1 h-3 w-3" />
+                        )}
+                        {row[statusHeader]}
+                      </Badge>
+                    </span>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{row[dateTimeHeader]}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {(attendanceRows.length > 0 || lastPage > 1) && (
+          <div className="flex items-center justify-center py-4 border-t border-border/40 bg-black/[0.01]">
+            <Pagination className="w-auto bg-background rounded-full border border-border/60 shadow-sm px-2 py-1">
+              <PaginationContent className="flex items-center space-x-1">
+                <PaginationItem>
+                  <PaginationPrevious
+                    className="h-8 w-8 rounded-full p-0 flex items-center justify-center hover:bg-black/5"
+                    disabled={attendanceData?.prev_page_url === null || currentPage <= 1}
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="text-sm font-medium text-foreground px-3">
+                    {currentPage} <span className="text-muted-foreground font-normal">/ {lastPage}</span>
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    className="h-8 w-8 rounded-full p-0 flex items-center justify-center hover:bg-black/5"
+                    disabled={attendanceData?.next_page_url == null || currentPage >= lastPage}
+                    onClick={() => setPage((prev) => Math.min(lastPage, prev + 1))}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </div>
 
       {panelOpen && (
         <div
           onClick={() => setPanelOpen(false)}
-          className="fixed inset-0 z-40 bg-black/20"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
         />
       )}
 
       <div
-        className={`fixed right-0 z-50 border-l bg-white shadow-xl transition-transform duration-300 dark:border-border dark:bg-popover
-        w-full md:w-[420px] lg:w-[360px]
+        className={`fixed right-0 z-50 border-l border-border/60 bg-surface shadow-2xl transition-transform duration-500 ease-out flex flex-col
+        w-full md:w-[420px] lg:w-[480px]
         ${panelOpen ? "translate-x-0" : "translate-x-full"}`}
         style={{
           top: NAVBAR_HEIGHT,
           height: `calc(100vh - ${NAVBAR_HEIGHT}px)`,
         }}
       >
-        <div className="flex items-center justify-between border-b px-4 py-3 dark:border-border">
-          <h3 className="text-sm font-semibold">{panelTitle}</h3>
-          <button
+        <div className="flex items-center justify-between border-b border-border/60 px-6 py-4 bg-black/[0.02]">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-brand-blue" />
+            <h3 className="text-base font-bold text-foreground">{panelTitle}</h3>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setPanelOpen(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-accent"
-            aria-label={t("attendance.details.panel.close")}
+            className="h-8 w-8 rounded-full text-muted-foreground hover:bg-black/5 hover:text-foreground"
           >
-            X
-          </button>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
-        <div className="h-[calc(100%-56px)] overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-6">
           {panelLoading ? (
-            <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              {t("attendance.details.panel.loading")}
-            </p>
+            <div className="flex flex-col items-center justify-center h-full space-y-4">
+              <div className="h-8 w-8 rounded-full border-4 border-brand-blue/30 border-t-brand-blue animate-spin" />
+              <p className="text-sm font-medium text-muted-foreground">
+                {t("attendance.details.panel.loading", "Generating insights...")}
+              </p>
+            </div>
           ) : (
-            <div className="whitespace-pre-wrap rounded-lg border bg-gray-50 p-4 text-sm leading-relaxed text-gray-800 dark:border-border dark:bg-background/50 dark:text-foreground">
-              {panelContent}
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <div className="whitespace-pre-wrap rounded-xl border border-border/60 bg-black/[0.02] p-5 text-sm leading-relaxed text-foreground shadow-inner">
+                {panelContent}
+              </div>
             </div>
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

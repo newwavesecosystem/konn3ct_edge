@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { Copy } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { 
+  Copy, Video, Calendar, Users, Clock, 
+  ArrowRight, Play, MoreVertical, 
+  CalendarDays, Share2, Globe, Lock, CreditCard
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { getUser } from "../api/userApi";
@@ -9,35 +13,21 @@ import { getMeetings, getRooms } from "../api/roomsApi";
 import useAuth from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { capitalize } from "../lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Button } from "../components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "../components/ui/card";
-import { Dialog, DialogContent } from "../components/ui/dialog";
-import { DialogDescription, DialogTitle } from "../components/ui/dialog";
-import { Separator } from "../components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Skeleton } from "../components/ui/skeleton";
-import StatCard from "../components/StatCard";
-import { gettingStartedVideoUrl } from "../lib/externalLinks";
-import { MeetingForm } from "./InviteHistory";
-import activeIcon from "../assets/icons/active.svg";
-import calendar from "../assets/icons/calendar.svg";
-import inactiveIcon from "../assets/icons/inactive.svg";
 import join from "../assets/icons/add-square.svg";
-import privateIcon from "../assets/icons/privateIcon.svg";
-import roomsIcon from "../assets/icons/roomsIcon.svg";
 import video from "../assets/icons/video-01.svg";
-
 const Dashboard = () => {
   const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [openSchedule, setOpenSchedule] = useState(false);
+  const navigate = useNavigate();
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
 
   const userQuery = useQueries({
     queries: [
@@ -52,14 +42,6 @@ const Dashboard = () => {
     ],
   });
 
-  if (userQuery.every((query) => query.isLoading)) {
-    return (
-      <div className="page container mx-auto px-4 sm:px-0">
-        <Skeleton className="relative min-h-full w-full" />
-      </div>
-    );
-  }
-
   const handleCopy = (text) => {
     if (text) {
       navigator.clipboard.writeText(text);
@@ -69,214 +51,219 @@ const Dashboard = () => {
     }
   };
 
+  const handleStartInstantMeeting = () => {
+    navigate('/rooms');
+  };
+
+  if (userQuery.some((query) => query.isLoading)) {
+    return (
+      <div className="flex flex-col gap-8 pb-10">
+        <Skeleton className="h-32 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-2xl" />
+      </div>
+    );
+  }
+
   if (!userQuery.every((query) => query.isSuccess)) {
     return null;
   }
 
-  const currentPlanName = capitalize(userQuery[0]?.data?.user_plan?.name || "");
-
+  const user = userQuery[0]?.data?.user;
+  const roomsData = userQuery[1]?.data;
+  const meetingsData = userQuery[2]?.data?.data || [];
+  const personalRoomId = roomsData?.personal_room?.id;
+  
   return (
-    <div className="container mx-auto page grid grid-cols-1 gap-5 px-4 sm:px-0 lg:grid-cols-3">
-      <div className="flex flex-col gap-10 lg:col-span-2">
-        <Card className="flex flex-col">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <Avatar className="h-[78px] w-[78px] rounded-lg">
-                <AvatarImage src={userQuery[0]?.data?.user?.profile_photo_url} />
-                <AvatarFallback>AJ</AvatarFallback>
-              </Avatar>
-            {/* <Link
-              to="/view-profile"
-              aria-label="View profile"
-              title="View profile"
-              className="cursor-pointer"
+    <div className="flex flex-col gap-8 pb-10">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
+            {t("app.sidebar.home", `Welcome back, ${user?.firstname || "User"}`)} 👋
+          </h1>
+          <p className="text-muted-foreground mt-1 text-lg">
+            Here's what's happening with your meetings today.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <Link to="/payments" className="w-full md:w-auto">
+            <Button
+              className="w-full h-12 rounded-xl px-6 bg-brand-green hover:bg-[#287854] text-white shadow-[0_8px_24px_rgba(32,116,80,0.25)] hover:shadow-[0_12px_32px_rgba(32,116,80,0.35)] transition-all"
             >
-              
-            </Link> */}
-            <CardHeader className="p-0 sm:p-6">
-              <CardTitle className="text-center text-2xl sm:text-left">
-                {userQuery[0]?.data?.user?.lastname}{" "}
-                {userQuery[0]?.data?.user?.firstname}
-              </CardTitle>
-              <CardDescription className="text-center font-medium sm:text-left">
-                {t("dashboard.currentPlan", { plan: currentPlanName })}
-              </CardDescription>
-            </CardHeader>
-          </div>
-          <CardContent className="mt-6 self-center sm:mt-10">
-            <Link to="/payments">
-              <Button className="w-full sm:w-auto">
-                {t("common.actions.managePlan")}
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <div className="flex flex-col items-center justify-evenly gap-8 sm:flex-row sm:gap-4">
-            <div className="flex flex-col gap-y-6 sm:gap-y-10">
-              <StatCard
-                value={userQuery[1]?.data?.total_rooms ?? 0}
-                name={t("dashboard.stats.totalRoom")}
-                icon={roomsIcon}
-              />
-              <StatCard
-                value={userQuery[1]?.data?.active_rooms ?? 0}
-                name={t("dashboard.stats.activeRoom")}
-                icon={activeIcon}
-              />
-            </div>
-            <Separator
-              orientation="vertical"
-              className="hidden h-[200px] sm:block"
-            />
-            <div className="flex flex-col gap-y-6 sm:gap-y-10">
-              <StatCard
-                value={
-                  (userQuery[1]?.data?.total_rooms ?? 0) -
-                  (userQuery[1]?.data?.active_rooms ?? 0)
-                }
-                name={t("dashboard.stats.inactiveRoom")}
-                icon={inactiveIcon}
-              />
-              <StatCard
-                value={userQuery[1]?.data?.private_rooms ?? 0}
-                name={t("dashboard.stats.privateRoom")}
-                icon={privateIcon}
-              />
-            </div>
-          </div>
-        </Card>
+              <CreditCard className="w-5 h-5 mr-2" />
+              {t("common.actions.managePlan", "Manage Plan")}
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-10">
-        <div className="max-w-full p-1 lg:max-w-[355px]">
-          <h2 className="mb-3 text-center font-semibold text-muted-foreground lg:text-left">
-            {t("dashboard.gettingStarted")}
-          </h2>
-          <div className="h-[200px] rounded-xl border border-border/70 p-1 shadow-sm transition-colors duration-300 sm:h-[188px]">
-            <iframe
-              className="rounded-xl"
-              width="100%"
-              height="100%"
-              src={gettingStartedVideoUrl}
-              title={t("dashboard.videoTitle")}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; web-share"
-              referrerPolicy="strict-origin-when-cross-origin"
-              allowFullScreen
-            ></iframe>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {/* Stat Cards */}
+        {[
+          { title: t("dashboard.stats.totalRoom", "Total Rooms"), value: roomsData?.total_rooms ?? 0, icon: Users, color: "text-brand-blue", bg: "bg-brand-blue/10" },
+          { title: t("dashboard.stats.activeRoom", "Active Rooms"), value: roomsData?.active_rooms ?? 0, icon: Calendar, color: "text-brand-green", bg: "bg-brand-green/10" },
+          { title: t("dashboard.stats.inactiveRoom", "Inactive Rooms"), value: (roomsData?.total_rooms ?? 0) - (roomsData?.active_rooms ?? 0), icon: Play, color: "text-[#CC505C]", bg: "bg-[#CC505C]/10" },
+          { title: t("dashboard.stats.privateRoom", "Private Rooms"), value: roomsData?.private_rooms ?? 0, icon: Lock, color: "text-amber-500", bg: "bg-amber-500/10" }
+        ].map((stat, i) => (
+          <div key={i} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${i * 100}ms` }}>
+            <Card className="rounded-2xl border-none shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden relative group h-full bg-surface">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-border to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">{stat.title}</p>
+                    <h3 className="text-3xl font-bold text-foreground">{stat.value}</h3>
+                  </div>
+                  <div className={`w-12 h-12 rounded-full ${stat.bg} flex items-center justify-center`}>
+                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Quick Actions / Schedule */}
+        <div className="lg:col-span-2 space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+          
+
+
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-foreground">Upcoming Meetings</h2>
+            <Link to="/rooms">
+              <Button variant="ghost" className="text-brand-green hover:text-brand-green-soft hover:bg-brand-green/10 rounded-lg">
+                View Calendar <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
+
+          <Card className="rounded-2xl border-border bg-surface shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] overflow-hidden">
+            <div className="divide-y divide-border">
+              {meetingsData.length === 0 ? (
+                <div className="p-5 flex justify-center text-muted-foreground text-sm">No upcoming meetings scheduled.</div>
+              ) : meetingsData.slice(0, 5).map((meeting, i) => {
+                const dotColor = ["bg-brand-blue", "bg-brand-green", "bg-amber-400"][i % 3];
+
+                return (
+                  <div key={i} className="flex items-center p-5 hover:bg-black/[0.02] transition-colors group">
+                    <div className="flex flex-col items-center justify-center w-20 text-center shrink-0">
+                      <span className="text-sm font-bold text-foreground">{meeting.time || "TBD"}</span>
+                      <span className="text-xs font-semibold text-muted-foreground">{meeting.date || ""}</span>
+                    </div>
+                    <div className={`w-1 h-12 rounded-full mx-4 opacity-70 ${dotColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-base font-semibold text-foreground truncate">{meeting.title}</h4>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                        <span className="flex items-center"><Clock className="w-3.5 h-3.5 mr-1" /> {t("dashboard.meetings.room", { room: meeting.roomname })}</span>
+                        <span className="w-1 h-1 rounded-full bg-border"></span>
+                        <span>Host: {meeting.hostname}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button onClick={() => handleCopy(meeting.id)} size="sm" variant="outline" className="rounded-lg h-9">
+                        <Copy className="w-4 h-4 mr-2" />
+                        ID
+                      </Button>
+                      <Link to="/join">
+                        <Button size="sm" className="rounded-lg h-9 bg-brand-green hover:bg-[#287854] text-white">
+                          Join
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
         </div>
 
-        <Card className="flex flex-col items-center">
-          <div className="mb-6 flex w-full flex-wrap justify-evenly gap-6 sm:gap-0">
-            <div className="flex flex-col items-center gap-y-4">
-              <div
-                onClick={() => setOpenSchedule(true)}
-                className="cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setOpenSchedule(true);
-                  }
-                }}
-              >
-                <div className="flex h-[65px] w-[65px] items-center justify-center rounded-xl bg-[#227451] shadow-sm transition-transform duration-300 hover:scale-[1.02]">
-                  <img src={calendar} alt={t("dashboard.quickActions.scheduleIconAlt")} />
+        {/* Right Column: Quick Start & Recent */}
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-700 delay-200">
+          <Card className="rounded-2xl border-none bg-gradient-to-br from-brand-blue to-[#001D5C] text-white overflow-hidden relative shadow-xl">
+            <div className="absolute top-[-20%] right-[-10%] w-[200px] h-[200px] rounded-full bg-white/10 blur-[40px] z-0" />
+            <div className="absolute bottom-[-10%] left-[-10%] w-[150px] h-[150px] rounded-full bg-brand-green/30 blur-[40px] z-0" />
+
+            <CardContent className="p-6 relative z-10">
+              <h3 className="text-lg font-bold mb-2">Instant Meeting</h3>
+              <p className="text-white/80 text-sm mb-6">
+                Connect and manage your meetings instantly.
+              </p>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => navigate('/join')}
+                    className="w-full bg-white text-brand-blue hover:bg-gray-100 h-12 rounded-xl font-bold transition-transform active:scale-95 px-2"
+                  >
+                    <img src={join} alt="Join" className="w-4 h-4 mr-2" style={{ filter: 'brightness(0) saturate(100%) invert(18%) sepia(90%) saturate(2250%) hue-rotate(209deg) brightness(97%) contrast(105%)' }} />
+                    Join
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/rooms')}
+                    className="w-full bg-brand-green text-white hover:bg-[#287854] h-12 rounded-xl font-bold transition-transform active:scale-95 px-2"
+                  >
+                    <img src={video} alt="Host" className="w-4 h-4 mr-2" style={{ filter: 'brightness(0) invert(1)' }} />
+                    Host
+                  </Button>
+                </div>
+                
+                <Button
+                  onClick={() => navigate('/dashboard/schedule/new')}
+                  variant="outline" className="w-full border-white/20 text-white hover:bg-white/10 h-12 rounded-xl bg-transparent hover:text-white"
+                >
+                  <CalendarDays className="w-4 h-4 mr-2" />
+                  Schedule for later
+                </Button>
+
+                <div className="pt-2">
+                  <p className="mb-1 text-xs font-semibold text-white/70 uppercase tracking-wider">{t("dashboard.personalMeetingId", "Personal Meeting ID")}</p>
+                  <div className="flex items-center justify-between bg-black/20 rounded-lg p-3">
+                    <p className="truncate text-sm font-medium">
+                      {personalRoomId ?? t("dashboard.noIdAvailable", "No ID Available")}
+                    </p>
+                    <Copy
+                      className="h-4 w-4 cursor-pointer text-white/70 hover:text-white transition-colors"
+                      onClick={() => handleCopy(personalRoomId)}
+                    />
+                  </div>
                 </div>
               </div>
-              {t("dashboard.quickActions.schedule")}
-            </div>
-            <div className="flex flex-col items-center gap-y-4">
-              <Link to="/join">
-                <div className="flex h-[65px] w-[65px] items-center justify-center rounded-xl bg-[#227451] shadow-sm transition-transform duration-300 hover:scale-[1.02]">
-                  <img src={join} alt={t("dashboard.quickActions.joinIconAlt")} />
-                </div>
-              </Link>
-              {t("dashboard.quickActions.join")}
-            </div>
-            <div className="flex flex-col items-center gap-y-4">
-              <Link to="/rooms">
-                <div className="flex h-[65px] w-[65px] items-center justify-center rounded-xl bg-[#012E89] shadow-sm transition-transform duration-300 hover:scale-[1.02]">
-                  <img src={video} alt={t("dashboard.quickActions.hostIconAlt")} />
-                </div>
-              </Link>
-              {t("dashboard.quickActions.host")}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <p className="mb-1 font-semibold">{t("dashboard.personalMeetingId")}</p>
-          <div className="flex items-center gap-x-2">
-            <p className="max-w-[200px] truncate text-base text-muted-foreground">
-              {userQuery[1]?.data?.personal_room?.id ?? t("dashboard.noIdAvailable")}
-            </p>
-            <Copy
-              className="h-5 w-5 cursor-pointer"
-              onClick={() => handleCopy(userQuery[1]?.data?.personal_room?.id)}
-            />
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex flex-col items-start justify-between space-y-2 sm:flex-row sm:items-end sm:space-y-0">
-            <div className="text-2xl font-semibold">
-              {t("dashboard.meetings.title")}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-foreground">Recent Activity</h2>
             </div>
-            <div>
-              <Link
-                to="/rooms"
-                className="text-sm font-semibold leading-7 text-[#2D8CFF]"
-              >
-                {t("common.actions.visitMeeting")}
-              </Link>
-            </div>
-          </div>
-          <div className="flex flex-col items-center justify-center">
-            <div className="my-6 w-full space-y-3 rounded-lg border border-border/70 bg-muted/50 p-3 text-foreground transition-colors duration-300 sm:my-10">
-              {userQuery[2]?.data?.data?.length === 0 ? (
-                <p className="text-center font-semibold">
-                  {t("dashboard.meetings.empty")}
-                </p>
-              ) : (
-                userQuery[2]?.data?.data?.map((meeting) => (
-                  <div
-                    key={meeting.id}
-                    className="rounded-lg border border-border/70 bg-background p-3 shadow-sm transition-colors duration-300"
-                  >
-                    <p className="text-base font-semibold">{meeting.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("dashboard.meetings.room", { room: meeting.roomname })}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("dashboard.meetings.host", { host: meeting.hostname })}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {meeting.date} {" \u2022 "} {meeting.time}
-                    </p>
+            <div className="space-y-3">
+              {[
+                { title: "Test Audio and Video", icon: Video, action: () => navigate("/rooms") },
+                { title: "Manage Plan", icon: CreditCard, action: () => navigate("/payments") },
+                { title: "Join Meeting", icon: Users, action: () => navigate("/join") }
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-border bg-surface hover:border-brand-blue/40 hover:shadow-sm transition-all group cursor-pointer" onClick={item.action}>
+                  <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:bg-brand-blue/10 transition-colors">
+                    <item.icon className="w-5 h-5 text-brand-blue" />
                   </div>
-                ))
-              )}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-foreground truncate">{item.title}</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">Quick Action</p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-muted-foreground hover:text-brand-blue"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
-
-            <Link to="/rooms" className="w-full sm:w-auto">
-              <Button variant="outline" className="w-full sm:w-auto">
-                {t("common.actions.testAudioAndVideo")}
-              </Button>
-            </Link>
           </div>
-        </Card>
+        </div>
       </div>
-
-      <Dialog open={openSchedule} onOpenChange={setOpenSchedule}>
-        <DialogContent className="top-[50%] h-[90%] w-[90%] overflow-y-scroll md:w-[calc(100%-4rem)] md:max-w-3xl lg:w-[50%]">
-          <DialogTitle>{t("dashboard.scheduleDialog.title")}</DialogTitle>
-          <DialogDescription>
-            {t("dashboard.scheduleDialog.description")}
-          </DialogDescription>
-          <MeetingForm setOpenDialog={setOpenSchedule} />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { fetchKyc, getBankList } from "../api/donationApi";
 import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import BusinessVerificationFlow from "./BusinessVerificationFlow";
 import DonationDashboard from "./DonationDashboard";
 import IndividualDonation from "./IndividualDonation";
@@ -39,7 +39,7 @@ export default function Donations() {
   }
 
   return (
-    <div className="mt-14 flex flex-1 items-center justify-center py-10">
+    <div className="flex flex-1 items-center justify-center py-20 px-4 animate-in fade-in duration-500 min-h-[calc(100vh-100px)]">
       {step === "card" &&
         !kycStatus?.success &&
         (kycStatus?.type === "business" ? (
@@ -63,24 +63,26 @@ export default function Donations() {
       )}
 
       {step === "success" && (
-        <Card className="w-[360px] space-y-4 rounded-2xl border border-gray-200 p-8 text-center shadow-md dark:border-border md:w-[420px] lg:w-[360px]">
-          <div className="flex justify-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/15">
-              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-300" />
+        <Card className="w-full max-w-[420px] rounded-2xl border-border/60 bg-surface shadow-lg text-center overflow-hidden">
+          <CardContent className="p-10">
+            <div className="flex justify-center mb-6">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-brand-green/10">
+                <CheckCircle className="h-10 w-10 text-brand-green" />
+              </div>
             </div>
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">
-            {t("donations.success.title")}
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-muted-foreground">
-            {t("donations.success.description")}
-          </p>
-          <Button
-            className="rounded-lg bg-green-600 px-6 py-2 text-white hover:bg-green-700"
-            onClick={() => setStep("dashboard")}
-          >
-            {t("common.actions.goToDashboard")}
-          </Button>
+            <h2 className="text-2xl font-bold text-foreground mb-3">
+              {t("donations.success.title", "Verification Submitted!")}
+            </h2>
+            <p className="text-sm text-muted-foreground mb-8 leading-relaxed">
+              {t("donations.success.description", "Your KYC details have been successfully submitted and are currently under review. We will notify you once verified.")}
+            </p>
+            <Button
+              className="w-full h-12 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-[0_6px_20px_rgba(32,116,80,0.2)] font-semibold text-base transition-all"
+              onClick={() => setStep("dashboard")}
+            >
+              {t("common.actions.goToDashboard", "Go to Dashboard")}
+            </Button>
+          </CardContent>
         </Card>
       )}
     </div>

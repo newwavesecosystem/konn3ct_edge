@@ -1,9 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { 
+  CalendarPlus, 
+  UploadCloud, 
+  ChevronLeft, 
+  Calendar as CalendarIcon, 
+  Clock, 
+  Globe, 
+  MapPin, 
+  User, 
+  FileText, 
+  Tag, 
+  DollarSign, 
+  Bell 
+} from "lucide-react";
 
 import { createPreRegEvent, getRooms } from "../api/eventsApi";
 import { useToast } from "../hooks/use-toast";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
 
 const getTimezones = () =>
   Intl.supportedValuesOf("timeZone").map((timezone) => timezone);
@@ -13,8 +32,8 @@ const CreateEvents = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const getSelectedFileLabel = (name) =>
-    t("events.create.selectedFile", { name });
+  
+  const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -116,7 +135,7 @@ const CreateEvents = () => {
     event.preventDefault();
 
     if (!formData.logo) {
-      setLogoError(t("events.create.validation.logoRequired"));
+      setLogoError(t("events.create.validation.logoRequired", "Please upload an event logo."));
       return;
     }
 
@@ -142,19 +161,19 @@ const CreateEvents = () => {
       const response = await createPreRegEvent(data);
 
       if (response?.success) {
-        toast({ description: t("events.create.toasts.created") });
+        toast({ description: t("events.create.toasts.created", "Event created successfully!") });
         navigate("/events");
       } else {
         toast({
           description:
-            response?.message || t("events.create.toasts.createFailed"),
+            response?.message || t("events.create.toasts.createFailed", "Failed to create event."),
           variant: "destructive",
         });
       }
     } catch (error) {
       console.error("Error creating event:", error);
       toast({
-        description: t("events.create.toasts.createError"),
+        description: t("events.create.toasts.createError", "An unexpected error occurred."),
         variant: "destructive",
       });
     } finally {
@@ -163,296 +182,333 @@ const CreateEvents = () => {
   };
 
   return (
-    <div className="min-h-screen w-full px-10 py-10 md:px-6 lg:px-10">
-      <div className="w-full rounded-2xl border border-gray-100 bg-white p-10 shadow-sm dark:border-border dark:bg-card md:p-6 lg:p-10">
-        <div className="mb-8 flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/15">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 text-green-600 dark:text-green-300"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10m-12 8h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-800 dark:text-foreground">
-              {t("events.create.title")}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-muted-foreground">
-              {t("events.create.description")}
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="w-full space-y-6">
-          <div className="max-w-5xl">
+    <div className="w-full flex-1 p-4 md:p-6 lg:p-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
+      <Card className="w-full rounded-2xl border-border/60 bg-surface shadow-md overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 bg-black/[0.01] p-6 sm:px-8">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-green/10 shrink-0">
+              <CalendarPlus className="h-6 w-6 text-brand-green" />
+            </div>
             <div>
-              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.eventTitle")}
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                placeholder={t("events.create.placeholders.eventTitle")}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
-              />
+              <CardTitle className="text-xl font-bold text-foreground">
+                {t("events.create.title", "Create New Event")}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t("events.create.description", "Set up your pre-registered event details.")}
+              </p>
             </div>
+          </div>
+          <Button variant="outline" className="h-10 rounded-xl hidden sm:flex" onClick={() => navigate("/events")}>
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            {t("common.actions.goBack", "Back")}
+          </Button>
+        </CardHeader>
 
-            <div className="mt-4">
-              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.hostName")}
-              </label>
-              <input
-                type="text"
-                name="host"
-                value={formData.host}
-                onChange={handleChange}
-                placeholder={t("events.create.placeholders.hostName")}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
-              />
-            </div>
+        <CardContent className="p-6 sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-10">
+            
+            {/* 1. Basic Details */}
+            <section>
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-brand-blue" />
+                1. Basic Details
+              </h3>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="md:col-span-2 space-y-2">
+                  <Label className="text-sm font-semibold">{t("events.create.fields.eventTitle", "Event Title")}</Label>
+                  <Input
+                    type="text"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleChange}
+                    placeholder={t("events.create.placeholders.eventTitle", "e.g. Annual Tech Summit")}
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30"
+                    required
+                  />
+                </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.selectRoom")}
-                </label>
-                <select
-                  name="room"
-                  value={formData.room}
-                  onChange={handleChange}
-                  disabled={roomLoading}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
-                >
-                  <option value="">
-                    {roomLoading
-                      ? t("events.create.states.loadingRooms")
-                      : t("events.create.fields.selectRoom")}
-                  </option>
-                  {Array.isArray(rooms) &&
-                    rooms.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.room_name ||
-                          room.name ||
-                          room.label ||
-                          getRoomFallbackLabel(room.id)}
-                      </option>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.hostName", "Host Name")}
+                  </Label>
+                  <Input
+                    type="text"
+                    name="host"
+                    value={formData.host}
+                    onChange={handleChange}
+                    placeholder={t("events.create.placeholders.hostName", "Your Name or Company")}
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.selectRoom", "Select Room")}
+                  </Label>
+                  <select
+                    name="room"
+                    value={formData.room}
+                    onChange={handleChange}
+                    disabled={roomLoading}
+                    className="flex h-11 w-full rounded-xl border border-border/60 bg-black/[0.02] px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    required
+                  >
+                    <option value="">
+                      {roomLoading
+                        ? t("events.create.states.loadingRooms", "Loading rooms...")
+                        : t("events.create.fields.selectRoom", "Choose a room")}
+                    </option>
+                    {Array.isArray(rooms) &&
+                      rooms.map((room) => (
+                        <option key={room.id} value={room.id}>
+                          {room.room_name || room.name || room.label || getRoomFallbackLabel(room.id)}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2 space-y-2">
+                  <Label className="text-sm font-semibold">{t("events.create.fields.aboutEvent", "About the Event")}</Label>
+                  <Textarea
+                    name="about"
+                    rows={4}
+                    value={formData.about}
+                    onChange={handleChange}
+                    placeholder={t("events.create.placeholders.aboutEvent", "Describe what your event is about...")}
+                    className="rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 resize-none"
+                    required
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* 2. Scheduling */}
+            <section>
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-brand-green" />
+                2. Scheduling
+              </h3>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.eventDate", "Event Date")}
+                  </Label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      name="date"
+                      value={formData.date}
+                      onChange={handleChange}
+                      className="w-full h-11 rounded-xl border border-border/60 bg-black/[0.02] px-3 pl-10 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30"
+                      required
+                    />
+                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.eventTime", "Event Time")}
+                  </Label>
+                  <div className="relative">
+                    <input
+                      type="time"
+                      name="time"
+                      value={formData.time}
+                      onChange={handleChange}
+                      className="w-full h-11 rounded-xl border border-border/60 bg-black/[0.02] px-3 pl-10 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30"
+                      required
+                    />
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.timeZone", "Timezone")}
+                  </Label>
+                  <select
+                    name="timezone"
+                    value={formData.timezone}
+                    onChange={handleChange}
+                    className="flex h-11 w-full rounded-xl border border-border/60 bg-black/[0.02] px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30"
+                    required
+                  >
+                    <option value="">{t("events.create.placeholders.selectTimezone", "Select Timezone")}</option>
+                    {timezones.map((timezone) => (
+                      <option key={timezone} value={timezone}>{timezone}</option>
                     ))}
-                </select>
+                  </select>
+                </div>
               </div>
+            </section>
 
-              <div>
-                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.eventDate")}
-                </label>
-                <input
-                  type="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
-                />
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.eventTime")}
-                </label>
-                <input
-                  type="time"
-                  name="time"
-                  value={formData.time}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
-                />
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {t("events.create.fields.eventType")}
-                  </label>
+            {/* 3. Ticketing */}
+            <section>
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+                <Tag className="h-5 w-5 text-amber-500" />
+                3. Ticketing & Reminders
+              </h3>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+                
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("events.create.fields.eventType", "Event Type")}</Label>
                   <select
                     name="free"
                     value={formData.free}
                     onChange={handleChange}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground"
+                    className="flex h-11 w-full rounded-xl border border-border/60 bg-black/[0.02] px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30"
                   >
-                    <option value="1">{t("events.create.eventTypes.free")}</option>
-                    <option value="0">{t("events.create.eventTypes.paid")}</option>
+                    <option value="1">{t("events.create.eventTypes.free", "Free")}</option>
+                    <option value="0">{t("events.create.eventTypes.paid", "Paid")}</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {t("events.create.fields.currency")}
-                  </label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">{t("events.create.fields.currency", "Currency")}</Label>
                   <select
                     name="currency"
                     value={formData.currency}
                     onChange={handleChange}
                     disabled={formData.free === "1"}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground"
+                    className="flex h-11 w-full rounded-xl border border-border/60 bg-black/[0.02] px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30 disabled:opacity-50"
                   >
                     <option value="NGN">NGN</option>
                     <option value="USD">USD</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                    {t("events.create.fields.amount")}
-                  </label>
-                  <input
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.amount", "Ticket Price")}
+                  </Label>
+                  <Input
                     type="number"
                     name="amount"
                     value={formData.amount}
                     onChange={handleChange}
                     disabled={formData.free === "1"}
-                    placeholder={t("events.create.placeholders.amount")}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm transition-colors dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
+                    placeholder={formData.free === "1" ? "Free" : t("events.create.placeholders.amount", "0.00")}
+                    className="h-11 rounded-xl bg-black/[0.02] border-border/60 focus-visible:ring-brand-green/30 disabled:opacity-50"
+                    required={formData.free === "0"}
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                  {t("events.create.fields.timeZone")}
-                </label>
-                <select
-                  name="timezone"
-                  value={formData.timezone}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <Bell className="h-4 w-4 text-muted-foreground" />
+                    {t("events.create.fields.setReminder", "Auto-Reminder")}
+                  </Label>
+                  <select
+                    name="reminder"
+                    value={formData.reminder}
+                    onChange={handleChange}
+                    className="flex h-11 w-full rounded-xl border border-border/60 bg-black/[0.02] px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-green/30"
+                    required
+                  >
+                    <option value="">{t("events.create.placeholders.selectReminder", "Select Reminder")}</option>
+                    <option value="2">{t("events.create.reminders.twoDays", "2 Days before")}</option>
+                    <option value="1">{t("events.create.reminders.oneDay", "1 Day before")}</option>
+                    <option value="0.5">{t("events.create.reminders.twelveHours", "12 Hours before")}</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            {/* 4. Branding */}
+            <section>
+              <h3 className="mb-5 text-lg font-bold text-foreground border-b border-border/40 pb-2 flex items-center gap-2">
+                <UploadCloud className="h-5 w-5 text-brand-green" />
+                4. Branding
+              </h3>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">{t("events.create.fields.uploadLogo", "Event Banner / Logo")}</Label>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleFileDragOver}
+                  onDrop={handleFileDrop}
+                  className={`group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-10 transition-colors ${
+                    logoError
+                      ? "border-red-400 bg-red-50/50 dark:border-red-500/60 dark:bg-red-500/5"
+                      : "border-border/60 bg-black/[0.02] hover:border-brand-green/50 hover:bg-black/[0.04]"
+                  }`}
                 >
-                  <option value="">{t("events.create.placeholders.selectTimezone")}</option>
-                  {timezones.map((timezone) => (
-                    <option key={timezone} value={timezone}>
-                      {timezone}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.aboutEvent")}
-              </label>
-              <textarea
-                name="about"
-                rows="4"
-                value={formData.about}
-                onChange={handleChange}
-                placeholder={t("events.create.placeholders.aboutEvent")}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground dark:focus:ring-ring/30"
-              />
-            </div>
-
-            <div className="mt-4">
-              <label className="mb-1 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.setReminder")}
-              </label>
-              <select
-                name="reminder"
-                value={formData.reminder}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition-colors focus:border-green-500 focus:ring-2 focus:ring-green-100 dark:border-input dark:bg-background dark:text-foreground dark:focus:ring-ring/30"
-              >
-                <option value="">{t("events.create.placeholders.selectReminder")}</option>
-                {[
-                  { value: "2", label: t("events.create.reminders.twoDays") },
-                  { value: "1", label: t("events.create.reminders.oneDay") },
-                  { value: "0.5", label: t("events.create.reminders.twelveHours") },
-                ].map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-4">
-              <label className="mb-2 block text-sm text-gray-700 dark:text-foreground">
-                {t("events.create.fields.uploadLogo")}
-              </label>
-              <div
-                className={`rounded-lg border-2 border-dashed p-6 text-center ${
-                  logoError
-                    ? "border-red-400 dark:border-red-500/60"
-                    : "border-gray-300 dark:border-border"
-                }`}
-                onDragOver={handleFileDragOver}
-                onDrop={handleFileDrop}
-              >
-                <input
-                  id="fileUpload"
-                  name="logo"
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <label
-                  htmlFor="fileUpload"
-                  className="cursor-pointer text-sm text-gray-500 dark:text-muted-foreground"
-                >
-                  <span className="mb-1 block">
-                    {t("events.create.placeholders.selectOrDropFile")}
+                  <input
+                    ref={fileInputRef}
+                    id="fileUpload"
+                    name="logo"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-background shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                    <UploadCloud className="h-6 w-6 text-brand-green" />
+                  </div>
+                  
+                  <span className="mb-1 block text-sm font-semibold text-foreground">
+                    {t("events.create.placeholders.selectOrDropFile", "Click to upload or drag and drop")}
                   </span>
-                  <span className="text-xs text-gray-400 dark:text-muted-foreground/80">
-                    {t("events.create.fileHelp")}
+                  <span className="text-xs text-muted-foreground text-center">
+                    {t("events.create.fileHelp", "SVG, PNG, JPG or PDF (max. 800x400px)")}
                   </span>
-                </label>
-              </div>
-              {formData.logo ? (
-                <p className="mt-2 text-xs text-gray-500 dark:text-muted-foreground">
-                  {getSelectedFileLabel(formData.logo.name)}
-                </p>
-              ) : null}
-              {logoError ? (
-                <p className="mt-2 text-xs text-red-500">{logoError}</p>
-              ) : null}
-              <p className="mt-1 text-xs text-gray-400 dark:text-muted-foreground/80">
-                {t("events.create.logoRecommendation")}
-              </p>
-            </div>
 
-            <div className="flex justify-end gap-3 pt-6">
-              <button
-                type="button"
+                  {formData.logo && (
+                    <div className="absolute inset-0 bg-surface/90 backdrop-blur-sm flex flex-col items-center justify-center rounded-2xl p-4">
+                      <div className="h-12 w-12 rounded-full bg-brand-green/10 flex items-center justify-center mb-2">
+                        <UploadCloud className="h-6 w-6 text-brand-green" />
+                      </div>
+                      <p className="text-sm font-bold text-foreground truncate max-w-full">
+                        {formData.logo.name}
+                      </p>
+                      <p className="text-xs text-brand-green mt-1 font-medium">Click or drag to replace</p>
+                    </div>
+                  )}
+                </div>
+                {logoError && <p className="mt-2 text-xs font-semibold text-red-500">{logoError}</p>}
+              </div>
+            </section>
+
+            <div className="pt-6 border-t border-border/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <Button 
+                variant="ghost" 
+                className="hidden sm:flex rounded-xl" 
                 onClick={() => navigate("/events")}
-                className="rounded-lg bg-red-100 px-5 py-2 text-red-600 transition hover:bg-red-200 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
+                type="button"
               >
-                {t("common.actions.cancel")}
-              </button>
-              <button
+                {t("common.actions.cancel", "Cancel")}
+              </Button>
+              <Button 
                 type="submit"
                 disabled={loading}
-                className={`rounded-lg px-5 py-2 text-white transition ${
-                  loading ? "bg-green-400" : "bg-green-600 hover:bg-green-700"
-                }`}
+                className="w-full sm:w-auto h-12 px-8 rounded-xl bg-brand-green hover:bg-[#287854] text-white shadow-[0_6px_20px_rgba(32,116,80,0.2)] font-semibold transition-all"
               >
-                {loading
-                  ? t("events.create.actions.submitting")
-                  : t("common.actions.submit")}
-              </button>
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {t("events.create.actions.submitting", "Creating...")}
+                  </div>
+                ) : (
+                  <>
+                    <CalendarPlus className="mr-2 h-5 w-5" />
+                    {t("common.actions.submit", "Create Event")}
+                  </>
+                )}
+              </Button>
             </div>
-          </div>
-        </form>
-      </div>
+            
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };

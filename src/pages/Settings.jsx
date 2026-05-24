@@ -20,6 +20,7 @@ import { Tabs, TabsTrigger, TabsList, TabsContent } from "../components/ui/tabs"
 import { SUPPORTED_LANGUAGES } from "../constants/languages";
 import useTheme from "../hooks/useTheme";
 import { capitalize, cn } from "../lib/utils";
+import SettingsIcon from "../assets/components/SettingsIcon";
 
 const Settings = () => {
   const { t, i18n } = useTranslation();
@@ -63,11 +64,16 @@ const Settings = () => {
     <section className="container mx-auto page">
       <Card className="h-full overflow-hidden border-border/70 bg-card/95 px-0 py-0 shadow-sm transition-colors duration-300">
         <div className="flex items-center gap-20 p-4 pt-8 md:flex-col md:items-start md:gap-4 lg:flex-row lg:items-center lg:gap-20 lg:px-8 lg:pt-10">
-          <div>
-            <h3 className="text-xl font-semibold">{t("settings.title")}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("settings.description")}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500">
+              <SettingsIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold">{t("settings.title")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("settings.description")}
+              </p>
+            </div>
           </div>
         </div>
         <Tabs defaultValue="general" className="w-full">

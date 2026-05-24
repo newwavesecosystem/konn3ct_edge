@@ -4,6 +4,9 @@ module.exports = {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Geist", "Inter", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -49,6 +52,20 @@ module.exports = {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // Brand Colors from modern design
+        brand: {
+          blue: "var(--color-brand-blue)",
+          green: "var(--color-brand-green)",
+          "green-soft": "var(--color-brand-green-soft)",
+          "green-muted": "var(--color-brand-green-muted)",
+        },
+        page: {
+          bg: "var(--color-page-bg)",
+        },
+        meeting: {
+          bg: "var(--color-meeting-bg)",
+        },
+        surface: "var(--color-surface)",
       },
     },
   },

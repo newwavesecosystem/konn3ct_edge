@@ -2,14 +2,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useState } from "react";
-
 import { Button } from "../../components/ui/button";
 import {
   Form,
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
@@ -17,10 +15,10 @@ import { useMutation } from "@tanstack/react-query";
 import { updatePassword } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-export function PasswordForm() {
+export function PasswordForm({ onCancel }) {
   const { t } = useTranslation();
   const formSchema = z
     .object({
@@ -38,6 +36,7 @@ export function PasswordForm() {
       message: t("profile.passwordForm.validation.passwordsMustMatch"),
       path: ["confirmPassword"],
     });
+    
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -75,26 +74,27 @@ export function PasswordForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
         <FormField
           control={form.control}
           name="currentPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("profile.passwordForm.currentPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type={showCurrent ? "text" : "password"}
                     placeholder={t("profile.passwordForm.currentPasswordPlaceholder")}
+                    className="pl-9 h-11 bg-black/[0.02]"
                     {...field}
                   />
                   <button
                     type="button"
                     onClick={() => setShowCurrent(!showCurrent)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </FormControl>
@@ -108,20 +108,21 @@ export function PasswordForm() {
           name="newPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("profile.passwordForm.newPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type={showNew ? "text" : "password"}
                     placeholder={t("profile.passwordForm.newPasswordPlaceholder")}
+                    className="pl-9 h-11 bg-black/[0.02]"
                     {...field}
                   />
                   <button
                     type="button"
                     onClick={() => setShowNew(!showNew)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </FormControl>
@@ -135,20 +136,21 @@ export function PasswordForm() {
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("profile.passwordForm.confirmNewPassword")}</FormLabel>
               <FormControl>
                 <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type={showConfirm ? "text" : "password"}
                     placeholder={t("profile.passwordForm.confirmNewPasswordPlaceholder")}
+                    className="pl-9 h-11 bg-black/[0.02]"
                     {...field}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirm(!showConfirm)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
-                    {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </FormControl>
@@ -157,9 +159,27 @@ export function PasswordForm() {
           )}
         />
 
-        <Button type="submit" size="lg">
-          {t("profile.passwordForm.submit")}
-        </Button>
+        <div className="flex justify-end gap-3 pt-2">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              className="rounded-lg h-9"
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            type="submit"
+            size="sm"
+            className="rounded-lg h-9 bg-brand-green hover:bg-[#287854] text-white"
+            disabled={passwordMutation.isPending}
+          >
+            {passwordMutation.isPending ? t("profile.form.updating", "Updating...") : t("profile.passwordForm.submit", "Update Password")}
+          </Button>
+        </div>
       </form>
     </Form>
   );

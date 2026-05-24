@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, updateProfile } from "../../api/userApi";
 import { useToast } from "../../hooks/use-toast";
+import { Camera, User, Phone } from "lucide-react";
 
 export function ProfileForm() {
   const { t } = useTranslation();
@@ -37,6 +38,7 @@ export function ProfileForm() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [preview, setPreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   const userQuery = useQuery({
     queryKey: ["profile"],
@@ -121,10 +123,10 @@ export function ProfileForm() {
     form.setValue("profileImage", file);
   };
 
-  if (userQuery.isLoading) return null;
+  if (userQuery.isLoading) return <div className="p-6">Loading profile...</div>;
   if (userQuery.isError) {
     return (
-      <div className="text-sm text-muted-foreground">
+      <div className="p-6 text-sm text-muted-foreground">
         {t("profile.form.errors.load")}
       </div>
     );
@@ -134,75 +136,103 @@ export function ProfileForm() {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-6"
         encType="multipart/form-data"
       >
-        <div className="flex flex-col items-center gap-3">
-          <img
-            src={preview || profileUser.profile_photo_url || "/avatar.png"}
-            alt={t("profile.form.imageAlt")}
-            className="h-24 w-24 rounded-full object-cover"
-          />
-
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="text-xs file:cursor-pointer file:rounded-full file:border file:px-4 file:py-1"
-          />
+        {/* Modern Header Gradient & Avatar */}
+        <div className="h-24 bg-gradient-to-r from-brand-blue to-brand-green relative w-full">
+          <div className="absolute -bottom-10 left-6">
+            <div className="relative">
+              <img
+                src={preview || profileUser.profile_photo_url || "/avatar.png"}
+                alt={t("profile.form.imageAlt")}
+                className="h-20 w-20 rounded-2xl object-cover bg-white shadow-xl ring-4 ring-surface"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-surface border border-border/60 shadow-sm hover:bg-black/[0.04] transition-colors"
+              >
+                <Camera className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleImageChange}
+                className="hidden"
+              />
+            </div>
+          </div>
         </div>
 
-        <FormField
-          control={form.control}
-          name="firstname"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("profile.form.firstName")}</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder={profileUser.firstname ?? ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="pt-14 p-6 space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="firstname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    {t("profile.form.firstName")}
+                  </FormLabel>
+                  <FormControl>
+                    <Input className="h-11 bg-black/[0.02]" {...field} placeholder={profileUser.firstname ?? ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-        <FormField
-          control={form.control}
-          name="lastname"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("profile.form.lastName")}</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder={profileUser.lastname ?? ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+            <FormField
+              control={form.control}
+              name="lastname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    {t("profile.form.lastName")}
+                  </FormLabel>
+                  <FormControl>
+                    <Input className="h-11 bg-black/[0.02]" {...field} placeholder={profileUser.lastname ?? ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-        <FormField
-          control={form.control}
-          name="phone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("profile.form.phone")}</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder={profileUser.phone ?? ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                    {t("profile.form.phone")}
+                  </FormLabel>
+                  <FormControl>
+                    <Input className="h-11 bg-black/[0.02]" {...field} placeholder={profileUser.phone ?? ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={profileMutation.isPending}
-        >
-          {profileMutation.isPending
-            ? t("profile.form.updating")
-            : t("profile.form.submit")}
-        </Button>
+          <div className="flex justify-end pt-2 border-t border-border/40">
+            <Button
+              type="submit"
+              className="h-10 rounded-xl px-6 bg-brand-green hover:bg-[#287854] text-white"
+              disabled={profileMutation.isPending}
+            >
+              {profileMutation.isPending
+                ? t("profile.form.updating")
+                : t("profile.form.submit")}
+            </Button>
+          </div>
+        </div>
       </form>
     </Form>
   );
