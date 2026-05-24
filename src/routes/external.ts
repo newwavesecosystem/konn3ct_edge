@@ -1,0 +1,254 @@
+import { Router, Request, Response } from 'express';
+import { db } from '../db';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import Redis from 'ioredis';
+import { logger } from '../logger';
+
+const router = Router();
+const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || "default-insecure-key-change-me";
+const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key";
+
+// Initialize Redis for status checks
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redis = new Redis(redisUrl, {
+  retryStrategy: (times) => {
+    if (process.env.NODE_ENV !== 'production') return null;
+    return Math.min(times * 50, 2000);
+  },
+  maxRetriesPerRequest: 1,
+  connectTimeout: 2000
+});
+redis.on("error", () => {});
+
+// Middleware to validate the API key
+function requireApiKey(req: Request, res: Response, next: Function) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (token !== EXTERNAL_API_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
+// Generate a random slug
+function generateRoomSlug() {
+  const adjectives = ["quick", "bright", "smart", "cool", "calm", "vibrant", "blue", "swift"];
+  const nouns = ["eagle", "fox", "river", "mountain", "ocean", "sky", "forest", "star"];
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const num = Math.floor(Math.random() * 1000);
+  return `${adj}-${noun}-${num}`;
+}
+
+router.use(requireApiKey);
+
+// 1. Create Meeting
+router.post('/meetings', async (req, res) => {
+  try {
+    const { name, ownerEmail, isWaitingRoomEnabled } = req.body;
+    const finalEmail = ownerEmail || "api_guest@conn3ct.com";
+    const roomName = name || "API Created Meeting";
+
+    // Lookup or create owner
+    let owner = await db.user.findUnique({ where: { email: finalEmail } });
+    if (!owner) {
+      const randomPassword = crypto.randomUUID();
+      const passwordHash = await bcrypt.hash(randomPassword, 10);
+      owner = await db.user.create({
+        data: {
+          email: finalEmail,
+          name: finalEmail.split('@')[0],
+          passwordHash
+        }
+      });
+    }
+
+    const roomSlug = generateRoomSlug();
+
+    // Create room in database
+    const room = await db.room.create({
+      data: {
+        name: roomName,
+        slug: roomSlug,
+        ownerId: owner.id,
+        isWaitingRoomEnabled: isWaitingRoomEnabled !== false, // default true
+      }
+    });
+
+    res.json({
+      roomId: room.slug,
+      message: "Meeting created successfully"
+    });
+  } catch (error) {
+    logger.error("External API /meetings error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// 2. Generate Join Token
+router.post('/meetings/join', async (req, res) => {
+  try {
+    const { roomId, name, email, role, isMobile, camera, mic } = req.body;
+
+    if (!roomId) {
+      return res.status(400).json({ error: "Missing roomId" });
+    }
+    if (!name || name.trim() === "") {
+      return res.status(400).json({ error: "Missing name" });
+    }
+
+    // Verify room exists in DB
+    const room = await db.room.findUnique({ where: { slug: roomId } });
+    if (!room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    const trustedRole = role || "attendee";
+    const finalEmail = email?.trim() || "guest@conn3ct.com";
+
+    // Lookup or create joining user to assign them a proper DB userId
+    let user = await db.user.findUnique({ where: { email: finalEmail } });
+    if (!user) {
+      const randomPassword = crypto.randomUUID();
+      const passwordHash = await bcrypt.hash(randomPassword, 10);
+      user = await db.user.create({
+        data: {
+          email: finalEmail,
+          name: name.trim(),
+          passwordHash
+        }
+      });
+    }
+
+    const sessionData = {
+      userId: user.id, // Pass actual DB user ID
+      roomId: room.slug,
+      name: name.trim(),
+      email: finalEmail,
+      role: trustedRole,
+      isMobile: !!isMobile,
+      camera: camera !== false,
+      mic: mic !== false,
+    };
+
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
+    const joinPath = `/meeting/${room.slug}?t=${sessionToken}`;
+
+    res.json({
+      sessionToken,
+      joinPath,
+      message: "Join token generated successfully"
+    });
+  } catch (error) {
+    logger.error("External API /meetings/join error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// 3. Create and Join
+router.post('/meetings/create-and-join', async (req, res) => {
+  try {
+    const { name, email, role, isMobile, camera, mic, roomName } = req.body;
+
+    if (!name || name.trim() === "") {
+      return res.status(400).json({ error: "Missing name" });
+    }
+
+    const roomSlug = generateRoomSlug();
+    const trustedRole = role || "host";
+    const finalEmail = email?.trim() || "host@conn3ct.com";
+    const finalRoomName = roomName || "API Created Meeting";
+
+    // Lookup or create owner
+    let owner = await db.user.findUnique({ where: { email: finalEmail } });
+    if (!owner) {
+      const randomPassword = crypto.randomUUID();
+      const passwordHash = await bcrypt.hash(randomPassword, 10);
+      owner = await db.user.create({
+        data: {
+          email: finalEmail,
+          name: name.trim(),
+          passwordHash
+        }
+      });
+    }
+
+    // Create room in database
+    const room = await db.room.create({
+      data: {
+        name: finalRoomName,
+        slug: roomSlug,
+        ownerId: owner.id,
+      }
+    });
+
+    const sessionData = {
+      userId: owner.id,
+      roomId: room.slug,
+      name: name.trim(),
+      email: finalEmail,
+      role: trustedRole,
+      isMobile: !!isMobile,
+      camera: camera !== false,
+      mic: mic !== false,
+    };
+
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
+    const joinPath = `/meeting/${room.slug}?t=${sessionToken}`;
+
+    res.json({
+      roomId: room.slug,
+      sessionToken,
+      joinPath,
+      message: "Meeting created and host token generated successfully"
+    });
+  } catch (error) {
+    logger.error("External API /meetings/create-and-join error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// 4. Meeting Status
+router.get('/meetings/:roomId/status', async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    if (!roomId) {
+      return res.status(400).json({ error: "Missing roomId parameter" });
+    }
+
+    let participantsStr = null;
+    try {
+      participantsStr = await redis.get(`room:${roomId}:participants`);
+    } catch (e) {
+      logger.warn("Failed to get room status from Redis", e);
+      return res.status(503).json({ error: "Status service unavailable" });
+    }
+
+    if (!participantsStr) {
+      return res.json({
+        isRunning: false,
+        participantCount: 0,
+        participants: []
+      });
+    }
+
+    const participants = JSON.parse(participantsStr);
+    
+    res.json({
+      isRunning: true,
+      participantCount: participants.length,
+      participants
+    });
+
+  } catch (error) {
+    logger.error("External API /status error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+export { router as externalRouter };

@@ -19,6 +19,7 @@ import { schedulingRouter } from './routes/scheduling';
 import { dashboardRouter } from './routes/dashboard';
 import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
+import { externalRouter } from './routes/external';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/api/scheduling', schedulingRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/telephony', telephonyRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/external/v1', externalRouter);
 
 // Basic 404 handler
 app.use((req, res) => {
