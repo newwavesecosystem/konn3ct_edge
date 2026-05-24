@@ -137,10 +137,21 @@ export function MeetingProvider({
   let storedJoinInfo: any = null;
   if (typeof window !== "undefined") {
     try {
-      const storedStr = sessionStorage.getItem("conn3ct_join_info");
-      if (storedStr) storedJoinInfo = JSON.parse(storedStr);
+      const searchParams = new URLSearchParams(window.location.search);
+      let sessionToken = searchParams.get("t");
+      
+      // If external API passed a token in the URL, save it to sessionStorage
+      if (sessionToken) {
+        sessionStorage.setItem("conn3ct_session_token", sessionToken);
+        // Clean the URL without triggering a page reload
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
+      
+      // We no longer read raw join info from sessionStorage, we only care about the sessionToken.
+      // But we still need fallback logic for queryName etc. if missing.
     } catch (e) {
-      console.error("Failed to parse join info", e);
+      console.error("Failed to parse external token", e);
     }
   }
 
