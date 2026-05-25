@@ -761,6 +761,10 @@ export function MeetingProvider({
               if (webrtcClient.current?.roomName) {
                 setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
               }
+            } else if (state === 'waiting') {
+              if (webrtcClient.current?.roomName) {
+                setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
+              }
             } else if (state === 'kicked') {
               toast.error("You have been removed from the meeting by the host.");
             } else if (state === 'denied') {
