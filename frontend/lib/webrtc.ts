@@ -25,6 +25,12 @@ export class WebRTCClient {
   private maxReconnectAttempts = 10;
   private reconnectTimeoutId?: NodeJS.Timeout;
 
+  public userId: string | undefined;
+  public userName: string | undefined;
+  public userRole: string | undefined;
+  public roomName: string | undefined;
+  public sessionStatus?: string;
+
   public onNewConsumer?: (consumer: Consumer, userId: string) => void;
   public onConnectionStateChange?: (state: string) => void;
   
@@ -122,6 +128,7 @@ export class WebRTCClient {
           this.userId = msg.userId;
           this.userName = msg.name;
           this.userRole = msg.role;
+          this.roomName = msg.roomName;
           
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');

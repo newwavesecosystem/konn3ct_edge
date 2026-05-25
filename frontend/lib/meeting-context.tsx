@@ -190,7 +190,7 @@ export function MeetingProvider({
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  const [meetingInfo] = useState<MeetingInfo>({
+  const [meetingInfo, setMeetingInfo] = useState<MeetingInfo>({
     ...mockMeetingInfo,
     roomName: formattedTitle,
     roomSlug,
@@ -574,7 +574,7 @@ export function MeetingProvider({
                 id: msg.id || `m-${Date.now()}-${Math.random()}`,
                 senderId: msg.userId,
                 senderName: msg.userId === webrtcClient.current?.userId
-                  ? client.userName || 'Guest'
+                  ? webrtcClient.current?.userName || 'Guest'
                   : msg.name || `Participant ${msg.userId.substring(5, 9)}`,
                 senderRole: "attendee",
                 content: msg.message,
@@ -703,7 +703,7 @@ export function MeetingProvider({
         client.onActiveSpeaker = (userIds) => {
           setParticipants((prev) => prev.map(p => ({
             ...p,
-            isSpeaking: userIds.includes(p.id) || (p.id === 'local' && userIds.includes(webrtcClient.current?.userId || ''))
+            isSpeaking: userIds.includes(p.id) || (p.id === currentUser.id && userIds.includes(webrtcClient.current?.userId || ''))
           })));
         };
 
@@ -755,10 +755,12 @@ export function MeetingProvider({
             setWebrtcStatus(state);
             if (state === 'connected') {
               // Update local user's name and role based on server truth
-              setLocalName(client.userName || 'Guest');
               setParticipants(prev => prev.map(p => 
-                p.id === 'local' ? { ...p, name: client.userName || 'Guest', role: (client.userRole || 'attendee') as any } : p
+                p.id === currentUser.id ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
               ));
+              if (webrtcClient.current?.roomName) {
+                setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
+              }
             } else if (state === 'kicked') {
               toast.error("You have been removed from the meeting by the host.");
             } else if (state === 'denied') {
@@ -844,7 +846,7 @@ export function MeetingProvider({
         client.onUserLeft = (userId) => {
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
-            if (user && user.id !== webrtcClient.current?.userId && user.id !== 'local') {
+            if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
                toast.info(`${user.name} left the meeting`);
             }
             return prev.filter(p => p.id !== userId);

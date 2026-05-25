@@ -257,6 +257,7 @@ export function initializeSignaling(server: Server) {
           email: decoded.email,
           name: decoded.name || 'Guest',
           roomId: room.id,
+          roomName: room.name,
           roomSlug,
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
@@ -271,7 +272,7 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomSlug, role, isWaitingRoomEnabled, isMobile } = clientData;
+    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile } = clientData;
 
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
@@ -319,7 +320,8 @@ export function initializeSignaling(server: Server) {
         status: client.status,
         userId: client.userId,
         name: client.name,
-        role: client.role 
+        role: client.role,
+        roomName
       }));
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
@@ -343,7 +345,8 @@ export function initializeSignaling(server: Server) {
         status: client.status,
         userId: client.userId,
         name: client.name,
-        role: client.role 
+        role: client.role,
+        roomName
       }));
 
       if (client.status === 'active') {
