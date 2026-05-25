@@ -18,7 +18,11 @@ export default function MeetingPage({
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const name = searchParams.get("name");
-    if (!name) {
+    const token = searchParams.get("t");
+    const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem("conn3ct_session_token") : null;
+    
+    // If there is no name, no token in URL, and no token in storage, redirect to join
+    if (!name && !token && !storedToken) {
       router.replace(`/join/${resolvedParams.roomId}`);
     } else {
       setIsReady(true);

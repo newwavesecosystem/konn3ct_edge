@@ -184,6 +184,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
         name: finalRoomName,
         slug: roomSlug,
         ownerId: owner.id,
+        isWaitingRoomEnabled: true // default to true for API created meetings
       }
     });
 
