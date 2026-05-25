@@ -531,13 +531,13 @@ export function MeetingProvider({
         };
 
         client.onNoteUpdate = (msg) => {
-          if (msg.userId !== currentUser.id) {
+          if (msg.userId !== webrtcClient.current?.userId) {
             setSharedNoteContent(msg.content);
           }
         };
 
         client.onChatMessage = (msg) => {
-          if (msg.userId !== currentUser.id) {
+          if (msg.userId !== webrtcClient.current?.userId) {
             // Play a prominent "Ding-Ding" notification sound for chat
             try {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -573,8 +573,8 @@ export function MeetingProvider({
               {
                 id: msg.id || `m-${Date.now()}-${Math.random()}`,
                 senderId: msg.userId,
-                senderName: msg.userId === currentUser.id
-                  ? currentUser.name
+                senderName: msg.userId === webrtcClient.current?.userId
+                  ? client.userName || 'Guest'
                   : msg.name || `Participant ${msg.userId.substring(5, 9)}`,
                 senderRole: "attendee",
                 content: msg.message,
@@ -657,7 +657,7 @@ export function MeetingProvider({
         };
 
         client.onHandRaise = (msg) => {
-          if (msg.isHandRaised && msg.userId !== currentUser.id) {
+          if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -703,7 +703,7 @@ export function MeetingProvider({
         client.onActiveSpeaker = (userIds) => {
           setParticipants((prev) => prev.map(p => ({
             ...p,
-            isSpeaking: userIds.includes(p.id)
+            isSpeaking: userIds.includes(p.id) || (p.id === 'local' && userIds.includes(webrtcClient.current?.userId || ''))
           })));
         };
 
@@ -753,7 +753,13 @@ export function MeetingProvider({
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
-            if (state === 'kicked') {
+            if (state === 'connected') {
+              // Update local user's name and role based on server truth
+              setLocalName(client.userName || 'Guest');
+              setParticipants(prev => prev.map(p => 
+                p.id === 'local' ? { ...p, name: client.userName || 'Guest', role: (client.userRole || 'attendee') as any } : p
+              ));
+            } else if (state === 'kicked') {
               toast.error("You have been removed from the meeting by the host.");
             } else if (state === 'denied') {
               toast.error("Your request to join was denied by the host.");
@@ -782,6 +788,7 @@ export function MeetingProvider({
           setParticipants((prev) => {
             const newParticipants = [...prev];
             for (const p of backendParticipants) {
+              if (p.userId === webrtcClient.current?.userId) continue;
               if (!newParticipants.some(existing => existing.id === p.userId)) {
                 newParticipants.push({
                   id: p.userId,
@@ -807,6 +814,7 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
+          if (user.userId === webrtcClient.current?.userId) return;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) return prev;
@@ -836,7 +844,7 @@ export function MeetingProvider({
         client.onUserLeft = (userId) => {
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
-            if (user && user.id !== currentUser.id) {
+            if (user && user.id !== webrtcClient.current?.userId && user.id !== 'local') {
                toast.info(`${user.name} left the meeting`);
             }
             return prev.filter(p => p.id !== userId);
