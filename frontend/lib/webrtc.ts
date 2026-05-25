@@ -118,6 +118,11 @@ export class WebRTCClient {
       // Handle server-initiated events
       switch (msg.type) {
         case 'session_status':
+          this.sessionStatus = msg.status;
+          this.userId = msg.userId;
+          this.userName = msg.name;
+          this.userRole = msg.role;
+          
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
             this.isIntentionalDisconnect = true;
@@ -144,7 +149,7 @@ export class WebRTCClient {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
             this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
-          } else if (msg.recovered && this.device?.loaded) {
+          } else if (msg.recovered && msg.status === 'active') {
             console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes (e.g. WiFi to Mobile)...");
             this.needsRepublish = false;
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {

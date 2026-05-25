@@ -313,7 +313,14 @@ export function initializeSignaling(server: Server) {
       clearTimeout(disconnectTimeouts.get(userId)!);
       disconnectTimeouts.delete(userId);
       logger.info(`User ${userId} reconnected to room ${roomId} during grace period`);
-      ws.send(JSON.stringify({ type: 'session_status', recovered: true, status: client.status }));
+      ws.send(JSON.stringify({ 
+        type: 'session_status', 
+        recovered: true, 
+        status: client.status,
+        userId: client.userId,
+        name: client.name,
+        role: client.role 
+      }));
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
 
@@ -329,7 +336,15 @@ export function initializeSignaling(server: Server) {
       }
 
       // Send session_status IMMEDIATELY after router is ready (not after DB queries)
-      ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: client.status }));
+      // We MUST include the userId and name here so the frontend knows its true identity!
+      ws.send(JSON.stringify({ 
+        type: 'session_status', 
+        recovered: false, 
+        status: client.status,
+        userId: client.userId,
+        name: client.name,
+        role: client.role 
+      }));
 
       if (client.status === 'active') {
         broadcastToRoom(roomId, {
