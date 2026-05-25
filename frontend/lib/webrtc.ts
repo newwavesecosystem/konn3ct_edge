@@ -125,10 +125,10 @@ export class WebRTCClient {
       switch (msg.type) {
         case 'session_status':
           this.sessionStatus = msg.status;
-          this.userId = msg.userId;
-          this.userName = msg.name;
-          this.userRole = msg.role;
-          this.roomName = msg.roomName;
+          if (msg.userId) this.userId = msg.userId;
+          if (msg.name) this.userName = msg.name;
+          if (msg.role) this.userRole = msg.role;
+          if (msg.roomName) this.roomName = msg.roomName;
           
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');

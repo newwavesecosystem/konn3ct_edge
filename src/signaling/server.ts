@@ -508,7 +508,7 @@ export function initializeSignaling(server: Server) {
           if (targetClient && targetClient.status === 'waiting') {
             targetClient.status = 'active';
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
-            broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role });
+            broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
             
             const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
               .filter(c => c.status === 'active')
