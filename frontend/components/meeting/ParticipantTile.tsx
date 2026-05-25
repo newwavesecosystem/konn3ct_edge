@@ -179,7 +179,10 @@ export function ParticipantTile({
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover"
+              className={cn(
+                "w-full h-full",
+                isLarge ? "object-contain" : "object-cover"
+              )}
               style={{
                 transform:
                   isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",

@@ -26,8 +26,16 @@ export function StageView() {
   const screenSharer = participants.find((p) => p.isScreenSharing);
   const isSomeoneSharing = !!screenSharer || isScreenSharing;
 
-  // Hooks must be called before any early returns — sort participants here.
-  const sorted = useMemo(() => {
+  // Grid view sorting (no active speaker rearranging)
+  const gridSorted = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
+      return 0;
+    });
+  }, [participants]);
+
+  // Speaker view sorting (uses active speaker)
+  const speakerSorted = useMemo(() => {
     return [...participants].sort((a, b) => {
       if (a.isSpeaking !== b.isSpeaking) return a.isSpeaking ? -1 : 1;
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
@@ -36,13 +44,13 @@ export function StageView() {
   }, [participants]);
 
   if (eCinemaLink) {
-    return <ECinemaLayout eCinemaLink={eCinemaLink} participants={participants} />;
+    return <ECinemaLayout eCinemaLink={eCinemaLink} participants={gridSorted} />;
   }
 
   if (isSomeoneSharing) {
     return (
       <ScreenShareLayout
-        participants={participants}
+        participants={gridSorted}
         screenSharer={screenSharer}
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
@@ -51,15 +59,15 @@ export function StageView() {
     );
   }
 
-  const activeSpeaker = sorted[0];
-  const others = sorted.filter((p) => p.id !== activeSpeaker?.id);
+  const activeSpeaker = speakerSorted[0] || gridSorted[0];
+  const others = gridSorted.filter((p) => p.id !== activeSpeaker?.id);
 
   if (layoutMode === "grid") {
-    return <GridLayout participants={sorted} />;
+    return <GridLayout participants={gridSorted} />;
   }
 
   if (layoutMode === "spotlight") {
-    return <SpotlightLayout participants={sorted} />;
+    return <SpotlightLayout participants={gridSorted} />;
   }
 
   // Default: speaker layout
@@ -531,8 +539,10 @@ function SpeakerLayout({
       {/* Main speaker */}
       <div className="flex-1 min-h-0">
         <motion.div
-          layout
-          layoutId={`tile-${activeSpeaker.id}`}
+          key={activeSpeaker.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2 }}
           className="w-full h-full"
         >
           <ParticipantTile participant={activeSpeaker} isLarge />
@@ -568,8 +578,6 @@ function SpeakerLayout({
                 return (
                   <motion.div
                     key={p.id}
-                    layout
-                    layoutId={`tile-${p.id}`}
                     initial={{ opacity: 0, scale: 0.92 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.92 }}
