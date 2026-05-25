@@ -87,18 +87,30 @@ export async function POST(request: Request) {
 
     // Generate a secure JWT that the Kubernetes backend will accept
     // The backend's WebSocket verifier expects `userId` and `email`
-    const token = jwt.sign(
-      {
-        userId: finalUserId,
-        email: finalEmail,
-        name: finalName,
-        role: finalRole,
-        isBot: !!isBot,
-        isMobile: finalIsMobile,
-      },
-      secret,
-      { expiresIn: "24h" }
-    );
+    // We MUST also forward any 'action' instructions (e.g. create_room_if_missing) from external APIs
+    const payload: any = {
+      userId: finalUserId,
+      email: finalEmail,
+      name: finalName,
+      role: finalRole,
+      isBot: !!isBot,
+      isMobile: finalIsMobile,
+    };
+
+    // If the sessionToken contained room creation metadata, pass it along!
+    if (!isBot && sessionToken) {
+      try {
+        const sessionData = jwt.verify(sessionToken, secret) as any;
+        if (sessionData.action) payload.action = sessionData.action;
+        if (sessionData.ownerEmail) payload.ownerEmail = sessionData.ownerEmail;
+        if (sessionData.roomName) payload.roomName = sessionData.roomName;
+        if (sessionData.isWaitingRoomEnabled !== undefined) payload.isWaitingRoomEnabled = sessionData.isWaitingRoomEnabled;
+      } catch (e) {
+        // Verification already happened above, so this should not fail, but we catch just in case
+      }
+    }
+
+    const token = jwt.sign(payload, secret, { expiresIn: "24h" });
 
     return NextResponse.json({ token });
   } catch (error) {
