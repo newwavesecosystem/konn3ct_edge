@@ -153,13 +153,12 @@ router.post('/meetings/join', async (req, res) => {
 // 3. Create and Join
 router.post('/meetings/create-and-join', async (req, res) => {
   try {
-    const { name, email, role, isMobile, camera, mic, roomName } = req.body;
+    const { name, email, role, isMobile, camera, mic, roomName, meetingSlug } = req.body;
 
     if (!name || name.trim() === "") {
       return res.status(400).json({ error: "Missing name" });
     }
 
-    const roomSlug = generateRoomSlug();
     const trustedRole = role || "host";
     const finalEmail = email?.trim() || "host@conn3ct.com";
     const finalRoomName = roomName || "API Created Meeting";
@@ -178,15 +177,27 @@ router.post('/meetings/create-and-join', async (req, res) => {
       });
     }
 
-    // Create room in database
-    const room = await db.room.create({
-      data: {
-        name: finalRoomName,
-        slug: roomSlug,
-        ownerId: owner.id,
-        isWaitingRoomEnabled: true // default to true for API created meetings
-      }
-    });
+    let room = null;
+    let finalSlug = meetingSlug;
+
+    if (finalSlug) {
+      // Check if room with this slug already exists
+      room = await db.room.findUnique({ where: { slug: finalSlug } });
+    } else {
+      finalSlug = generateRoomSlug();
+    }
+
+    if (!room) {
+      // Create room in database
+      room = await db.room.create({
+        data: {
+          name: finalRoomName,
+          slug: finalSlug,
+          ownerId: owner.id,
+          isWaitingRoomEnabled: true // default to true for API created meetings
+        }
+      });
+    }
 
     const sessionData = {
       userId: owner.id,
