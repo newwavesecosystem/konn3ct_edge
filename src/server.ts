@@ -21,7 +21,7 @@ import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
 
-const app = express();
+export const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -93,4 +93,6 @@ async function boot() {
   }
 }
 
-boot();
+if (require.main === module) {
+  boot();
+}
