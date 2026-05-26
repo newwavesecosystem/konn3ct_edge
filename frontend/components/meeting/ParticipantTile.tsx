@@ -168,10 +168,14 @@ export function ParticipantTile({
       {participant.isCameraOn ? (
         <div
           className="absolute inset-0 flex items-center justify-center"
-          style={{
-            background:
-              "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
-          }}
+          style={
+            isLarge
+              ? { backgroundColor: "black" }
+              : {
+                  background:
+                    "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
+                }
+          }
         >
           {participant.videoTrack ? (
             <video
