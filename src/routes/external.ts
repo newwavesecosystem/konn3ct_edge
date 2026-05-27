@@ -50,7 +50,16 @@ router.use(requireApiKey);
 // 1. Create Meeting
 router.post('/meetings', async (req, res) => {
   try {
-    const { name, ownerEmail, isWaitingRoomEnabled } = req.body;
+    const {
+      name,
+      ownerEmail,
+      isWaitingRoomEnabled,
+      mode = 'meeting',          // "meeting" | "webinar"
+      recordingSetting = 'off',  // "off" | "free" | "paid"
+      guestJoinAllowed = true,
+      accessPin,
+    } = req.body;
+
     const finalEmail = ownerEmail || "api_guest@conn3ct.com";
     const roomName = name || "API Created Meeting";
 
@@ -70,18 +79,29 @@ router.post('/meetings', async (req, res) => {
 
     const roomSlug = generateRoomSlug();
 
+    // Webinar mode automatically enables the waiting room
+    const finalWaitingRoom = mode === 'webinar' ? true : (isWaitingRoomEnabled !== false);
+
     // Create room in database
     const room = await db.room.create({
       data: {
         name: roomName,
         slug: roomSlug,
         ownerId: owner.id,
-        isWaitingRoomEnabled: isWaitingRoomEnabled !== false, // default true
+        isWaitingRoomEnabled: finalWaitingRoom,
+        mode,
+        recordingSetting,
+        guestJoinAllowed,
+        accessPin: accessPin || null,
       }
     });
 
     res.json({
       roomId: room.slug,
+      mode: room.mode,
+      recordingSetting: room.recordingSetting,
+      guestJoinAllowed: room.guestJoinAllowed,
+      isWaitingRoomEnabled: room.isWaitingRoomEnabled,
       message: "Meeting created successfully"
     });
   } catch (error) {
@@ -93,7 +113,7 @@ router.post('/meetings', async (req, res) => {
 // 2. Generate Join Token
 router.post('/meetings/join', async (req, res) => {
   try {
-    const { roomId, name, email, role, isMobile, camera, mic } = req.body;
+    const { roomId, name, email, role, isMobile, camera, mic, pin } = req.body;
 
     if (!roomId) {
       return res.status(400).json({ error: "Missing roomId" });
@@ -106,6 +126,18 @@ router.post('/meetings/join', async (req, res) => {
     const room = await db.room.findUnique({ where: { slug: roomId } });
     if (!room) {
       return res.status(404).json({ error: "Room not found" });
+    }
+
+    // Enforce Access PIN if the room requires one
+    if (room.accessPin) {
+      if (!pin || pin !== room.accessPin) {
+        return res.status(403).json({ error: "Invalid or missing access PIN" });
+      }
+    }
+
+    // Enforce guest join policy
+    if (!room.guestJoinAllowed && role !== 'host') {
+      return res.status(403).json({ error: "Guest join is not allowed for this room" });
     }
 
     const trustedRole = role || "attendee";
@@ -126,7 +158,7 @@ router.post('/meetings/join', async (req, res) => {
     }
 
     const sessionData = {
-      userId: user.id, // Pass actual DB user ID
+      userId: user.id,
       roomId: room.slug,
       name: name.trim(),
       email: finalEmail,
@@ -153,7 +185,20 @@ router.post('/meetings/join', async (req, res) => {
 // 3. Create and Join
 router.post('/meetings/create-and-join', async (req, res) => {
   try {
-    const { name, email, role, isMobile, camera, mic, roomName, meetingSlug } = req.body;
+    const {
+      name,
+      email,
+      role,
+      isMobile,
+      camera,
+      mic,
+      roomName,
+      meetingSlug,
+      mode = 'meeting',
+      recordingSetting = 'off',
+      guestJoinAllowed = true,
+      accessPin,
+    } = req.body;
 
     if (!name || name.trim() === "") {
       return res.status(400).json({ error: "Missing name" });
@@ -181,20 +226,25 @@ router.post('/meetings/create-and-join', async (req, res) => {
     let finalSlug = meetingSlug;
 
     if (finalSlug) {
-      // Check if room with this slug already exists
       room = await db.room.findUnique({ where: { slug: finalSlug } });
     } else {
       finalSlug = generateRoomSlug();
     }
 
     if (!room) {
-      // Create room in database
+      // Webinar mode automatically enables the waiting room
+      const isWaitingRoomEnabled = mode === 'webinar' ? true : true;
+
       room = await db.room.create({
         data: {
           name: finalRoomName,
           slug: finalSlug,
           ownerId: owner.id,
-          isWaitingRoomEnabled: true // default to true for API created meetings
+          isWaitingRoomEnabled,
+          mode,
+          recordingSetting,
+          guestJoinAllowed,
+          accessPin: accessPin || null,
         }
       });
     }
@@ -215,6 +265,10 @@ router.post('/meetings/create-and-join', async (req, res) => {
 
     res.json({
       roomId: room.slug,
+      mode: room.mode,
+      recordingSetting: room.recordingSetting,
+      guestJoinAllowed: room.guestJoinAllowed,
+      isWaitingRoomEnabled: room.isWaitingRoomEnabled,
       sessionToken,
       joinPath,
       message: "Meeting created and host token generated successfully"

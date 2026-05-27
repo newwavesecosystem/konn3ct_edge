@@ -687,33 +687,27 @@ export class WebRTCClient {
       { scaleResolutionDownBy: 2, maxBitrate: 50000 },
       { scaleResolutionDownBy: 1, maxBitrate: 150000 }
     ] : [
-      // Standard HQ simulcast
+      // Standard 3-layer simulcast: low / medium / high
       { scaleResolutionDownBy: 4, maxBitrate: 100000 },
       { scaleResolutionDownBy: 2, maxBitrate: 300000 },
       { scaleResolutionDownBy: 1, maxBitrate: 900000 },
     ];
 
-    this.localVideoProducer = await this.sendTransport.produce({ 
-      track: videoTrack,
-      appData: { source: 'camera' }, // Tag so remote peers know this is a camera feed
-      encodings,
-      codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
-    });
+    // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
       await this.localVideoProducer.replaceTrack({ track: videoTrack });
       this.localVideoProducer.resume();
     } else {
-      this.localVideoProducer = await this.sendTransport.produce({ 
+      // First time or after producer was closed — create with full simulcast encodings
+      this.localVideoProducer = await this.sendTransport.produce({
         track: videoTrack,
-        encodings: [
-          { scaleResolutionDownBy: 4, maxBitrate: 100000 },
-          { scaleResolutionDownBy: 2, maxBitrate: 300000 },
-          { scaleResolutionDownBy: 1, maxBitrate: 900000 },
-        ],
-        codecOptions: { videoGoogleStartBitrate: 1000 }
+        appData: { source: 'camera' },
+        encodings,
+        codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
       });
     }
     return videoTrack;
+
   }
 
   public disableCamera() {

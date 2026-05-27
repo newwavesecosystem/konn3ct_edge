@@ -21,17 +21,58 @@ export async function initializeWorkers() {
   
   for (let i = 0; i < numWorkers; i++) {
     const worker = await mediasoup.createWorker(config.mediasoup.worker);
-    
-    worker.on('died', () => {
-      logger.error(`mediasoup Worker ${worker.pid} died, exiting in 2 seconds...`);
-      setTimeout(() => process.exit(1), 2000);
-    });
-
+    attachWorkerListeners(worker);
     workers.push(worker);
   }
   
   logger.info(`Initialized ${workers.length} mediasoup workers`);
 }
+
+/**
+ * Attach lifecycle listeners to a worker.
+ * On death, spawn a replacement instead of crashing the process.
+ */
+function attachWorkerListeners(worker: Worker) {
+  worker.on('died', () => {
+    logger.error(
+      `mediasoup Worker pid=${worker.pid} died — spawning replacement worker`
+    );
+    spawnReplacementWorker(worker);
+  });
+}
+
+/**
+ * Replace a dead worker in the pool with a fresh one.
+ * Active transports/producers/consumers on the dead worker will close naturally
+ * (their 'transportclose' / 'producerclose' events fire automatically).
+ * New rooms will be routed to the replacement worker via round-robin.
+ */
+async function spawnReplacementWorker(deadWorker: Worker) {
+  try {
+    const idx = workers.indexOf(deadWorker);
+    const newWorker = await mediasoup.createWorker(config.mediasoup.worker);
+    attachWorkerListeners(newWorker);
+
+    if (idx !== -1) {
+      workers[idx] = newWorker;
+    } else {
+      workers.push(newWorker);
+    }
+
+    logger.info(
+      `Replacement mediasoup worker started. New pid=${newWorker.pid} ` +
+      `(replaced slot ${idx !== -1 ? idx : 'new'}). Total workers: ${workers.length}`
+    );
+  } catch (err) {
+    logger.error('Failed to spawn replacement mediasoup worker:', err);
+    // Only exit if we have no workers left at all — otherwise keep serving
+    if (workers.filter(w => !w.closed).length === 0) {
+      logger.error('All mediasoup workers are dead. Shutting down.');
+      process.exit(1);
+    }
+  }
+}
+
 
 /**
  * Get the next worker via round-robin

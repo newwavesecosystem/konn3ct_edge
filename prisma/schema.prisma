@@ -73,6 +73,10 @@ model Room {
   ownerId   String
   teamId    String?
   isWaitingRoomEnabled Boolean @default(true)
+  mode             String  @default("meeting")  // "meeting" | "webinar"
+  recordingSetting String  @default("off")       // "off" | "free" | "paid"
+  guestJoinAllowed Boolean @default(true)
+  accessPin        String?                       // null = no PIN required
   createdAt DateTime @default(now())
 
   owner User @relation("RoomOwner", fields: [ownerId], references: [id])
@@ -92,6 +96,7 @@ model Room {
   @@index([ownerId])
   @@index([teamId])
 }
+
 
 model MeetingSession {
   id          String   @id @default(cuid())
