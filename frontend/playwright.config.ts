@@ -6,6 +6,9 @@ import path from 'path';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Seed DB and clean up before/after the entire suite
+  globalSetup: require.resolve('./e2e/global-setup.ts'),
+  globalTeardown: require.resolve('./e2e/global-teardown.ts'),
   /* Maximum time one test can run for. */
   timeout: 30 * 1000,
   expect: {
@@ -31,14 +34,21 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
+    // Set backend domain so WebSocket connects to LOCAL backend, not production
+    extraHTTPHeaders: {},
+
     // VERY IMPORTANT FOR WEBRTC: Fake camera and microphone
     launchOptions: {
       args: [
         '--use-fake-ui-for-media-stream',
         '--use-fake-device-for-media-stream',
-        // Optional: specify a fake video file for the camera
-        // `--use-file-for-fake-video-capture=${path.join(__dirname, 'mock.y4m')}`
       ],
+      env: {
+        // This is picked up by Next.js at runtime as NEXT_PUBLIC_BACKEND_DOMAIN
+        // Ensures WebSocket connects to local backend (ws://localhost:3000)
+        // instead of the production edge server.
+        NEXT_PUBLIC_BACKEND_DOMAIN: 'localhost:3000',
+      },
     },
   },
 
