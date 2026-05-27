@@ -108,7 +108,7 @@ const Rooms = () => {
   };
 
   const handleCopy = (url) => {
-    const meeting_url = `${process.env.REACT_APP_BASE_BACKENED_URL}join/${url}`;
+    const meeting_url = `${process.env.REACT_APP_JOIN_MEETING_URL}join/${url}`;
     if (meeting_url) {
       navigator.clipboard.writeText(meeting_url);
       toast({ description: t("rooms.toasts.linkCopied") });
