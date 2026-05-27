@@ -44,7 +44,7 @@ export default function DashboardPage() {
   const handleStartInstantMeeting = async () => {
     try {
       setIsCreatingRoom(true);
-      const room = await apiClient.rooms.create("Instant Meeting");
+      const room = await apiClient.rooms.create({ name: "Instant Meeting" });
       router.push(`/meeting/${room.slug}`);
     } catch (error) {
       console.error(error);

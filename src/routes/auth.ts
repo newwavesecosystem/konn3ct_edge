@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
+import { authLimiter, passwordResetLimiter } from '../middleware/rateLimiter';
 
 export const authRouter = Router();
 
@@ -18,7 +19,7 @@ const loginSchema = z.object({
   password: z.string()
 });
 
-authRouter.post('/signup', async (req: Request, res: Response) => {
+authRouter.post('/signup', authLimiter, async (req: Request, res: Response) => {
   try {
     const data = signupSchema.parse(req.body);
     
@@ -47,7 +48,7 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post('/login', async (req: Request, res: Response) => {
+authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
 

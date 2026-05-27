@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
+import { telephonyLimiter } from '../middleware/rateLimiter';
 
 export const telephonyRouter = Router();
 
@@ -65,7 +66,7 @@ const calloutSchema = z.object({
   targetNumber: z.string().regex(/^\+[1-9]\d{1,14}$/) // E.164 format
 });
 
-telephonyRouter.post('/callout', requireAuth, async (req: Request, res: Response) => {
+telephonyRouter.post('/callout', telephonyLimiter, requireAuth, async (req: Request, res: Response) => {
   try {
     const { roomId, targetNumber } = calloutSchema.parse(req.body);
     const userId = req.user!.userId;

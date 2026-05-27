@@ -9,6 +9,7 @@ import { initializeSignaling } from './signaling/server';
 import { initializeWorkers } from './media/sfu';
 import { config } from './media/config';
 import { logger } from './logger';
+import { generalLimiter } from './middleware/rateLimiter';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { teamsRouter } from './routes/teams';
@@ -34,6 +35,9 @@ app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url}`);
   next();
 });
+
+// Global rate limiter — 100 req/min per IP (skips /health automatically)
+app.use(generalLimiter);
 
 // Swagger Documentation
 const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));

@@ -30,6 +30,15 @@ export const config = {
         },
         {
           kind: 'video' as const,
+          mimeType: 'video/VP9',
+          clockRate: 90000,
+          parameters: {
+            'profile-id': 2,
+            'x-google-start-bitrate': 1000
+          }
+        },
+        {
+          kind: 'video' as const,
           mimeType: 'video/H264',
           clockRate: 90000,
           parameters: {
@@ -39,6 +48,7 @@ export const config = {
             'x-google-start-bitrate': 1000
           }
         }
+
       ]
     },
     webRtcTransport: {

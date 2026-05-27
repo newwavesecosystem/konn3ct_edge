@@ -18,7 +18,32 @@ export interface Room {
   name: string;
   slug: string;
   ownerId: string;
+  teamId?: string | null;
+  mode: 'meeting' | 'webinar';
+  recordingSetting: 'off' | 'free' | 'paid';
+  guestJoinAllowed: boolean;
+  accessPin?: string | null;
+  isWaitingRoomEnabled: boolean;
   createdAt: string;
+}
+
+export interface CreateRoomPayload {
+  name: string;
+  teamId?: string;
+  mode?: 'meeting' | 'webinar';
+  recordingSetting?: 'off' | 'free' | 'paid';
+  guestJoinAllowed?: boolean;
+  accessPin?: string;
+  isWaitingRoomEnabled?: boolean;
+}
+
+export interface UpdateRoomPayload {
+  name?: string;
+  mode?: 'meeting' | 'webinar';
+  recordingSetting?: 'off' | 'free' | 'paid';
+  guestJoinAllowed?: boolean;
+  accessPin?: string | null; // null to clear the PIN
+  isWaitingRoomEnabled?: boolean;
 }
 
 export interface ScheduledMeeting {
@@ -116,10 +141,27 @@ export const apiClient = {
       return fetchApi<Room[]>('/rooms');
     },
 
-    create: async (name: string) => {
+    getBySlug: async (slug: string) => {
+      return fetchApi<Room>(`/rooms/${slug}`);
+    },
+
+    create: async (payload: CreateRoomPayload) => {
       return fetchApi<Room>('/rooms', {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(payload),
+      });
+    },
+
+    update: async (id: string, payload: UpdateRoomPayload) => {
+      return fetchApi<Room>(`/rooms/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    delete: async (id: string) => {
+      return fetchApi<void>(`/rooms/${id}`, {
+        method: 'DELETE',
       });
     },
   },

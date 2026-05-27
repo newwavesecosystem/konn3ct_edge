@@ -5,21 +5,18 @@ import Redis from "ioredis";
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const redis = new Redis(redisUrl, {
   retryStrategy: (times) => {
-    // Don't reconnect endlessly in local development
     if (process.env.NODE_ENV !== "production") return null;
     return Math.min(times * 50, 2000);
   },
   maxRetriesPerRequest: 1,
   connectTimeout: 2000,
 });
-
-// Swallow the unhandled error event so it doesn't spam the console in local dev
 redis.on("error", () => {});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { roomId, sessionToken, isBot } = body;
+    const { roomId, sessionToken, isBot, pin } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -57,18 +54,56 @@ export async function POST(request: Request) {
       }
     }
 
-    // Method 1: Redis Pre-flight Rejection (Option A)
-    // Wrap in try/catch so local dev without Redis doesn't break
+    // ── Access PIN enforcement (decision: enforced here in /api/join) ──────────
+    // Fetch the room record to check accessPin and guestJoinAllowed.
+    // We call the backend REST API instead of Prisma directly (Next.js is a separate process).
     try {
-      // First, determine which Pod the NGINX router has assigned this room to
+      const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
+      // Use the internal rooms slug endpoint — requires a service-level auth header
+      const roomRes = await fetch(`${backendUrl}/api/rooms/${roomId}`, {
+        headers: {
+          // Use a service JWT signed with the shared JWT_SECRET so the backend accepts it
+          Authorization: `Bearer ${jwt.sign(
+            { userId: "system", email: "system@conn3ct.internal" },
+            process.env.JWT_SECRET || "fallback-secret-key",
+            { expiresIn: "30s" }
+          )}`,
+        },
+      });
+
+      if (roomRes.ok) {
+        const room = await roomRes.json() as {
+          accessPin?: string | null;
+          guestJoinAllowed?: boolean;
+          mode?: string;
+        };
+
+        // 1. Enforce access PIN
+        if (room.accessPin) {
+          if (!pin || pin !== room.accessPin) {
+            return NextResponse.json({ error: "Invalid or missing access PIN" }, { status: 403 });
+          }
+        }
+
+        // 2. Enforce guest join allowed (hosts bypass this check)
+        if (room.guestJoinAllowed === false && finalRole !== "host" && !isBot) {
+          return NextResponse.json(
+            { error: "Guest join is not allowed for this room" },
+            { status: 403 }
+          );
+        }
+      }
+      // If room lookup fails (backend unreachable), we fall through gracefully —
+      // the signaling server will still validate the room on WebSocket upgrade.
+    } catch (e) {
+      console.warn("Room lookup for PIN check failed — proceeding without PIN enforcement:", e);
+    }
+
+    // ── Redis capacity pre-flight check ────────────────────────────────────────
+    try {
       const mappedPod = await redis.get(`room:${roomId}:pod`);
-
-      console.log(`room:${roomId}:pod mappedPod`, mappedPod);
-
-      // If the room is active on a pod, check that specific pod's CPU
       if (mappedPod) {
         const cpuStr = await redis.get(`pod:${mappedPod}:cpu`);
-        console.log(`pod:${mappedPod}:cpu cpuStr`, cpuStr);
         if (cpuStr) {
           const cpuUsage = parseFloat(cpuStr);
           const maxRejectionLoad = parseFloat(process.env.MAX_REJECTION_CPU_LOAD || "90");
@@ -85,9 +120,6 @@ export async function POST(request: Request) {
 
     const secret = process.env.JWT_SECRET || "fallback-secret-key";
 
-    // Generate a secure JWT that the Kubernetes backend will accept
-    // The backend's WebSocket verifier expects `userId` and `email`
-    // We MUST also forward any 'action' instructions (e.g. create_room_if_missing) from external APIs
     const payload: any = {
       userId: finalUserId,
       email: finalEmail,
@@ -97,7 +129,7 @@ export async function POST(request: Request) {
       isMobile: finalIsMobile,
     };
 
-    // If the sessionToken contained room creation metadata, pass it along!
+    // Forward any metadata from the session token (e.g. from external API)
     if (!isBot && sessionToken) {
       try {
         const sessionData = jwt.verify(sessionToken, secret) as any;
@@ -106,12 +138,11 @@ export async function POST(request: Request) {
         if (sessionData.roomName) payload.roomName = sessionData.roomName;
         if (sessionData.isWaitingRoomEnabled !== undefined) payload.isWaitingRoomEnabled = sessionData.isWaitingRoomEnabled;
       } catch (e) {
-        // Verification already happened above, so this should not fail, but we catch just in case
+        // Already verified above — ignore
       }
     }
 
     const token = jwt.sign(payload, secret, { expiresIn: "24h" });
-
     return NextResponse.json({ token });
   } catch (error) {
     console.error("Token generation error:", error);
