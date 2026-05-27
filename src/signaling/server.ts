@@ -256,6 +256,18 @@ export function initializeSignaling(server: Server) {
         role = 'host';
       }
 
+      const currentParticipants = rooms.get(room.id)?.size || 0;
+      const maxParticipants = (decoded as any).maxParticipants ?? 100;
+      const maxWebinarAudience = (decoded as any).maxWebinarAudience ?? 1000;
+      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
+
+      // Allow hosts and bots to bypass capacity
+      if (role !== 'host' && role !== 'bot' && currentParticipants >= limit) {
+        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request, {
           userId: decoded.userId,
@@ -267,6 +279,7 @@ export function initializeSignaling(server: Server) {
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
+          maxActiveCameras: (decoded as any).maxActiveCameras ?? 15,
         });
       });
     } catch (error) {
@@ -975,7 +988,7 @@ export function initializeSignaling(server: Server) {
         if (data.kind === 'video' && source !== 'screen') {
           const roomProducersList = roomProducers.get(roomId) || [];
           const cameraProducers = roomProducersList.filter(p => p.kind === 'video' && p.appData?.source !== 'screen');
-          const maxCameras = parseInt(process.env.MAX_ACTIVE_CAMERAS || "15", 10);
+          const maxCameras = clientData.maxActiveCameras ?? 15;
           if (cameraProducers.length >= maxCameras) {
             client.ws.send(JSON.stringify({
               type: 'error',

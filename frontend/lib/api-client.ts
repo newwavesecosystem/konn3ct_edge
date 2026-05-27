@@ -35,6 +35,9 @@ export interface CreateRoomPayload {
   guestJoinAllowed?: boolean;
   accessPin?: string;
   isWaitingRoomEnabled?: boolean;
+  maxParticipants?: number;
+  maxWebinarAudience?: number;
+  maxActiveCameras?: number;
 }
 
 export interface UpdateRoomPayload {
@@ -44,6 +47,9 @@ export interface UpdateRoomPayload {
   guestJoinAllowed?: boolean;
   accessPin?: string | null; // null to clear the PIN
   isWaitingRoomEnabled?: boolean;
+  maxParticipants?: number;
+  maxWebinarAudience?: number;
+  maxActiveCameras?: number;
 }
 
 export interface ScheduledMeeting {
