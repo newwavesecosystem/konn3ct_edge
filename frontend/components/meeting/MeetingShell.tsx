@@ -12,6 +12,7 @@ import { DocsPanel } from "./DocsPanel";
 import { MeetingInfoPanel } from "./MeetingInfoPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Konn3ctAIPanel } from "./panels/Konn3ctAIPanel";
+import StreamingPanel from "./StreamingPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
@@ -57,6 +58,7 @@ export function MeetingShell() {
     info: <MeetingInfoPanel />,
     settings: <SettingsPanel />,
     ai: <Konn3ctAIPanel />,
+    streaming: <StreamingPanel />,
   };
 
   if (webrtcStatus === 'waiting') {

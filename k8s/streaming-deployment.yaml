@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: konn3ct-streaming-worker
+  namespace: konn3ct
+  labels:
+    app: konn3ct-streaming-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: konn3ct-streaming-worker
+  template:
+    metadata:
+      labels:
+        app: konn3ct-streaming-worker
+    spec:
+      containers:
+        - name: streaming-worker
+          image: konn3ct/streaming-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: konn3ct-secrets
+            - configMapRef:
+                name: konn3ct-config
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          # FFmpeg and Puppeteer need generous system resources, hence the limits
+          securityContext:
+            # Puppeteer may require SYS_ADMIN in some restricted container environments
+            capabilities:
+              add: ["SYS_ADMIN"]

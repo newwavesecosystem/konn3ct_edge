@@ -212,4 +212,23 @@ export const apiClient = {
       });
     },
   },
+
+  // ── STREAMING ──
+
+  streaming: {
+    startStream: async (data: { roomId: string; rtmpUrls: string[] }) => {
+      return fetchApi<{ message: string; streamId: string }>('/streaming/start', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    stopStream: async (streamId: string) => {
+      return fetchApi<{ message: string }>(`/streaming/${streamId}/stop`, {
+        method: 'POST',
+      });
+    },
+    getStreams: async (roomSlug: string) => {
+      return fetchApi<Array<{ id: string; status: string; rtmpUrls: string[] }>>(`/streaming/${roomSlug}`);
+    },
+  },
 };

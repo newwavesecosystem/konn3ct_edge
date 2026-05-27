@@ -42,6 +42,7 @@ const redisSubscriber = new Redis(redisUrl, {
 redisSubscriber.on("error", (e) => logger.error('Redis connection error', e));
 
 redisSubscriber.subscribe('recorder:completed').catch(e => logger.error('Failed to subscribe to recorder:completed', e));
+redisSubscriber.subscribe('streamer:status').catch(e => logger.error('Failed to subscribe to streamer:status', e));
 redisSubscriber.on('message', async (channel, message) => {
   if (channel === 'recorder:completed') {
     try {
@@ -72,9 +73,26 @@ redisSubscriber.on('message', async (channel, message) => {
             client.ws.send(payload);
           }
         }
+        logger.info(`Recording completed for room ${data.roomId}`);
       }
     } catch (e) {
-      logger.error('Failed to process recorder:completed event', e);
+      logger.error('Failed to process recorder:completed message', e);
+    }
+  } else if (channel === 'streamer:status') {
+    try {
+      const data = JSON.parse(message);
+      if (data.streamId && data.status) {
+        await db.liveStream.update({
+          where: { id: data.streamId },
+          data: { 
+            status: data.status,
+            ...(data.status === 'stopped' || data.status === 'failed' ? { endedAt: new Date() } : {})
+          }
+        });
+        logger.info(`Updated stream ${data.streamId} status to ${data.status}`);
+      }
+    } catch (e) {
+      logger.error('Failed to process streamer:status message', e);
     }
   }
 });
@@ -92,6 +110,7 @@ interface Client {
   status: 'waiting' | 'active';
   transports: string[];
   isMobile: boolean;
+  maxActiveCameras?: number;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -295,7 +314,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile };
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -632,6 +651,19 @@ export function initializeSignaling(server: Server) {
               c.ws.close();
             }
           }
+          
+          // Stop any active recordings
+          redis.publish(`recorder:stop:${roomId}`, 'stop').catch(e => logger.error("Failed to stop recording on end_meeting", e));
+          
+          // Stop any active streams
+          db.liveStream.findMany({ where: { roomId, status: { in: ['live', 'processing'] } } })
+            .then(streams => {
+              for (const stream of streams) {
+                redis.publish(`streamer:stop:${stream.id}`, 'stop').catch(e => logger.error(`Failed to stop stream ${stream.id}`, e));
+              }
+            })
+            .catch(e => logger.error("Failed to fetch streams to stop on end_meeting", e));
+
           // Fire off AI Summary generation in the background
           generateMeetingSummary(roomId).catch(e => logger.error(e));
           // The socket close handlers will trigger full room cleanup
@@ -988,7 +1020,7 @@ export function initializeSignaling(server: Server) {
         if (data.kind === 'video' && source !== 'screen') {
           const roomProducersList = roomProducers.get(roomId) || [];
           const cameraProducers = roomProducersList.filter(p => p.kind === 'video' && p.appData?.source !== 'screen');
-          const maxCameras = clientData.maxActiveCameras ?? 15;
+          const maxCameras = client.maxActiveCameras ?? 15;
           if (cameraProducers.length >= maxCameras) {
             client.ws.send(JSON.stringify({
               type: 'error',
