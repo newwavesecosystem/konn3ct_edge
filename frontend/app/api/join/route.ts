@@ -66,6 +66,7 @@ export async function POST(request: Request) {
     // ── Access PIN enforcement (decision: enforced here in /api/join) ──────────
     // Fetch the room record to check accessPin and guestJoinAllowed.
     // We call the backend REST API instead of Prisma directly (Next.js is a separate process).
+    let fetchedRoomLimits: any = {};
     try {
       const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
       // Use the internal rooms slug endpoint — requires a service-level auth header
@@ -86,6 +87,15 @@ export async function POST(request: Request) {
           accessPin?: string | null;
           guestJoinAllowed?: boolean;
           mode?: string;
+          maxParticipants?: number;
+          maxWebinarAudience?: number;
+          maxActiveCameras?: number;
+        };
+
+        fetchedRoomLimits = {
+          maxParticipants: room.maxParticipants ?? 100,
+          maxWebinarAudience: room.maxWebinarAudience ?? 1000,
+          maxActiveCameras: room.maxActiveCameras ?? 15,
         };
 
         // 1. Enforce access PIN (timing-safe comparison)
@@ -139,6 +149,7 @@ export async function POST(request: Request) {
       role: finalRole,
       isBot: !!isBot,
       isMobile: finalIsMobile,
+      ...fetchedRoomLimits
     };
 
     // Forward any metadata from the session token (e.g. from external API)

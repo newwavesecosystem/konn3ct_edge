@@ -56,6 +56,9 @@ router.post('/meetings', async (req, res) => {
       recordingSetting = 'off',  // "off" | "free" | "paid"
       guestJoinAllowed = true,
       accessPin,
+      maxParticipants,
+      maxWebinarAudience,
+      maxActiveCameras,
     } = req.body;
 
     const finalEmail = ownerEmail || "api_guest@conn3ct.com";
@@ -91,6 +94,9 @@ router.post('/meetings', async (req, res) => {
         recordingSetting,
         guestJoinAllowed,
         accessPin: accessPin || null,
+        maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : 100,
+        maxWebinarAudience: maxWebinarAudience ? parseInt(maxWebinarAudience, 10) : 1000,
+        maxActiveCameras: maxActiveCameras ? parseInt(maxActiveCameras, 10) : 15,
       }
     });
 
@@ -100,6 +106,9 @@ router.post('/meetings', async (req, res) => {
       recordingSetting: room.recordingSetting,
       guestJoinAllowed: room.guestJoinAllowed,
       isWaitingRoomEnabled: room.isWaitingRoomEnabled,
+      maxParticipants: room.maxParticipants,
+      maxWebinarAudience: room.maxWebinarAudience,
+      maxActiveCameras: room.maxActiveCameras,
       message: "Meeting created successfully"
     });
   } catch (error) {
@@ -196,6 +205,9 @@ router.post('/meetings/create-and-join', async (req, res) => {
       recordingSetting = 'off',
       guestJoinAllowed = true,
       accessPin,
+      maxParticipants,
+      maxWebinarAudience,
+      maxActiveCameras,
     } = req.body;
 
     if (!name || name.trim() === "") {
@@ -243,6 +255,9 @@ router.post('/meetings/create-and-join', async (req, res) => {
           recordingSetting,
           guestJoinAllowed,
           accessPin: accessPin || null,
+          maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : 100,
+          maxWebinarAudience: maxWebinarAudience ? parseInt(maxWebinarAudience, 10) : 1000,
+          maxActiveCameras: maxActiveCameras ? parseInt(maxActiveCameras, 10) : 15,
         }
       });
     }
@@ -267,6 +282,9 @@ router.post('/meetings/create-and-join', async (req, res) => {
       recordingSetting: room.recordingSetting,
       guestJoinAllowed: room.guestJoinAllowed,
       isWaitingRoomEnabled: room.isWaitingRoomEnabled,
+      maxParticipants: room.maxParticipants,
+      maxWebinarAudience: room.maxWebinarAudience,
+      maxActiveCameras: room.maxActiveCameras,
       sessionToken,
       joinPath,
       message: "Meeting created and host token generated successfully"

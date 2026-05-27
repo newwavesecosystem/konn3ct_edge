@@ -17,6 +17,9 @@ const createRoomSchema = z.object({
   guestJoinAllowed: z.boolean().default(true),
   accessPin: z.string().min(4).max(12).optional(),
   isWaitingRoomEnabled: z.boolean().optional(),
+  maxParticipants: z.number().int().min(1).optional(),
+  maxWebinarAudience: z.number().int().min(1).optional(),
+  maxActiveCameras: z.number().int().min(1).optional(),
 });
 
 const updateRoomSchema = z.object({
@@ -26,6 +29,9 @@ const updateRoomSchema = z.object({
   guestJoinAllowed: z.boolean().optional(),
   accessPin: z.string().min(4).max(12).nullable().optional(), // null clears the PIN
   isWaitingRoomEnabled: z.boolean().optional(),
+  maxParticipants: z.number().int().min(1).optional(),
+  maxWebinarAudience: z.number().int().min(1).optional(),
+  maxActiveCameras: z.number().int().min(1).optional(),
 });
 
 function generateSlug() {
@@ -70,6 +76,9 @@ roomsRouter.post('/', async (req: Request, res: Response) => {
         guestJoinAllowed: data.guestJoinAllowed,
         accessPin: data.accessPin ?? null,
         isWaitingRoomEnabled,
+        maxParticipants: data.maxParticipants ?? 100,
+        maxWebinarAudience: data.maxWebinarAudience ?? 1000,
+        maxActiveCameras: data.maxActiveCameras ?? 15,
       }
     });
 

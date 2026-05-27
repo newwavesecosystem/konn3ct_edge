@@ -28,6 +28,9 @@ export default function NewRoomPage() {
   const [guestJoinAllowed, setGuestJoinAllowed] = useState(true);
   const [accessPin, setAccessPin] = useState("");
   const [enablePin, setEnablePin] = useState(false);
+  const [maxParticipants, setMaxParticipants] = useState(100);
+  const [maxWebinarAudience, setMaxWebinarAudience] = useState(1000);
+  const [maxActiveCameras, setMaxActiveCameras] = useState(15);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +51,9 @@ export default function NewRoomPage() {
         accessPin: enablePin && accessPin ? accessPin : undefined,
         // Webinar mode auto-enables waiting room (handled server-side too)
         isWaitingRoomEnabled: mode === "webinar" ? true : undefined,
+        maxParticipants,
+        maxWebinarAudience,
+        maxActiveCameras,
       };
       await apiClient.rooms.create(payload);
       toast.success("Room created successfully!");
@@ -91,6 +97,21 @@ export default function NewRoomPage() {
                 placeholder="e.g. Design Critique"
                 className="h-11 bg-black/[0.02]"
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-text-primary">Max Meeting Participants</label>
+                <Input type="number" min={1} value={maxParticipants} onChange={e => setMaxParticipants(parseInt(e.target.value) || 100)} className="h-11 bg-black/[0.02]" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-text-primary">Max Webinar Audience</label>
+                <Input type="number" min={1} value={maxWebinarAudience} onChange={e => setMaxWebinarAudience(parseInt(e.target.value) || 1000)} className="h-11 bg-black/[0.02]" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-text-primary">Max Active Cameras</label>
+                <Input type="number" min={1} max={50} value={maxActiveCameras} onChange={e => setMaxActiveCameras(parseInt(e.target.value) || 15)} className="h-11 bg-black/[0.02]" />
+              </div>
             </div>
           </CardContent>
         </Card>
