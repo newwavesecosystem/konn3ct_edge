@@ -18,16 +18,17 @@ import rateLimit from 'express-rate-limit';
 const rateLimitHandler = (req: any, res: any) => {
   res.status(429).json({
     error: 'Too many requests — please slow down and try again later.',
+    retryAfter: res.getHeader('Retry-After'),
   });
 };
 
 /**
  * Auth limiter — login and signup
- * 20 requests per 15 minutes per IP
+ * 5 requests per 15 minutes per IP
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,
@@ -84,5 +85,5 @@ export const generalLimiter = rateLimit({
   legacyHeaders: false,
   handler: rateLimitHandler,
   // Skip rate limiting for health checks
-  skip: (req) => req.path === '/health',
+  skip: (req) => req.path.startsWith('/health'),
 });

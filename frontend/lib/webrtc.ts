@@ -90,13 +90,15 @@ export class WebRTCClient {
     // Detect mobile
     const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone/i.test(navigator.userAgent);
     
-    // Connect WebSocket
+    // Connect WebSocket — token is NOT included in URL to avoid logging in server access logs
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}`;
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&isMobile=${isMobile}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
       try {
+        // Send auth token as first message (not in URL to avoid logging in server access logs)
+        this.ws!.send(JSON.stringify({ type: 'auth', token: this.token }));
         this.reconnectAttempts = 0; // Reset on success
         // Device init moved to session_status handling to respect waiting room
       } catch (err) {
@@ -106,7 +108,13 @@ export class WebRTCClient {
     };
 
     this.ws.onmessage = async (event) => {
-      const msg = JSON.parse(event.data);
+      let msg: any;
+      try {
+        msg = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
+      } catch (e) {
+        console.warn('Received non-JSON WS message, ignoring');
+        return;
+      }
       
       // Handle Response matching by event type
       if (this.pendingRequests.has(msg.type)) {
@@ -570,7 +578,7 @@ export class WebRTCClient {
       } catch (e) {
         // Ignore stats errors
       }
-    }, 15000);
+    }, 5000);
   }
 
   private async republishMedia() {
@@ -600,12 +608,13 @@ export class WebRTCClient {
       } catch (error: any) { errback(error); }
     });
 
-    this.sendTransport.on('produce', async ({ kind, rtpParameters }: any, callback: any, errback: any) => {
+    this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
       try {
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
           kind,
-          rtpParameters
+          rtpParameters,
+          appData
         });
         callback({ id });
       } catch (error: any) { errback(error); }
@@ -994,6 +1003,10 @@ export class WebRTCClient {
     this.stopScreenShareProducer();
     if (this.sendTransport) this.sendTransport.close();
     if (this.recvTransport) this.recvTransport.close();
+    this.sendTransport = null;
+    this.recvTransport = null;
+    this.ws = null;
+    this.device = null;
   }
 
   // --- Host Controls ---

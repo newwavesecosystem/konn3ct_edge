@@ -7,8 +7,7 @@ import Redis from 'ioredis';
 import { logger } from '../logger';
 
 const router = Router();
-const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || "default-insecure-key-change-me";
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // Initialize Redis for status checks
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -24,13 +23,12 @@ redis.on("error", () => {});
 
 // Middleware to validate the API key
 function requireApiKey(req: Request, res: Response, next: Function) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Unauthorized" });
+  const apiKey = process.env.EXTERNAL_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'External API not configured' });
   }
-  const token = authHeader.split(" ")[1];
-  if (token !== EXTERNAL_API_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
+  if (req.headers['x-api-key'] !== apiKey) {
+    return res.status(401).json({ error: 'Invalid API key' });
   }
   next();
 }

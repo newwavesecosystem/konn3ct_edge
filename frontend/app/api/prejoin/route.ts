@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 
 export async function POST(request: Request) {
+  if (!process.env.JWT_SECRET) {
+    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+  }
+
   try {
     const body = await request.json();
     const { roomId, name, email, isMobile, camera, mic } = body;
@@ -12,6 +16,17 @@ export async function POST(request: Request) {
 
     if (!name || name.trim() === "") {
       return NextResponse.json({ error: "Missing name" }, { status: 400 });
+    }
+
+    if (name && name.trim().length > 64) {
+      return NextResponse.json({ error: 'Name too long (max 64 characters)' }, { status: 400 });
+    }
+    // Validate email format if provided
+    if (email && email !== 'guest@conn3ct.com') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
+      }
     }
 
     // Force the role to "attendee" to prevent malicious role elevation.
@@ -32,8 +47,7 @@ export async function POST(request: Request) {
 
     // Encrypt the locked-down payload into a secure, stateless JWT token
     // This allows it to work seamlessly across Serverless / Kubernetes pods without Redis
-    const secret = process.env.JWT_SECRET || "fallback-secret-key";
-    const sessionToken = jwt.sign(sessionData, secret, { expiresIn: "2h" });
+    const sessionToken = jwt.sign(sessionData, process.env.JWT_SECRET!, { expiresIn: "2h" });
 
     return NextResponse.json({ sessionToken });
   } catch (error) {

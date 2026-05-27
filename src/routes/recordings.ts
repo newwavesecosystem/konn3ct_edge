@@ -87,27 +87,33 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
     const { title, roomSlug, durationMinutes } = startRecordingSchema.parse(req.body);
     const userId = req.user!.userId;
 
+    const room = await db.room.findUnique({ where: { slug: roomSlug } });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
     // Create the recording record in 'processing' state
     const recording = await db.recording.create({
       data: {
         title,
         url: '', // Will be updated when upload finishes
+        roomId: room.id,
         ownerId: userId,
         status: 'processing'
       }
     });
 
-    // Fire and forget the bot (run in background)
-    // Note: In production, you'd use a background worker queue like BullMQ here!
-    import('../recording/egress-bot').then(({ startRecordingBot }) => {
-      startRecordingBot(recording.id, roomSlug, durationMinutes).catch(err => {
-        logger.error(`Recording bot failed for ${recording.id}`, err);
-        db.recording.update({
-          where: { id: recording.id },
-          data: { status: 'failed' }
-        }).catch(console.error);
-      });
-    });
+    const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'app.konn3ct.net';
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    const Redis = require('ioredis');
+    const redis = new Redis(redisUrl);
+    
+    await redis.lpush('recorder:queue', JSON.stringify({
+      roomId: room.id,
+      roomSlug,
+      recordingId: recording.id,
+      url: `https://${frontendDomain}/join/${roomSlug}`
+    }));
+    
+    redis.disconnect();
 
     res.status(202).json({ message: 'Recording started', recordingId: recording.id });
   } catch (error) {
