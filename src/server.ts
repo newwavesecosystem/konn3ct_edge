@@ -23,6 +23,7 @@ import { dashboardRouter } from './routes/dashboard';
 import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
+import { streamingRouter } from './routes/streaming';
 
 if (process.env.NODE_ENV === 'production') {
   const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
@@ -86,6 +87,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/telephony', telephonyRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/external/v1', externalRouter);
+app.use('/api/streaming', streamingRouter);
 
 // Basic 404 handler
 app.use((req, res) => {

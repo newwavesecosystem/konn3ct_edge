@@ -23,6 +23,7 @@ import {
   LogOut,
   Circle,
   LayoutGrid,
+  Radio,
   Presentation,
   Sparkles,
   Focus,
@@ -308,6 +309,13 @@ export function MeetingControls() {
                     label="eCinema Broadcast"
                     badge={eCinemaLink ? "Live" : undefined}
                     onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
+                  />
+                )}
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Radio className="w-4 h-4" />}
+                    label="Live Streaming"
+                    onClick={() => { setActivePanel("streaming"); setShowMoreMenu(false); }}
                   />
                 )}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
