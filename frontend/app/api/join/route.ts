@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
+import { timingSafeEqual } from "crypto";
 import Redis from "ioredis";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
@@ -14,6 +15,10 @@ const redis = new Redis(redisUrl, {
 redis.on("error", () => {});
 
 export async function POST(request: Request) {
+  if (!process.env.JWT_SECRET) {
+    return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
+  }
+
   try {
     const body = await request.json();
     const { roomId, sessionToken, isBot, pin } = body;
@@ -23,22 +28,26 @@ export async function POST(request: Request) {
     }
 
     // Default values if no session (only for bots or fallback)
-    let finalUserId = `user_${Math.random().toString(36).substr(2, 9)}`;
+    let finalUserId = `user_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`;
     let finalEmail = "guest@conn3ct.com";
     let finalName = "Guest";
     let finalRole = isBot ? "bot" : "attendee";
     let finalIsMobile = false;
 
     if (isBot) {
-      finalUserId = "bot_recorder";
+      const botSecret = process.env.BOT_SECRET;
+      const providedBotSecret = request.headers.get('x-bot-secret');
+      if (!botSecret || providedBotSecret !== botSecret) {
+        return NextResponse.json({ error: 'Unauthorized bot request' }, { status: 401 });
+      }
+      finalUserId = 'bot_recorder';
     } else {
       if (!sessionToken) {
         return NextResponse.json({ error: "Missing session token" }, { status: 403 });
       }
 
       try {
-        const secret = process.env.JWT_SECRET || "fallback-secret-key";
-        const sessionData = jwt.verify(sessionToken, secret) as any;
+        const sessionData = jwt.verify(sessionToken, process.env.JWT_SECRET!) as any;
 
         if (sessionData.roomId !== roomId) {
           return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
@@ -60,12 +69,13 @@ export async function POST(request: Request) {
     try {
       const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
       // Use the internal rooms slug endpoint — requires a service-level auth header
+      const serviceSecret = process.env.SERVICE_JWT_SECRET || process.env.JWT_SECRET!;
       const roomRes = await fetch(`${backendUrl}/api/rooms/${roomId}`, {
         headers: {
-          // Use a service JWT signed with the shared JWT_SECRET so the backend accepts it
+          // Use a service JWT signed with the shared SERVICE_JWT_SECRET so the backend accepts it
           Authorization: `Bearer ${jwt.sign(
             { userId: "system", email: "system@conn3ct.internal" },
-            process.env.JWT_SECRET || "fallback-secret-key",
+            serviceSecret,
             { expiresIn: "30s" }
           )}`,
         },
@@ -78,10 +88,14 @@ export async function POST(request: Request) {
           mode?: string;
         };
 
-        // 1. Enforce access PIN
+        // 1. Enforce access PIN (timing-safe comparison)
         if (room.accessPin) {
-          if (!pin || pin !== room.accessPin) {
-            return NextResponse.json({ error: "Invalid or missing access PIN" }, { status: 403 });
+          const pinBuffer = Buffer.from(pin || '');
+          const storedBuffer = Buffer.from(room.accessPin || '');
+          const pinMatch = pinBuffer.length === storedBuffer.length &&
+            timingSafeEqual(pinBuffer, storedBuffer);
+          if (!pinMatch) {
+            return NextResponse.json({ error: 'Incorrect access PIN' }, { status: 403 });
           }
         }
 
@@ -118,8 +132,6 @@ export async function POST(request: Request) {
       console.warn("Redis is unreachable. Skipping capacity check. (Normal in local dev)");
     }
 
-    const secret = process.env.JWT_SECRET || "fallback-secret-key";
-
     const payload: any = {
       userId: finalUserId,
       email: finalEmail,
@@ -132,7 +144,7 @@ export async function POST(request: Request) {
     // Forward any metadata from the session token (e.g. from external API)
     if (!isBot && sessionToken) {
       try {
-        const sessionData = jwt.verify(sessionToken, secret) as any;
+        const sessionData = jwt.verify(sessionToken, process.env.JWT_SECRET!) as any;
         if (sessionData.action) payload.action = sessionData.action;
         if (sessionData.ownerEmail) payload.ownerEmail = sessionData.ownerEmail;
         if (sessionData.roomName) payload.roomName = sessionData.roomName;
@@ -142,7 +154,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const token = jwt.sign(payload, secret, { expiresIn: "24h" });
+    const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: "24h" });
     return NextResponse.json({ token });
   } catch (error) {
     console.error("Token generation error:", error);

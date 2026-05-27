@@ -8,11 +8,19 @@ export const schedulingRouter = Router();
 
 schedulingRouter.use(requireAuth);
 
+function escapeIcs(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
 const createScheduleSchema = z.object({
   roomId: z.string(),
-  title: z.string().min(1),
+  title: z.string().min(1).max(200),
   startTime: z.string().datetime(),
-  durationMin: z.number().min(1).default(60)
+  durationMin: z.number().min(1).max(1440).default(60)
 });
 
 schedulingRouter.post('/', async (req: Request, res: Response) => {
@@ -49,7 +57,8 @@ schedulingRouter.post('/', async (req: Request, res: Response) => {
     logger.info(`Session scheduled: ${session.id} for room ${roomId}`);
     
     // Generates a mock ICS content directly for MVP
-    const icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:${title}\nDTSTART:${session.startTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z\nURL:https://conn3ct.example.com/join/${room.slug}\nEND:VEVENT\nEND:VCALENDAR`;
+    const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'app.konn3ct.net';
+    const icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nSUMMARY:${escapeIcs(title)}\nDTSTART:${session.startTime.toISOString().replace(/[-:]/g, '').split('.')[0]}Z\nURL:https://${frontendDomain}/join/${room.slug}\nEND:VEVENT\nEND:VCALENDAR`;
 
     res.status(201).json({
       session,

@@ -10,6 +10,13 @@ import Redis from 'ioredis';
 import crypto from 'crypto';
 import OpenAI from 'openai';
 
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('[FATAL] JWT_SECRET must be set in production');
+}
+if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('[FATAL] TURN_SECRET must be set in production');
+}
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'dummy_key_if_missing',
 });
@@ -23,7 +30,7 @@ const redis = new Redis(redisUrl, {
   maxRetriesPerRequest: 1
 });
 
-redis.on("error", () => { }); // Catch unhandled connection error events silently
+redis.on("error", (e) => logger.error('Redis connection error', e));
 
 const redisSubscriber = new Redis(redisUrl, {
   retryStrategy: (times) => {
@@ -32,7 +39,7 @@ const redisSubscriber = new Redis(redisUrl, {
   },
   maxRetriesPerRequest: 1
 });
-redisSubscriber.on("error", () => { });
+redisSubscriber.on("error", (e) => logger.error('Redis connection error', e));
 
 redisSubscriber.subscribe('recorder:completed').catch(e => logger.error('Failed to subscribe to recorder:completed', e));
 redisSubscriber.on('message', async (channel, message) => {
@@ -198,14 +205,14 @@ export function initializeSignaling(server: Server) {
       await redis.set(`pod:${POD_ID}:cpu`, cpuUsage);
       await redis.expire(`pod:${POD_ID}:cpu`, 10);
 
-      console.info(`pod:${POD_ID}:cpu =>`, cpuUsage)
+      logger.info(`pod:${POD_ID}:cpu =>`, cpuUsage)
 
       // Method 2: Graceful Degradation if load is too high
       // If CPU is > MAX_DEGRADATION_CPU_LOAD (default 85%), tell all connected clients to optimize video feeds
       const maxDegradationLoad = parseInt(process.env.MAX_DEGRADATION_CPU_LOAD || "85", 10);
       if (cpuUsage > maxDegradationLoad) {
         for (const roomId of rooms.keys()) {
-          console.warn("CPU LOAD IS HIGH!!!", cpuUsage)
+          logger.warn("CPU LOAD IS HIGH!!!", cpuUsage)
           broadcastToRoom(roomId, { type: 'server_load_high' });
         }
       }
@@ -234,8 +241,6 @@ export function initializeSignaling(server: Server) {
 
       const secret = process.env.JWT_SECRET || 'fallback-secret-key';
       const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string };
-
-      console.log("decoded", decoded);
 
       // Verify room exists
       const room = await db.room.findUnique({ where: { slug: roomSlug } });
@@ -310,9 +315,9 @@ export function initializeSignaling(server: Server) {
 
     rooms.get(roomId)!.set(userId, client);
 
-    if (disconnectTimeouts.has(userId)) {
-      clearTimeout(disconnectTimeouts.get(userId)!);
-      disconnectTimeouts.delete(userId);
+    if (disconnectTimeouts.has(`${userId}:${roomId}`)) {
+      clearTimeout(disconnectTimeouts.get(`${userId}:${roomId}`)!);
+      disconnectTimeouts.delete(`${userId}:${roomId}`);
       logger.info(`User ${userId} reconnected to room ${roomId} during grace period`);
       ws.send(JSON.stringify({ 
         type: 'session_status', 
@@ -422,9 +427,13 @@ export function initializeSignaling(server: Server) {
       }
     }
 
-    ws.on('message', async (message: string) => {
+    ws.on('message', async (message: Buffer | string) => {
       try {
-        const data = JSON.parse(message);
+        if (Buffer.byteLength(typeof message === 'string' ? message : message) > 65536) {
+          logger.warn(`User ${userId} sent oversized WS message (>64KB), ignoring.`);
+          return;
+        }
+        const data = JSON.parse(message.toString());
         try {
           await handleMessage(client, data);
         } catch (handleError) {
@@ -485,10 +494,10 @@ export function initializeSignaling(server: Server) {
             syncRoomStateToRedis(roomId, roomSlug);
           }
         }
-        disconnectTimeouts.delete(userId);
+        disconnectTimeouts.delete(`${userId}:${roomId}`);
       }, 30000); // 30 seconds
 
-      disconnectTimeouts.set(userId, timeout);
+      disconnectTimeouts.set(`${userId}:${roomId}`, timeout);
     });
   });
 
@@ -526,6 +535,11 @@ export function initializeSignaling(server: Server) {
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
             targetClient.ws.close();
             rooms.get(roomId)?.delete(data.userId);
+            // Notify all other hosts that this user was denied
+            broadcastToHosts(roomId, {
+              type: 'waiting_room_denied',
+              userId: data.userId,
+            });
           }
         }
         break;
@@ -535,9 +549,13 @@ export function initializeSignaling(server: Server) {
           const targetClient = rooms.get(roomId)?.get(data.userId);
           // Don't allow kicking other hosts (or maybe we should? for now let's say only attendees)
           if (targetClient && targetClient.role !== 'host') {
+            // Remove first so the close handler skips grace period
+            rooms.get(roomId)?.delete(data.userId);
+            const producers = roomProducers.get(roomId) || [];
+            roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
+            broadcastToRoom(roomId, { type: 'user_left', userId: data.userId });
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
             targetClient.ws.close();
-            // Disconnect handlers will clean up their presence
           }
         }
         break;
@@ -582,11 +600,11 @@ export function initializeSignaling(server: Server) {
           }
         }
         // If there's an existing disconnect timeout, clear it so it doesn't fire later
-        if (disconnectTimeouts.has(userId)) {
-          clearTimeout(disconnectTimeouts.get(userId)!);
-          disconnectTimeouts.delete(userId);
+        if (disconnectTimeouts.has(`${userId}:${roomId}`)) {
+          clearTimeout(disconnectTimeouts.get(`${userId}:${roomId}`)!);
+          disconnectTimeouts.delete(`${userId}:${roomId}`);
         }
-        try { client.ws.close(); } catch(e){}
+        try { client.ws.close(); } catch(e) { logger.warn('ws.close() error on leave_meeting', e); }
         break;
 
       case 'end_meeting':
@@ -609,6 +627,16 @@ export function initializeSignaling(server: Server) {
 
       case 'chat':
         try {
+          if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) return;
+          if (data.message.length > 4000) {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Message too long (max 4000 characters).' }));
+            return;
+          }
+          if (data.fileUrl && (typeof data.fileUrl !== 'string' || !/^https?:\/\//i.test(data.fileUrl))) {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid file URL.' }));
+            return;
+          }
+
           const newMsg = await db.chatMessage.create({
             data: {
               roomId,
@@ -667,6 +695,9 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'caption':
+        if (!data.text || typeof data.text !== 'string' || data.text.length > 2000) return;
+        if (data.lang && typeof data.lang === 'string' && !/^[a-z]{2}(-[A-Z]{2})?$/.test(data.lang)) return;
+
         if (data.isFinal) {
           if (!roomTranscripts.has(roomId)) {
             roomTranscripts.set(roomId, []);
@@ -690,6 +721,18 @@ export function initializeSignaling(server: Server) {
 
       case 'ecinema_update':
         if (client.role === 'host' || client.role === 'presenter') {
+          if (data.link) {
+            try {
+              const url = new URL(data.link);
+              if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid eCinema URL.' }));
+                return;
+              }
+            } catch {
+              client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid eCinema URL.' }));
+              return;
+            }
+          }
           roomECinema.set(roomId, data.link || null);
           broadcastToRoom(roomId, {
             type: 'ecinema_update',
@@ -774,8 +817,18 @@ export function initializeSignaling(server: Server) {
           // Increment vote in DB
           const poll = await db.meetingPoll.findUnique({ where: { id: data.pollId } });
           if (poll && Array.isArray(poll.options)) {
-            const updatedOptions = poll.options.map((opt: any) => {
-              if (opt.id === data.optionId) return { ...opt, votes: (opt.votes || 0) + 1 };
+            // Check for duplicate vote
+            const alreadyVoted = (poll.options as any[]).some(
+              (opt: any) => Array.isArray(opt.votedBy) && opt.votedBy.includes(userId)
+            );
+            if (alreadyVoted) {
+              client.ws.send(JSON.stringify({ type: 'error', message: 'You have already voted on this poll.' }));
+              return;
+            }
+            const updatedOptions = (poll.options as any[]).map((opt: any) => {
+              if (opt.id === data.optionId) {
+                return { ...opt, votes: (opt.votes || 0) + 1, votedBy: [...(opt.votedBy || []), userId] };
+              }
               return opt;
             });
             await db.meetingPoll.update({
@@ -830,23 +883,28 @@ export function initializeSignaling(server: Server) {
 
       case 'start_recording':
         if (client.role === 'host' || client.role === 'co-host') {
-          // Push job to redis queue
-          const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-          const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-          
-          db.room.findUnique({ where: { id: roomId } }).then(room => {
+          try {
+            const room = await db.room.findUnique({ where: { id: roomId } });
             if (room) {
+              const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+              const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
               const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true`;
               
-              redis.lpush('recorder:queue', JSON.stringify({
+              const pushed = await redis.lpush('recorder:queue', JSON.stringify({
                 roomId,
                 roomSlug: room.slug,
                 url: recordingUrl
-              })).catch(e => logger.error("Failed to push recording job to queue", e));
-
-              broadcastToRoom(roomId, { type: 'recording_started' });
+              }));
+              
+              if (pushed > 0) {
+                broadcastToRoom(roomId, { type: 'recording_started' });
+              } else {
+                logger.error(`Failed to push recording job to queue for room ${roomId}`);
+              }
             }
-          });
+          } catch (e) {
+            logger.error('Failed to start recording', e);
+          }
         }
         break;
 
@@ -900,6 +958,10 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'connectWebRtcTransport': {
+        if (!client.transports.includes(data.transportId)) {
+          logger.warn(`User ${userId} tried to connect a transport they don't own: ${data.transportId}`);
+          return;
+        }
         await connectTransport(data.transportId, data.dtlsParameters);
         client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
         break;
@@ -994,6 +1056,13 @@ export function initializeSignaling(server: Server) {
 
       case 'stop_producer': {
         // Client is explicitly closing a producer (e.g. stopped screen sharing)
+        const rp0 = roomProducers.get(roomId);
+        const ownedProducer = rp0?.find(p => p.producerId === data.producerId && p.userId === userId);
+        if (!ownedProducer) {
+          logger.warn(`User ${userId} tried to stop a producer they don't own: ${data.producerId}`);
+          return;
+        }
+
         const { producerId: pidToStop, appData: stopAppData } = data;
         const source = (stopAppData || {}).source || 'unknown';
 
@@ -1014,12 +1083,20 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'resume': {
+        if (consumerOwners.get(data.consumerId) !== client) {
+          logger.warn(`User ${userId} tried to resume a consumer they don't own`);
+          return;
+        }
         await resumeConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
         break;
       }
 
       case 'pause_consumer': {
+        if (consumerOwners.get(data.consumerId) !== client) {
+          logger.warn(`User ${userId} tried to pause a consumer they don't own`);
+          return;
+        }
         await pauseConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
         break;

@@ -62,8 +62,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-    const token = jwt.sign({ userId: user.id, email: user.email }, secret, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: '7d' });
 
     // Set HTTP-only cookie
     res.cookie('token', token, {
@@ -94,8 +93,7 @@ authRouter.get('/me', async (req: Request, res: Response) => {
     const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
 
-    const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-    const decoded = jwt.verify(token, secret) as { userId: string, email: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string, email: string };
     
     const user = await db.user.findUnique({ where: { id: decoded.userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });
