@@ -423,10 +423,13 @@ function ControlBtn({
   icon: React.ReactNode; danger?: boolean; active?: boolean;
   highlight?: boolean; onClick: () => void; tooltip: string; className?: string;
 }) {
+  // Derive a stable data-testid from the tooltip text (lowercase, hyphened)
+  const testId = `ctrl-${tooltip.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <button
       onClick={onClick}
       title={tooltip}
+      data-testid={testId}
       className={cn(
         "relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 active:scale-90",
         danger && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
@@ -455,10 +458,12 @@ function PanelBtn({
 }: {
   icon: React.ReactNode; active: boolean; onClick: () => void; tooltip: string; hasNotification?: boolean;
 }) {
+  const testId = `panel-${tooltip.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <button
       onClick={onClick}
       title={tooltip}
+      data-testid={testId}
       className={cn(
         "relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-200 active:scale-90",
       )}
