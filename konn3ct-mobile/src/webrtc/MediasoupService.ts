@@ -1,0 +1,281 @@
+import { Device, types } from 'mediasoup-client';
+import { MediaStream } from 'react-native-webrtc';
+import { useAuthStore } from '../store/useAuthStore';
+
+// Connected to Kubernetes Backend Ingress Domain
+const BACKEND_DOMAIN = process.env.EXPO_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
+
+export interface RemoteParticipant {
+  id: string;
+  name: string;
+  stream: MediaStream;
+}
+
+export class MediasoupService {
+  private ws: WebSocket | null = null;
+  private device: Device | null = null;
+  
+  private sendTransport: types.Transport | null = null;
+  private recvTransport: types.Transport | null = null;
+  
+  private localVideoProducer: types.Producer | null = null;
+  private localAudioProducer: types.Producer | null = null;
+  private consumers: Map<string, types.Consumer> = new Map();
+  private remoteStreams: Map<string, MediaStream> = new Map();
+
+  private pendingRequests = new Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: NodeJS.Timeout }>>();
+  private onStreamUpdateCallback: ((streams: RemoteParticipant[]) => void) | null = null;
+  
+  public roomId: string;
+  public sessionStatus?: string;
+  
+  constructor(roomId: string) {
+    this.roomId = roomId;
+  }
+
+  public onStreamUpdate(callback: (streams: RemoteParticipant[]) => void) {
+    this.onStreamUpdateCallback = callback;
+  }
+
+  private notifyStreamUpdate() {
+    if (!this.onStreamUpdateCallback) return;
+    const participants: RemoteParticipant[] = [];
+    this.remoteStreams.forEach((stream, id) => {
+      participants.push({
+        id,
+        name: `User ${id.substring(0, 4)}`,
+        stream
+      });
+    });
+    this.onStreamUpdateCallback([...participants]);
+  }
+
+  private request(sendType: string, expectType: string, payload: any = {}): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return reject(new Error('WebSocket is not connected'));
+      }
+      
+      const timeoutId = setTimeout(() => {
+        if (this.pendingRequests.has(expectType)) {
+          const queue = this.pendingRequests.get(expectType)!;
+          const index = queue.findIndex(req => req.resolve === resolve);
+          if (index !== -1) {
+            queue.splice(index, 1);
+            reject(new Error(`Timeout waiting for ${expectType}`));
+          }
+        }
+      }, 10000);
+
+      if (!this.pendingRequests.has(expectType)) {
+        this.pendingRequests.set(expectType, []);
+      }
+      this.pendingRequests.get(expectType)!.push({ resolve, reject, timeoutId });
+
+      this.ws.send(JSON.stringify({ type: sendType, ...payload }));
+    });
+  }
+
+  public async connect() {
+    const token = useAuthStore.getState().token;
+    if (!token) throw new Error('No auth token found');
+
+    // The backend's server.ts explicitly expects the token in the URL query parameters
+    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}`;
+    console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
+    
+    this.ws = new WebSocket(wsUrl);
+
+    return new Promise<void>((resolve, reject) => {
+      this.ws!.onopen = () => {
+        console.log('Native WebSocket connected successfully!');
+        // Send auth token to authorize the connection
+        this.ws!.send(JSON.stringify({ type: 'auth', token }));
+      };
+
+      this.ws!.onerror = (err) => {
+        console.error('WebSocket connection error:', err);
+        reject(err);
+      };
+      
+      this.ws!.onclose = (e) => {
+        console.log(`WebSocket closed: ${e.code} ${e.reason}`);
+      };
+
+      this.ws!.onmessage = async (event) => {
+        let msg: any;
+        try {
+          msg = JSON.parse(event.data);
+        } catch (e) { return; }
+
+        if (this.pendingRequests.has(msg.type)) {
+          const queue = this.pendingRequests.get(msg.type)!;
+          if (queue.length > 0) {
+            const resolver = queue.shift()!;
+            clearTimeout(resolver.timeoutId);
+            resolver.resolve(msg);
+            if (queue.length === 0) this.pendingRequests.delete(msg.type);
+            return;
+          }
+        }
+
+        switch (msg.type) {
+          case 'session_status':
+            this.sessionStatus = msg.status;
+            if (msg.status === 'active' && !this.device?.loaded) {
+              try {
+                await this.initializeMediasoup();
+                resolve();
+              } catch (e) {
+                console.error('Failed to init mediasoup:', e);
+                reject(e);
+              }
+            } else if (msg.status === 'waiting') {
+              console.log('Waiting for host to admit...');
+            }
+            break;
+            
+          case 'newProducer':
+            this.consumeRemote(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
+            break;
+            
+          case 'producer_closed':
+            this.consumers.forEach((consumer, consumerId) => {
+              if (consumerId === msg.consumerId) {
+                consumer.close();
+                this.consumers.delete(consumerId);
+              }
+            });
+            break;
+            
+          case 'user_left':
+            const stream = this.remoteStreams.get(msg.userId);
+            if (stream) {
+              this.remoteStreams.delete(msg.userId);
+              this.notifyStreamUpdate();
+            }
+            break;
+        }
+      };
+    });
+  }
+
+  private async initializeMediasoup() {
+    console.log('Requesting Router Capabilities...');
+    const res = await this.request('getRouterRtpCapabilities', 'routerCapabilities');
+    
+    this.device = new Device();
+    await this.device.load({ routerRtpCapabilities: res.rtpCapabilities });
+    console.log('Mediasoup Device loaded!');
+
+    // Send Transport
+    const sendRes = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
+    this.sendTransport = this.device.createSendTransport(sendRes.transportParams);
+    
+    this.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      try {
+        await this.request('connectWebRtcTransport', 'transportConnected', {
+          transportId: this.sendTransport!.id,
+          dtlsParameters
+        });
+        callback();
+      } catch (err) { errback(err as Error); }
+    });
+
+    this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
+      try {
+        const { id } = await this.request('produce', 'produced', {
+          transportId: this.sendTransport!.id,
+          kind,
+          rtpParameters,
+          appData
+        });
+        callback({ id });
+      } catch (err) { errback(err as Error); }
+    });
+
+    // Recv Transport
+    const recvRes = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'recv' });
+    this.recvTransport = this.device.createRecvTransport(recvRes.transportParams);
+    
+    this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      try {
+        await this.request('connectWebRtcTransport', 'transportConnected', {
+          transportId: this.recvTransport!.id,
+          dtlsParameters
+        });
+        callback();
+      } catch (err) { errback(err as Error); }
+    });
+
+    // Fetch existing producers
+    try {
+      const prodRes = await this.request('getProducers', 'producersList');
+      for (const p of prodRes.producers || []) {
+        await this.consumeRemote(p.producerId, p.userId, p.kind, p.appData);
+      }
+    } catch (e) { console.error('Failed to get existing producers', e); }
+  }
+
+  public async broadcast(stream: MediaStream) {
+    if (!this.sendTransport) return;
+    
+    const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
+    
+    if (videoTrack) {
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: videoTrack as any, 
+        appData: { source: 'camera' },
+        encodings: [{ scaleResolutionDownBy: 1, maxBitrate: 900000 }] 
+      });
+    }
+    if (audioTrack) {
+      this.localAudioProducer = await this.sendTransport.produce({ track: audioTrack as any });
+    }
+  }
+
+  private async consumeRemote(producerId: string, peerId: string, kind: string, appData: any) {
+    if (!this.device || !this.recvTransport) return;
+
+    try {
+      const data = await this.request('consume', 'consumed', {
+        producerId,
+        rtpCapabilities: this.device.rtpCapabilities
+      });
+
+      const consumer = await this.recvTransport.consume({
+        id: data.id,
+        producerId: data.producerId,
+        kind: data.kind,
+        rtpParameters: data.rtpParameters
+      });
+
+      this.consumers.set(consumer.id, consumer);
+
+      let stream = this.remoteStreams.get(peerId);
+      if (!stream) {
+        stream = new MediaStream();
+        this.remoteStreams.set(peerId, stream);
+      }
+      stream.addTrack(consumer.track as any);
+      
+      // Resume the consumer natively (Mobile requires explicit resume)
+      consumer.resume();
+      await this.request('resumeConsumer', 'consumerResumed', { consumerId: consumer.id });
+      
+      this.notifyStreamUpdate();
+    } catch (e) {
+      console.error('Failed to consume', e);
+    }
+  }
+
+  public disconnect() {
+    if (this.sendTransport) this.sendTransport.close();
+    if (this.recvTransport) this.recvTransport.close();
+    if (this.ws) this.ws.close();
+    this.remoteStreams.clear();
+    this.consumers.clear();
+    this.notifyStreamUpdate();
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "konn3ct-mobile",
+    "slug": "konn3ct-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.konn3ct.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow Konn3ct to access your camera for video meetings.",
+          "microphonePermission": "Allow Konn3ct to access your microphone for video meetings."
+        }
+      ]
+    ]
+  }
+}
