@@ -1,6 +1,7 @@
 import { Device, types } from 'mediasoup-client';
 import { MediaStream } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
+import { useMeetingStore } from '../store/useMeetingStore';
 
 // Connected to Kubernetes Backend Ingress Domain
 const BACKEND_DOMAIN = process.env.EXPO_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
@@ -24,13 +25,72 @@ export class MediasoupService {
   private remoteStreams: Map<string, MediaStream> = new Map();
 
   private pendingRequests = new Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: NodeJS.Timeout }>>();
+  
+  // Callbacks
   private onStreamUpdateCallback: ((streams: RemoteParticipant[]) => void) | null = null;
+  public onParticipantsList?: (participants: any[]) => void;
+  public onUserJoined?: (user: any) => void;
+  public onUserLeft?: (userId: string) => void;
+  public onChatMessage?: (msg: any) => void;
+  public onChatHistory?: (messages: any[]) => void;
+  public onReaction?: (reaction: any) => void;
+  public onPollCreate?: (poll: any) => void;
+  public onPollVote?: (vote: any) => void;
+  public onPollHistory?: (polls: any[]) => void;
+  public onWaitingRoomRequest?: (user: any) => void;
+  public onForceMute?: () => void;
+  public onSessionStatusChange?: (status: string) => void;
   
   public roomId: string;
   public sessionStatus?: string;
+  public currentUserId?: string;
+  public currentUserRole?: string;
   
   constructor(roomId: string) {
     this.roomId = roomId;
+  }
+
+  // --- Collaboration Methods ---
+  public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl }));
+    }
+  }
+
+  public sendReaction(reaction: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'reaction', reaction }));
+    }
+  }
+
+  public createPoll(pollId: string, question: string, options: any[]) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'poll_create', pollId, question, options }));
+    }
+  }
+
+  public votePoll(pollId: string, optionId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
+  }
+
+  public admitUser(userId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'admit_user', userId }));
+    }
+  }
+
+  public denyUser(userId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'deny_user', userId }));
+    }
+  }
+
+  public forceMute(userId?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId }));
+    }
   }
 
   public onStreamUpdate(callback: (streams: RemoteParticipant[]) => void) {
@@ -80,16 +140,14 @@ export class MediasoupService {
     const token = useAuthStore.getState().token;
     if (!token) throw new Error('No auth token found');
 
-    // The backend's server.ts explicitly expects the token in the URL query parameters
     const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}`;
     console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
     
     this.ws = new WebSocket(wsUrl);
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       this.ws!.onopen = () => {
         console.log('Native WebSocket connected successfully!');
-        // Send auth token to authorize the connection
         this.ws!.send(JSON.stringify({ type: 'auth', token }));
       };
 
@@ -122,23 +180,81 @@ export class MediasoupService {
         switch (msg.type) {
           case 'session_status':
             this.sessionStatus = msg.status;
+            if (msg.userId && msg.role) {
+              this.currentUserId = msg.userId;
+              this.currentUserRole = msg.role;
+              useMeetingStore.getState().setCurrentUser(msg.userId, msg.role);
+            }
+            
             if (msg.status === 'active' && !this.device?.loaded) {
               try {
                 await this.initializeMediasoup();
-                resolve();
+                if (this.onSessionStatusChange) this.onSessionStatusChange('active');
+                resolve('active');
               } catch (e) {
                 console.error('Failed to init mediasoup:', e);
                 reject(e);
               }
             } else if (msg.status === 'waiting') {
               console.log('Waiting for host to admit...');
+              if (this.onSessionStatusChange) this.onSessionStatusChange('waiting');
+              resolve('waiting');
             }
             break;
-            
+
+          case 'participants_list':
+            if (this.onParticipantsList) this.onParticipantsList(msg.participants || []);
+            break;
+
+          case 'user_joined':
+            if (this.onUserJoined) this.onUserJoined(msg);
+            break;
+
+          case 'user_left':
+            if (this.onUserLeft) this.onUserLeft(msg.userId);
+            const stream = this.remoteStreams.get(msg.userId);
+            if (stream) {
+              this.remoteStreams.delete(msg.userId);
+              this.notifyStreamUpdate();
+            }
+            break;
+
+          case 'chat_history':
+            if (this.onChatHistory) this.onChatHistory(msg.messages || []);
+            break;
+
+          case 'chat':
+            if (this.onChatMessage) this.onChatMessage(msg);
+            break;
+
+          case 'reaction':
+            if (this.onReaction) this.onReaction(msg);
+            break;
+
+          case 'poll_history':
+            if (this.onPollHistory) this.onPollHistory(msg.polls || []);
+            break;
+
+          case 'poll_create':
+            if (this.onPollCreate) this.onPollCreate(msg);
+            break;
+
+          case 'poll_vote':
+            if (this.onPollVote) this.onPollVote(msg);
+            break;
+
+          case 'waiting_room_request':
+            if (this.onWaitingRoomRequest) this.onWaitingRoomRequest(msg);
+            break;
+
+          case 'force_mute':
+            if (this.onForceMute) this.onForceMute();
+            break;
+
           case 'newProducer':
             this.consumeRemote(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
             break;
-            
+
           case 'producer_closed':
             this.consumers.forEach((consumer, consumerId) => {
               if (consumerId === msg.consumerId) {
@@ -146,14 +262,6 @@ export class MediasoupService {
                 this.consumers.delete(consumerId);
               }
             });
-            break;
-            
-          case 'user_left':
-            const stream = this.remoteStreams.get(msg.userId);
-            if (stream) {
-              this.remoteStreams.delete(msg.userId);
-              this.notifyStreamUpdate();
-            }
             break;
         }
       };
