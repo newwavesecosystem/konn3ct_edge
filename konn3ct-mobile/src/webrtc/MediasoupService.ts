@@ -184,7 +184,7 @@ export class MediasoupService {
         console.log('Native WebSocket connected successfully!');
         this.ws!.send(JSON.stringify({ type: 'auth', token }));
 
-        // Keep-alive to prevent 1006 abnormal closure from proxies (Nginx/ELB)
+        // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'ping' }));
@@ -456,7 +456,7 @@ export class MediasoupService {
       
       // Resume the consumer natively (Mobile requires explicit resume)
       consumer.resume();
-      await this.request('resumeConsumer', 'consumerResumed', { consumerId: consumer.id });
+      await this.request('resume', 'resumed', { consumerId: consumer.id });
       
       this.notifyStreamUpdate();
     } catch (e) {
