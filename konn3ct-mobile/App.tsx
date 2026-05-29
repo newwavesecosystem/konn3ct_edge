@@ -14,7 +14,16 @@ import MainTabNavigator from './src/navigation/MainTabNavigator';
 import AuthStackNavigator from './src/navigation/AuthStackNavigator';
 import MeetingScreen from './src/screens/MeetingScreen';
 import { MeetingSummaryScreen } from './src/screens/MeetingSummaryScreen';
-import { useAuthStore } from './src/store/useAuthStore';
+import { useAuthStore, registerForPushNotificationsAsync } from './src/store/useAuthStore';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -48,6 +57,12 @@ export default function App() {
     // Hide the infinite white splash screen!
     SplashScreen.hideAsync().catch(console.warn);
   }, []);
+
+  useEffect(() => {
+    if (token) {
+      registerForPushNotificationsAsync();
+    }
+  }, [token]);
 
   return (
     <ErrorBoundary>

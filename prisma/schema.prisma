@@ -12,6 +12,7 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  expoPushToken String?
   createdAt    DateTime @default(now())
 
   ownedTeams   Team[]   @relation("TeamOwner")
