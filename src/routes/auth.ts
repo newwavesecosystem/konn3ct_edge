@@ -48,6 +48,28 @@ authRouter.post('/signup', authLimiter, async (req: Request, res: Response) => {
   }
 });
 
+// --- Register Expo Push Token ---
+authRouter.post('/push-token', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { expoPushToken } = req.body;
+    const userId = req.user!.userId;
+
+    if (!expoPushToken) {
+      return res.status(400).json({ error: 'Missing expoPushToken' });
+    }
+
+    await db.user.update({
+      where: { id: userId },
+      data: { expoPushToken }
+    });
+
+    res.status(200).json({ message: 'Push token registered successfully' });
+  } catch (error) {
+    logger.error('Register Push Token error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);

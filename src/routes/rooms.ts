@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
+import { sendPushNotification } from '../notifications/push';
 
 export const roomsRouter = Router();
 
@@ -133,6 +134,53 @@ roomsRouter.get('/:slug', async (req: Request, res: Response) => {
     res.status(200).json(room);
   } catch (error) {
     logger.error('Error fetching room', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const inviteSchema = z.object({
+  email: z.string().email()
+});
+
+roomsRouter.post('/:id/invite', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const userId = req.user!.userId;
+    const { email } = inviteSchema.parse(req.body);
+
+    const room = await db.room.findUnique({ where: { id } });
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    // Check if the invited user is registered on the platform
+    const targetUser = await db.user.findUnique({ where: { email } });
+
+    const invite = await db.meetingInvite.create({
+      data: {
+        roomId: id,
+        email,
+        token: crypto.randomBytes(16).toString('hex'),
+        invitedById: userId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      }
+    });
+
+    if (targetUser && targetUser.expoPushToken) {
+      await sendPushNotification(
+        targetUser.id,
+        'Meeting Invitation',
+        `You have been invited to join the meeting: ${room.name}`,
+        { roomId: room.id, slug: room.slug }
+      );
+    }
+
+    res.status(201).json({ message: 'Invite sent', invite });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid input', details: error.flatten().fieldErrors });
+    }
+    logger.error('Error sending invite', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
