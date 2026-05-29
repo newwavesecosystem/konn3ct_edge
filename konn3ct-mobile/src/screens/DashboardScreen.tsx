@@ -13,14 +13,16 @@ export default function DashboardScreen({ navigation }: Props) {
   const [showJoinInput, setShowJoinInput] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState('');
   const [pastRooms, setPastRooms] = useState<any[]>([]);
+  const [upcoming, setUpcoming] = useState<any[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
 
   React.useEffect(() => {
-    apiClient.get('/rooms').then(res => {
-      setPastRooms(res.data.slice(0, 3)); // Show top 3
-      setIsLoadingRooms(false);
-    }).catch(err => {
-      console.error(err);
+    Promise.all([
+      apiClient.get('/rooms').catch(() => ({ data: [] })),
+      apiClient.get('/scheduling').catch(() => ({ data: [] }))
+    ]).then(([roomsRes, schedRes]) => {
+      setPastRooms(roomsRes.data.slice(0, 3));
+      setUpcoming(schedRes.data.slice(0, 3));
       setIsLoadingRooms(false);
     });
   }, []);
@@ -118,11 +120,27 @@ export default function DashboardScreen({ navigation }: Props) {
 
       <Text style={styles.sectionTitle}>Upcoming</Text>
       
-      <View style={styles.card}>
-        <Text style={styles.cardTime}>10:00 AM - 11:00 AM</Text>
-        <Text style={styles.cardTitle}>Weekly Sync</Text>
-        <Text style={styles.cardSubtitle}>Room: test-room</Text>
-      </View>
+      {isLoadingRooms ? (
+        <Text style={styles.emptyText}>Loading...</Text>
+      ) : upcoming.length === 0 ? (
+        <Text style={styles.emptyText}>No upcoming meetings.</Text>
+      ) : (
+        upcoming.map((meeting, i) => {
+          const date = new Date(meeting.startTime);
+          const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return (
+            <TouchableOpacity 
+              key={i} 
+              style={styles.card}
+              onPress={() => navigation.navigate('Meeting', { roomId: meeting.room?.slug || meeting.roomId })}
+            >
+              <Text style={styles.cardTime}>{date.toLocaleDateString()} • {timeStr}</Text>
+              <Text style={styles.cardTitle}>{meeting.title}</Text>
+              <Text style={styles.cardSubtitle}>Room: {meeting.room?.name || 'Unknown'}</Text>
+            </TouchableOpacity>
+          );
+        })
+      )}
 
       <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Past Meetings Intelligence</Text>
       
