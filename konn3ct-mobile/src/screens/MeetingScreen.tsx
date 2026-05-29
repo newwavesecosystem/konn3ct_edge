@@ -8,13 +8,19 @@ import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService'
 import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
-import { Mic, MicOff, Video, VideoOff, MessageSquare, Users, BarChart2, Disc, Square, PhoneOff, UserPlus, Hand } from 'lucide-react-native';
+import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText } from 'lucide-react-native';
+import { useAuthStore } from '../store/useAuthStore';
 
 // Components
 import { ChatPanel } from '../components/meeting/ChatPanel';
 import { ParticipantsPanel } from '../components/meeting/ParticipantsPanel';
 import { PollsPanel } from '../components/meeting/PollsPanel';
+import { SettingsPanel } from '../components/meeting/SettingsPanel';
+import { StreamingPanel } from '../components/meeting/StreamingPanel';
+import { WhiteboardPanel } from '../components/meeting/WhiteboardPanel';
+import { DocsPanel } from '../components/meeting/DocsPanel';
 import { ReactionsLayer } from '../components/meeting/ReactionsLayer';
+import { CaptionsOverlay } from '../components/meeting/CaptionsOverlay';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Meeting'>;
 
@@ -89,6 +95,22 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onUserJoined = (user) => {
           useMeetingStore.getState().addParticipant(user);
           useMeetingStore.getState().removeWaitingRoomUser(user.userId);
+        };
+        service.onCaptionReceived = (userId, text, isFinal, lang) => {
+          const sender = useMeetingStore.getState().participants.find((p) => p.userId === userId);
+          const senderName = sender?.name || `Participant ${userId.substring(5, 9)}`;
+          
+          useMeetingStore.getState().setCaptions((currCaptions: any) => {
+            const newCaptions = [...currCaptions];
+            const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
+            if (lastIdx >= 0) {
+              newCaptions[lastIdx] = { userId, name: senderName, text, isFinal, timestamp: Date.now() };
+            } else {
+              newCaptions.push({ userId, name: senderName, text, isFinal, timestamp: Date.now() });
+            }
+            if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
+            return newCaptions;
+          });
         };
         service.onUserLeft = (userId) => {
           useMeetingStore.getState().removeParticipant(userId);
@@ -331,54 +353,78 @@ export default function MeetingScreen({ route, navigation }: Props) {
         </View>
       </View>
 
-      {/* Floating Toolbar */}
-      <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, isMicMuted && styles.toolBtnDanger]} onPress={toggleMic}>
-          {isMicMuted ? <MicOff size={20} color="#ef4444" /> : <Mic size={20} color="white" />}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.toolBtn, isCameraOff && styles.toolBtnDanger]} onPress={toggleCamera}>
-          {isCameraOff ? <VideoOff size={20} color="#ef4444" /> : <Video size={20} color="white" />}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.toolBtn, isHandRaisedLocally && {backgroundColor: 'rgba(56, 189, 248, 0.2)'}]} onPress={toggleHandRaise}>
-           <Hand size={20} color={isHandRaisedLocally ? "#38bdf8" : "white"} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'chat' ? 'none' : 'chat')}>
-          <MessageSquare size={20} color={activePane === 'chat' ? '#38bdf8' : 'white'} />
-          {unreadChatCount > 0 && (
-            <View style={styles.badge}><Text style={styles.badgeText}>{unreadChatCount}</Text></View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'participants' ? 'none' : 'participants')}>
-          <Users size={20} color={activePane === 'participants' ? '#38bdf8' : 'white'} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'polls' ? 'none' : 'polls')}>
-          <BarChart2 size={20} color={activePane === 'polls' ? '#38bdf8' : 'white'} />
-        </TouchableOpacity>
-
-        {isHost && (
-          <TouchableOpacity style={[styles.toolBtn, isRecording && styles.toolBtnDanger]} onPress={toggleRecording}>
-            {isRecording ? <Square size={20} color="#ef4444" fill="#ef4444" /> : <Disc size={20} color="white" />}
+      <View style={styles.toolbarScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbarInner}>
+          <TouchableOpacity style={[styles.toolBtn, isMicMuted && styles.toolBtnDanger]} onPress={toggleMic}>
+            {isMicMuted ? <MicOff size={20} color="#ef4444" /> : <Mic size={20} color="white" />}
           </TouchableOpacity>
-        )}
-        
-        <TouchableOpacity style={styles.toolBtn} onPress={() => sendReaction('👏')}>
-          <Text style={styles.toolIcon}>👏</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.toolBtn, styles.leaveBtn]} onPress={handleLeave}>
-          <PhoneOff size={20} color="white" />
-        </TouchableOpacity>
+          <TouchableOpacity style={[styles.toolBtn, isCameraOff && styles.toolBtnDanger]} onPress={toggleCamera}>
+            {isCameraOff ? <VideoOff size={20} color="#ef4444" /> : <VideoIcon size={20} color="white" />}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.toolBtn, isHandRaisedLocally && {backgroundColor: 'rgba(56, 189, 248, 0.2)'}]} onPress={toggleHandRaise}>
+            <Hand size={20} color={isHandRaisedLocally ? "#38bdf8" : "white"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'chat' ? 'none' : 'chat')}>
+            <MessageSquare size={20} color={activePane === 'chat' ? '#38bdf8' : 'white'} />
+            {unreadChatCount > 0 && activePane !== 'chat' && (
+              <View style={styles.badge}><Text style={styles.badgeText}>{unreadChatCount}</Text></View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'participants' ? 'none' : 'participants')}>
+            <Users size={20} color={activePane === 'participants' ? '#38bdf8' : 'white'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'polls' ? 'none' : 'polls')}>
+            <BarChart2 size={20} color={activePane === 'polls' ? '#38bdf8' : 'white'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'whiteboard' ? 'none' : 'whiteboard')}>
+            <Presentation size={20} color={activePane === 'whiteboard' ? '#38bdf8' : 'white'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'docs' ? 'none' : 'docs')}>
+            <FileText size={20} color={activePane === 'docs' ? '#38bdf8' : 'white'} />
+          </TouchableOpacity>
+
+          {isHost && (
+            <TouchableOpacity style={[styles.toolBtn, isRecording && styles.toolBtnDanger]} onPress={toggleRecording}>
+              {isRecording ? <Square size={20} color="#ef4444" fill="#ef4444" /> : <Disc size={20} color="white" />}
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => sendReaction('👏')}>
+            <Text style={styles.toolIcon}>👏</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'streaming' ? 'none' : 'streaming')}>
+            <Radio size={22} color={activePane === 'streaming' ? "#38bdf8" : "white"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'settings' ? 'none' : 'settings')}>
+            <Settings size={22} color={activePane === 'settings' ? "#38bdf8" : "white"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.toolBtn, styles.leaveBtn]} onPress={handleLeave}>
+            <PhoneOff size={22} color="white" />
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       {/* Side Panels Overlay */}
       {activePane === 'chat' && <ChatPanel service={serviceRef.current} />}
       {activePane === 'participants' && <ParticipantsPanel service={serviceRef.current} />}
       {activePane === 'polls' && <PollsPanel service={serviceRef.current} />}
+      {activePane === 'whiteboard' && <WhiteboardPanel />}
+      {activePane === 'docs' && <DocsPanel />}
+      {activePane === 'settings' && <SettingsPanel service={serviceRef.current} />}
+      {activePane === 'streaming' && <StreamingPanel roomId={roomId} />}
+
+      {/* Overlays */}
+      <CaptionsOverlay />
 
     </SafeAreaView>
   );
@@ -439,10 +485,16 @@ const styles = StyleSheet.create({
   cameraOff: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e293b' },
   cameraOffIcon: { fontSize: 24 },
   cameraOffText: { color: '#94a3b8', fontSize: 10, marginTop: 4 },
-  toolbar: {
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
-    padding: 16, backgroundColor: '#1e293b',
+  toolbarScroll: {
+    maxHeight: 76,
+    backgroundColor: '#1e293b',
     borderTopWidth: 1, borderTopColor: '#334155'
+  },
+  toolbarInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
   },
   toolBtn: {
     width: 44, height: 44,

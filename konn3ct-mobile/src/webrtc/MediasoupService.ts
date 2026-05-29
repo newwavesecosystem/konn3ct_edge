@@ -47,6 +47,7 @@ export class MediasoupService {
   public onActiveSpeaker?: (userIds: string[]) => void;
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
+  public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
   public onSessionStatusChange?: (status: string) => void;
   
   public roomId: string;
@@ -289,6 +290,10 @@ export class MediasoupService {
             if (this.onWaitingRoomRequest) this.onWaitingRoomRequest(msg);
             break;
 
+          case 'caption':
+            if (this.onCaptionReceived) this.onCaptionReceived(msg.userId, msg.text, msg.isFinal, msg.lang);
+            break;
+
           case 'force_mute':
             if (this.onForceMute) this.onForceMute();
             break;
@@ -422,6 +427,15 @@ export class MediasoupService {
   public resumeCamera() {
     if (this.localVideoProducer && this.localVideoProducer.paused) {
       this.localVideoProducer.resume();
+    }
+  }
+
+  public switchCamera() {
+    if (this.localVideoProducer) {
+      const track = this.localVideoProducer.track as any;
+      if (track && typeof track._switchCamera === 'function') {
+        track._switchCamera();
+      }
     }
   }
 

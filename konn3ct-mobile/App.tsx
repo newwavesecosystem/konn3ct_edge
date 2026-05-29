@@ -13,11 +13,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import AuthStackNavigator from './src/navigation/AuthStackNavigator';
 import MeetingScreen from './src/screens/MeetingScreen';
+import { MeetingSummaryScreen } from './src/screens/MeetingSummaryScreen';
 import { useAuthStore } from './src/store/useAuthStore';
 
 export type RootStackParamList = {
   MainTabs: undefined;
   Meeting: { roomId: string };
+  MeetingSummary: { roomId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -62,6 +64,11 @@ export default function App() {
                 name="Meeting" 
                 component={MeetingScreen} 
                 options={{ title: 'Meeting Room', headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="MeetingSummary" 
+                component={MeetingSummaryScreen} 
+                options={{ title: 'AI Intelligence', headerShown: true, headerStyle: { backgroundColor: '#1e293b' }, headerTintColor: 'white' }} 
               />
             </Stack.Navigator>
           ) : (
