@@ -1,28 +1,31 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
+import { apiClient } from '../api/client';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
 };
 
-import { apiClient } from '../api/client';
-import { ActivityIndicator, Alert } from 'react-native';
-
 export default function DashboardScreen({ navigation }: Props) {
-  const [isCreating, setIsCreating] = React.useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [showJoinInput, setShowJoinInput] = useState(false);
+  const [joinRoomId, setJoinRoomId] = useState('');
 
   const handleJoin = () => {
-    // For now, hardcode or ask user. We'll just alert for now since we need an input UI.
-    Alert.prompt(
-      "Join Meeting",
-      "Enter Room ID (Slug)",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Join", onPress: (roomId) => { if(roomId) navigation.navigate('Meeting', { roomId }); } }
-      ]
-    );
+    if (!showJoinInput) {
+      setShowJoinInput(true);
+      return;
+    }
+
+    if (joinRoomId.trim()) {
+      navigation.navigate('Meeting', { roomId: joinRoomId.trim() });
+      setShowJoinInput(false);
+      setJoinRoomId('');
+    } else {
+      Alert.alert("Error", "Please enter a valid Room ID.");
+    }
   };
 
   const handleCreate = async () => {
@@ -73,9 +76,33 @@ export default function DashboardScreen({ navigation }: Props) {
           style={[styles.actionButton, styles.secondaryButton]}
           onPress={handleJoin}
         >
-          <Text style={styles.secondaryButtonText}>Join Room</Text>
+          <Text style={styles.secondaryButtonText}>
+            {showJoinInput ? 'Go' : 'Join Room'}
+          </Text>
         </TouchableOpacity>
       </View>
+
+      {showJoinInput && (
+        <View style={styles.joinInputContainer}>
+          <TextInput
+            style={styles.joinInput}
+            placeholder="Enter Room ID (Slug)"
+            value={joinRoomId}
+            onChangeText={setJoinRoomId}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TouchableOpacity 
+            style={styles.cancelJoinButton}
+            onPress={() => {
+              setShowJoinInput(false);
+              setJoinRoomId('');
+            }}
+          >
+            <Text style={styles.cancelJoinButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <Text style={styles.sectionTitle}>Upcoming</Text>
       
@@ -111,7 +138,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 32,
+    marginBottom: 16,
   },
   actionButton: {
     flex: 1,
@@ -143,6 +170,34 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  joinInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  joinInput: {
+    flex: 1,
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#ffffff',
+    fontSize: 16,
+    marginRight: 12,
+  },
+  cancelJoinButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 50,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+  },
+  cancelJoinButtonText: {
+    color: '#64748b',
+    fontWeight: 'bold',
   },
   sectionTitle: {
     fontSize: 20,
