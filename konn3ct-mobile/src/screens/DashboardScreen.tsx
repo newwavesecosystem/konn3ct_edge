@@ -18,10 +18,10 @@ export default function DashboardScreen({ navigation }: Props) {
 
   React.useEffect(() => {
     Promise.all([
-      apiClient.get('/rooms').catch(() => ({ data: [] })),
+      apiClient.get('/ai/summaries').catch(() => ({ data: [] })),
       apiClient.get('/scheduling').catch(() => ({ data: [] }))
-    ]).then(([roomsRes, schedRes]) => {
-      setPastRooms(roomsRes.data.slice(0, 3));
+    ]).then(([summariesRes, schedRes]) => {
+      setPastRooms(summariesRes.data.slice(0, 3));
       setUpcoming(schedRes.data.slice(0, 3));
       setIsLoadingRooms(false);
     });
@@ -153,11 +153,11 @@ export default function DashboardScreen({ navigation }: Props) {
           <TouchableOpacity 
             key={i} 
             style={styles.pastRoomCard}
-            onPress={() => navigation.navigate('MeetingSummary', { roomId: room.id })}
+            onPress={() => navigation.navigate('MeetingSummary', { roomId: room.roomId })}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{room.name}</Text>
-              <Text style={styles.cardSubtitle}>ID: {room.slug}</Text>
+              <Text style={styles.cardTitle}>{room.roomName}</Text>
+              <Text style={styles.cardSubtitle}>ID: {room.roomSlug}</Text>
             </View>
             <View style={styles.aiBadge}>
               <Text style={styles.aiBadgeText}>AI</Text>

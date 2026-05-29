@@ -16,8 +16,8 @@ export function MeetingSummaryScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     Promise.all([
-      apiClient.ai.getSummary(roomId).catch(() => null),
-      apiClient.ai.getTranscription(roomId).catch(() => [])
+      apiClient.get(`/ai/summary/${roomId}`).then(res => res.data).catch(() => null),
+      apiClient.get(`/ai/transcription/${roomId}`).then(res => res.data).catch(() => [])
     ]).then(([s, t]) => {
       setSummary(s);
       setTranscriptions(t);

@@ -20,7 +20,7 @@ export async function sendPushNotification(userId: string, title: string, body: 
   try {
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { expoPushToken: true }
+      select: { expoPushToken: true, webPushSubscription: true }
     });
 
     if (!user || !user.expoPushToken) {
