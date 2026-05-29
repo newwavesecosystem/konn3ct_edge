@@ -101,8 +101,8 @@ export class WebRTCClient {
         // Send auth token as first message (not in URL to avoid logging in server access logs)
         this.ws!.send(JSON.stringify({ type: 'auth', token: this.token }));
         this.reconnectAttempts = 0; // Reset on success
-        
-        // Keep-alive to prevent 1006 abnormal closure from proxies (Nginx/ELB)
+
+        // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'ping' }));

@@ -1156,6 +1156,10 @@ export function initializeSignaling(server: Server) {
         break;
       }
 
+      case 'ping':
+        // Silently ignore ping messages used for keep-alive
+        break;
+
       default:
         logger.warn(`Unknown message type: ${data.type}`);
     }
