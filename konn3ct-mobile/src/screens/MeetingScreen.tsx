@@ -9,6 +9,7 @@ import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
 import { Alert } from 'react-native';
 import { useMeetingStore } from '../store/useMeetingStore';
+import { Mic, MicOff, Video, VideoOff, MessageSquare, Users, BarChart2, Disc, Square, PhoneOff, UserPlus } from 'lucide-react-native';
 
 // Components
 import { ChatPanel } from '../components/meeting/ChatPanel';
@@ -150,7 +151,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
       const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
-        setIsMicMuted(!audioTrack.enabled);
+        const newMutedState = !audioTrack.enabled;
+        setIsMicMuted(newMutedState);
+        
+        if (serviceRef.current) {
+          if (newMutedState) serviceRef.current.pauseMic();
+          else serviceRef.current.resumeMic();
+        }
       }
     }
   };
@@ -160,7 +167,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
-        setIsCameraOff(!videoTrack.enabled);
+        const newCameraState = !videoTrack.enabled;
+        setIsCameraOff(newCameraState);
+        
+        if (serviceRef.current) {
+          if (newCameraState) serviceRef.current.pauseCamera();
+          else serviceRef.current.resumeCamera();
+        }
       }
     }
   };
@@ -210,7 +223,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
         <View>
           <Text style={styles.roomText}>Room: {roomId}</Text>
           <TouchableOpacity onPress={copyMeetingLink} style={styles.copyBtn}>
-            <Text style={styles.copyText}>📋 Copy Invite Link</Text>
+            <UserPlus size={14} color="#38bdf8" />
+            <Text style={styles.copyText}>  Copy Invite Link</Text>
           </TouchableOpacity>
         </View>
         <Text style={[styles.statusText, isConnected ? styles.statusConnected : styles.statusConnecting]}>
@@ -263,31 +277,31 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {/* Floating Toolbar */}
       <View style={styles.toolbar}>
         <TouchableOpacity style={[styles.toolBtn, isMicMuted && styles.toolBtnDanger]} onPress={toggleMic}>
-          <Text style={styles.toolIcon}>{isMicMuted ? '🔇' : '🎤'}</Text>
+          {isMicMuted ? <MicOff size={20} color="#ef4444" /> : <Mic size={20} color="white" />}
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.toolBtn, isCameraOff && styles.toolBtnDanger]} onPress={toggleCamera}>
-          <Text style={styles.toolIcon}>{isCameraOff ? '🚫' : '📷'}</Text>
+          {isCameraOff ? <VideoOff size={20} color="#ef4444" /> : <Video size={20} color="white" />}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'chat' ? 'none' : 'chat')}>
-          <Text style={styles.toolIcon}>💬</Text>
+          <MessageSquare size={20} color={activePane === 'chat' ? '#38bdf8' : 'white'} />
           {unreadChatCount > 0 && (
             <View style={styles.badge}><Text style={styles.badgeText}>{unreadChatCount}</Text></View>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'participants' ? 'none' : 'participants')}>
-          <Text style={styles.toolIcon}>👥</Text>
+          <Users size={20} color={activePane === 'participants' ? '#38bdf8' : 'white'} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'polls' ? 'none' : 'polls')}>
-          <Text style={styles.toolIcon}>📊</Text>
+          <BarChart2 size={20} color={activePane === 'polls' ? '#38bdf8' : 'white'} />
         </TouchableOpacity>
 
         {isHost && (
           <TouchableOpacity style={[styles.toolBtn, isRecording && styles.toolBtnDanger]} onPress={toggleRecording}>
-            <Text style={styles.toolIcon}>{isRecording ? '⏹' : '⏺'}</Text>
+            {isRecording ? <Square size={20} color="#ef4444" fill="#ef4444" /> : <Disc size={20} color="white" />}
           </TouchableOpacity>
         )}
         
@@ -296,7 +310,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.toolBtn, styles.leaveBtn]} onPress={handleLeave}>
-          <Text style={styles.leaveText}>Leave</Text>
+          <PhoneOff size={20} color="white" />
         </TouchableOpacity>
       </View>
 
@@ -324,12 +338,13 @@ const styles = StyleSheet.create({
   statusConnecting: { color: '#f59e0b' },
   videoGrid: { flex: 1 },
   remoteGrid: { flex: 1, padding: 8 },
-  gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
   remoteVideoWrapper: {
-    width: 160, height: 200,
+    flexBasis: '48%',
+    height: 220,
     backgroundColor: '#1e293b',
-    margin: 4,
-    borderRadius: 12,
+    margin: '1%',
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1, borderColor: '#334155'
   },
@@ -347,7 +362,6 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 10
   },
   cameraOff: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e293b' },
-  cameraOffIcon: { fontSize: 30 },
   cameraOffText: { color: '#94a3b8', fontSize: 10, marginTop: 4 },
   toolbar: {
     flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',

@@ -343,12 +343,37 @@ export class MediasoupService {
     }
   }
 
+  public pauseMic() {
+    if (this.localAudioProducer && !this.localAudioProducer.paused) {
+      this.localAudioProducer.pause();
+    }
+  }
+
+  public resumeMic() {
+    if (this.localAudioProducer && this.localAudioProducer.paused) {
+      this.localAudioProducer.resume();
+    }
+  }
+
+  public pauseCamera() {
+    if (this.localVideoProducer && !this.localVideoProducer.paused) {
+      this.localVideoProducer.pause();
+    }
+  }
+
+  public resumeCamera() {
+    if (this.localVideoProducer && this.localVideoProducer.paused) {
+      this.localVideoProducer.resume();
+    }
+  }
+
   private async consumeRemote(producerId: string, peerId: string, kind: string, appData: any) {
     if (!this.device || !this.recvTransport) return;
 
     try {
       const data = await this.request('consume', 'consumed', {
         producerId,
+        transportId: this.recvTransport.id,
         rtpCapabilities: this.device.rtpCapabilities
       });
 
@@ -361,12 +386,12 @@ export class MediasoupService {
 
       this.consumers.set(consumer.id, consumer);
 
-      let stream = this.remoteStreams.get(peerId);
-      if (!stream) {
-        stream = new MediaStream();
-        this.remoteStreams.set(peerId, stream);
-      }
-      stream.addTrack(consumer.track as any);
+      const oldStream = this.remoteStreams.get(peerId);
+      const existingTracks = oldStream ? oldStream.getTracks() : [];
+      const newTracks = [...existingTracks, consumer.track];
+      
+      const newStream = new MediaStream(newTracks as any);
+      this.remoteStreams.set(peerId, newStream);
       
       // Resume the consumer natively (Mobile requires explicit resume)
       consumer.resume();
