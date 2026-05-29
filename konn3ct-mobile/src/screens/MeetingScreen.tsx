@@ -19,6 +19,7 @@ import { SettingsPanel } from '../components/meeting/SettingsPanel';
 import { StreamingPanel } from '../components/meeting/StreamingPanel';
 import { WhiteboardPanel } from '../components/meeting/WhiteboardPanel';
 import { DocsPanel } from '../components/meeting/DocsPanel';
+import { DonationPanel } from '../components/meeting/DonationPanel';
 import { ReactionsLayer } from '../components/meeting/ReactionsLayer';
 import { CaptionsOverlay } from '../components/meeting/CaptionsOverlay';
 
@@ -390,6 +391,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
             <FileText size={20} color={activePane === 'docs' ? '#38bdf8' : 'white'} />
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'donation' ? 'none' : 'donation')}>
+            <Gift size={20} color={activePane === 'donation' ? '#38bdf8' : 'white'} />
+          </TouchableOpacity>
+
           {isHost && (
             <TouchableOpacity style={[styles.toolBtn, isRecording && styles.toolBtnDanger]} onPress={toggleRecording}>
               {isRecording ? <Square size={20} color="#ef4444" fill="#ef4444" /> : <Disc size={20} color="white" />}
@@ -420,6 +425,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {activePane === 'polls' && <PollsPanel service={serviceRef.current} />}
       {activePane === 'whiteboard' && <WhiteboardPanel />}
       {activePane === 'docs' && <DocsPanel />}
+      {activePane === 'donation' && <DonationPanel />}
       {activePane === 'settings' && <SettingsPanel service={serviceRef.current} />}
       {activePane === 'streaming' && <StreamingPanel roomId={roomId} />}
 
