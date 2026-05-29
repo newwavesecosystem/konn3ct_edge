@@ -1,14 +1,46 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import { apiClient } from '../api/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
+import { Fingerprint } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const { login } = useAuthStore();
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        // Load saved email
+        const savedEmail = await AsyncStorage.getItem('@konn3ct_email');
+        if (savedEmail) {
+          setEmail(savedEmail);
+        }
+
+        // Check biometrics
+        const compatible = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        setIsBiometricSupported(compatible && enrolled);
+
+        // Check if we have a saved token for biometrics
+        const savedToken = await SecureStore.getItemAsync('konn3ct_token');
+        if (savedToken) {
+          setHasSavedCredentials(true);
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      }
+    };
+    initApp();
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -20,27 +52,54 @@ export default function LoginScreen() {
     setError('');
     
     try {
-      console.log(`Attempting login to: ${apiClient.defaults.baseURL}/auth/login`);
       const response = await apiClient.post('/auth/login', { email, password });
-      console.log('Login Response:', response.data);
       
       if (response.data && response.data.token) {
-        // Backend returns token but no user object, so we construct a temporary one
+        // Save email for next time
+        await AsyncStorage.setItem('@konn3ct_email', email);
+        
         const userObj = response.data.user || {
           id: 'unknown-id',
           email: email,
           name: email.split('@')[0]
         };
+
+        // Save token and user securely for biometric login
+        await SecureStore.setItemAsync('konn3ct_token', response.data.token);
+        await SecureStore.setItemAsync('konn3ct_user', JSON.stringify(userObj));
+
         login(userObj, response.data.token);
       } else {
-        console.warn('Login success but missing token in response payload!');
-        setError('Login succeeded but API returned invalid format. Check terminal logs.');
+        setError('Login succeeded but API returned invalid format.');
       }
     } catch (err: any) {
-      console.error('Login Error:', err.response?.data || err.message);
       setError(err.response?.data?.error || err.message || 'Failed to login. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Login to Konn3ct',
+        fallbackLabel: 'Use Password',
+      });
+
+      if (result.success) {
+        const savedToken = await SecureStore.getItemAsync('konn3ct_token');
+        const savedUserStr = await SecureStore.getItemAsync('konn3ct_user');
+        
+        if (savedToken && savedUserStr) {
+          const userObj = JSON.parse(savedUserStr);
+          login(userObj, savedToken);
+        } else {
+          Alert.alert('Error', 'No saved credentials found. Please login with password first.');
+        }
+      }
+    } catch (error) {
+      console.error('Biometric Auth Error:', error);
+      Alert.alert('Error', 'Biometric authentication failed.');
     }
   };
 
@@ -83,6 +142,16 @@ export default function LoginScreen() {
         <Text style={styles.buttonText}>Log In</Text>
       </TouchableOpacity>
       
+      {isBiometricSupported && hasSavedCredentials && (
+        <TouchableOpacity 
+          style={styles.biometricButton}
+          onPress={handleBiometricLogin}
+        >
+          <Fingerprint color="#2563eb" size={24} style={{ marginRight: 8 }} />
+          <Text style={styles.biometricButtonText}>Login with Biometrics</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity style={styles.linkContainer}>
         <Text style={styles.linkText}>Don't have an account? Sign up</Text>
       </TouchableOpacity>
@@ -140,6 +209,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 16,
+  },
+  biometricButton: {
+    width: '100%',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    padding: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  biometricButtonText: {
+    color: '#2563eb',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   spinner: {
     marginRight: 8,
