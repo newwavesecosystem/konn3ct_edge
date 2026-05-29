@@ -8,7 +8,7 @@ import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProdu
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
-import OpenAI from 'openai';
+import { generateMeetingSummaryData } from '../ai/summarizer';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
@@ -16,10 +16,6 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
 if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] TURN_SECRET must be set in production');
 }
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'dummy_key_if_missing',
-});
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl, {
@@ -170,36 +166,15 @@ async function generateMeetingSummary(roomId: string) {
       }
     });
 
-    if (process.env.OPENAI_API_KEY) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: "You are an AI Meeting Assistant. Read the following meeting transcript and provide a very brief summary and a list of actionable items. Format your response clearly.",
-          },
-          {
-            role: "user",
-            content: fullText,
-          },
-        ],
-        temperature: 0.3,
+    const { summary: summaryText, actionItems } = await generateMeetingSummaryData(fullText);
+
+    if (summaryText !== "Summary could not be generated.") {
+      await db.meetingSummary.upsert({
+        where: { roomId },
+        update: { summary: summaryText, actionItems: actionItems },
+        create: { roomId, summary: summaryText, actionItems: actionItems },
       });
-
-      const aiResponse = response.choices[0]?.message?.content?.trim();
-      if (aiResponse) {
-        // We will split the response naively or just store it all in 'summary'
-        const splitIndex = aiResponse.indexOf("Action");
-        const summaryText = splitIndex > -1 ? aiResponse.substring(0, splitIndex).trim() : aiResponse;
-        const actionItemsText = splitIndex > -1 ? aiResponse.substring(splitIndex).trim() : "";
-
-        await db.meetingSummary.upsert({
-          where: { roomId },
-          update: { summary: summaryText, actionItems: actionItemsText },
-          create: { roomId, summary: summaryText, actionItems: actionItemsText },
-        });
-        logger.info(`AI Summary generated and saved for room ${roomId}`);
-      }
+      logger.info(`AI Summary auto-generated for room ${roomId}`);
     }
   } catch (error) {
     logger.error(`Failed to generate summary for room ${roomId}:`, error);

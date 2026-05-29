@@ -4,6 +4,7 @@ import { useMeetingStore } from '../../store/useMeetingStore';
 import { MediasoupService } from '../../webrtc/MediasoupService';
 import { Smile, Paperclip, Send, Download } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 
 interface ChatPanelProps {
   service: MediasoupService | null;
@@ -63,14 +64,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // Upload the file to S3
-      const fileResp = await fetch(file.uri);
-      const blob = await fileResp.blob();
-
-      await fetch(data.presignedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.mimeType || 'application/octet-stream', "x-amz-acl": "public-read" },
-        body: blob
+      // Upload the file to S3 using Expo FileSystem to avoid React Native Blob bugs
+      await FileSystem.uploadAsync(data.presignedUrl, file.uri, {
+        httpMethod: 'PUT',
+        headers: {
+          "Content-Type": file.mimeType || 'application/octet-stream',
+          "x-amz-acl": "public-read"
+        }
       });
 
       // Dispatch chat message

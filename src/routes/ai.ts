@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { GoogleGenAI } from '@google/genai';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
@@ -43,7 +42,7 @@ aiRouter.get('/transcription/:roomId', async (req: Request, res: Response) => {
 // --- 2. Generate/Get AI Summary ---
 aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
   try {
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
       return res.status(503).json({ error: 'AI summarisation is not configured on this server.' });
     }
 
@@ -75,31 +74,10 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
 
     const fullText = transcriptions.map(t => t.content).join('\n');
 
-    const MAX_TRANSCRIPT_CHARS = 30000;
-    const truncatedText = fullText.length > MAX_TRANSCRIPT_CHARS
-      ? fullText.substring(0, MAX_TRANSCRIPT_CHARS) + '\n[Transcript truncated for summarisation]'
-      : fullText;
+    const { generateMeetingSummaryData } = require('../ai/summarizer');
+    const { summary: summaryText, actionItems } = await generateMeetingSummaryData(fullText);
 
-    let actionItems = "[]";
-    let summaryText = "Summary could not be generated.";
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Analyze the following meeting transcript and provide a brief overall summary and a JSON array of string action items.\n\nTranscript:\n${truncatedText}\n\nPlease format your response strictly as a JSON object with two fields: "summary" (string) and "actionItems" (array of strings). Do not include markdown formatting.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
-      if (response.text) {
-        const cleanedText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(cleanedText);
-        summaryText = parsed.summary || summaryText;
-        actionItems = JSON.stringify(Array.isArray(parsed.actionItems) ? parsed.actionItems : []);
-      }
-    } catch (aiError) {
-      logger.error('Failed to call Gemini API', aiError);
+    if (summaryText === "Summary could not be generated.") {
       return res.status(502).json({ error: 'AI processing failed' });
     }
 

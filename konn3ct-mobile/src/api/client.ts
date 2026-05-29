@@ -19,3 +19,19 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Streaming API
+export const streamingApi = {
+  startStream: async (data: { roomId: string; rtmpUrls: string[] }) => {
+    const res = await apiClient.post<{ message: string; streamId: string }>('/streaming/start', data);
+    return res.data;
+  },
+  stopStream: async (streamId: string) => {
+    const res = await apiClient.post<{ message: string }>(`/streaming/${streamId}/stop`);
+    return res.data;
+  },
+  getStreams: async (roomSlug: string) => {
+    const res = await apiClient.get<Array<{ id: string; status: string; rtmpUrls: string[] }>>(`/streaming/${roomSlug}`);
+    return res.data;
+  },
+};

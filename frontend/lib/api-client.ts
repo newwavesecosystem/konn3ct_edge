@@ -13,6 +13,25 @@ export interface User {
   email: string;
 }
 
+export interface ActionItem {
+  id: string;
+  text: string;
+}
+
+export interface MeetingSummary {
+  id: string;
+  roomId: string;
+  summary: string;
+  actionItems: string;
+}
+
+export interface Transcription {
+  id: string;
+  roomId: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -198,19 +217,12 @@ export const apiClient = {
   // ── AI INTELLIGENCE ──
 
   ai: {
-    getTranscription: async (roomId: string) => {
-      return fetchApi<Array<{ content: string; createdAt: string }>>(`/ai/transcription/${roomId}`);
-    },
-
     getSummary: async (roomId: string) => {
-      return fetchApi<{ summary: string; actionItems: string }>(`/ai/summary/${roomId}`);
+      return fetchApi<MeetingSummary>(`/ai/summary/${roomId}`);
     },
-
-    generateSummary: async (roomId: string) => {
-      return fetchApi<{ summary: string; actionItems: string }>(`/ai/summary/${roomId}`, {
-        method: 'POST',
-      });
-    },
+    getTranscription: async (roomId: string) => {
+      return fetchApi<Transcription[]>(`/ai/transcription/${roomId}`);
+    }
   },
 
   // ── STREAMING ──

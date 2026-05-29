@@ -12,6 +12,18 @@ export default function DashboardScreen({ navigation }: Props) {
   const [isCreating, setIsCreating] = useState(false);
   const [showJoinInput, setShowJoinInput] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState('');
+  const [pastRooms, setPastRooms] = useState<any[]>([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+
+  React.useEffect(() => {
+    apiClient.get('/rooms').then(res => {
+      setPastRooms(res.data.slice(0, 3)); // Show top 3
+      setIsLoadingRooms(false);
+    }).catch(err => {
+      console.error(err);
+      setIsLoadingRooms(false);
+    });
+  }, []);
 
   const handleJoin = () => {
     if (!showJoinInput) {
@@ -111,6 +123,30 @@ export default function DashboardScreen({ navigation }: Props) {
         <Text style={styles.cardTitle}>Weekly Sync</Text>
         <Text style={styles.cardSubtitle}>Room: test-room</Text>
       </View>
+
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Past Meetings Intelligence</Text>
+      
+      {isLoadingRooms ? (
+        <Text style={styles.emptyText}>Loading...</Text>
+      ) : pastRooms.length === 0 ? (
+        <Text style={styles.emptyText}>No past meetings found.</Text>
+      ) : (
+        pastRooms.map((room, i) => (
+          <TouchableOpacity 
+            key={i} 
+            style={styles.pastRoomCard}
+            onPress={() => navigation.navigate('MeetingSummary', { roomId: room.id })}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{room.name}</Text>
+              <Text style={styles.cardSubtitle}>ID: {room.slug}</Text>
+            </View>
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>AI</Text>
+            </View>
+          </TouchableOpacity>
+        ))
+      )}
     </View>
   );
 }
@@ -230,4 +266,32 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 4,
   },
+  pastRoomCard: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  emptyText: {
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  aiBadge: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  aiBadgeText: {
+    color: '#2563eb',
+    fontWeight: 'bold',
+    fontSize: 12,
+  }
 });

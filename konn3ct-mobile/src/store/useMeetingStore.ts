@@ -35,12 +35,21 @@ export interface Reaction {
   timestamp: number;
 }
 
+export interface CaptionMessage {
+  userId: string;
+  name: string;
+  text: string;
+  isFinal: boolean;
+  timestamp: number;
+}
+
 interface MeetingState {
   chatMessages: ChatMessage[];
   polls: Poll[];
   participants: Participant[];
   waitingRoom: Participant[];
   reactions: Reaction[];
+  captions: CaptionMessage[];
   unreadChatCount: number;
   
   currentUserRole: string | null;
@@ -48,7 +57,7 @@ interface MeetingState {
   isHandRaisedLocally: boolean;
 
   // Active UI Panes
-  activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings';
+  activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs';
   
   // Actions
   setCurrentUser: (userId: string, role: string) => void;
@@ -67,7 +76,8 @@ interface MeetingState {
   setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
-  setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings') => void;
+  setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs') => void;
+  setCaptions: (updater: (curr: CaptionMessage[]) => CaptionMessage[]) => void;
   reset: () => void;
 }
 
@@ -77,6 +87,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   participants: [],
   waitingRoom: [],
   reactions: [],
+  captions: [],
   unreadChatCount: 0,
   activePane: 'none',
   currentUserRole: null,
@@ -85,6 +96,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
 
   setCurrentUser: (userId, role) => set({ currentUserId: userId, currentUserRole: role }),
   setIsHandRaisedLocally: (isRaised) => set({ isHandRaisedLocally: isRaised }),
+  setCaptions: (updater) => set((state) => ({ captions: updater(state.captions) })),
 
   addChatMessage: (msg) => set((state) => {
     // Prevent duplicates

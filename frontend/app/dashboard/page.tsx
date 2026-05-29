@@ -6,11 +6,11 @@ import { motion } from "framer-motion";
 import {
   Video, Calendar, Users, Clock,
   ArrowRight, Play, MoreVertical,
-  Link2, Copy, CalendarDays, Share2, Globe, Lock
+  Link2, Copy, CalendarDays, Share2, Globe, Lock, Brain
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { apiClient, DashboardStats, ScheduledMeeting } from "@/lib/api-client";
+import { apiClient, DashboardStats, ScheduledMeeting, Room } from "@/lib/api-client";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [meetings, setMeetings] = useState<ScheduledMeeting[]>([]);
+  const [pastRooms, setPastRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -56,10 +57,12 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       apiClient.dashboard.getStats().catch(() => null),
-      apiClient.scheduling.getUpcoming().catch(() => [])
-    ]).then(([s, m]) => {
+      apiClient.scheduling.getUpcoming().catch(() => []),
+      apiClient.rooms.getAll().catch(() => [])
+    ]).then(([s, m, r]) => {
       setStats(s);
       setMeetings(m);
+      setPastRooms(r.slice(0, 5)); // Just take the latest 5 rooms for the dashboard
       setIsLoading(false);
     });
   }, []);
@@ -233,39 +236,33 @@ export default function DashboardPage() {
 
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-text-primary">Recent Recordings</h2>
+              <h2 className="text-lg font-bold text-text-primary">Past Meetings Intelligence</h2>
             </div>
             <div className="space-y-3">
-              {[
-                { title: "Q3 Planning Session", date: "Today, 11:00 AM", duration: "1h 15m" },
-                { title: "Weekly All Hands", date: "Yesterday", duration: "45m" },
-                { title: "Design Sync", date: "Mon, 2:00 PM", duration: "30m" }
-              ].map((rec, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-border bg-surface hover:border-brand-blue/40 hover:shadow-sm transition-all group">
-                  <div className="w-12 h-12 rounded-lg bg-meeting-bg flex items-center justify-center shrink-0 group-hover:bg-brand-blue/10 transition-colors">
-                    <Play className="w-5 h-5 text-brand-blue" />
+              {isLoading ? (
+                <div className="p-3 text-center text-text-muted text-sm">Loading past meetings...</div>
+              ) : pastRooms.length === 0 ? (
+                <div className="p-3 text-center text-text-muted text-sm border border-border rounded-xl">No past meetings found.</div>
+              ) : (
+                pastRooms.map((room, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-border bg-surface hover:border-brand-blue/40 hover:shadow-sm transition-all group cursor-pointer" onClick={() => router.push(`/dashboard/meetings/${room.id}`)}>
+                    <div className="w-12 h-12 rounded-lg bg-meeting-bg flex items-center justify-center shrink-0 group-hover:bg-brand-blue/10 transition-colors">
+                      <Brain className="w-5 h-5 text-brand-blue" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-text-primary truncate">{room.name}</h4>
+                      <p className="text-xs text-text-muted mt-0.5">ID: {room.slug}</p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-brand-blue"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-text-primary truncate">{rec.title}</h4>
-                    <p className="text-xs text-text-muted mt-0.5">{rec.date} • {rec.duration}</p>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleShareRecording(rec)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-text-muted hover:text-brand-blue"
-                  >
-                    <Share2 className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-text-muted"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </motion.div>
