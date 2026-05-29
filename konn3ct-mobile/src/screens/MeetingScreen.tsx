@@ -31,7 +31,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const serviceRef = useRef<MediasoupService | null>(null);
   
   // Zustand Store
-  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, participants, isHandRaisedLocally, setIsHandRaisedLocally } = useMeetingStore();
+  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, isHandRaisedLocally, setIsHandRaisedLocally } = useMeetingStore();
   const isHost = currentUserRole === 'host';
 
   const activeScreenShare = remoteStreams.find(p => p.screenStream != null);
@@ -113,6 +113,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
         };
         service.onActiveSpeaker = (userIds) => {
           useMeetingStore.getState().updateParticipantSpeaking(userIds);
+        };
+        service.onRecordingStarted = () => {
+          setIsRecording(true);
+          Alert.alert("Recording Started", "The host has started cloud recording.");
+        };
+        service.onRecordingStopped = () => {
+          setIsRecording(false);
+          Alert.alert("Recording Stopped", "Cloud recording has been stopped.");
         };
 
         const initialStatus = await service.connect();
@@ -196,12 +204,12 @@ export default function MeetingScreen({ route, navigation }: Props) {
   };
 
   const toggleRecording = () => {
-    if (!isRecording) {
-      Alert.alert("Recording Started", "The cloud recording has started.");
-      setIsRecording(true);
-    } else {
-      Alert.alert("Recording Stopped", "The cloud recording has been saved.");
-      setIsRecording(false);
+    if (serviceRef.current) {
+      if (!isRecording) {
+        serviceRef.current.sendStartRecording();
+      } else {
+        serviceRef.current.sendStopRecording();
+      }
     }
   };
 

@@ -24,9 +24,11 @@ export class MediasoupService {
   private localAudioProducer: types.Producer | null = null;
   private consumers: Map<string, types.Consumer> = new Map();
   private remoteStreams: Map<string, MediaStream> = new Map();
-  private remoteScreenStreams: Map<string, MediaStream> = new Map();
+  private remoteScreenStreams = new Map<string, MediaStream>();
+  private pendingRequests = new Map<string, {resolve: Function, reject: Function, timeoutId: any}[]>();
+  private pingInterval: NodeJS.Timeout | null = null;
 
-  private pendingRequests = new Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: NodeJS.Timeout }>>();
+  // Connection State
   
   // Callbacks
   private onStreamUpdateCallback: ((streams: RemoteParticipant[]) => void) | null = null;
@@ -43,6 +45,8 @@ export class MediasoupService {
   public onForceMute?: () => void;
   public onHandRaise?: (msg: any) => void;
   public onActiveSpeaker?: (userIds: string[]) => void;
+  public onRecordingStarted?: () => void;
+  public onRecordingStopped?: () => void;
   public onSessionStatusChange?: (status: string) => void;
   
   public roomId: string;
@@ -67,9 +71,21 @@ export class MediasoupService {
     }
   }
 
-  public sendHandRaise(isHandRaised: boolean) {
+  public sendHandRaise(isRaised: boolean) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
+      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised: isRaised }));
+    }
+  }
+
+  public sendStartRecording() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'start_recording' }));
+    }
+  }
+
+  public sendStopRecording() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'stop_recording' }));
     }
   }
 
@@ -167,6 +183,13 @@ export class MediasoupService {
       this.ws!.onopen = () => {
         console.log('Native WebSocket connected successfully!');
         this.ws!.send(JSON.stringify({ type: 'auth', token }));
+
+        // Keep-alive to prevent 1006 abnormal closure from proxies (Nginx/ELB)
+        this.pingInterval = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 25000);
       };
 
       this.ws!.onerror = (err) => {
@@ -176,6 +199,7 @@ export class MediasoupService {
       
       this.ws!.onclose = (e) => {
         console.log(`WebSocket closed: ${e.code} ${e.reason}`);
+        if (this.pingInterval) clearInterval(this.pingInterval);
       };
 
       this.ws!.onmessage = async (event) => {
@@ -275,6 +299,14 @@ export class MediasoupService {
             
           case 'active_speaker':
             if (this.onActiveSpeaker) this.onActiveSpeaker(msg.userIds);
+            break;
+
+          case 'recording_started':
+            if (this.onRecordingStarted) this.onRecordingStarted();
+            break;
+
+          case 'recording_stopped':
+            if (this.onRecordingStopped) this.onRecordingStopped();
             break;
 
           case 'newProducer':

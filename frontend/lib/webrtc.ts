@@ -7,6 +7,7 @@ export class WebRTCClient {
   private device: Device | null = null;
   private sendTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
+  private pingInterval: NodeJS.Timeout | null = null;
   
   private localVideoProducer: Producer | null = null;
   private localAudioProducer: Producer | null = null;
@@ -100,7 +101,13 @@ export class WebRTCClient {
         // Send auth token as first message (not in URL to avoid logging in server access logs)
         this.ws!.send(JSON.stringify({ type: 'auth', token: this.token }));
         this.reconnectAttempts = 0; // Reset on success
-        // Device init moved to session_status handling to respect waiting room
+        
+        // Keep-alive to prevent 1006 abnormal closure from proxies (Nginx/ELB)
+        this.pingInterval = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 25000);
       } catch (err) {
         console.error("Connection failed:", err);
         this.onConnectionStateChange?.('failed');
@@ -311,6 +318,7 @@ export class WebRTCClient {
     };
 
     this.ws.onclose = () => {
+      if (this.pingInterval) clearInterval(this.pingInterval);
       if (!this.isIntentionalDisconnect) {
         this.onConnectionStateChange?.('disconnected');
         this.needsRepublish = true;
@@ -988,6 +996,7 @@ export class WebRTCClient {
   public disconnect() {
     console.log('[WebRTC] Disconnecting gracefully...');
     this.isIntentionalDisconnect = true;
+    if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.networkInterval) clearInterval(this.networkInterval);
     this.ws?.close();
     
