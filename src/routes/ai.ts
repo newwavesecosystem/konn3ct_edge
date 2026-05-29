@@ -39,7 +39,48 @@ aiRouter.get('/transcription/:roomId', async (req: Request, res: Response) => {
   }
 });
 
-// --- 2. Generate/Get AI Summary ---
+// --- 2. Get All AI Summaries (Past Meetings) ---
+aiRouter.get('/summaries', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Find all rooms the user owns or is a team member of
+    const rooms = await db.room.findMany({
+      where: {
+        OR: [
+          { ownerId: userId },
+          { team: { members: { some: { userId } } } }
+        ]
+      },
+      select: { id: true, name: true, slug: true }
+    });
+    
+    const roomIds = rooms.map((r: any) => r.id);
+    
+    // Fetch all summaries for those rooms
+    const summaries = await db.meetingSummary.findMany({
+      where: { roomId: { in: roomIds } },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    // Attach room details
+    const pastMeetings = summaries.map((s: any) => {
+      const room = rooms.find((r: any) => r.id === s.roomId);
+      return {
+        ...s,
+        roomName: room?.name || 'Unknown Room',
+        roomSlug: room?.slug || ''
+      };
+    });
+    
+    res.status(200).json(pastMeetings);
+  } catch (error) {
+    logger.error('Error fetching summaries', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- 3. Generate/Get AI Summary ---
 aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
   try {
     if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {

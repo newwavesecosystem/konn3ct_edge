@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
 import { authLimiter, passwordResetLimiter } from '../middleware/rateLimiter';
+import { requireAuth } from '../middleware/auth';
 
 export const authRouter = Router();
 
