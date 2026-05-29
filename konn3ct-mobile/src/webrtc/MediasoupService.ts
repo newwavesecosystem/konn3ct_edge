@@ -10,6 +10,7 @@ export interface RemoteParticipant {
   id: string;
   name: string;
   stream: MediaStream;
+  screenStream?: MediaStream;
 }
 
 export class MediasoupService {
@@ -23,6 +24,7 @@ export class MediasoupService {
   private localAudioProducer: types.Producer | null = null;
   private consumers: Map<string, types.Consumer> = new Map();
   private remoteStreams: Map<string, MediaStream> = new Map();
+  private remoteScreenStreams: Map<string, MediaStream> = new Map();
 
   private pendingRequests = new Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: NodeJS.Timeout }>>();
   
@@ -39,6 +41,8 @@ export class MediasoupService {
   public onPollHistory?: (polls: any[]) => void;
   public onWaitingRoomRequest?: (user: any) => void;
   public onForceMute?: () => void;
+  public onHandRaise?: (msg: any) => void;
+  public onActiveSpeaker?: (userIds: string[]) => void;
   public onSessionStatusChange?: (status: string) => void;
   
   public roomId: string;
@@ -60,6 +64,12 @@ export class MediasoupService {
   public sendReaction(reaction: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'reaction', reaction }));
+    }
+  }
+
+  public sendHandRaise(isHandRaised: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
     }
   }
 
@@ -100,12 +110,20 @@ export class MediasoupService {
   private notifyStreamUpdate() {
     if (!this.onStreamUpdateCallback) return;
     const participants: RemoteParticipant[] = [];
-    this.remoteStreams.forEach((stream, id) => {
-      participants.push({
-        id,
-        name: `User ${id.substring(0, 4)}`,
-        stream
-      });
+    const allIds = new Set([...this.remoteStreams.keys(), ...this.remoteScreenStreams.keys()]);
+    
+    allIds.forEach((id) => {
+      const stream = this.remoteStreams.get(id);
+      const screenStream = this.remoteScreenStreams.get(id);
+      
+      if (stream || screenStream) {
+        participants.push({
+          id,
+          name: `User ${id.substring(0, 4)}`,
+          stream: stream || new MediaStream(),
+          screenStream
+        });
+      }
     });
     this.onStreamUpdateCallback([...participants]);
   }
@@ -251,6 +269,14 @@ export class MediasoupService {
             if (this.onForceMute) this.onForceMute();
             break;
 
+          case 'hand_raise':
+            if (this.onHandRaise) this.onHandRaise(msg);
+            break;
+            
+          case 'active_speaker':
+            if (this.onActiveSpeaker) this.onActiveSpeaker(msg.userIds);
+            break;
+
           case 'newProducer':
             this.consumeRemote(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
             break;
@@ -386,12 +412,15 @@ export class MediasoupService {
 
       this.consumers.set(consumer.id, consumer);
 
-      const oldStream = this.remoteStreams.get(peerId);
+      const isScreen = appData?.source === 'screen';
+      const targetMap = isScreen ? this.remoteScreenStreams : this.remoteStreams;
+      
+      const oldStream = targetMap.get(peerId);
       const existingTracks = oldStream ? oldStream.getTracks() : [];
       const newTracks = [...existingTracks, consumer.track];
       
       const newStream = new MediaStream(newTracks as any);
-      this.remoteStreams.set(peerId, newStream);
+      targetMap.set(peerId, newStream);
       
       // Resume the consumer natively (Mobile requires explicit resume)
       consumer.resume();
@@ -408,6 +437,7 @@ export class MediasoupService {
     if (this.recvTransport) this.recvTransport.close();
     if (this.ws) this.ws.close();
     this.remoteStreams.clear();
+    this.remoteScreenStreams.clear();
     this.consumers.clear();
     this.notifyStreamUpdate();
   }

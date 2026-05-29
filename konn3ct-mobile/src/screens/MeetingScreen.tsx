@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { mediaDevices, RTCView, MediaStream } from 'react-native-webrtc';
@@ -7,9 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService';
 import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
-import { Alert } from 'react-native';
 import { useMeetingStore } from '../store/useMeetingStore';
-import { Mic, MicOff, Video, VideoOff, MessageSquare, Users, BarChart2, Disc, Square, PhoneOff, UserPlus } from 'lucide-react-native';
+import { Mic, MicOff, Video, VideoOff, MessageSquare, Users, BarChart2, Disc, Square, PhoneOff, UserPlus, Hand } from 'lucide-react-native';
 
 // Components
 import { ChatPanel } from '../components/meeting/ChatPanel';
@@ -32,8 +31,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const serviceRef = useRef<MediasoupService | null>(null);
   
   // Zustand Store
-  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole } = useMeetingStore();
+  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, participants, isHandRaisedLocally, setIsHandRaisedLocally } = useMeetingStore();
   const isHost = currentUserRole === 'host';
+
+  const activeScreenShare = remoteStreams.find(p => p.screenStream != null);
 
   useEffect(() => {
     let isMounted = true;
@@ -104,6 +105,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
             if (track) track.enabled = false;
           }
           Alert.alert("Muted by Host", "The host has muted your microphone.");
+        };
+        service.onHandRaise = (msg) => {
+          if (msg.userId) {
+            useMeetingStore.getState().updateParticipantHandRaise(msg.userId, msg.isHandRaised);
+          }
+        };
+        service.onActiveSpeaker = (userIds) => {
+          useMeetingStore.getState().updateParticipantSpeaking(userIds);
         };
 
         const initialStatus = await service.connect();
@@ -178,6 +187,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
     }
   };
 
+  const toggleHandRaise = () => {
+    const newState = !isHandRaisedLocally;
+    setIsHandRaisedLocally(newState);
+    if (serviceRef.current) {
+      serviceRef.current.sendHandRaise(newState);
+    }
+  };
+
   const toggleRecording = () => {
     if (!isRecording) {
       Alert.alert("Recording Started", "The cloud recording has started.");
@@ -232,23 +249,46 @@ export default function MeetingScreen({ route, navigation }: Props) {
         </Text>
       </View>
 
-      <View style={styles.videoGrid}>
-        <ScrollView style={styles.remoteGrid}>
-          <View style={styles.gridInner}>
-            {remoteStreams.map((p) => (
-              <View key={p.id} style={styles.remoteVideoWrapper}>
-                <RTCView
-                  streamURL={p.stream.toURL()}
-                  style={styles.rtcView}
-                  objectFit="cover"
-                />
-                <View style={styles.nameLabel}>
-                  <Text style={styles.nameText}>{p.name}</Text>
+      {activeScreenShare && activeScreenShare.screenStream && (
+        <View style={styles.screenShareContainer}>
+          <RTCView
+            streamURL={activeScreenShare.screenStream.toURL()}
+            style={styles.screenShareView}
+            objectFit="contain"
+          />
+          <View style={styles.screenShareLabel}>
+            <Text style={styles.nameText}>{activeScreenShare.name}'s Screen</Text>
+          </View>
+        </View>
+      )}
+
+      <View style={[styles.videoGrid, activeScreenShare && styles.videoGridShrunk]}>
+        <ScrollView style={styles.remoteGrid} horizontal={!!activeScreenShare}>
+          <View style={[styles.gridInner, activeScreenShare && styles.gridInnerHorizontal]}>
+            {remoteStreams.map((p) => {
+              const storeParticipant = participants.find(up => up.userId === p.id);
+              const isRaised = storeParticipant?.isHandRaised;
+              const isSpeaking = storeParticipant?.isSpeaking;
+              
+              return (
+                <View key={p.id} style={[
+                  styles.remoteVideoWrapper, 
+                  activeScreenShare && styles.remoteVideoWrapperHorizontal,
+                  isSpeaking && styles.activeSpeakerBorder
+                ]}>
+                  <RTCView
+                    streamURL={p.stream.toURL()}
+                    style={styles.rtcView}
+                    objectFit="cover"
+                  />
+                  <View style={styles.nameLabel}>
+                    <Text style={styles.nameText}>{p.name} {isRaised && '👋'}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
             
-            {remoteStreams.length === 0 && (
+            {remoteStreams.length === 0 && !activeScreenShare && (
               <View style={styles.emptyGrid}>
                 <Text style={styles.emptyText}>Waiting for others to join...</Text>
               </View>
@@ -257,18 +297,27 @@ export default function MeetingScreen({ route, navigation }: Props) {
         </ScrollView>
 
         {/* Local Stream PIP */}
-        <View style={styles.localVideoWrapper}>
+        <View style={[
+          styles.localVideoWrapper, 
+          participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
+        ]}>
           {localStream && !isCameraOff ? (
             <RTCView
               streamURL={localStream.toURL()}
               style={styles.rtcView}
               objectFit="cover"
               mirror={true}
+              zOrder={1}
             />
           ) : (
             <View style={styles.cameraOff}>
               <Text style={styles.cameraOffIcon}>📷</Text>
               <Text style={styles.cameraOffText}>Camera Off</Text>
+            </View>
+          )}
+          {isHandRaisedLocally && (
+            <View style={styles.localHandBadge}>
+              <Text style={{ fontSize: 16 }}>👋</Text>
             </View>
           )}
         </View>
@@ -282,6 +331,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
         <TouchableOpacity style={[styles.toolBtn, isCameraOff && styles.toolBtnDanger]} onPress={toggleCamera}>
           {isCameraOff ? <VideoOff size={20} color="#ef4444" /> : <Video size={20} color="white" />}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.toolBtn, isHandRaisedLocally && {backgroundColor: 'rgba(56, 189, 248, 0.2)'}]} onPress={toggleHandRaise}>
+           <Hand size={20} color={isHandRaisedLocally ? "#38bdf8" : "white"} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'chat' ? 'none' : 'chat')}>
@@ -336,9 +389,20 @@ const styles = StyleSheet.create({
   statusText: { fontWeight: 'bold' },
   statusConnected: { color: '#10b981' },
   statusConnecting: { color: '#f59e0b' },
+  screenShareContainer: {
+    height: 340,
+    backgroundColor: '#000',
+    width: '100%',
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155'
+  },
+  screenShareView: { width: '100%', height: '100%' },
+  screenShareLabel: { position: 'absolute', bottom: 12, left: 12, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   videoGrid: { flex: 1 },
+  videoGridShrunk: { flex: 1, maxHeight: 180 },
   remoteGrid: { flex: 1, padding: 8 },
   gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
+  gridInnerHorizontal: { flexDirection: 'row', flexWrap: 'nowrap' },
   remoteVideoWrapper: {
     flexBasis: '48%',
     height: 220,
@@ -348,6 +412,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1, borderColor: '#334155'
   },
+  remoteVideoWrapperHorizontal: { flexBasis: 'auto', width: 140, height: 150, marginHorizontal: 4 },
+  activeSpeakerBorder: { borderWidth: 2, borderColor: '#10b981' },
   rtcView: { width: '100%', height: '100%' },
   nameLabel: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   nameText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
@@ -361,7 +427,9 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#334155',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 10
   },
+  localHandBadge: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 4 },
   cameraOff: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e293b' },
+  cameraOffIcon: { fontSize: 24 },
   cameraOffText: { color: '#94a3b8', fontSize: 10, marginTop: 4 },
   toolbar: {
     flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
