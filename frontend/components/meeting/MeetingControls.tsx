@@ -149,7 +149,6 @@ export function MeetingControls() {
             {meetingInfo.roomName}
           </span>
 
-          {/* 
           <ControlBtn
             icon={<Subtitles className="w-5 h-5" />}
             active={isCaptionsEnabled}
@@ -172,8 +171,7 @@ export function MeetingControls() {
               onClick={() => setShowDonationModal(true)}
               tooltip="Donate"
             />
-          )} 
-          */}
+          )}
         </div>
 
         {/* ── Center: Controls pill ─────────────────── */}
@@ -267,7 +265,6 @@ export function MeetingControls() {
                     label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
                     onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
                   />
-                  {/* 
                   <MoreMenuItem
                     icon={<Subtitles className="w-4 h-4" />}
                     label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
@@ -279,8 +276,7 @@ export function MeetingControls() {
                       label={isDonationActive ? "Stop Offering" : "Start Offering"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
-                  )} 
-                  */}
+                  )}
                   {isDonationActive && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
@@ -327,7 +323,6 @@ export function MeetingControls() {
                 />
                 {/* Desktop-only: captions & donation already shown above on mobile */}
                 <div className="hidden sm:block">
-                  {/* 
                   <MoreMenuItem
                     icon={<Subtitles className="w-4 h-4" />}
                     label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
@@ -339,8 +334,7 @@ export function MeetingControls() {
                       label={isDonationActive ? "Stop Offering" : "Start Offering"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
-                  )} 
-                  */}
+                  )}
                 </div>
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 <MoreMenuItem

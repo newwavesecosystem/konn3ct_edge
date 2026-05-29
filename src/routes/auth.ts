@@ -70,6 +70,28 @@ authRouter.post('/push-token', requireAuth, async (req: Request, res: Response) 
   }
 });
 
+// --- Register Web Push Token ---
+authRouter.post('/web-push-token', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { subscription } = req.body;
+    const userId = req.user!.userId;
+
+    if (!subscription) {
+      return res.status(400).json({ error: 'Missing subscription' });
+    }
+
+    await db.user.update({
+      where: { id: userId },
+      data: { webPushSubscription: JSON.stringify(subscription) }
+    });
+
+    res.status(200).json({ message: 'Web Push subscription registered successfully' });
+  } catch (error) {
+    logger.error('Register Web Push Token error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
