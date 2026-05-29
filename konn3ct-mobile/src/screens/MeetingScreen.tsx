@@ -8,7 +8,7 @@ import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService'
 import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
-import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText } from 'lucide-react-native';
+import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 
 // Components
