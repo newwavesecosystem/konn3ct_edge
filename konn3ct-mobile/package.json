@@ -10,6 +10,7 @@
     "axios": "^1.16.1",
     "expo": "~56.0.5",
     "expo-clipboard": "~56.0.3",
+    "expo-document-picker": "~56.0.4",
     "expo-splash-screen": "^56.0.10",
     "expo-status-bar": "~56.0.4",
     "lucide-react-native": "^1.17.0",
