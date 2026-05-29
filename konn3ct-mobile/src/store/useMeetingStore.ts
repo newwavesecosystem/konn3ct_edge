@@ -23,6 +23,8 @@ export interface Participant {
   role: string;
   isMobile?: boolean;
   status?: 'active' | 'waiting';
+  isHandRaised?: boolean;
+  isSpeaking?: boolean;
 }
 
 export interface Reaction {
@@ -43,6 +45,7 @@ interface MeetingState {
   
   currentUserRole: string | null;
   currentUserId: string | null;
+  isHandRaisedLocally: boolean;
 
   // Active UI Panes
   activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings';
@@ -59,6 +62,9 @@ interface MeetingState {
   setParticipants: (participants: Participant[]) => void;
   addParticipant: (participant: Participant) => void;
   removeParticipant: (userId: string) => void;
+  updateParticipantHandRaise: (userId: string, isRaised: boolean) => void;
+  updateParticipantSpeaking: (userIds: string[]) => void;
+  setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
   setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings') => void;
@@ -75,8 +81,10 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   activePane: 'none',
   currentUserRole: null,
   currentUserId: null,
+  isHandRaisedLocally: false,
 
   setCurrentUser: (userId, role) => set({ currentUserId: userId, currentUserRole: role }),
+  setIsHandRaisedLocally: (isRaised) => set({ isHandRaisedLocally: isRaised }),
 
   addChatMessage: (msg) => set((state) => {
     // Prevent duplicates
@@ -130,6 +138,19 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     participants: state.participants.filter(p => p.userId !== userId)
   })),
 
+  updateParticipantHandRaise: (userId, isRaised) => set((state) => ({
+    participants: state.participants.map(p => 
+      p.userId === userId ? { ...p, isHandRaised: isRaised } : p
+    )
+  })),
+
+  updateParticipantSpeaking: (userIds) => set((state) => ({
+    participants: state.participants.map(p => ({
+      ...p,
+      isSpeaking: userIds.includes(p.userId)
+    }))
+  })),
+
   addWaitingRoomUser: (user) => set((state) => {
     if (state.waitingRoom.find(u => u.userId === user.userId)) return state;
     return { waitingRoom: [...state.waitingRoom, user] };
@@ -153,6 +174,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     unreadChatCount: 0,
     activePane: 'none',
     currentUserRole: null,
-    currentUserId: null
+    currentUserId: null,
+    isHandRaisedLocally: false
   })
 }));
