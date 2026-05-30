@@ -54,7 +54,8 @@
           "faceIDPermission": "Allow Konn3ct to use Face ID for secure login."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "./plugins/withPiP"
     ]
   }
 }
