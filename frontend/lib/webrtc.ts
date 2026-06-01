@@ -91,9 +91,9 @@ export class WebRTCClient {
     // Detect mobile
     const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone/i.test(navigator.userAgent);
     
-    // Connect WebSocket — token is NOT included in URL to avoid logging in server access logs
+    // Connect WebSocket — passing token in URL is required by backend upgrade handler
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&isMobile=${isMobile}`;
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
