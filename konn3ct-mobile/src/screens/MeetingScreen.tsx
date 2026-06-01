@@ -52,7 +52,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
     // Setup PiP Listener for Android
     let pipListener: any = null;
     if (Platform.OS === 'android' && PipAndroid) {
-      pipListener = PipAndroid.onPictureInPictureModeChanged((isPip: boolean) => {
+      pipListener = PipAndroid.onPipModeChanged((isPip: boolean) => {
         if (isMounted) setIsPipMode(isPip);
       });
     }
@@ -265,7 +265,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
   const enterPip = () => {
     if (Platform.OS === 'android' && PipAndroid) {
-      PipAndroid.enterPictureInPictureMode();
+      PipAndroid.enterPipMode();
     } else {
       Alert.alert("Not Supported", "Picture-in-Picture is only supported on Android.");
     }
