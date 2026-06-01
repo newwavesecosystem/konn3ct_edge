@@ -985,7 +985,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
       }
       if (ecinemaAction.time !== undefined) {
         // Optional: seekTo if you want to sync time later, but sticking to play/pause for now
-        // playerRef.current.seekTo(ecinemaAction.time, true);
+        playerRef.current.seekTo(ecinemaAction.time, true);
       }
     }
   }, [ecinemaAction]);
