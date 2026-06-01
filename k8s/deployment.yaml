@@ -56,6 +56,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: GEMINI_API_KEY
+            - name: EXTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: EXTERNAL_API_KEY
             - name: PAYSTACK_SECRET_KEY
               valueFrom:
                 secretKeyRef:
