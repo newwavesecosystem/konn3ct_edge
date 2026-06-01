@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: konn3ct-streaming-worker
-  namespace: konn3ct
   labels:
     app: konn3ct-streaming-worker
 spec:
@@ -21,9 +20,7 @@ spec:
           imagePullPolicy: Always
           envFrom:
             - secretRef:
-                name: konn3ct-secrets
-            - configMapRef:
-                name: konn3ct-config
+                name: conn3ct-secrets
           resources:
             requests:
               cpu: "1"
