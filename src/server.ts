@@ -47,6 +47,7 @@ app.use(helmet());
 
 // CORS - allow only the frontend domain
 const allowedOrigins = [
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
   process.env.NEXT_PUBLIC_FRONTEND_DOMAIN ? `https://${process.env.NEXT_PUBLIC_FRONTEND_DOMAIN}` : null,
   'http://localhost:3000',
   'http://localhost:3001',
