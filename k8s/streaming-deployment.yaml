@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: konn3ct-streaming-worker
+  name: conn3ct-streaming-worker
   labels:
-    app: konn3ct-streaming-worker
+    app: conn3ct-streaming-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: konn3ct-streaming-worker
+      app: conn3ct-streaming-worker
   template:
     metadata:
       labels:
-        app: konn3ct-streaming-worker
+        app: conn3ct-streaming-worker
     spec:
       containers:
         - name: streaming-worker
-          image: konn3ct/streaming-worker:latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-streaming-worker:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:
