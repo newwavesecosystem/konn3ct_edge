@@ -955,7 +955,7 @@ export class WebRTCClient {
       this.onNewConsumer?.(consumer, userId);
       
       // Tell the backend to resume sending media (unpause the consumer)
-      if (this.isAudioOnlyMode && consumerKind === 'video') {
+      if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {
         console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
       } else {
         console.log(`[WebRTC] Resuming consumer ${id} on server...`);
@@ -972,11 +972,11 @@ export class WebRTCClient {
 
   public enableAudioOnlyMode() {
     this.isAudioOnlyMode = true;
-    this.pauseCamera();
+    this.disableCamera();
     
-    // Pause all existing video consumers locally and on server
+    // Pause all existing video consumers locally and on server, EXCEPT screenshares
     for (const [id, consumer] of this.consumers.entries()) {
-      if (consumer.kind === 'video') {
+      if (consumer.kind === 'video' && consumer.appData?.source !== 'screen') {
         this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
         consumer.pause();
       }
@@ -986,9 +986,9 @@ export class WebRTCClient {
   public disableAudioOnlyMode() {
     this.isAudioOnlyMode = false;
     
-    // Resume all existing video consumers
+    // Resume all existing video consumers, EXCEPT screenshares (which never paused)
     for (const [id, consumer] of this.consumers.entries()) {
-      if (consumer.kind === 'video') {
+      if (consumer.kind === 'video' && consumer.appData?.source !== 'screen') {
         this.request('resume', 'resumed', { consumerId: id }).catch(console.error);
         consumer.resume();
       }
