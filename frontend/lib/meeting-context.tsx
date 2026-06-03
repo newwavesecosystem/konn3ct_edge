@@ -57,6 +57,7 @@ interface MeetingContextValue {
   captionLanguage: string;
   translationLanguage: string;
   isDonationActive: boolean;
+  totalDonations: number;
 
   // Actions
   toggleMute: () => void;
@@ -231,6 +232,7 @@ export function MeetingProvider({
   const [ecinemaAction, setEcinemaAction] = useState<{ action: 'play' | 'pause'; time?: number } | null>(null);
   const [isCaptionsEnabled, setIsCaptionsEnabled] = useState(false);
   const [isDonationActive, setIsDonationActive] = useState(false);
+  const [totalDonations, setTotalDonations] = useState(0);
   const [captions, setCaptions] = useState<CaptionMessage[]>([]);
   const [captionLanguage, setCaptionLanguage] = useState("en-US");
   const [translationLanguage, setTranslationLanguage] = useState("original");
@@ -351,12 +353,19 @@ export function MeetingProvider({
         setWebrtcStatus("fetching-token");
 
         // Call our new Next.js endpoint to get a secure JWT
-        const isBot = new URLSearchParams(window.location.search).get('bot') === 'true';
+        const searchParamsData = new URLSearchParams(window.location.search);
+        const isBot = searchParamsData.get('bot') === 'true';
+        const botSecret = searchParamsData.get('botSecret') || '';
         const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (isBot && botSecret) {
+          headers["x-bot-secret"] = botSecret;
+        }
 
         const res = await fetch("/api/join", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             roomId: roomSlug,
             sessionToken,
@@ -454,6 +463,7 @@ export function MeetingProvider({
         };
 
         client.onDonationSuccessReceived = (userId, name, amount, currency) => {
+          setTotalDonations(prev => prev + amount);
           if (client?.userRole === 'host' || client?.userRole === 'co-host') {
             toast.success(`${name} just donated ${currency} ${amount}!`, {
               icon: "🎁",
@@ -1400,6 +1410,7 @@ export function MeetingProvider({
         captionLanguage,
         translationLanguage,
         isDonationActive,
+        totalDonations,
         toggleMute,
         toggleCamera,
         toggleScreenShare,

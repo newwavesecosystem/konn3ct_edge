@@ -912,7 +912,8 @@ export function initializeSignaling(server: Server) {
             if (room) {
               const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
               const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-              const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true`;
+              const botSecret = process.env.BOT_SECRET || '';
+              const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true&botSecret=${botSecret}`;
               
               const pushed = await redis.lpush('recorder:queue', JSON.stringify({
                 roomId,

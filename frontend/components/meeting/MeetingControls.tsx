@@ -156,14 +156,6 @@ export function MeetingControls() {
             tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
           />
 
-          {isHost && (
-            <ControlBtn
-              icon={<Gift className={cn("w-5 h-5", isDonationActive && "text-brand-green")} />}
-              active={isDonationActive}
-              onClick={() => toggleDonation()}
-              tooltip={isDonationActive ? "Stop Offering" : "Start Offering"}
-            />
-          )}
           {isDonationActive && (
             <ControlBtn
               icon={<Gift className="w-5 h-5" />}
@@ -273,7 +265,7 @@ export function MeetingControls() {
                   {isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
-                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
                   )}
