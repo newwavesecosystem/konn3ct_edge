@@ -632,12 +632,12 @@ export function initializeSignaling(server: Server) {
           
           // Stop any active streams
           db.liveStream.findMany({ where: { roomId, status: { in: ['live', 'processing'] } } })
-            .then(streams => {
+            .then((streams: { id: string }[]) => {
               for (const stream of streams) {
-                redis.publish(`streamer:stop:${stream.id}`, 'stop').catch(e => logger.error(`Failed to stop stream ${stream.id}`, e));
+                redis.publish(`streamer:stop:${stream.id}`, 'stop').catch((e: unknown) => logger.error(`Failed to stop stream ${stream.id}`, e));
               }
             })
-            .catch(e => logger.error("Failed to fetch streams to stop on end_meeting", e));
+            .catch((e: unknown) => logger.error("Failed to fetch streams to stop on end_meeting", e));
 
           // Fire off AI Summary generation in the background
           generateMeetingSummary(roomId).catch(e => logger.error(e));

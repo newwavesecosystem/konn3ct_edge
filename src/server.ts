@@ -53,7 +53,7 @@ const allowedOrigins = [
   'http://localhost:3001',
 ].filter(Boolean) as string[];
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
