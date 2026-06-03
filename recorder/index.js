@@ -91,9 +91,9 @@ async function processRecordingJob(job) {
     // Navigate to the meeting URL with bot flag
     console.log(`Navigating to ${url}`);
     
-    // Auto-grant permissions for capturing
+    // Auto-grant permissions for capturing (display-capture is handled by CLI flags)
     const context = browser.defaultBrowserContext();
-    await context.overridePermissions(new URL(url).origin, ['camera', 'microphone', 'display-capture']);
+    await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
 
     // Set a dummy title before navigation so auto-select knows what to look for
     await page.evaluateOnNewDocument(() => {

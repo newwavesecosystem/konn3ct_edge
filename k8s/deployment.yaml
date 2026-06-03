@@ -117,6 +117,13 @@ spec:
               value: "turnedge.konn3ct.net"
             - name: TURN_SECRET
               value: "my-super-strong-conn3ct-secret-123"
+            - name: BOT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: BOT_SECRET
+            - name: NEXT_PUBLIC_FRONTEND_DOMAIN
+              value: "konn3ctedge.konn3ct.net"
           resources:
             requests:
               cpu: "1500m"

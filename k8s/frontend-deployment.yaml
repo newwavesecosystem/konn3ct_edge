@@ -73,6 +73,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
+            - name: BOT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: BOT_SECRET
           resources:
             requests:
               cpu: "100m"
