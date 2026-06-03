@@ -735,7 +735,7 @@ export function initializeSignaling(server: Server) {
           const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
           const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
           
-          db.room.findUnique({ where: { id: roomId } }).then(room => {
+          db.room.findUnique({ where: { id: roomId } }).then((room: { id: string; slug: string } | null) => {
             if (room) {
               const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true`;
               

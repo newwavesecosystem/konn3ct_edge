@@ -62,7 +62,7 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No transcriptions found to summarize.' });
     }
 
-    const fullText = transcriptions.map(t => t.content).join('\n');
+    const fullText = transcriptions.map((t: { content: string }) => t.content).join('\n');
 
     let actionItems = "[]";
     let summaryText = "Summary could not be generated.";
