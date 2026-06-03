@@ -1118,10 +1118,11 @@ export function MeetingProvider({
   const toggleCamera = useCallback(() => {
     const newState = !isCameraOn;
     if (!newState) {
-      webrtcClient.current?.pauseCamera();
+      webrtcClient.current?.disableCamera();
+      localCameraTrackRef.current = null;
       webrtcClient.current?.sendCameraState(newState);
       setIsCameraOn(newState);
-      setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState } : p));
+      setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
     } else {
       if (!localCameraTrackRef.current) {
         // First time turning on camera
