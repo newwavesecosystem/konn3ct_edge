@@ -140,18 +140,26 @@ export function MeetingProvider({
       const searchParams = new URLSearchParams(window.location.search);
       let sessionToken = searchParams.get("t");
       
-      // If external API passed a token in the URL, save it to sessionStorage
       if (sessionToken) {
         sessionStorage.setItem("conn3ct_session_token", sessionToken);
         // Clean the URL without triggering a page reload
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
+      } else {
+        sessionToken = sessionStorage.getItem("conn3ct_session_token");
       }
       
-      // We no longer read raw join info from sessionStorage, we only care about the sessionToken.
-      // But we still need fallback logic for queryName etc. if missing.
+      if (sessionToken) {
+        // Decode the JWT payload without verifying signature on client
+        const base64Url = sessionToken.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        storedJoinInfo = JSON.parse(jsonPayload);
+      }
     } catch (e) {
-      console.error("Failed to parse external token", e);
+      console.error("Failed to parse session token", e);
     }
   }
 
@@ -160,8 +168,8 @@ export function MeetingProvider({
   const queryName = storedJoinInfo?.name || searchParams.get("name") || "Guest";
   const queryEmail = storedJoinInfo?.email || "guest@conn3ct.com";
   const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
-  const initialCameraOn = storedJoinInfo ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
-  const initialMuted = storedJoinInfo ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
+  const initialCameraOn = storedJoinInfo && storedJoinInfo.camera !== undefined ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
+  const initialMuted = storedJoinInfo && storedJoinInfo.mic !== undefined ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
 
   // ── State ────────────────────────────────────────────
   const isMobileClient = typeof navigator !== 'undefined' ? 
