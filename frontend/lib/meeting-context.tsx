@@ -420,7 +420,7 @@ export function MeetingProvider({
               }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
-              toast.warning("Network connection is weak. Video or Audio quality might be degraded.");
+              // toast.warning("Network connection is weak. Video or Audio quality might be degraded.");
               lastNetworkToastTime = now;
             } else if (quality === 'good') {
               if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {

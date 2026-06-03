@@ -100,6 +100,7 @@ export function ParticipantTile({
 
 
   const isSelf = participant.id === currentUser.id;
+  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack;
 
   return (
     <div
@@ -165,7 +166,7 @@ export function ParticipantTile({
       )}
 
       {/* ── Video / avatar area ── */}
-      {participant.isCameraOn ? (
+      {isCameraEffectivelyOn ? (
         <div
           className="absolute inset-0 flex items-center justify-center"
           style={
@@ -177,53 +178,20 @@ export function ParticipantTile({
                 }
           }
         >
-          {participant.videoTrack ? (
-            <video
-              ref={setVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className={cn(
-                "w-full h-full",
-                isLarge ? "object-contain" : "object-cover"
-              )}
-              style={{
-                transform:
-                  isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
-              }}
-            />
-          ) : (
-            <div className="relative flex flex-col items-center gap-2">
-              {/* Camera on but no track yet — show circular avatar */}
-              <div
-                className={cn(
-                  "rounded-full flex items-center justify-center font-bold shadow-lg",
-                  isLarge ? "w-32 h-32 text-5xl" : "w-28 h-28 text-3xl",
-                )}
-                style={{
-                  backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
-                  color: "var(--mt-avatar-text, var(--mt-text))",
-                  border: "3px solid rgba(255,255,255,0.18)",
-                }}
-              >
-                {initials}
-              </div>
-              {participant.isSpeaking && (
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-[2px]">
-                  {[12, 18, 10, 16].map((h, i) => (
-                    <span
-                      key={i}
-                      className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
-                      style={{
-                        height: `${h}px`,
-                        animationDelay: `${i * 0.15}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <video
+            ref={setVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className={cn(
+              "w-full h-full",
+              isLarge ? "object-contain" : "object-cover"
+            )}
+            style={{
+              transform:
+                isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
+            }}
+          />
         </div>
       ) : (
         <div
@@ -233,19 +201,34 @@ export function ParticipantTile({
               "linear-gradient(135deg, var(--mt-bg-tile-alt), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
           }}
         >
-          {/* Larger circular avatar — matches the image style */}
-          <div
-            className={cn(
-              "rounded-full flex items-center justify-center font-bold shadow-lg",
-              isLarge ? "w-32 h-32 text-5xl" : "w-28 h-28 text-3xl",
+          <div className="relative flex flex-col items-center gap-2">
+            <div
+              className={cn(
+                "rounded-full flex items-center justify-center font-bold shadow-lg",
+                isLarge ? "w-32 h-32 text-5xl" : "w-28 h-28 text-3xl",
+              )}
+              style={{
+                backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
+                color: "var(--mt-avatar-text, var(--mt-text))",
+                border: "3px solid rgba(255,255,255,0.18)",
+              }}
+            >
+              {initials}
+            </div>
+            {participant.isSpeaking && (
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-[2px]">
+                {[12, 18, 10, 16].map((h, i) => (
+                  <span
+                    key={i}
+                    className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
+                    style={{
+                      height: `${h}px`,
+                      animationDelay: `${i * 0.15}s`,
+                    }}
+                  />
+                ))}
+              </div>
             )}
-            style={{
-              backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
-              color: "var(--mt-avatar-text, var(--mt-text))",
-              border: "3px solid rgba(255,255,255,0.18)",
-            }}
-          >
-            {initials}
           </div>
         </div>
       )}
@@ -296,7 +279,7 @@ export function ParticipantTile({
         </div>
         {/* Network quality + camera off indicators */}
         <div className="flex items-center gap-1 shrink-0">
-          {!participant.isCameraOn && (
+          {!isCameraEffectivelyOn && (
             <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
           )}
           {participant.networkQuality === 'poor' && (
