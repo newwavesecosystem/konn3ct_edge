@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
+import { paymentLimiter } from '../middleware/rateLimiter';
 
 export const paymentsRouter = Router();
 
@@ -12,7 +13,7 @@ const initPaymentSchema = z.object({
 });
 
 // Initialize payment (Requires Auth)
-paymentsRouter.post('/initialize', requireAuth, async (req: Request, res: Response) => {
+paymentsRouter.post('/initialize', paymentLimiter, requireAuth, async (req: Request, res: Response) => {
   try {
     const { recordingId } = initPaymentSchema.parse(req.body);
     const userId = req.user!.userId;

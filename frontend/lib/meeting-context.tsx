@@ -37,6 +37,7 @@ interface MeetingContextValue {
   meetingInfo: MeetingInfo;
   reactions: Reaction[];
   activePanel: SidePanel;
+  hasUnreadChat: boolean;
   layoutMode: LayoutMode;
   gridOverflowMode: GridOverflowMode;
   isMuted: boolean;
@@ -69,6 +70,7 @@ interface MeetingContextValue {
   setCaptionLanguage: (lang: string) => void;
   setTranslationLanguage: (lang: string) => void;
   setActivePanel: (panel: SidePanel) => void;
+  setHasUnreadChat: (has: boolean) => void;
   setLayoutMode: (mode: LayoutMode) => void;
   setGridOverflowMode: (mode: GridOverflowMode) => void;
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
@@ -85,7 +87,10 @@ interface MeetingContextValue {
   kickUser: (userId: string) => void;
   forceMuteUser: (userId?: string) => void;
   endMeetingForAll: () => void;
+  leaveMeeting: () => void;
   broadcastECinema: (link: string | null) => void;
+  ecinemaAction: { action: 'play' | 'pause'; time?: number } | null;
+  sendECinemaAction: (action: 'play' | 'pause', time?: number) => void;
   
   // Device Management
   devices: {
@@ -128,14 +133,40 @@ export function MeetingProvider({
   children: React.ReactNode;
   roomSlug: string;
 }) {
-  // Extract user info from URL (passed from Join or Dashboard)
+  // Extract user info from sessionStorage (passed from Join screen)
+  let storedJoinInfo: any = null;
+  if (typeof window !== "undefined") {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      let sessionToken = searchParams.get("t");
+      
+      // If external API passed a token in the URL, save it to sessionStorage
+      if (sessionToken) {
+        sessionStorage.setItem("conn3ct_session_token", sessionToken);
+        // Clean the URL without triggering a page reload
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
+      
+      // We no longer read raw join info from sessionStorage, we only care about the sessionToken.
+      // But we still need fallback logic for queryName etc. if missing.
+    } catch (e) {
+      console.error("Failed to parse external token", e);
+    }
+  }
+
+  // For the initial render, use URL search params as a fallback for backwards compatibility
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  const queryName = searchParams.get("name") || "Guest";
-  const queryRole = (searchParams.get("role") as ParticipantRole) || "attendee";
-  const initialCameraOn = searchParams.get("camera") !== "false";
-  const initialMuted = searchParams.get("mic") === "false";
+  const queryName = storedJoinInfo?.name || searchParams.get("name") || "Guest";
+  const queryEmail = storedJoinInfo?.email || "guest@conn3ct.com";
+  const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
+  const initialCameraOn = storedJoinInfo ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
+  const initialMuted = storedJoinInfo ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
 
   // ── State ────────────────────────────────────────────
+  const isMobileClient = typeof navigator !== 'undefined' ? 
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
+
   const [currentUser] = useState<Participant>({
     id: `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
@@ -146,6 +177,7 @@ export function MeetingProvider({
     isHandRaised: false,
     isSpeaking: false,
     joinedAt: new Date().toISOString(),
+    isMobile: isMobileClient,
   });
 
   // Start with only the current user, so real users are dynamically added
@@ -158,13 +190,16 @@ export function MeetingProvider({
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-  const [meetingInfo] = useState<MeetingInfo>({
+  const [meetingInfo, setMeetingInfo] = useState<MeetingInfo>({
     ...mockMeetingInfo,
     roomName: formattedTitle,
     roomSlug,
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
+  const activePanelRef = useRef<SidePanel>(null);
+  useEffect(() => { activePanelRef.current = activePanel; }, [activePanel]);
+  const [hasUnreadChat, setHasUnreadChat] = useState<boolean>(false);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("grid");
   const [gridOverflowMode, setGridOverflowMode] = useState<GridOverflowMode>("paginate");
   const [isMuted, setIsMuted] = useState(initialMuted);
@@ -179,6 +214,7 @@ export function MeetingProvider({
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
+  const [ecinemaAction, setEcinemaAction] = useState<{ action: 'play' | 'pause'; time?: number } | null>(null);
   const [isCaptionsEnabled, setIsCaptionsEnabled] = useState(false);
   const [isDonationActive, setIsDonationActive] = useState(false);
   const [captions, setCaptions] = useState<CaptionMessage[]>([]);
@@ -287,6 +323,7 @@ export function MeetingProvider({
   const webrtcClient = useRef<WebRTCClient | null>(null);
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
@@ -297,19 +334,25 @@ export function MeetingProvider({
 
         // Call our new Next.js endpoint to get a secure JWT
         const isBot = new URLSearchParams(window.location.search).get('bot') === 'true';
+        const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+
         const res = await fetch("/api/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             roomId: roomSlug,
-            name: isBot ? "Recording Bot" : currentUser.name,
-            email: "guest@conn3ct.com",
-            role: currentUser.role,
+            sessionToken,
             isBot
           })
         });
 
         const data = await res.json();
+
+        if (res.status === 403) {
+          toast.error("Your join session is invalid or expired. Please join again.");
+          setWebrtcStatus("invalid-session");
+          return;
+        }
 
         if (!res.ok || !data.token) {
           toast.error(data.error || "Failed to get connection token");
@@ -416,8 +459,10 @@ export function MeetingProvider({
         };
 
         client.onSyncPanel = (panel: any) => {
-          // If we are the bot, or if we want all participants to sync with the host's view
-          setActivePanel(panel);
+          // Only sync the panel view for the recording bot so it matches the host's screen
+          if (currentUser.role === 'bot') {
+            setActivePanel(panel);
+          }
         };
 
         client.onCaptionReceived = (userId, text, isFinal, lang) => {
@@ -486,28 +531,38 @@ export function MeetingProvider({
         };
 
         client.onNoteUpdate = (msg) => {
-          if (msg.userId !== currentUser.id) {
+          if (msg.userId !== webrtcClient.current?.userId) {
             setSharedNoteContent(msg.content);
           }
         };
 
         client.onChatMessage = (msg) => {
-          if (msg.userId !== currentUser.id) {
-            // Play Pop Sound
+          if (msg.userId !== webrtcClient.current?.userId) {
+            // Play a prominent "Ding-Ding" notification sound for chat
             try {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const osc = audioCtx.createOscillator();
-              const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = 'sine';
-              osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-              osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
-              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-              osc.start();
-              osc.stop(audioCtx.currentTime + 0.1);
+              
+              const playBeep = (timeOffset: number) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime + timeOffset);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + timeOffset + 0.1);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime + timeOffset);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + timeOffset + 0.1);
+                osc.start(audioCtx.currentTime + timeOffset);
+                osc.stop(audioCtx.currentTime + timeOffset + 0.15);
+              };
+
+              playBeep(0);
+              playBeep(0.2);
             } catch (e) { }
+
+            if (activePanelRef.current !== "chat") {
+              setHasUnreadChat(true);
+            }
           }
 
           setChatMessages((prev) => {
@@ -518,8 +573,8 @@ export function MeetingProvider({
               {
                 id: msg.id || `m-${Date.now()}-${Math.random()}`,
                 senderId: msg.userId,
-                senderName: msg.userId === currentUser.id
-                  ? currentUser.name
+                senderName: msg.userId === webrtcClient.current?.userId
+                  ? webrtcClient.current?.userName || 'Guest'
                   : msg.name || `Participant ${msg.userId.substring(5, 9)}`,
                 senderRole: "attendee",
                 content: msg.message,
@@ -544,17 +599,24 @@ export function MeetingProvider({
         };
 
         client.onPollCreate = (msg) => {
-          setPolls((prev) => [
-            ...prev,
-            {
-              id: msg.pollId,
-              question: msg.question,
-              options: msg.options,
-              createdBy: msg.userId,
-              isActive: true,
-              totalVotes: 0,
-            },
-          ]);
+          setPolls((prev) => {
+            if (prev.some(p => p.id === msg.pollId)) return prev;
+            return [
+              ...prev,
+              {
+                id: msg.pollId,
+                question: msg.question,
+                options: msg.options,
+                createdBy: msg.userId,
+                isActive: true,
+                totalVotes: 0,
+              },
+            ];
+          });
+          
+          // Automatically open the polls panel for everyone when a new poll is created
+          setActivePanel("polls");
+          setIsMobilePanelOpen(true);
         };
 
         client.onPollVote = (msg) => {
@@ -584,6 +646,10 @@ export function MeetingProvider({
           });
         };
 
+        client.onECinemaAction = (msg) => {
+          setEcinemaAction({ action: msg.action, time: msg.time });
+        };
+
         client.onCameraState = (msg) => {
           setParticipants((prev) => prev.map(p =>
             p.id === msg.userId ? { ...p, isCameraOn: msg.isCameraOn } : p
@@ -591,7 +657,7 @@ export function MeetingProvider({
         };
 
         client.onHandRaise = (msg) => {
-          if (msg.isHandRaised && msg.userId !== currentUser.id) {
+          if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -637,41 +703,49 @@ export function MeetingProvider({
         client.onActiveSpeaker = (userIds) => {
           setParticipants((prev) => prev.map(p => ({
             ...p,
-            isSpeaking: userIds.includes(p.id)
+            isSpeaking: userIds.includes(p.id) || (p.id === currentUser.id && userIds.includes(webrtcClient.current?.userId || ''))
           })));
         };
 
         client.onWaitingRoomRequest = (msg) => {
+          if (notifiedWaitingUsersRef.current.has(msg.userId)) {
+            return;
+          }
+          notifiedWaitingUsersRef.current.add(msg.userId);
+
+          // Play Doorbell Sound (Ding-Dong)
+          try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            // Ding
+            oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+            // Dong
+            oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+            // Fade out smoothly to avoid popping
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.6);
+          } catch(e) {
+            console.warn("Failed to play doorbell sound", e);
+          }
+
+          toast(`${msg.name} is waiting to join`, {
+            action: {
+              label: 'Admit',
+              onClick: () => {
+                webrtcClient.current?.sendAdmitUser(msg.userId);
+                notifiedWaitingUsersRef.current.delete(msg.userId);
+              }
+            }
+          });
+
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
-
-            // Play Doorbell Sound (Ding-Dong)
-            try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              oscillator.type = 'sine';
-              // Ding
-              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-              // Dong
-              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
-              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
-              // Fade out smoothly to avoid popping
-              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-              oscillator.start(audioCtx.currentTime);
-              oscillator.stop(audioCtx.currentTime + 0.6);
-            } catch(e) {
-              console.warn("Failed to play doorbell sound", e);
-            }
-
-            toast(`${msg.name} is waiting to join`, {
-              action: {
-                label: 'Admit',
-                onClick: () => webrtcClient.current?.sendAdmitUser(msg.userId)
-              }
-            });
             return [...prev, { userId: msg.userId, name: msg.name }];
           });
         };
@@ -679,7 +753,19 @@ export function MeetingProvider({
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
-            if (state === 'kicked') {
+            if (state === 'connected') {
+              // Update local user's name and role based on server truth
+              setParticipants(prev => prev.map(p => 
+                p.id === currentUser.id ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
+              ));
+              if (webrtcClient.current?.roomName) {
+                setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
+              }
+            } else if (state === 'waiting') {
+              if (webrtcClient.current?.roomName) {
+                setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
+              }
+            } else if (state === 'kicked') {
               toast.error("You have been removed from the meeting by the host.");
             } else if (state === 'denied') {
               toast.error("Your request to join was denied by the host.");
@@ -708,6 +794,7 @@ export function MeetingProvider({
           setParticipants((prev) => {
             const newParticipants = [...prev];
             for (const p of backendParticipants) {
+              if (p.userId === webrtcClient.current?.userId) continue;
               if (!newParticipants.some(existing => existing.id === p.userId)) {
                 newParticipants.push({
                   id: p.userId,
@@ -721,6 +808,7 @@ export function MeetingProvider({
                   networkQuality: 'good',
                   joinedAt: new Date().toISOString(),
                   isConnecting: true,
+                  isMobile: p.isMobile,
                 });
                 setTimeout(() => {
                   setParticipants(curr => curr.map(u => u.id === p.userId ? { ...u, isConnecting: false } : u));
@@ -732,6 +820,8 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
+          if (user.userId === webrtcClient.current?.userId) return;
+          setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) return prev;
             return [...prev, {
@@ -746,6 +836,7 @@ export function MeetingProvider({
               networkQuality: 'good',
               joinedAt: new Date().toISOString(),
               isConnecting: true,
+              isMobile: user.isMobile,
             }];
           });
           
@@ -759,7 +850,7 @@ export function MeetingProvider({
         client.onUserLeft = (userId) => {
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
-            if (user && user.id !== currentUser.id) {
+            if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
                toast.info(`${user.name} left the meeting`);
             }
             return prev.filter(p => p.id !== userId);
@@ -1189,9 +1280,19 @@ export function MeetingProvider({
         setIsMobilePanelOpen(true);
       }
       
+      if (newPanel === "chat") {
+        setHasUnreadChat(false);
+      }
+      
       // If host, sync the panel state so the recorder bot captures it
+      // Don't sync 'participants' or 'settings' as those are private to the host
       if (currentUser.role === 'host' || currentUser.role === 'co-host') {
-        webrtcClient.current?.sendSyncPanel(newPanel);
+        if (newPanel !== 'participants' && newPanel !== 'settings') {
+          webrtcClient.current?.sendSyncPanel(newPanel);
+        } else {
+          // If the host opened a private panel, tell the bot to close its panel so it doesn't get stuck
+          webrtcClient.current?.sendSyncPanel(null);
+        }
       }
     },
     [activePanel, currentUser.role]
@@ -1219,9 +1320,18 @@ export function MeetingProvider({
     webrtcClient.current?.sendEndMeeting();
   }, []);
 
+  const leaveMeeting = useCallback(() => {
+    webrtcClient.current?.sendLeaveMeeting();
+  }, []);
+
   const broadcastECinema = useCallback((link: string | null) => {
     setECinemaLink(link); // Optimistic local update
     webrtcClient.current?.sendECinemaUpdate(link);
+  }, []);
+
+  const sendECinemaAction = useCallback((action: 'play' | 'pause', time?: number) => {
+    // We don't optimistically update here because the YouTube player handles its own state for the host
+    webrtcClient.current?.sendECinemaAction(action, time);
   }, []);
 
   return (
@@ -1236,6 +1346,7 @@ export function MeetingProvider({
         meetingInfo,
         reactions,
         activePanel,
+        hasUnreadChat,
         layoutMode,
         gridOverflowMode,
         isMuted,
@@ -1265,6 +1376,7 @@ export function MeetingProvider({
         setCaptionLanguage,
         setTranslationLanguage,
         setActivePanel: handleSetActivePanel,
+        setHasUnreadChat,
         setLayoutMode,
         setGridOverflowMode,
         sendMessage,
@@ -1281,8 +1393,11 @@ export function MeetingProvider({
         kickUser,
         forceMuteUser,
         endMeetingForAll,
+        leaveMeeting,
         broadcastECinema,
         eCinemaLink,
+        ecinemaAction,
+        sendECinemaAction,
         devices,
         selectedDevices,
         switchDevice,
@@ -1324,7 +1439,54 @@ export function MeetingProvider({
         setIsAlwaysMuteOnJoin: updateAlwaysMute,
       }}
     >
+      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} />
       {children}
     </MeetingContext.Provider>
   );
+}
+
+function GlobalAudioRenderer({ participants, currentUserId }: { participants: Participant[]; currentUserId: string }) {
+  const { selectedDevices } = useMeeting();
+  return (
+    <>
+      {participants.map((p) => (
+        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} />
+      ))}
+    </>
+  );
+}
+
+function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
+    if (sinkId && typeof (el as any).setSinkId === "function") {
+      try {
+        await (el as any).setSinkId(sinkId);
+      } catch (e) {
+        console.warn("Failed to set audio output device:", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (audioRef.current && track && !isLocal) {
+      if (audioRef.current.srcObject) {
+        const stream = audioRef.current.srcObject as MediaStream;
+        if (stream.getAudioTracks()[0] === track) {
+          applyAudioSink(audioRef.current, audioOutput);
+          return;
+        }
+      }
+      audioRef.current.srcObject = new MediaStream([track]);
+      applyAudioSink(audioRef.current, audioOutput);
+      audioRef.current.play().catch((e) => {
+        if (e.name !== 'AbortError') console.warn("Global audio play failed:", e);
+      });
+    } else if (audioRef.current && (!track || isLocal)) {
+      audioRef.current.srcObject = null;
+    }
+  }, [track, isLocal, audioOutput]);
+
+  return <audio ref={audioRef} autoPlay muted={isLocal} style={{ display: 'none' }} />;
 }

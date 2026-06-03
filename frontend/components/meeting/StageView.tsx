@@ -17,6 +17,8 @@ import {
   Users,
 } from "lucide-react";
 
+import YouTube from "react-youtube";
+
 export function StageView() {
   const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
     useMeeting();
@@ -24,8 +26,16 @@ export function StageView() {
   const screenSharer = participants.find((p) => p.isScreenSharing);
   const isSomeoneSharing = !!screenSharer || isScreenSharing;
 
-  // Hooks must be called before any early returns — sort participants here.
-  const sorted = useMemo(() => {
+  // Grid view sorting (no active speaker rearranging)
+  const gridSorted = useMemo(() => {
+    return [...participants].sort((a, b) => {
+      if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
+      return 0;
+    });
+  }, [participants]);
+
+  // Speaker view sorting (uses active speaker)
+  const speakerSorted = useMemo(() => {
     return [...participants].sort((a, b) => {
       if (a.isSpeaking !== b.isSpeaking) return a.isSpeaking ? -1 : 1;
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
@@ -34,13 +44,13 @@ export function StageView() {
   }, [participants]);
 
   if (eCinemaLink) {
-    return <ECinemaLayout eCinemaLink={eCinemaLink} participants={participants} />;
+    return <ECinemaLayout eCinemaLink={eCinemaLink} participants={gridSorted} />;
   }
 
   if (isSomeoneSharing) {
     return (
       <ScreenShareLayout
-        participants={participants}
+        participants={gridSorted}
         screenSharer={screenSharer}
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
@@ -49,15 +59,15 @@ export function StageView() {
     );
   }
 
-  const activeSpeaker = sorted[0];
-  const others = sorted.filter((p) => p.id !== activeSpeaker?.id);
+  const activeSpeaker = speakerSorted[0] || gridSorted[0];
+  const others = gridSorted.filter((p) => p.id !== activeSpeaker?.id);
 
   if (layoutMode === "grid") {
-    return <GridLayout participants={sorted} />;
+    return <GridLayout participants={gridSorted} />;
   }
 
   if (layoutMode === "spotlight") {
-    return <SpotlightLayout participants={sorted} />;
+    return <SpotlightLayout participants={gridSorted} />;
   }
 
   // Default: speaker layout
@@ -529,8 +539,10 @@ function SpeakerLayout({
       {/* Main speaker */}
       <div className="flex-1 min-h-0">
         <motion.div
-          layout
-          layoutId={`tile-${activeSpeaker.id}`}
+          key={activeSpeaker.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2 }}
           className="w-full h-full"
         >
           <ParticipantTile participant={activeSpeaker} isLarge />
@@ -566,8 +578,6 @@ function SpeakerLayout({
                 return (
                   <motion.div
                     key={p.id}
-                    layout
-                    layoutId={`tile-${p.id}`}
                     initial={{ opacity: 0, scale: 0.92 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.92 }}
@@ -946,25 +956,51 @@ function ScreenShareLayout({
 
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const { broadcastECinema } = useMeeting();
+  const { broadcastECinema, currentUser, sendECinemaAction, ecinemaAction } = useMeeting();
+  const playerRef = React.useRef<any>(null);
 
-  const getEmbedUrl = (url: string) => {
+  const extractVideoId = (url: string) => {
     try {
       if (url.includes("youtube.com/watch")) {
-        const videoId = new URL(url).searchParams.get("v");
-        if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+        return new URL(url).searchParams.get("v");
       }
       if (url.includes("youtu.be/")) {
-        const videoId = new URL(url).pathname.slice(1);
-        if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+        return new URL(url).pathname.slice(1);
       }
-      return url;
+      return null;
     } catch {
-      return url;
+      return null;
     }
   };
 
-  const embedUrl = getEmbedUrl(eCinemaLink);
+  const videoId = extractVideoId(eCinemaLink);
+
+  // Sync player when receiving actions
+  React.useEffect(() => {
+    if (ecinemaAction && playerRef.current) {
+      if (ecinemaAction.action === 'play') {
+        playerRef.current.playVideo();
+      } else if (ecinemaAction.action === 'pause') {
+        playerRef.current.pauseVideo();
+      }
+      if (ecinemaAction.time !== undefined) {
+        // Optional: seekTo if you want to sync time later, but sticking to play/pause for now
+        playerRef.current.seekTo(ecinemaAction.time, true);
+      }
+    }
+  }, [ecinemaAction]);
+
+  const handlePlay = (e: any) => {
+    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+      sendECinemaAction('play', e.target.getCurrentTime());
+    }
+  };
+
+  const handlePause = (e: any) => {
+    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+      sendECinemaAction('pause', e.target.getCurrentTime());
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
@@ -979,13 +1015,13 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         }}
       >
         <div
-          className="flex items-center justify-between px-3 py-2 backdrop-blur-sm shrink-0 z-10 absolute top-0 w-full"
+          className="flex items-center justify-between px-3 py-2 backdrop-blur-sm shrink-0 z-10 absolute top-0 w-full pointer-events-none"
           style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)" }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pointer-events-auto">
             <span className="text-white text-xs font-semibold drop-shadow-md">eCinema Broadcast</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 pointer-events-auto">
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="p-1.5 rounded-lg transition-colors text-white hover:bg-white/20"
@@ -993,22 +1029,43 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
-            <button
-              onClick={() => broadcastECinema(null)}
-              className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
-            >
-              Stop
-            </button>
+            {currentUser.role === 'host' && (
+              <button
+                onClick={() => broadcastECinema(null)}
+                className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+              >
+                Stop
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex-1 w-full h-full bg-black">
-          <iframe
-            src={embedUrl}
-            className="w-full h-full border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+          {videoId ? (
+            <YouTube
+              videoId={videoId}
+              opts={{
+                width: '100%',
+                height: '100%',
+                playerVars: {
+                  autoplay: 1,
+                  controls: currentUser.role === 'host' || currentUser.role === 'co-host' ? 1 : 0, // Only hosts see controls
+                  disablekb: currentUser.role === 'host' || currentUser.role === 'co-host' ? 0 : 1, // Disable keyboard for non-hosts
+                  rel: 0,
+                  modestbranding: 1
+                },
+              }}
+              className="w-full h-full"
+              iframeClassName="w-full h-full border-0 pointer-events-auto"
+              onReady={(e) => { playerRef.current = e.target; }}
+              onPlay={handlePlay}
+              onPause={handlePause}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-white">
+              Invalid Video Link
+            </div>
+          )}
         </div>
       </div>
 

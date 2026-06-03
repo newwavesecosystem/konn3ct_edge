@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Mic,
@@ -22,6 +23,7 @@ import {
   LogOut,
   Circle,
   LayoutGrid,
+  Radio,
   Presentation,
   Sparkles,
   Focus,
@@ -74,6 +76,7 @@ export function MeetingControls() {
     switchDevice,
     meetingInfo,
     eCinemaLink,
+    hasUnreadChat,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -146,7 +149,6 @@ export function MeetingControls() {
             {meetingInfo.roomName}
           </span>
 
-          {/* Captions toggle — left side quick access */}
           <ControlBtn
             icon={<Subtitles className="w-5 h-5" />}
             active={isCaptionsEnabled}
@@ -154,7 +156,6 @@ export function MeetingControls() {
             tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
           />
 
-          {/* Donation controls — left side for host */}
           {isHost && (
             <ControlBtn
               icon={<Gift className={cn("w-5 h-5", isDonationActive && "text-brand-green")} />}
@@ -198,11 +199,17 @@ export function MeetingControls() {
 
           <PillDivider className="hidden sm:block" />
 
-          {/* Screen share — desktop only */}
+          {/* Screen share */}
           <ControlBtn
             icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
             active={isScreenSharing}
-            onClick={toggleScreenShare}
+            onClick={() => {
+              if (currentUser.isMobile) {
+                toast.error("Screen sharing is not supported on mobile. Please join with a PC to share your screen.");
+                return;
+              }
+              toggleScreenShare();
+            }}
             tooltip="Share screen"
             className="hidden sm:flex"
           />
@@ -285,17 +292,28 @@ export function MeetingControls() {
                   label="Polls"
                   onClick={() => { setActivePanel("polls"); setShowMoreMenu(false); }}
                 />
+                {/* 
                 <MoreMenuItem
                   icon={<FileText className="w-4 h-4" />}
                   label="Workspace"
                   onClick={() => { setActivePanel("docs"); setShowMoreMenu(false); }}
-                />
-                <MoreMenuItem
-                  icon={<Film className="w-4 h-4" />}
-                  label="eCinema Broadcast"
-                  badge={eCinemaLink ? "Live" : undefined}
-                  onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
-                />
+                /> 
+                */}
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Film className="w-4 h-4" />}
+                    label="eCinema Broadcast"
+                    badge={eCinemaLink ? "Live" : undefined}
+                    onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
+                  />
+                )}
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Radio className="w-4 h-4" />}
+                    label="Live Streaming"
+                    onClick={() => { setActivePanel("streaming"); setShowMoreMenu(false); }}
+                  />
+                )}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 <MoreMenuItem
                   icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
@@ -371,18 +389,20 @@ export function MeetingControls() {
             ))}
           </div>
 
-          {/* Konn3ct AI panel toggle */}
+          {/* Konn3ct AI panel toggle 
           <PanelBtn
             icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
             active={activePanel === "ai"}
             onClick={() => setActivePanel("ai")}
             tooltip="Konn3ct AI"
           />
+          */}
           <PanelBtn
             icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}
             onClick={() => setActivePanel("chat")}
             tooltip="Chat"
+            hasNotification={hasUnreadChat}
           />
           <PanelBtn
             icon={<Users className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
@@ -405,10 +425,13 @@ function ControlBtn({
   icon: React.ReactNode; danger?: boolean; active?: boolean;
   highlight?: boolean; onClick: () => void; tooltip: string; className?: string;
 }) {
+  // Derive a stable data-testid from the tooltip text (lowercase, hyphened)
+  const testId = `ctrl-${tooltip.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <button
       onClick={onClick}
       title={tooltip}
+      data-testid={testId}
       className={cn(
         "relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 active:scale-90",
         danger && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
@@ -433,16 +456,18 @@ function ControlBtn({
 
 /* ── Panel toggle button (right zone) ──────────────── */
 function PanelBtn({
-  icon, active, onClick, tooltip,
+  icon, active, onClick, tooltip, hasNotification
 }: {
-  icon: React.ReactNode; active: boolean; onClick: () => void; tooltip: string;
+  icon: React.ReactNode; active: boolean; onClick: () => void; tooltip: string; hasNotification?: boolean;
 }) {
+  const testId = `panel-${tooltip.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <button
       onClick={onClick}
       title={tooltip}
+      data-testid={testId}
       className={cn(
-        "flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-200 active:scale-90",
+        "relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-200 active:scale-90",
       )}
       style={{
         backgroundColor: active ? "var(--mt-bg-active)" : "var(--mt-bg-control)",
@@ -450,6 +475,12 @@ function PanelBtn({
       }}
     >
       {icon}
+      {hasNotification && (
+        <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+        </span>
+      )}
     </button>
   );
 }

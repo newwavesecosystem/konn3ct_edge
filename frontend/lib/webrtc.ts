@@ -7,6 +7,7 @@ export class WebRTCClient {
   private device: Device | null = null;
   private sendTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
+  private pingInterval: NodeJS.Timeout | null = null;
   
   private localVideoProducer: Producer | null = null;
   private localAudioProducer: Producer | null = null;
@@ -25,13 +26,19 @@ export class WebRTCClient {
   private maxReconnectAttempts = 10;
   private reconnectTimeoutId?: NodeJS.Timeout;
 
+  public userId: string | undefined;
+  public userName: string | undefined;
+  public userRole: string | undefined;
+  public roomName: string | undefined;
+  public sessionStatus?: string;
+
   public onNewConsumer?: (consumer: Consumer, userId: string) => void;
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
-  public onUserJoined?: (user: { userId: string, name: string, role: string }) => void;
+  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean }) => void;
   public onUserLeft?: (userId: string) => void;
-  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string }>) => void;
+  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean }>) => void;
   
   // Collaboration Callbacks
   public onChatMessage?: (msg: any) => void;
@@ -50,6 +57,7 @@ export class WebRTCClient {
   public onServerReject?: (msg: string) => void;
   public onForceMute?: () => void;
   public onECinemaUpdate?: (link: string | null) => void;
+  public onECinemaAction?: (msg: any) => void;
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
@@ -80,15 +88,26 @@ export class WebRTCClient {
   public async connect() {
     this.onConnectionStateChange?.('connecting');
     
-    // Connect WebSocket
+    // Detect mobile
+    const isMobile = typeof navigator !== 'undefined' && /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    
+    // Connect WebSocket — passing token in URL is required by backend upgrade handler
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}`;
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
       try {
+        // Send auth token as first message (not in URL to avoid logging in server access logs)
+        this.ws!.send(JSON.stringify({ type: 'auth', token: this.token }));
         this.reconnectAttempts = 0; // Reset on success
-        // Device init moved to session_status handling to respect waiting room
+
+        // Keep-alive to prevent DO Load Balancer from dropping idle connections
+        this.pingInterval = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 25000);
       } catch (err) {
         console.error("Connection failed:", err);
         this.onConnectionStateChange?.('failed');
@@ -96,7 +115,13 @@ export class WebRTCClient {
     };
 
     this.ws.onmessage = async (event) => {
-      const msg = JSON.parse(event.data);
+      let msg: any;
+      try {
+        msg = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
+      } catch (e) {
+        console.warn('Received non-JSON WS message, ignoring');
+        return;
+      }
       
       // Handle Response matching by event type
       if (this.pendingRequests.has(msg.type)) {
@@ -114,6 +139,12 @@ export class WebRTCClient {
       // Handle server-initiated events
       switch (msg.type) {
         case 'session_status':
+          this.sessionStatus = msg.status;
+          if (msg.userId) this.userId = msg.userId;
+          if (msg.name) this.userName = msg.name;
+          if (msg.role) this.userRole = msg.role;
+          if (msg.roomName) this.roomName = msg.roomName;
+          
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
             this.isIntentionalDisconnect = true;
@@ -140,15 +171,13 @@ export class WebRTCClient {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
             this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
-          } else if (msg.recovered && this.device?.loaded) {
-            if (this.needsRepublish || this.sendTransport?.connectionState === 'disconnected' || this.sendTransport?.connectionState === 'failed') {
-               console.log("Session recovered by server, but WebRTC transport is dead (IP changed?). Executing Auto-Republish...");
-               this.needsRepublish = false;
-               if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                 this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-               }
-               this.republishMedia().catch(console.error);
+          } else if (msg.recovered && msg.status === 'active') {
+            console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes (e.g. WiFi to Mobile)...");
+            this.needsRepublish = false;
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
             }
+            this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
             // First time active
@@ -224,6 +253,9 @@ export class WebRTCClient {
         case 'note_update':
           this.onNoteUpdate?.(msg);
           break;
+        case 'ecinema_action':
+          this.onECinemaAction?.(msg);
+          break;
         case 'screen_share_started':
           this.onScreenShareStarted?.(msg.userId, msg.producerId);
           break;
@@ -286,6 +318,7 @@ export class WebRTCClient {
     };
 
     this.ws.onclose = () => {
+      if (this.pingInterval) clearInterval(this.pingInterval);
       if (!this.isIntentionalDisconnect) {
         this.onConnectionStateChange?.('disconnected');
         this.needsRepublish = true;
@@ -362,6 +395,12 @@ export class WebRTCClient {
     }
   }
 
+  public sendECinemaAction(action: 'play' | 'pause', time?: number) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ecinema_action', action, time }));
+    }
+  }
+
   public createPoll(pollId: string, question: string, options: any[]) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'poll_create', pollId, question, options }));
@@ -401,6 +440,12 @@ export class WebRTCClient {
   public denyUser(userId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'deny_user', userId }));
+    }
+  }
+
+  public sendLeaveMeeting() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'leave_meeting' }));
     }
   }
 
@@ -526,9 +571,11 @@ export class WebRTCClient {
         });
 
         let quality: 'good' | 'poor' | 'bad' = 'good';
-        if (maxRtt > 1000 || maxPacketLoss > 20) {
+        // Zoom and modern platforms are highly tolerant due to FEC.
+        // We relax the thresholds so users don't get unnecessary warnings.
+        if (maxRtt > 1500 || maxPacketLoss > 25) {
           quality = 'bad';
-        } else if (maxRtt > 500 || maxPacketLoss > 10) {
+        } else if (maxRtt > 800 || maxPacketLoss > 15) {
           quality = 'poor';
         }
 
@@ -569,12 +616,13 @@ export class WebRTCClient {
       } catch (error: any) { errback(error); }
     });
 
-    this.sendTransport.on('produce', async ({ kind, rtpParameters }: any, callback: any, errback: any) => {
+    this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
       try {
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
           kind,
-          rtpParameters
+          rtpParameters,
+          appData
         });
         callback({ id });
       } catch (error: any) { errback(error); }
@@ -656,33 +704,27 @@ export class WebRTCClient {
       { scaleResolutionDownBy: 2, maxBitrate: 50000 },
       { scaleResolutionDownBy: 1, maxBitrate: 150000 }
     ] : [
-      // Standard HQ simulcast
+      // Standard 3-layer simulcast: low / medium / high
       { scaleResolutionDownBy: 4, maxBitrate: 100000 },
       { scaleResolutionDownBy: 2, maxBitrate: 300000 },
       { scaleResolutionDownBy: 1, maxBitrate: 900000 },
     ];
 
-    this.localVideoProducer = await this.sendTransport.produce({ 
-      track: videoTrack,
-      appData: { source: 'camera' }, // Tag so remote peers know this is a camera feed
-      encodings,
-      codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
-    });
+    // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
       await this.localVideoProducer.replaceTrack({ track: videoTrack });
       this.localVideoProducer.resume();
     } else {
-      this.localVideoProducer = await this.sendTransport.produce({ 
+      // First time or after producer was closed — create with full simulcast encodings
+      this.localVideoProducer = await this.sendTransport.produce({
         track: videoTrack,
-        encodings: [
-          { scaleResolutionDownBy: 4, maxBitrate: 100000 },
-          { scaleResolutionDownBy: 2, maxBitrate: 300000 },
-          { scaleResolutionDownBy: 1, maxBitrate: 900000 },
-        ],
-        codecOptions: { videoGoogleStartBitrate: 1000 }
+        appData: { source: 'camera' },
+        encodings,
+        codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
       });
     }
     return videoTrack;
+
   }
 
   public disableCamera() {
@@ -785,6 +827,8 @@ export class WebRTCClient {
     const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
 
     if (producer) {
+      const oldTrack = producer.track;
+
       if (kind === 'audio') {
         this.rawAudioTrack = newTrack;
         if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
@@ -797,7 +841,9 @@ export class WebRTCClient {
       // Replace the track in the Mediasoup producer
       await producer.replaceTrack({ track: newTrack });
       // Stop the old track to release the hardware
-      producer.track?.stop();
+      if (oldTrack) {
+        oldTrack.stop();
+      }
     }
 
     return newTrack;
@@ -950,6 +996,7 @@ export class WebRTCClient {
   public disconnect() {
     console.log('[WebRTC] Disconnecting gracefully...');
     this.isIntentionalDisconnect = true;
+    if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.networkInterval) clearInterval(this.networkInterval);
     this.ws?.close();
     
@@ -965,6 +1012,10 @@ export class WebRTCClient {
     this.stopScreenShareProducer();
     if (this.sendTransport) this.sendTransport.close();
     if (this.recvTransport) this.recvTransport.close();
+    this.sendTransport = null;
+    this.recvTransport = null;
+    this.ws = null;
+    this.device = null;
   }
 
   // --- Host Controls ---

@@ -65,7 +65,6 @@ export function ReactionsLayer() {
                   key={emoji}
                   onClick={() => {
                     sendReaction(emoji);
-                    setShowReactionPicker(false);
                   }}
                   className="w-10 h-10 flex items-center justify-center rounded-xl active:scale-90 transition-all text-xl"
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"}

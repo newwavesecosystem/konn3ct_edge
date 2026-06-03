@@ -47,6 +47,14 @@ jobs:
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
 
+      - name: Build and Push Streaming Worker Docker Image
+        run: |
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-streaming-worker"
+          docker build -t $IMAGE_NAME:${{ github.sha }} ./streaming-worker
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
       - name: Authenticate with Kubernetes Cluster
         run: |
           # IMPORTANT: Update 'conn3ct-cluster' to match the exact name of your cluster in DigitalOcean
@@ -60,6 +68,7 @@ jobs:
             --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET }}" \
             --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
             --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --from-literal=EXTERNAL_API_KEY="${{ secrets.EXTERNAL_API_KEY }}" \
             --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
             --from-literal=NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY="${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" \
             --from-literal=DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
@@ -76,6 +85,7 @@ jobs:
           kubectl rollout restart deployment conn3ct-backend
           kubectl rollout restart deployment conn3ct-frontend
           kubectl rollout restart deployment conn3ct-recorder
+          kubectl rollout restart deployment conn3ct-streaming-worker
 
       # - name: Debugging - Print Pod Logs
       #   run: |

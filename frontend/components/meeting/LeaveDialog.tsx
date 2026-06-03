@@ -7,10 +7,11 @@ import { LogOut, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function LeaveDialog() {
-  const { currentUser, showLeaveDialog, setShowLeaveDialog, endMeetingForAll } = useMeeting();
+  const { currentUser, showLeaveDialog, setShowLeaveDialog, endMeetingForAll, leaveMeeting } = useMeeting();
   const router = useRouter();
 
   const handleLeave = () => {
+    leaveMeeting();
     setShowLeaveDialog(false);
     router.push("/dashboard");
   };
