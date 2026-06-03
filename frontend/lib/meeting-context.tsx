@@ -116,6 +116,11 @@ interface MeetingContextValue {
   setIsLowBandwidthEnabled: (enabled: boolean) => void;
   isAlwaysMuteOnJoin: boolean;
   setIsAlwaysMuteOnJoin: (enabled: boolean) => void;
+  
+  // Virtual Background
+  vbMode: 'none' | 'blur' | 'image';
+  vbImageUrl?: string;
+  handleVbSelect: (mode: 'none' | 'blur' | 'image', imageUrl?: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -241,6 +246,10 @@ export function MeetingProvider({
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
+
+  // Virtual Background
+  const [vbMode, setVbMode] = useState<'none' | 'blur' | 'image'>('none');
+  const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -943,6 +952,14 @@ export function MeetingProvider({
 
           if (isCameraOn) {
             videoTrack = await client.enableCamera();
+            
+            // Re-apply Virtual background on initial camera mount
+            if (vbMode !== 'none') {
+              const vbTrack = await client.setVirtualBackground(vbMode, vbImageUrl);
+              if (vbTrack) {
+                videoTrack = vbTrack;
+              }
+            }
             localCameraTrackRef.current = videoTrack;
           }
           
@@ -1098,11 +1115,17 @@ export function MeetingProvider({
     } else {
       if (!localCameraTrackRef.current) {
         // First time turning on camera
-        webrtcClient.current?.enableCamera().then(track => {
-          localCameraTrackRef.current = track;
+        webrtcClient.current?.enableCamera().then(async track => {
+          let finalTrack = track;
+          // Apply VB
+          if (vbMode !== 'none' && webrtcClient.current) {
+            const vbTrack = await webrtcClient.current.setVirtualBackground(vbMode, vbImageUrl);
+            if (vbTrack) finalTrack = vbTrack;
+          }
+          localCameraTrackRef.current = finalTrack;
           webrtcClient.current?.sendCameraState(newState);
           setIsCameraOn(newState);
-          setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: track } : p));
+          setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: finalTrack } : p));
         }).catch(err => console.error("Failed to enable camera:", err));
       } else {
         webrtcClient.current?.resumeCamera();
@@ -1111,7 +1134,7 @@ export function MeetingProvider({
         setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState } : p));
       }
     }
-  }, [isCameraOn, initialCurrentUser.id]);
+  }, [isCameraOn, initialCurrentUser.id, vbMode, vbImageUrl]);
 
   const toggleScreenShare = useCallback(async () => {
     try {
@@ -1449,6 +1472,23 @@ export function MeetingProvider({
         setIsLowBandwidthEnabled: updateLowBandwidth,
         isAlwaysMuteOnJoin,
         setIsAlwaysMuteOnJoin: updateAlwaysMute,
+        
+        vbMode,
+        vbImageUrl,
+        handleVbSelect: async (mode: 'none' | 'blur' | 'image', imageUrl?: string) => {
+          setVbMode(mode);
+          setVbImageUrl(imageUrl);
+          sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: imageUrl }));
+          if (isCameraOn && webrtcClient.current) {
+            const track = await webrtcClient.current.setVirtualBackground(mode, imageUrl);
+            if (track) {
+              localCameraTrackRef.current = track;
+              setParticipants(prev => prev.map(p => 
+                p.id === currentUser.id ? { ...p, videoTrack: track } : p
+              ));
+            }
+          }
+        },
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} />

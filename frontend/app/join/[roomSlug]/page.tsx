@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { VideoProcessor, VirtualBackgroundMode } from "@/lib/video-processor";
 import {
   Mic,
   MicOff,
@@ -34,8 +35,11 @@ export default function JoinPage({
   const [isJoining, setIsJoining] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [vbMode, setVbMode] = useState<VirtualBackgroundMode>('none');
+  const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<VideoProcessor | null>(null);
 
   const roomName = resolvedParams.roomSlug
     .replace(/-/g, " ")
@@ -61,6 +65,49 @@ export default function JoinPage({
     checkServer();
   }, [resolvedParams.roomSlug]);
 
+  useEffect(() => {
+    if (!processorRef.current) {
+      processorRef.current = new VideoProcessor();
+    }
+    
+    // Load persisted VB setting
+    const saved = sessionStorage.getItem("mtg_vb");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setVbMode(parsed.mode);
+        setVbImageUrl(parsed.image);
+        processorRef.current.setMode(parsed.mode, parsed.image);
+      } catch (e) {}
+    }
+    
+    return () => {
+      processorRef.current?.stopProcessing();
+    };
+  }, []);
+
+  const handleVbSelect = (mode: VirtualBackgroundMode, url?: string) => {
+    setVbMode(mode);
+    setVbImageUrl(url);
+    processorRef.current?.setMode(mode, url);
+    sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: url }));
+    
+    if (streamRef.current) {
+      const processed = processorRef.current!.startProcessing(streamRef.current);
+      if (videoRef.current) videoRef.current.srcObject = processed;
+    }
+  };
+
+  const handleCustomUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      handleVbSelect('image', ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Attempt camera preview
   useEffect(() => {
     if (!isCameraOn) {
@@ -73,7 +120,8 @@ export default function JoinPage({
       .getUserMedia({ video: true })
       .then((stream) => {
         streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        const processed = processorRef.current!.startProcessing(stream);
+        if (videoRef.current) videoRef.current.srcObject = processed;
       })
       .catch(() => {
         // Camera not available – silently degrade
@@ -213,7 +261,7 @@ export default function JoinPage({
                 </div>
               </div>
 
-              {/* Device selectors */}
+              {/* Device selectors & Settings */}
               {showSettings && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -223,6 +271,64 @@ export default function JoinPage({
                   <DeviceSelect label="Camera" options={["Default Camera"]} />
                   <DeviceSelect label="Microphone" options={["Default Microphone"]} />
                   <DeviceSelect label="Speaker" options={["Default Speaker"]} />
+
+                  {/* Virtual Background Selection UI */}
+                  {isCameraOn && (
+                    <div className="pt-4 mt-2 border-t border-white/10">
+                      <label className="block text-[11px] text-white/30 mb-2 font-medium">
+                        Virtual Background
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        <button
+                          onClick={() => handleVbSelect('none')}
+                          className={cn(
+                            "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14",
+                            vbMode === 'none' ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                          )}
+                        >
+                          <span className="text-[10px] text-white">None</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => handleVbSelect('blur')}
+                          className={cn(
+                            "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 relative overflow-hidden",
+                            vbMode === 'blur' ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                          )}
+                        >
+                          <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
+                          <span className="relative z-10 text-[10px] text-white">Blur</span>
+                        </button>
+                        
+                        {[
+                          '/backgrounds/modern_office.png',
+                          '/backgrounds/cozy_cafe.png',
+                          '/backgrounds/minimalist_gradient.png'
+                        ].map((url, i) => (
+                          <button
+                            key={url}
+                            onClick={() => handleVbSelect('image', url)}
+                            className={cn(
+                              "rounded-xl overflow-hidden transition-all h-14",
+                              vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
+                            )}
+                          >
+                            <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+
+                        {/* Custom Upload */}
+                        <label className={cn(
+                          "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
+                          vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
+                        )}>
+                          <span className="text-lg text-white/50 leading-none mb-0.5">+</span>
+                          <span className="text-[9px] text-white/40">Upload</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={handleCustomUpload} />
+                        </label>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>

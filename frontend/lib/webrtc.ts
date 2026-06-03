@@ -1,6 +1,7 @@
 import type { Device } from 'mediasoup-client';
 // @ts-ignore
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
+import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
 
 export class WebRTCClient {
   private ws: WebSocket | null = null;
@@ -18,6 +19,8 @@ export class WebRTCClient {
   
   // Media
   public rawAudioTrack: MediaStreamTrack | null = null;
+  private rawCameraStream: MediaStream | null = null;
+  private videoProcessor: VideoProcessor | null = null;
   private purifyInstance: any = null;
   public isAINoiseSuppressionEnabled = false;
   private messageIdCounter = 0;
@@ -693,13 +696,30 @@ export class WebRTCClient {
       }
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ 
+    this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
       video: { 
         width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
         height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
       } 
     });
-    const videoTrack = stream.getVideoTracks()[0];
+
+    let videoTrack = this.rawCameraStream.getVideoTracks()[0];
+
+    // Initialize VideoProcessor if not exists
+    if (!this.videoProcessor) {
+      this.videoProcessor = new VideoProcessor();
+      const saved = sessionStorage.getItem("mtg_vb");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          this.videoProcessor.setMode(parsed.mode, parsed.image);
+        } catch (e) {}
+      }
+    }
+
+    // Pass the stream through the VideoProcessor to apply Virtual Background
+    const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+    videoTrack = processedStream.getVideoTracks()[0];
     
     const encodings = this.isLowBandwidth ? [
       // Aggressively limit resolution and bitrate for bad networks
@@ -725,11 +745,30 @@ export class WebRTCClient {
         codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
       });
     }
+    
     return videoTrack;
 
   }
 
+  public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
+    if (!this.videoProcessor) {
+      this.videoProcessor = new VideoProcessor();
+    }
+    this.videoProcessor.setMode(mode, imageUrl);
+    
+    if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
+      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+      const newTrack = processedStream.getVideoTracks()[0];
+      await this.localVideoProducer.replaceTrack({ track: newTrack });
+      return newTrack;
+    }
+    return null;
+  }
+
   public disableCamera() {
+    if (this.videoProcessor) {
+      this.videoProcessor.stopProcessing();
+    }
     if (this.localVideoProducer) {
       if (this.localVideoProducer.track) {
         this.localVideoProducer.track.stop();
