@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import type {
   Participant,
@@ -175,7 +175,7 @@ export function MeetingProvider({
   const isMobileClient = typeof navigator !== 'undefined' ? 
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
-  const [currentUser] = useState<Participant>({
+  const [initialCurrentUser] = useState<Participant>({
     id: `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
@@ -189,7 +189,8 @@ export function MeetingProvider({
   });
 
   // Start with only the current user, so real users are dynamically added
-  const [participants, setParticipants] = useState<Participant[]>([currentUser]);
+  const [participants, setParticipants] = useState<Participant[]>([initialCurrentUser]);
+  const currentUser = useMemo(() => participants.find(p => p.id === initialCurrentUser.id) || initialCurrentUser, [participants, initialCurrentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
@@ -264,13 +265,13 @@ export function MeetingProvider({
           setIsMuted(true);
           setParticipants((prev) =>
             prev.map((p) =>
-              p.id === currentUser.id ? { ...p, isMuted: true } : p
+              p.id === initialCurrentUser.id ? { ...p, isMuted: true } : p
             )
           );
         }
       }
     }
-  }, [currentUser.id]);
+  }, [initialCurrentUser.id]);
 
   // Wrappers to persist settings
   const updateHDVideo = (val: boolean) => {
@@ -444,7 +445,7 @@ export function MeetingProvider({
         };
 
         client.onDonationSuccessReceived = (userId, name, amount, currency) => {
-          if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+          if (client?.userRole === 'host' || client?.userRole === 'co-host') {
             toast.success(`${name} just donated ${currency} ${amount}!`, {
               icon: "🎁",
               duration: 5000,
@@ -468,7 +469,7 @@ export function MeetingProvider({
 
         client.onSyncPanel = (panel: any) => {
           // Only sync the panel view for the recording bot so it matches the host's screen
-          if (currentUser.role === 'bot') {
+          if (client?.userRole === 'bot') {
             setActivePanel(panel);
           }
         };
@@ -926,14 +927,9 @@ export function MeetingProvider({
     connectToMeeting();
 
     return () => {
-      if (client) {
-        client.disconnect();
-        if (webrtcClient.current === client) {
-          webrtcClient.current = null;
-        }
-      }
+      client?.disconnect();
     };
-  }, [roomSlug, currentUser.name, currentUser.id]);
+  }, [roomSlug, initialCurrentUser.name, initialCurrentUser.id]);
 
   // ── Initialize Local Media upon WebRTC connect ────────
   useEffect(() => {
@@ -958,7 +954,7 @@ export function MeetingProvider({
 
           setParticipants((prev) =>
             prev.map((p) => {
-              if (p.id === currentUser.id) {
+              if (p.id === initialCurrentUser.id) {
                 return { ...p, videoTrack: videoTrack || undefined, audioTrack: audioTrack || undefined, isCameraOn, isMuted };
               }
               return p;
@@ -971,7 +967,7 @@ export function MeetingProvider({
 
       initMedia();
     }
-  }, [webrtcStatus, currentUser.id]);
+  }, [webrtcStatus, initialCurrentUser.id]);
 
   // ── Device Management ────────────────────────────────
   const fetchDevices = async () => {
@@ -1017,7 +1013,7 @@ export function MeetingProvider({
         } else {
           localCameraTrackRef.current = newTrack;
           setParticipants(prev => prev.map(p => 
-            p.id === currentUser.id ? { ...p, videoTrack: newTrack } : p
+            p.id === initialCurrentUser.id ? { ...p, videoTrack: newTrack } : p
           ));
         }
       }
@@ -1025,7 +1021,7 @@ export function MeetingProvider({
       console.error(`Failed to switch ${type} device`, e);
       toast.error(`Could not switch ${type} device`);
     }
-  }, [currentUser.id]);
+  }, [initialCurrentUser.id]);
 
   // ── Timer ────────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1089,8 +1085,8 @@ export function MeetingProvider({
     else webrtcClient.current?.resumeMic();
     webrtcClient.current?.sendMuteState(newState);
     setIsMuted(newState);
-    setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isMuted: newState } : p));
-  }, [isMuted, currentUser.id]);
+    setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isMuted: newState } : p));
+  }, [isMuted, initialCurrentUser.id]);
 
   const toggleCamera = useCallback(() => {
     const newState = !isCameraOn;
@@ -1098,7 +1094,7 @@ export function MeetingProvider({
       webrtcClient.current?.pauseCamera();
       webrtcClient.current?.sendCameraState(newState);
       setIsCameraOn(newState);
-      setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState } : p));
+      setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState } : p));
     } else {
       if (!localCameraTrackRef.current) {
         // First time turning on camera
@@ -1106,16 +1102,16 @@ export function MeetingProvider({
           localCameraTrackRef.current = track;
           webrtcClient.current?.sendCameraState(newState);
           setIsCameraOn(newState);
-          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState, videoTrack: track } : p));
+          setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: track } : p));
         }).catch(err => console.error("Failed to enable camera:", err));
       } else {
         webrtcClient.current?.resumeCamera();
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: newState } : p));
+        setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState } : p));
       }
     }
-  }, [isCameraOn, currentUser.id]);
+  }, [isCameraOn, initialCurrentUser.id]);
 
   const toggleScreenShare = useCallback(async () => {
     try {
@@ -1123,20 +1119,20 @@ export function MeetingProvider({
         await webrtcClient.current?.disableScreenShare();
         setIsScreenSharing(false);
         setParticipants(prev => prev.map(p =>
-          p.id === currentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
+          p.id === initialCurrentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
         ));
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
           setIsScreenSharing(true);
           setParticipants(prev => prev.map(p =>
-            p.id === currentUser.id ? { ...p, isScreenSharing: true, screenTrack } : p
+            p.id === initialCurrentUser.id ? { ...p, isScreenSharing: true, screenTrack } : p
           ));
           screenTrack.onended = async () => {
             await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
             setParticipants(prev => prev.map(p =>
-              p.id === currentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
+              p.id === initialCurrentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
             ));
           };
         }
@@ -1144,7 +1140,7 @@ export function MeetingProvider({
     } catch (e) {
       console.error("Screen share error:", e);
     }
-  }, [isScreenSharing, currentUser.id]);
+  }, [isScreenSharing, initialCurrentUser.id]);
 
   const toggleRecording = useCallback(async () => {
     if (isRecording) {
@@ -1161,8 +1157,8 @@ export function MeetingProvider({
     const newState = !isHandRaised;
     setIsHandRaised(newState);
     webrtcClient.current?.sendHandRaise(newState);
-    setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isHandRaised: newState } : p));
-  }, [isHandRaised, currentUser.id]);
+    setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isHandRaised: newState } : p));
+  }, [isHandRaised, initialCurrentUser.id]);
 
   const sendMessage = useCallback(
     (content: string, targetUserId?: string, fileUrl?: string) => {
@@ -1171,7 +1167,7 @@ export function MeetingProvider({
         id: `m-${Date.now()}`,
         senderId: currentUser.id,
         senderName: currentUser.name,
-        senderRole: currentUser.role,
+        senderRole: (webrtcClient.current?.userRole as ParticipantRole) || currentUser.role,
         content,
         timestamp: new Date().toISOString(),
         targetUserId,
@@ -1219,7 +1215,7 @@ export function MeetingProvider({
   }, [startListening, stopListening]);
 
   const toggleDonation = useCallback(() => {
-    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+    if (webrtcClient.current?.userRole === 'host' || webrtcClient.current?.userRole === 'co-host') {
       const newState = !isDonationActive;
       setIsDonationActive(newState);
       webrtcClient.current?.sendDonationStatus(newState);
@@ -1227,7 +1223,7 @@ export function MeetingProvider({
     } else {
       toast.error("Only the host can enable donations.");
     }
-  }, [isDonationActive, currentUser.role]);
+  }, [isDonationActive]);
 
   const sendDonationSuccess = useCallback((amount: number, currency: string) => {
     webrtcClient.current?.sendDonationSuccess(amount, currency);
@@ -1302,7 +1298,7 @@ export function MeetingProvider({
       
       // If host, sync the panel state so the recorder bot captures it
       // Don't sync 'participants' or 'settings' as those are private to the host
-      if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+      if (webrtcClient.current?.userRole === 'host' || webrtcClient.current?.userRole === 'co-host') {
         if (newPanel !== 'participants' && newPanel !== 'settings') {
           webrtcClient.current?.sendSyncPanel(newPanel);
         } else {
@@ -1311,7 +1307,7 @@ export function MeetingProvider({
         }
       }
     },
-    [activePanel, currentUser.role]
+    [activePanel]
   );
 
   const admitUser = useCallback((userId: string) => {
