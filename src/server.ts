@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { createServer } from 'http';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import path from 'path';
@@ -9,6 +11,7 @@ import { initializeSignaling } from './signaling/server';
 import { initializeWorkers } from './media/sfu';
 import { config } from './media/config';
 import { logger } from './logger';
+import { generalLimiter } from './middleware/rateLimiter';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { teamsRouter } from './routes/teams';
@@ -19,24 +22,59 @@ import { schedulingRouter } from './routes/scheduling';
 import { dashboardRouter } from './routes/dashboard';
 import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
+import { externalRouter } from './routes/external';
+import { streamingRouter } from './routes/streaming';
 
-const app = express();
+if (process.env.NODE_ENV === 'production') {
+  const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
+  for (const key of required) {
+    if (!process.env[key]) {
+      throw new Error(`[FATAL] Environment variable ${key} must be set in production`);
+    }
+  }
+}
+
+export const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '50kb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Security headers
+app.use(helmet());
+
+// CORS - allow only the frontend domain
+const allowedOrigins = [
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_DOMAIN ? `https://${process.env.NEXT_PUBLIC_FRONTEND_DOMAIN}` : null,
+  'http://localhost:3000',
+  'http://localhost:3001',
+].filter(Boolean) as string[];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+
 // Request logging middleware
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.url}`);
+  const safeUrl = req.url.replace(/([?&])token=[^&]*/g, '$1token=[REDACTED]');
+  logger.info(`${req.method} ${safeUrl}`);
   next();
 });
 
-// Swagger Documentation
-const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Global rate limiter — 100 req/min per IP (skips /health automatically)
+app.use(generalLimiter);
+
+// Swagger Documentation (non-production only)
+if (process.env.NODE_ENV !== 'production') {
+  const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
 
 // Routes
 app.use('/health', healthRouter);
@@ -49,6 +87,8 @@ app.use('/api/scheduling', schedulingRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/telephony', telephonyRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/external/v1', externalRouter);
+app.use('/api/streaming', streamingRouter);
 
 // Basic 404 handler
 app.use((req, res) => {
@@ -83,7 +123,8 @@ async function boot() {
     await initializeWorkers();
     logger.info('Mediasoup workers initialized successfully.');
   } catch (err) {
-    logger.warn('Failed to initialize mediasoup workers. Running in REST-only mode.', err);
+    logger.error('Failed to initialize mediasoup workers.', err);
+    if (process.env.NODE_ENV === 'production') throw err;
   } finally {
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);
@@ -91,4 +132,6 @@ async function boot() {
   }
 }
 
-boot();
+if (require.main === module) {
+  boot();
+}

@@ -1,8 +1,8 @@
 // ── Meeting Types ──────────────────────────────────────
 
-export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest";
+export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot";
 export type MediaState = "on" | "off" | "disabled";
-export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended";
+export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended" | "fetching-token" | "failed" | "denied" | "kicked" | "invalid-session";
 export type RoomType = "meeting" | "webinar";
 export type LayoutMode = "speaker" | "grid" | "spotlight";
 export type GridOverflowMode = "scroll" | "paginate";
@@ -23,6 +23,7 @@ export interface Participant {
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
+  isMobile?: boolean;
 }
 
 export interface ChatMessage {
@@ -94,4 +95,4 @@ export interface DocNote {
   lastEditedAt: string;
 }
 
-export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | null;
+export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | "streaming" | null;

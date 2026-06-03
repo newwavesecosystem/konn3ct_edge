@@ -12,6 +12,8 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  expoPushToken String?
+  webPushSubscription String?
   createdAt    DateTime @default(now())
 
   ownedTeams   Team[]   @relation("TeamOwner")
@@ -73,6 +75,13 @@ model Room {
   ownerId   String
   teamId    String?
   isWaitingRoomEnabled Boolean @default(true)
+  mode             String  @default("meeting")  // "meeting" | "webinar"
+  recordingSetting String  @default("off")       // "off" | "free" | "paid"
+  guestJoinAllowed Boolean @default(true)
+  accessPin        String?                       // null = no PIN required
+  maxParticipants  Int     @default(100)
+  maxWebinarAudience Int   @default(1000)
+  maxActiveCameras Int     @default(15)
   createdAt DateTime @default(now())
 
   owner User @relation("RoomOwner", fields: [ownerId], references: [id])
@@ -88,10 +97,12 @@ model Room {
   polls MeetingPoll[]
   sharedNote SharedNote?
   paymentTransactions PaymentTransaction[]
+  liveStreams LiveStream[]
 
   @@index([ownerId])
   @@index([teamId])
 }
+
 
 model MeetingSession {
   id          String   @id @default(cuid())
@@ -274,4 +285,18 @@ model SharedNote {
   updatedAt DateTime @updatedAt
   
   room Room @relation(fields: [roomId], references: [id])
+}
+
+model LiveStream {
+  id         String   @id @default(cuid())
+  roomId     String
+  rtmpUrls   Json     // Array of strings
+  status     String   @default("processing") // processing, live, failed, stopped
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  duration   Int?     // Duration in seconds
+  createdAt  DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+  @@index([roomId])
 }

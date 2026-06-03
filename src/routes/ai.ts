@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { GoogleGenAI } from '@google/genai';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
@@ -40,17 +39,69 @@ aiRouter.get('/transcription/:roomId', async (req: Request, res: Response) => {
   }
 });
 
-// --- 2. Generate/Get AI Summary ---
+// --- 2. Get All AI Summaries (Past Meetings) ---
+aiRouter.get('/summaries', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Find all rooms the user owns or is a team member of
+    const rooms = await db.room.findMany({
+      where: {
+        OR: [
+          { ownerId: userId },
+          { team: { members: { some: { userId } } } }
+        ]
+      },
+      select: { id: true, name: true, slug: true }
+    });
+    
+    const roomIds = rooms.map((r: any) => r.id);
+    
+    // Fetch all summaries for those rooms
+    const summaries = await db.meetingSummary.findMany({
+      where: { roomId: { in: roomIds } },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    // Attach room details
+    const pastMeetings = summaries.map((s: any) => {
+      const room = rooms.find((r: any) => r.id === s.roomId);
+      return {
+        ...s,
+        roomName: room?.name || 'Unknown Room',
+        roomSlug: room?.slug || ''
+      };
+    });
+    
+    res.status(200).json(pastMeetings);
+  } catch (error) {
+    logger.error('Error fetching summaries', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- 3. Generate/Get AI Summary ---
 aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
   try {
+    if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: 'AI summarisation is not configured on this server.' });
+    }
+
     const roomId = req.params.roomId as string;
     const userId = req.user!.userId;
 
     // Verify ownership (only owners/admins should generate expensive AI summaries)
     const room = await db.room.findUnique({ where: { id: roomId } });
-    if (!room || room.ownerId !== userId) {
-      return res.status(403).json({ error: 'Forbidden. Only room owners can generate AI summaries.' });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    const roomWithTeam = await db.room.findUnique({
+      where: { id: roomId },
+      include: { team: { include: { members: true } } }
+    });
+    let hasAccess = room.ownerId === userId;
+    if (!hasAccess && roomWithTeam?.team) {
+      hasAccess = roomWithTeam.team.members.some((m: any) => m.userId === userId && ['owner', 'admin'].includes(m.role));
     }
+    if (!hasAccess) return res.status(403).json({ error: 'Forbidden. Only room owners and team admins can generate AI summaries.' });
 
     // Fetch all transcriptions for this room
     const transcriptions = await db.transcription.findMany({ 
@@ -64,26 +115,10 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
 
     const fullText = transcriptions.map((t: { content: string }) => t.content).join('\n');
 
-    let actionItems = "[]";
-    let summaryText = "Summary could not be generated.";
+    const { generateMeetingSummaryData } = require('../ai/summarizer');
+    const { summary: summaryText, actionItems } = await generateMeetingSummaryData(fullText);
 
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Analyze the following meeting transcript and provide a brief overall summary and a JSON array of string action items.\n\nTranscript:\n${fullText}\n\nPlease format your response strictly as a JSON object with two fields: "summary" (string) and "actionItems" (array of strings). Do not include markdown formatting.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
-      if (response.text) {
-        const cleanedText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(cleanedText);
-        summaryText = parsed.summary || summaryText;
-        actionItems = JSON.stringify(parsed.actionItems || []);
-      }
-    } catch (aiError) {
-      logger.error('Failed to call Gemini API', aiError);
+    if (summaryText === "Summary could not be generated.") {
       return res.status(502).json({ error: 'AI processing failed' });
     }
 

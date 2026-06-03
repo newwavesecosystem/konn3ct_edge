@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
+import { authLimiter, passwordResetLimiter } from '../middleware/rateLimiter';
+import { requireAuth } from '../middleware/auth';
 
 export const authRouter = Router();
 
@@ -18,7 +20,7 @@ const loginSchema = z.object({
   password: z.string()
 });
 
-authRouter.post('/signup', async (req: Request, res: Response) => {
+authRouter.post('/signup', authLimiter, async (req: Request, res: Response) => {
   try {
     const data = signupSchema.parse(req.body);
     
@@ -47,7 +49,51 @@ authRouter.post('/signup', async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post('/login', async (req: Request, res: Response) => {
+// --- Register Expo Push Token ---
+authRouter.post('/push-token', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { expoPushToken } = req.body;
+    const userId = req.user!.userId;
+
+    if (!expoPushToken) {
+      return res.status(400).json({ error: 'Missing expoPushToken' });
+    }
+
+    await db.user.update({
+      where: { id: userId },
+      data: { expoPushToken }
+    });
+
+    res.status(200).json({ message: 'Push token registered successfully' });
+  } catch (error) {
+    logger.error('Register Push Token error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- Register Web Push Token ---
+authRouter.post('/web-push-token', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { subscription } = req.body;
+    const userId = req.user!.userId;
+
+    if (!subscription) {
+      return res.status(400).json({ error: 'Missing subscription' });
+    }
+
+    await db.user.update({
+      where: { id: userId },
+      data: { webPushSubscription: JSON.stringify(subscription) }
+    });
+
+    res.status(200).json({ message: 'Web Push subscription registered successfully' });
+  } catch (error) {
+    logger.error('Register Web Push Token error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
 
@@ -61,8 +107,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-    const token = jwt.sign({ userId: user.id, email: user.email }, secret, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, { expiresIn: '7d' });
 
     // Set HTTP-only cookie
     res.cookie('token', token, {
@@ -93,8 +138,7 @@ authRouter.get('/me', async (req: Request, res: Response) => {
     const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
 
-    const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-    const decoded = jwt.verify(token, secret) as { userId: string, email: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string, email: string };
     
     const user = await db.user.findUnique({ where: { id: decoded.userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });

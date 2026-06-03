@@ -97,42 +97,7 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
-  const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
-    if (sinkId && typeof (el as any).setSinkId === "function") {
-      try {
-        await (el as any).setSinkId(sinkId);
-      } catch (e) {
-        console.warn("Failed to set audio output device:", e);
-      }
-    }
-  };
-
-  const setAudioRef = React.useCallback(
-    (el: HTMLAudioElement | null) => {
-      audioRef.current = el;
-      if (el && participant.audioTrack) {
-        if (el.srcObject) {
-          const stream = el.srcObject as MediaStream;
-          if (stream.getAudioTracks()[0] === participant.audioTrack) {
-            applyAudioSink(el, selectedDevices.audioOutput);
-            return;
-          }
-        }
-        el.srcObject = new MediaStream([participant.audioTrack]);
-        applyAudioSink(el, selectedDevices.audioOutput);
-        el.play().catch((e) => console.warn("Audio play failed:", e));
-      }
-    },
-    [participant.audioTrack, selectedDevices.audioOutput]
-  );
-
-  React.useEffect(() => {
-    if (audioRef.current && selectedDevices.audioOutput) {
-      applyAudioSink(audioRef.current, selectedDevices.audioOutput);
-    }
-  }, [selectedDevices.audioOutput]);
 
   const isSelf = participant.id === currentUser.id;
 
@@ -203,10 +168,14 @@ export function ParticipantTile({
       {participant.isCameraOn ? (
         <div
           className="absolute inset-0 flex items-center justify-center"
-          style={{
-            background:
-              "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
-          }}
+          style={
+            isLarge
+              ? { backgroundColor: "black" }
+              : {
+                  background:
+                    "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
+                }
+          }
         >
           {participant.videoTrack ? (
             <video
@@ -214,7 +183,10 @@ export function ParticipantTile({
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover"
+              className={cn(
+                "w-full h-full",
+                isLarge ? "object-contain" : "object-cover"
+              )}
               style={{
                 transform:
                   isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
@@ -339,10 +311,6 @@ export function ParticipantTile({
         </div>
       </div>
 
-      {/* Hidden audio element for remote participants */}
-      {participant.audioTrack && !isSelf && (
-        <audio autoPlay playsInline ref={setAudioRef} />
-      )}
     </div>
   );
 }

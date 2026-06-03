@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "Konn3ct",
+    "slug": "konn3ct",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.konn3ct.mobile",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Konn3ct to access your camera for video meetings.",
+        "NSMicrophoneUsageDescription": "Allow Konn3ct to access your microphone for video meetings."
+      }
+    },
+    "android": {
+      "package": "com.konn3ct.mobile",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow Konn3ct to access your camera for video meetings.",
+          "microphonePermission": "Allow Konn3ct to access your microphone for video meetings."
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Konn3ct to use Face ID for secure login."
+        }
+      ],
+      "expo-notifications",
+      "./plugins/withPiP"
+    ]
+  }
+}

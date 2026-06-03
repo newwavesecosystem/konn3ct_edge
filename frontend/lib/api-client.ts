@@ -13,12 +13,62 @@ export interface User {
   email: string;
 }
 
+export interface ActionItem {
+  id: string;
+  text: string;
+}
+
+export interface MeetingSummary {
+  id: string;
+  roomId: string;
+  summary: string;
+  actionItems: string;
+}
+
+export interface Transcription {
+  id: string;
+  roomId: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface Room {
   id: string;
   name: string;
   slug: string;
   ownerId: string;
+  teamId?: string | null;
+  mode: 'meeting' | 'webinar';
+  recordingSetting: 'off' | 'free' | 'paid';
+  guestJoinAllowed: boolean;
+  accessPin?: string | null;
+  isWaitingRoomEnabled: boolean;
   createdAt: string;
+}
+
+export interface CreateRoomPayload {
+  name: string;
+  teamId?: string;
+  mode?: 'meeting' | 'webinar';
+  recordingSetting?: 'off' | 'free' | 'paid';
+  guestJoinAllowed?: boolean;
+  accessPin?: string;
+  isWaitingRoomEnabled?: boolean;
+  maxParticipants?: number;
+  maxWebinarAudience?: number;
+  maxActiveCameras?: number;
+}
+
+export interface UpdateRoomPayload {
+  name?: string;
+  mode?: 'meeting' | 'webinar';
+  recordingSetting?: 'off' | 'free' | 'paid';
+  guestJoinAllowed?: boolean;
+  accessPin?: string | null; // null to clear the PIN
+  isWaitingRoomEnabled?: boolean;
+  maxParticipants?: number;
+  maxWebinarAudience?: number;
+  maxActiveCameras?: number;
 }
 
 export interface ScheduledMeeting {
@@ -116,10 +166,27 @@ export const apiClient = {
       return fetchApi<Room[]>('/rooms');
     },
 
-    create: async (name: string) => {
+    getBySlug: async (slug: string) => {
+      return fetchApi<Room>(`/rooms/${slug}`);
+    },
+
+    create: async (payload: CreateRoomPayload) => {
       return fetchApi<Room>('/rooms', {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(payload),
+      });
+    },
+
+    update: async (id: string, payload: UpdateRoomPayload) => {
+      return fetchApi<Room>(`/rooms/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    delete: async (id: string) => {
+      return fetchApi<void>(`/rooms/${id}`, {
+        method: 'DELETE',
       });
     },
   },
@@ -150,18 +217,30 @@ export const apiClient = {
   // ── AI INTELLIGENCE ──
 
   ai: {
-    getTranscription: async (roomId: string) => {
-      return fetchApi<Array<{ content: string; createdAt: string }>>(`/ai/transcription/${roomId}`);
-    },
-
     getSummary: async (roomId: string) => {
-      return fetchApi<{ summary: string; actionItems: string }>(`/ai/summary/${roomId}`);
+      return fetchApi<MeetingSummary>(`/ai/summary/${roomId}`);
     },
+    getTranscription: async (roomId: string) => {
+      return fetchApi<Transcription[]>(`/ai/transcription/${roomId}`);
+    }
+  },
 
-    generateSummary: async (roomId: string) => {
-      return fetchApi<{ summary: string; actionItems: string }>(`/ai/summary/${roomId}`, {
+  // ── STREAMING ──
+
+  streaming: {
+    startStream: async (data: { roomId: string; rtmpUrls: string[] }) => {
+      return fetchApi<{ message: string; streamId: string }>('/streaming/start', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    stopStream: async (streamId: string) => {
+      return fetchApi<{ message: string }>(`/streaming/${streamId}/stop`, {
         method: 'POST',
       });
+    },
+    getStreams: async (roomSlug: string) => {
+      return fetchApi<Array<{ id: string; status: string; rtmpUrls: string[] }>>(`/streaming/${roomSlug}`);
     },
   },
 };
