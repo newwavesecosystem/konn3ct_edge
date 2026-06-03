@@ -32,7 +32,7 @@ teamsRouter.get('/', async (req: Request, res: Response) => {
       },
       orderBy: { team: { name: 'asc' } }
     });
-    const teams = memberships.map(m => ({
+    const teams = memberships.map((m: { role: string; team: { id: string; name: string; _count: { members: number } } }) => ({
       id: m.team.id,
       name: m.team.name,
       role: m.role,
