@@ -758,12 +758,20 @@ export function MeetingProvider({
               setParticipants(prev => prev.map(p => 
                 p.id === currentUser.id ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
               ));
-              if (webrtcClient.current?.roomName) {
-                setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
+              if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
+                setMeetingInfo(prev => ({ 
+                  ...prev, 
+                  ...(webrtcClient.current?.roomName && { roomName: webrtcClient.current.roomName }),
+                  ...(webrtcClient.current?.maxParticipants && { maxParticipants: webrtcClient.current.maxParticipants }),
+                }));
               }
             } else if (state === 'waiting') {
-              if (webrtcClient.current?.roomName) {
-                setMeetingInfo(prev => ({ ...prev, roomName: webrtcClient.current!.roomName! }));
+              if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
+                setMeetingInfo(prev => ({ 
+                  ...prev, 
+                  ...(webrtcClient.current?.roomName && { roomName: webrtcClient.current.roomName }),
+                  ...(webrtcClient.current?.maxParticipants && { maxParticipants: webrtcClient.current.maxParticipants }),
+                }));
               }
             } else if (state === 'kicked') {
               toast.error("You have been removed from the meeting by the host.");

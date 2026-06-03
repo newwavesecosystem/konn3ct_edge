@@ -30,6 +30,7 @@ export class WebRTCClient {
   public userName: string | undefined;
   public userRole: string | undefined;
   public roomName: string | undefined;
+  public maxParticipants: number | undefined;
   public sessionStatus?: string;
 
   public onNewConsumer?: (consumer: Consumer, userId: string) => void;
@@ -144,6 +145,7 @@ export class WebRTCClient {
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
+          if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
           
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
