@@ -107,6 +107,7 @@ interface Client {
   transports: string[];
   isMobile: boolean;
   maxActiveCameras?: number;
+  maxParticipants?: number;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -274,6 +275,7 @@ export function initializeSignaling(server: Server) {
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
           maxActiveCameras: (decoded as any).maxActiveCameras ?? 15,
+          maxParticipants: maxParticipants,
         });
       });
     } catch (error) {
@@ -289,7 +291,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras };
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -333,7 +335,8 @@ export function initializeSignaling(server: Server) {
         userId: client.userId,
         name: client.name,
         role: client.role,
-        roomName
+        roomName,
+        maxParticipants: client.maxParticipants
       }));
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
@@ -358,7 +361,8 @@ export function initializeSignaling(server: Server) {
         userId: client.userId,
         name: client.name,
         role: client.role,
-        roomName
+        roomName,
+        maxParticipants: client.maxParticipants
       }));
 
       if (client.status === 'active') {
