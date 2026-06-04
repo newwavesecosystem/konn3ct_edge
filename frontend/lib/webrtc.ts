@@ -771,7 +771,7 @@ export class WebRTCClient {
     }
     if (this.rawCameraStream) {
       this.rawCameraStream.getTracks().forEach(t => t.stop());
-      this.rawCameraStream = undefined;
+      this.rawCameraStream = null;
     }
     if (this.localVideoProducer) {
       if (this.localVideoProducer.track) {
