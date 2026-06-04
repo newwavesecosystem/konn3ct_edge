@@ -136,7 +136,7 @@ export function ParticipantTile({
           </div>
 
           {/* PiP camera bubble — bottom-right corner */}
-          {participant.videoTrack && (
+          {isCameraEffectivelyOn && (
             <div className="absolute bottom-3 right-3 z-30 w-24 h-16 rounded-xl overflow-hidden border-2 border-white/20 shadow-xl">
               <video
                 ref={setVideoRef}
@@ -185,7 +185,7 @@ export function ParticipantTile({
             muted
             className={cn(
               "w-full h-full",
-              isLarge ? "object-contain" : "object-cover"
+              "object-cover"
             )}
             style={{
               transform:
