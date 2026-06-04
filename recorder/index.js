@@ -80,7 +80,9 @@ async function processRecordingJob(job) {
         '--disable-gpu',
         '--disable-notifications',
         '--auto-select-tab-capture-source-by-title=BotRecord',
-        '--enable-usermedia-screen-capturing'
+        '--auto-select-desktop-capture-source=BotRecord',
+        '--enable-usermedia-screen-capturing',
+        '--use-fake-ui-for-media-stream'
       ],
     });
 
@@ -111,10 +113,42 @@ async function processRecordingJob(job) {
     // Create WriteStream
     const fileStream = fs.createWriteStream(outputPathRaw);
 
-    // Get the stream from the page using puppeteer-stream (bypasses all permissions!)
-    console.log('Starting puppeteer-stream capture...');
-    stream = await getStream(page, { audio: true, video: true, frameSize: 1000 });
-    stream.pipe(fileStream);
+    // Get the stream from the page
+    console.log('Starting native MediaRecorder...');
+
+    // Expose a function to write chunks from browser to the Node.js file stream
+    await page.exposeFunction('writeChunk', (chunkStr) => {
+      const buffer = Buffer.from(chunkStr, 'base64');
+      fileStream.write(buffer);
+    });
+
+    // Inject recording logic directly into the browser context
+    await page.evaluate(() => {
+      return new Promise(async (resolve, reject) => {
+        try {
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: "browser" },
+            audio: true
+          });
+          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+          recorder.ondataavailable = async (e) => {
+            if (e.data.size > 0) {
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64 = reader.result.split(',')[1];
+                await window.writeChunk(base64);
+              };
+              reader.readAsDataURL(e.data);
+            }
+          };
+          recorder.start(1000); // 1 chunk per second
+          window.recorder = recorder;
+          resolve();
+        } catch (e) {
+          reject(e.toString());
+        }
+      });
+    });
 
     console.log(`Recording started for ${roomId}`);
 
@@ -127,12 +161,15 @@ async function processRecordingJob(job) {
           isStopping = true;
           console.log(`Received stop command for ${roomId}`);
           
-          pubsub.unsubscribe(`recorder:stop:${roomId}`);
           pubsub.removeListener('message', stopHandler);
 
           try {
-            console.log('Stopping puppeteer-stream...');
-            if (stream) stream.destroy();
+            // Signal the browser stream to stop
+            await page.evaluate(() => {
+              if (window.recorder && window.recorder.state !== 'inactive') {
+                window.recorder.stop();
+              }
+            });
             
             // Wait for file to finish writing
             await new Promise(r => setTimeout(r, 1500));

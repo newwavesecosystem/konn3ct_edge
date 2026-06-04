@@ -323,7 +323,7 @@ export function MeetingControls() {
                   {isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
-                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
                   )}
