@@ -17,9 +17,13 @@ redis.on("error", () => {}); // Suppress harmless reconnection errors
 pubsub.on("error", () => {});
 
 // Configure DO Spaces (S3 compatible)
+const rawEndpoint = process.env.DO_SPACES_ENDPOINT || 'sfo3.digitaloceanspaces.com';
+const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEndpoint}`;
+
 const s3Client = new S3Client({
-  endpoint: `https://${process.env.DO_SPACES_ENDPOINT || 'sfo3.digitaloceanspaces.com'}`,
+  endpoint,
   region: process.env.DO_SPACES_REGION || 'sfo3',
+  forcePathStyle: false, // DigitalOcean Spaces usually supports virtual-hosted style, but we let SDK handle it cleanly now
   credentials: {
     accessKeyId: process.env.DO_SPACES_KEY || '',
     secretAccessKey: process.env.DO_SPACES_SECRET || '',
