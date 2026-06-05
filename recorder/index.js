@@ -100,6 +100,7 @@ async function processRecordingJob(job) {
     const context = browser.defaultBrowserContext();
     await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
 
+    await page.setBypassCSP(true);
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
 
