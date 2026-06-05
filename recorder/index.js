@@ -169,13 +169,16 @@ async function processRecordingJob(job) {
             });
           }
           const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-          recorder.ondataavailable = async (e) => {
+          window.uploadQueue = Promise.resolve();
+          recorder.ondataavailable = (e) => {
             if (e.data.size > 0) {
-              // Push the raw binary Blob via HTTP POST instantly!
-              await fetch(`http://127.0.0.1:${serverPort}/chunk`, {
-                method: 'POST',
-                body: e.data
-              }).catch(err => console.error("Chunk upload failed", err));
+              // Chain the uploads to guarantee sequential arrival at the server
+              window.uploadQueue = window.uploadQueue.then(() => 
+                fetch(`http://127.0.0.1:${serverPort}/chunk`, {
+                  method: 'POST',
+                  body: e.data
+                }).catch(err => console.error("Chunk upload failed", err))
+              );
             }
           };
           recorder.start(1000); // 1 chunk per second
@@ -201,15 +204,23 @@ async function processRecordingJob(job) {
           pubsub.removeListener('message', stopHandler);
 
           try {
-            // Signal the browser stream to stop
+            // Signal the browser stream to stop and wait for final upload
             await page.evaluate(() => {
-              if (window.recorder && window.recorder.state !== 'inactive') {
-                window.recorder.stop();
-              }
+              return new Promise((resolve) => {
+                if (window.recorder && window.recorder.state !== 'inactive') {
+                  window.recorder.onstop = () => {
+                    // Wait for the final chunk in the queue to finish uploading
+                    window.uploadQueue.then(resolve);
+                  };
+                  window.recorder.stop();
+                } else {
+                  resolve();
+                }
+              });
             });
             
-            // Wait for file to finish writing chunks over network
-            await new Promise(r => setTimeout(r, 2000));
+            // Wait a tiny bit extra just for the Node HTTP server to flush the file pipe
+            await new Promise(r => setTimeout(r, 500));
             
             fileStream.end();
             server.close();
@@ -244,6 +255,11 @@ async function processRecordingJob(job) {
                   '-c:a aac'
                 ])
               .save(outputPathMp4)
+              .on('error', (err, stdout, stderr) => {
+                console.error('FFmpeg stderr:', stderr);
+                console.error('FFmpeg error:', err);
+                reject(err);
+              })
               .on('end', async () => {
                 console.log('Conversion finished. Uploading to Spaces...');
                 try {
