@@ -101,16 +101,17 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
       }
     });
 
-    const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'app.konn3ct.net';
+    const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     const Redis = require('ioredis');
     const redis = new Redis(redisUrl);
+    const botSecret = process.env.BOT_SECRET || 'my-bot-secret-123';
     
     await redis.lpush('recorder:queue', JSON.stringify({
       roomId: room.id,
       roomSlug,
       recordingId: recording.id,
-      url: `https://${frontendDomain}/join/${roomSlug}`
+      url: `https://${frontendDomain}/meeting/${roomSlug}?bot=true&botSecret=${botSecret}`
     }));
     
     redis.disconnect();
