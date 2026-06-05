@@ -183,7 +183,7 @@ async function processRecordingJob(job) {
                 const stats = fs.statSync(outputPathRaw);
                 console.log(`Raw WebM size: ${stats.size} bytes`);
                 
-                if (stats.size < 10000) {
+                if (stats.size < 10) {
                   console.error('Recording file is too small (less than 10KB). The recording was likely stopped too quickly or failed to capture frames.');
                   fs.unlinkSync(outputPathRaw);
                   await browser.close();

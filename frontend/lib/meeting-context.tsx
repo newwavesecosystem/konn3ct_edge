@@ -1003,11 +1003,31 @@ export function MeetingProvider({
       await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => {});
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       
+      const audioInputs = allDevices.filter((d) => d.kind === "audioinput");
+      const videoInputs = allDevices.filter((d) => d.kind === "videoinput");
+      const audioOutputs = allDevices.filter((d) => d.kind === "audiooutput");
+
       setDevices({
-        audioInputs: allDevices.filter((d) => d.kind === "audioinput"),
-        videoInputs: allDevices.filter((d) => d.kind === "videoinput"),
-        audioOutputs: allDevices.filter((d) => d.kind === "audiooutput"),
+        audioInputs,
+        videoInputs,
+        audioOutputs,
       });
+
+      // Initialize selectedDevices from sessionStorage or defaults
+      setSelectedDevices(prev => {
+        const saved = typeof window !== 'undefined' ? sessionStorage.getItem("conn3ct_devices") : null;
+        if (saved && !prev.audioInput && !prev.videoInput) {
+          try {
+            return JSON.parse(saved);
+          } catch (e) {}
+        }
+        return {
+          audioInput: prev.audioInput || (audioInputs[0]?.deviceId || ""),
+          videoInput: prev.videoInput || (videoInputs[0]?.deviceId || ""),
+          audioOutput: prev.audioOutput || (audioOutputs[0]?.deviceId || ""),
+        };
+      });
+
     } catch (e) {
       console.error("Failed to enumerate devices", e);
     }
