@@ -252,7 +252,8 @@ async function processRecordingJob(job) {
                 .outputOptions([
                   '-preset veryfast',
                   '-c:v libx264',
-                  '-c:a aac'
+                  '-c:a aac',
+                  '-max_muxing_queue_size 9999'
                 ])
               .save(outputPathMp4)
               .on('error', (err, stdout, stderr) => {
