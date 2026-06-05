@@ -18,6 +18,7 @@ import {
   Loader2,
   Wifi,
   WifiOff,
+  Volume2,
 } from "lucide-react";
 
 export default function JoinPage({
@@ -37,9 +38,22 @@ export default function JoinPage({
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
   const [vbMode, setVbMode] = useState<VirtualBackgroundMode>('none');
   const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
+  const [volumeLevel, setVolumeLevel] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<VideoProcessor | null>(null);
+
+  const [devices, setDevices] = useState<{
+    audioInputs: MediaDeviceInfo[];
+    videoInputs: MediaDeviceInfo[];
+    audioOutputs: MediaDeviceInfo[];
+  }>({ audioInputs: [], videoInputs: [], audioOutputs: [] });
+  const [selectedDevices, setSelectedDevices] = useState({
+    audioInput: "",
+    videoInput: "",
+    audioOutput: "",
+  });
 
   const roomName = resolvedParams.roomSlug
     .replace(/-/g, " ")
@@ -64,6 +78,34 @@ export default function JoinPage({
     };
     checkServer();
   }, [resolvedParams.roomSlug]);
+
+  useEffect(() => {
+    const getDevices = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const dev = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = dev.filter(d => d.kind === 'audioinput');
+        const audioOutputs = dev.filter(d => d.kind === 'audiooutput');
+        const videoInputs = dev.filter(d => d.kind === 'videoinput');
+        
+        setDevices({ audioInputs, audioOutputs, videoInputs });
+        
+        const saved = sessionStorage.getItem("conn3ct_devices");
+        if (saved) {
+          setSelectedDevices(JSON.parse(saved));
+        } else {
+          setSelectedDevices({
+            audioInput: audioInputs[0]?.deviceId || "",
+            audioOutput: audioOutputs[0]?.deviceId || "",
+            videoInput: videoInputs[0]?.deviceId || "",
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to enumerate devices", err);
+      }
+    };
+    getDevices();
+  }, []);
 
   useEffect(() => {
     if (!processorRef.current) {
@@ -108,6 +150,67 @@ export default function JoinPage({
     reader.readAsDataURL(file);
   };
 
+  // Audio meter logic
+  useEffect(() => {
+    let animationFrameId: number;
+    let audioContext: AudioContext;
+    let analyser: AnalyserNode;
+
+    const startMic = async () => {
+      try {
+        const constraints: MediaStreamConstraints = { audio: true };
+        if (selectedDevices.audioInput) {
+          constraints.audio = { deviceId: { exact: selectedDevices.audioInput } };
+        }
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        micStreamRef.current = stream;
+
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioContext = new AudioContextClass();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const updateVolume = () => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const average = sum / dataArray.length;
+          
+          // Smoothly map 0-255 to 0-100%
+          const level = Math.min(100, Math.round((average / 128) * 100));
+          setVolumeLevel(level);
+
+          animationFrameId = requestAnimationFrame(updateVolume);
+        };
+        updateVolume();
+      } catch (err) {
+        console.warn("Failed to get mic for volume meter", err);
+      }
+    };
+
+    if (!isMuted) {
+      startMic();
+    } else {
+      setVolumeLevel(0);
+    }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (audioContext && audioContext.state !== 'closed') audioContext.close();
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+    };
+  }, [isMuted, selectedDevices.audioInput]);
+
   // Attempt camera preview
   useEffect(() => {
     if (!isCameraOn) {
@@ -116,21 +219,24 @@ export default function JoinPage({
       if (videoRef.current) videoRef.current.srcObject = null;
       return;
     }
+    const constraints: MediaStreamConstraints = { video: true };
+    if (selectedDevices.videoInput) {
+      constraints.video = { deviceId: { exact: selectedDevices.videoInput } };
+    }
     navigator.mediaDevices
-      .getUserMedia({ video: true })
+      .getUserMedia(constraints)
       .then((stream) => {
         streamRef.current = stream;
         const processed = processorRef.current!.startProcessing(stream);
         if (videoRef.current) videoRef.current.srcObject = processed;
       })
       .catch(() => {
-        // Camera not available – silently degrade
         setIsCameraOn(false);
       });
     return () => {
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
-  }, [isCameraOn]);
+  }, [isCameraOn, selectedDevices.videoInput]);
 
   const handleJoin = async () => {
     if (!name.trim() || isJoining) return;
@@ -228,6 +334,18 @@ export default function JoinPage({
                     {name} (You)
                   </div>
                 )}
+                {/* Audio Meter */}
+                {!isMuted && (
+                  <div className="absolute bottom-[4.5rem] right-3 flex items-center gap-2 bg-black/40 px-2 py-1.5 rounded-md shadow-md backdrop-blur-sm">
+                    <Mic className="w-3 h-3 text-white/70" />
+                    <div className="w-16 h-1.5 bg-black/40 rounded-full overflow-hidden flex">
+                      <div 
+                        className="h-full bg-brand-green transition-all duration-75"
+                        style={{ width: `${volumeLevel}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 {/* Preview controls */}
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
                   <button
@@ -253,6 +371,31 @@ export default function JoinPage({
                     {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
                   </button>
                   <button
+                    onClick={async () => {
+                      try {
+                        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                        if (selectedDevices.audioOutput && typeof (audioCtx as any).setSinkId === 'function') {
+                          await (audioCtx as any).setSinkId(selectedDevices.audioOutput);
+                        }
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+                        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.3);
+                      } catch (e) { }
+                    }}
+                    title="Test Speaker"
+                    className="w-11 h-11 rounded-xl flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/15 transition-all duration-200 active:scale-90"
+                  >
+                    <Volume2 className="w-5 h-5" />
+                  </button>
+                  <button
                     onClick={() => setShowSettings(!showSettings)}
                     className="w-11 h-11 rounded-xl flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/15 transition-all duration-200 active:scale-90"
                   >
@@ -268,9 +411,36 @@ export default function JoinPage({
                   animate={{ opacity: 1, height: "auto" }}
                   className="mt-3 bg-white/5 rounded-xl p-4 border border-white/5 space-y-3"
                 >
-                  <DeviceSelect label="Camera" options={["Default Camera"]} />
-                  <DeviceSelect label="Microphone" options={["Default Microphone"]} />
-                  <DeviceSelect label="Speaker" options={["Default Speaker"]} />
+                  <DeviceSelect 
+                    label="Camera" 
+                    options={devices.videoInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Camera' }))} 
+                    value={selectedDevices.videoInput}
+                    onChange={(val) => {
+                      const newDevs = { ...selectedDevices, videoInput: val };
+                      setSelectedDevices(newDevs);
+                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                    }}
+                  />
+                  <DeviceSelect 
+                    label="Microphone" 
+                    options={devices.audioInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Microphone' }))} 
+                    value={selectedDevices.audioInput}
+                    onChange={(val) => {
+                      const newDevs = { ...selectedDevices, audioInput: val };
+                      setSelectedDevices(newDevs);
+                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                    }}
+                  />
+                  <DeviceSelect 
+                    label="Speaker" 
+                    options={devices.audioOutputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Speaker' }))} 
+                    value={selectedDevices.audioOutput}
+                    onChange={(val) => {
+                      const newDevs = { ...selectedDevices, audioOutput: val };
+                      setSelectedDevices(newDevs);
+                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                    }}
+                  />
 
                   {/* Virtual Background Selection UI */}
                   {isCameraOn && (
@@ -434,9 +604,13 @@ export default function JoinPage({
 function DeviceSelect({
   label,
   options,
+  value,
+  onChange
 }: {
   label: string;
-  options: string[];
+  options: { label: string, value: string }[];
+  value: string;
+  onChange: (val: string) => void;
 }) {
   return (
     <div>
@@ -444,10 +618,14 @@ function DeviceSelect({
         {label}
       </label>
       <div className="relative">
-        <select className="w-full bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-xs text-white/70 outline-none focus:border-brand-green/40 transition-colors appearance-none pr-8">
+        <select 
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-xs text-white/70 outline-none focus:border-brand-green/40 transition-colors appearance-none pr-8"
+        >
           {options.map((o) => (
-            <option key={o} value={o} className="bg-[#1a1a2e]">
-              {o}
+            <option key={o.value} value={o.value} className="bg-[#1a1a2e]">
+              {o.label}
             </option>
           ))}
         </select>
