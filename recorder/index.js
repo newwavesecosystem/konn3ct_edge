@@ -5,6 +5,7 @@ const Redis = require('ioredis');
 const { S3Client } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const ffmpeg = require('fluent-ffmpeg');
+const http = require('http');
 
 require('dotenv').config();
 
@@ -78,9 +79,10 @@ async function processRecordingJob(job) {
         '--autoplay-policy=no-user-gesture-required',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--disable-notifications',
-        '--auto-select-tab-capture-source-by-title=BotRecord',
-        '--auto-select-desktop-capture-source=BotRecord',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--auto-select-desktop-capture-source=Entire screen',
         '--enable-usermedia-screen-capturing',
         '--use-fake-ui-for-media-stream'
       ],
@@ -97,14 +99,9 @@ async function processRecordingJob(job) {
     const context = browser.defaultBrowserContext();
     await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
 
-    // Set a dummy title before navigation so auto-select knows what to look for
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(document, 'title', {
-        get: () => 'BotRecord',
-        set: () => {}
-      });
-    });
-    
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
+
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
     // Wait a bit for React to render and WebRTC to connect
@@ -113,32 +110,50 @@ async function processRecordingJob(job) {
     // Create WriteStream
     const fileStream = fs.createWriteStream(outputPathRaw);
 
-    // Get the stream from the page
-    console.log('Starting native MediaRecorder...');
-
-    // Expose a function to write chunks from browser to the Node.js file stream
-    await page.exposeFunction('writeChunk', (chunkStr) => {
-      const buffer = Buffer.from(chunkStr, 'base64');
-      fileStream.write(buffer);
+    // Spin up an ephemeral HTTP server to receive binary video chunks directly
+    // This bypasses Puppeteer's slow IPC channel which drops large base64 strings!
+    const server = http.createServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/chunk') {
+        req.pipe(fileStream, { end: false });
+        req.on('end', () => res.end('ok'));
+      } else {
+        res.end('invalid');
+      }
     });
 
+    const port = await new Promise((resolve) => {
+      server.listen(0, '127.0.0.1', () => {
+        resolve(server.address().port);
+      });
+    });
+
+    console.log(`Ephemeral HTTP server listening on port ${port} for chunks...`);
+    console.log('Starting native MediaRecorder...');
+
     // Inject recording logic directly into the browser context
-    await page.evaluate(() => {
+    await page.evaluate((serverPort) => {
       return new Promise(async (resolve, reject) => {
         try {
-          const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: { displaySurface: "browser" },
-            audio: true
-          });
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: { width: 1280, height: 720 },
+              audio: true
+            });
+          } catch (err) {
+            console.warn("getDisplayMedia with audio failed, falling back to video only:", err.toString());
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: { width: 1280, height: 720 }
+            });
+          }
           const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
           recorder.ondataavailable = async (e) => {
             if (e.data.size > 0) {
-              const reader = new FileReader();
-              reader.onloadend = async () => {
-                const base64 = reader.result.split(',')[1];
-                await window.writeChunk(base64);
-              };
-              reader.readAsDataURL(e.data);
+              // Push the raw binary Blob via HTTP POST instantly!
+              await fetch(`http://127.0.0.1:${serverPort}/chunk`, {
+                method: 'POST',
+                body: e.data
+              }).catch(err => console.error("Chunk upload failed", err));
             }
           };
           recorder.start(1000); // 1 chunk per second
@@ -148,7 +163,7 @@ async function processRecordingJob(job) {
           reject(e.toString());
         }
       });
-    });
+    }, port);
 
     console.log(`Recording started for ${roomId}`);
 
@@ -171,10 +186,11 @@ async function processRecordingJob(job) {
               }
             });
             
-            // Wait for file to finish writing
-            await new Promise(r => setTimeout(r, 1500));
+            // Wait for file to finish writing chunks over network
+            await new Promise(r => setTimeout(r, 2000));
             
             fileStream.end();
+            server.close();
             
             fileStream.on('close', async () => {
               console.log('File stream closed. Checking raw file size...');
