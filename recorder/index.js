@@ -82,7 +82,8 @@ async function processRecordingJob(job) {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
-        '--auto-select-desktop-capture-source=Entire screen',
+        '--auto-select-desktop-capture-source=BotRecord',
+        '--auto-select-tab-capture-source-by-title=BotRecord',
         '--enable-usermedia-screen-capturing',
         '--use-fake-ui-for-media-stream'
       ],
@@ -134,16 +135,20 @@ async function processRecordingJob(job) {
     await page.evaluate((serverPort) => {
       return new Promise(async (resolve, reject) => {
         try {
+          // Spoof title right before capture so auto-select-tab-capture-source-by-title finds it instantly
+          document.title = 'BotRecord';
+          await new Promise(r => setTimeout(r, 500));
+
           let stream;
           try {
             stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { width: 1280, height: 720 },
+              video: { displaySurface: "browser", width: 1280, height: 720 },
               audio: true
             });
           } catch (err) {
             console.warn("getDisplayMedia with audio failed, falling back to video only:", err.toString());
             stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { width: 1280, height: 720 }
+              video: { displaySurface: "browser", width: 1280, height: 720 }
             });
           }
           const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
