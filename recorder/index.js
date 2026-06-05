@@ -85,7 +85,8 @@ async function processRecordingJob(job) {
         '--auto-select-desktop-capture-source=BotRecord',
         '--auto-select-tab-capture-source-by-title=BotRecord',
         '--enable-usermedia-screen-capturing',
-        '--use-fake-ui-for-media-stream'
+        '--use-fake-ui-for-media-stream',
+        '--disable-web-security'
       ],
     });
 
@@ -115,10 +116,25 @@ async function processRecordingJob(job) {
     // Spin up an ephemeral HTTP server to receive binary video chunks directly
     // This bypasses Puppeteer's slow IPC channel which drops large base64 strings!
     const server = http.createServer((req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+
       if (req.method === 'POST' && req.url === '/chunk') {
         req.pipe(fileStream, { end: false });
-        req.on('end', () => res.end('ok'));
+        req.on('end', () => {
+          res.writeHead(200);
+          res.end('ok');
+        });
       } else {
+        res.writeHead(404);
         res.end('invalid');
       }
     });
