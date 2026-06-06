@@ -9,6 +9,7 @@ import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
+import { transcriberEvents } from '../media/transcriber';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
@@ -197,6 +198,30 @@ async function generateMeetingSummary(roomId: string) {
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
+
+  transcriberEvents.on('caption', (data) => {
+    const { roomId, userId, name, text, isFinal, lang } = data;
+    
+    if (isFinal) {
+      if (!roomTranscripts.has(roomId)) {
+        roomTranscripts.set(roomId, []);
+      }
+      roomTranscripts.get(roomId)!.push({
+        name,
+        text,
+        timestamp: Date.now()
+      });
+    }
+
+    broadcastToRoom(roomId, {
+      type: 'caption',
+      userId,
+      name,
+      text,
+      isFinal,
+      lang
+    });
+  });
 
   // Periodically report CPU load to Redis and Broadcast Degradation (Method 1 & 2)
   setInterval(async () => {
@@ -729,28 +754,8 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'caption':
-        if (!data.text || typeof data.text !== 'string' || data.text.length > 2000) return;
-        if (data.lang && typeof data.lang === 'string' && !/^[a-z]{2}(-[A-Z]{2})?$/.test(data.lang)) return;
-
-        if (data.isFinal) {
-          if (!roomTranscripts.has(roomId)) {
-            roomTranscripts.set(roomId, []);
-          }
-          roomTranscripts.get(roomId)!.push({
-            name: client.name,
-            text: data.text,
-            timestamp: Date.now()
-          });
-        }
-        
-        // In the future, we can append this to the MeetingTranscript in the database for AI Summary.
-        broadcastToRoom(roomId, {
-          type: 'caption',
-          userId,
-          text: data.text,
-          isFinal: data.isFinal,
-          lang: data.lang
-        }, userId);
+        // Client-side captions are deprecated in favor of server-side Deepgram.
+        // We safely ignore any straggler caption events from older clients.
         break;
 
       case 'ecinema_update':
@@ -1020,7 +1025,7 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId);
+        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name);
 
         // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
