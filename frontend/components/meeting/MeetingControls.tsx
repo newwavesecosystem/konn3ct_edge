@@ -381,14 +381,13 @@ export function MeetingControls() {
             ))}
           </div>
 
-          {/* Konn3ct AI panel toggle 
+          {/* Konn3ct AI panel toggle */}
           <PanelBtn
             icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
             active={activePanel === "ai"}
             onClick={() => setActivePanel("ai")}
             tooltip="Konn3ct AI"
           />
-          */}
           <PanelBtn
             icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}
