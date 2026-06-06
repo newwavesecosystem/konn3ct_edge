@@ -298,6 +298,7 @@ export class WebRTCClient {
           this.onParticipantNetworkQuality?.(msg.userId, msg.quality);
           break;
         case 'caption':
+          console.log('[WebRTCClient] Received caption message from server:', msg);
           this.onCaptionReceived?.(msg.userId, msg.name, msg.text, msg.isFinal, msg.lang);
           break;
         case 'donation_status':
@@ -696,11 +697,14 @@ export class WebRTCClient {
       }
     }
 
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
       video: { 
-        width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
-        height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
-      } 
+        width: isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }), 
+        height: isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 }),
+        facingMode: "user"
+      },
+      audio: false 
     });
 
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
@@ -774,10 +778,15 @@ export class WebRTCClient {
       this.rawCameraStream = null;
     }
     if (this.localVideoProducer) {
-      if (this.localVideoProducer.track) {
-        this.localVideoProducer.track.stop();
+      this.localVideoProducer.close();
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ 
+          type: 'stop_producer', 
+          producerId: this.localVideoProducer.id,
+          appData: { source: 'camera' }
+        }));
       }
-      this.localVideoProducer.pause();
+      this.localVideoProducer = null;
     }
   }
 

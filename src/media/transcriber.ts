@@ -25,7 +25,11 @@ async function getFreePort(): Promise<number> {
 const transcribers = new Map<string, () => void>();
 
 export async function startTranscription(producer: Producer, router: Router, roomId: string, userId: string, userName: string) {
-  if (!deepgram) return; // Silent return if no API key
+  logger.info(`[DEEPGRAM] startTranscription called for user ${userId} in room ${roomId}`);
+  if (!deepgram) {
+    logger.warn(`[DEEPGRAM] No API key found, skipping transcription for user ${userId}`);
+    return; // Silent return if no API key
+  }
   
   // 1. Get free ports for FFmpeg to listen on
   const rtpPort = await getFreePort();
@@ -101,7 +105,7 @@ a=rtpmap:${pt} opus/48000/2
   });
   
   dgConnection.on('open', async () => {
-    logger.info(`Deepgram connected for user ${userId}`);
+    logger.info(`[DEEPGRAM] WebSocket connected for user ${userId}`);
     await consumer.resume();
   });
   
@@ -109,6 +113,7 @@ a=rtpmap:${pt} opus/48000/2
     if (data.type === 'Results') {
       const text = data.channel?.alternatives?.[0]?.transcript;
       if (text) {
+        logger.info(`[DEEPGRAM] Transcript received for user ${userId}: "${text}" (isFinal: ${data.is_final})`);
         transcriberEvents.emit('caption', {
           roomId,
           userId,

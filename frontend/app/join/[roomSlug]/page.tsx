@@ -219,9 +219,18 @@ export default function JoinPage({
       if (videoRef.current) videoRef.current.srcObject = null;
       return;
     }
-    const constraints: MediaStreamConstraints = { video: true };
+    const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    const constraints: MediaStreamConstraints = { 
+      video: isMobileDevice ? { facingMode: "user" } : true 
+    };
+    
     if (selectedDevices.videoInput) {
-      constraints.video = { deviceId: { exact: selectedDevices.videoInput } };
+      if (typeof constraints.video === "object") {
+        constraints.video = { ...constraints.video, deviceId: { exact: selectedDevices.videoInput } };
+      } else {
+        constraints.video = { deviceId: { exact: selectedDevices.videoInput } };
+      }
     }
     navigator.mediaDevices
       .getUserMedia(constraints)
