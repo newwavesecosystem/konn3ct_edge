@@ -201,6 +201,7 @@ export function initializeSignaling(server: Server) {
 
   transcriberEvents.on('caption', (data) => {
     const { roomId, userId, name, text, isFinal, lang } = data;
+    logger.info(`[SIGNALING] Broadcasting caption to room ${roomId} for user ${userId}: "${text}"`);
     
     if (isFinal) {
       if (!roomTranscripts.has(roomId)) {

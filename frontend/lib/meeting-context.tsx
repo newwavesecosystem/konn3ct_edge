@@ -493,6 +493,7 @@ export function MeetingProvider({
         };
 
         client.onCaptionReceived = (userId, name, text, isFinal, lang) => {
+          console.log(`[MeetingContext] onCaptionReceived: ${name} said "${text}" (isFinal: ${isFinal})`);
           const tLang = translationLanguageRef.current;
           
           const updateLocalCaption = (newText: string) => {
