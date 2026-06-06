@@ -55,7 +55,7 @@ async function startWorker() {
 }
 
 async function processRecordingJob(job) {
-  const { roomId, url } = job;
+  const { roomId, url, recordingId } = job;
   let browser = null;
   let stream = null;
   
@@ -287,6 +287,7 @@ async function processRecordingJob(job) {
                   // Publish completion back to signaling server so it can update DB
                   await redis.publish('recorder:completed', JSON.stringify({
                     roomId,
+                    recordingId,
                     recordingUrl: data.Location
                   }));
 
