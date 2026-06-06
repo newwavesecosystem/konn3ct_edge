@@ -1,12 +1,12 @@
 import { Producer, Router } from 'mediasoup/node/lib/types';
 import { spawn } from 'child_process';
 import dgram from 'dgram';
-import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
+import { DeepgramClient } from '@deepgram/sdk';
 import { logger } from '../logger';
 import { EventEmitter } from 'events';
 
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
-const deepgram = deepgramApiKey ? createClient(deepgramApiKey) : null;
+const deepgram = deepgramApiKey ? new DeepgramClient({ apiKey: deepgramApiKey }) : null;
 
 // Emitter to broadcast captions back to server.ts
 export const transcriberEvents = new EventEmitter();
@@ -51,17 +51,17 @@ export async function startTranscription(producer: Producer, router: Router, roo
   });
   
   // 3. Connect to Deepgram
-  const dgConnection = deepgram.listen.live({
+  const dgConnection = await deepgram.listen.v1.connect({
     model: 'nova-2',
     language: 'en',
-    smart_format: true,
+    smart_format: "true",
     encoding: 'linear16',
     sample_rate: 48000,
-    channels: 1
+    channels: 1,
+    Authorization: `Token ${deepgramApiKey}`
   });
   
   // 4. Start FFmpeg
-  // We need to tell FFmpeg how to interpret the incoming RTP. We use a simple SDP string.
   const pt = consumer.rtpParameters.codecs[0].payloadType;
   const sdpString = `v=0
 o=- 0 0 IN IP4 127.0.0.1
@@ -89,37 +89,39 @@ a=rtpmap:${pt} opus/48000/2
   ffmpegProcess.stdin.end();
   
   // Pipe ffmpeg stdout to Deepgram
-  ffmpegProcess.stdout.on('data', (data) => {
-    // 1 is OPEN state for deepgram sdk WebSocket
-    if (dgConnection.getReadyState() === 1) {
-      dgConnection.send(data);
+  ffmpegProcess.stdout.on('data', (data: Buffer) => {
+    // Check if readyState is 1 (OPEN) using generic websocket property
+    if ((dgConnection.socket as any).readyState === 1) {
+      dgConnection.socket.send(data);
     }
   });
   
-  ffmpegProcess.on('error', (err) => {
+  ffmpegProcess.on('error', (err: any) => {
     logger.error(`FFmpeg error for user ${userId}:`, err);
   });
   
-  dgConnection.on(LiveTranscriptionEvents.Open, async () => {
+  dgConnection.on('open', async () => {
     logger.info(`Deepgram connected for user ${userId}`);
     await consumer.resume();
   });
   
-  dgConnection.on(LiveTranscriptionEvents.Transcript, (data) => {
-    const text = data.channel.alternatives[0]?.transcript;
-    if (text) {
-      transcriberEvents.emit('caption', {
-        roomId,
-        userId,
-        name: userName,
-        text,
-        isFinal: data.is_final,
-        lang: 'en'
-      });
+  dgConnection.on('message', (data: any) => {
+    if (data.type === 'Results') {
+      const text = data.channel?.alternatives?.[0]?.transcript;
+      if (text) {
+        transcriberEvents.emit('caption', {
+          roomId,
+          userId,
+          name: userName,
+          text,
+          isFinal: data.is_final,
+          lang: 'en'
+        });
+      }
     }
   });
   
-  dgConnection.on(LiveTranscriptionEvents.Error, (err) => {
+  dgConnection.on('error', (err: any) => {
     logger.error(`Deepgram error for user ${userId}:`, err);
   });
   
@@ -130,13 +132,16 @@ a=rtpmap:${pt} opus/48000/2
     if (!consumer.closed) consumer.close();
     if (!plainTransport.closed) plainTransport.close();
     if (!ffmpegProcess.killed) ffmpegProcess.kill('SIGTERM');
-    dgConnection.finish();
+    try {
+      dgConnection.socket.close();
+    } catch(e){}
   };
   
   transcribers.set(producer.id, cleanup);
   
   producer.on('transportclose', cleanup);
-  producer.on('producerclose', cleanup);
+  // Also cleanup when the producer is closed natively
+  producer.on('@close' as any, cleanup);
 }
 
 export function stopTranscription(producerId: string) {
