@@ -65,7 +65,7 @@ export class WebRTCClient {
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
-  public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
+  public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -298,7 +298,7 @@ export class WebRTCClient {
           this.onParticipantNetworkQuality?.(msg.userId, msg.quality);
           break;
         case 'caption':
-          this.onCaptionReceived?.(msg.userId, msg.text, msg.isFinal, msg.lang);
+          this.onCaptionReceived?.(msg.userId, msg.name, msg.text, msg.isFinal, msg.lang);
           break;
         case 'donation_status':
           this.onDonationStatusReceived?.(msg.active);

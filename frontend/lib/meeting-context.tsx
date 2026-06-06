@@ -24,7 +24,6 @@ import {
   mockMeetingInfo,
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
 interface MeetingContextValue {
   // State
@@ -493,21 +492,18 @@ export function MeetingProvider({
           }
         };
 
-        client.onCaptionReceived = (userId, text, isFinal, lang) => {
+        client.onCaptionReceived = (userId, name, text, isFinal, lang) => {
           const tLang = translationLanguageRef.current;
           
           const updateLocalCaption = (newText: string) => {
             setParticipants((prev) => {
-              const sender = prev.find((p) => p.id === userId);
-              const senderName = sender?.name || `Participant ${userId.substring(5, 9)}`;
-              
               setCaptions(currCaptions => {
                 const newCaptions = [...currCaptions];
                 const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
                 if (lastIdx >= 0) {
-                  newCaptions[lastIdx] = { userId, name: senderName, text: newText, isFinal, timestamp: Date.now() };
+                  newCaptions[lastIdx] = { userId, name, text: newText, isFinal, timestamp: Date.now() };
                 } else {
-                  newCaptions.push({ userId, name: senderName, text: newText, isFinal, timestamp: Date.now() });
+                  newCaptions.push({ userId, name, text: newText, isFinal, timestamp: Date.now() });
                 }
                 if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
                 return newCaptions;
@@ -1233,40 +1229,18 @@ export function MeetingProvider({
     [currentUser]
   );
 
-  const { startListening, stopListening } = useSpeechRecognition({
-    language: captionLanguage,
-    onResult: (text, isFinal) => {
-      // Add locally
-      setCaptions(curr => {
-        const newCaptions = [...curr];
-        const lastIdx = newCaptions.findIndex(c => c.userId === currentUser.id && !c.isFinal);
-        if (lastIdx >= 0) {
-          newCaptions[lastIdx] = { userId: currentUser.id, name: currentUser.name, text, isFinal, timestamp: Date.now() };
-        } else {
-          newCaptions.push({ userId: currentUser.id, name: currentUser.name, text, isFinal, timestamp: Date.now() });
-        }
-        if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
-        return newCaptions;
-      });
-      // Broadcast
-      webrtcClient.current?.sendCaption(text, isFinal, captionLanguage);
-    }
-  });
-
   const toggleCaptions = useCallback(() => {
     setIsCaptionsEnabled(prev => {
       const newState = !prev;
       if (newState) {
-        startListening();
         toast.success("Live Captions enabled");
       } else {
-        stopListening();
         setCaptions([]);
         toast.info("Live Captions disabled");
       }
       return newState;
     });
-  }, [startListening, stopListening]);
+  }, []);
 
   const toggleDonation = useCallback(() => {
     if (webrtcClient.current?.userRole === 'host' || webrtcClient.current?.userRole === 'co-host') {
