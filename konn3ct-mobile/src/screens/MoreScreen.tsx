@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
 
 const { width } = Dimensions.get('window');
@@ -61,6 +62,7 @@ const LIST_ITEMS = [
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const { logout } = useAuthStore();
   
   // Mock user data for the header
@@ -73,6 +75,24 @@ export default function MoreScreen() {
   const handlePress = (item: any) => {
     if (item.action === 'logout') {
       logout();
+    } else if (item.id === 'streaming') {
+      navigation.navigate('Streaming');
+    } else if (item.id === 'recordings') {
+      navigation.navigate('Recordings');
+    } else if (item.id === 'events') {
+      navigation.navigate('Events');
+    } else if (item.id === 'attendance') {
+      navigation.navigate('Attendance');
+    } else if (item.id === 'payments') {
+      navigation.navigate('Payments');
+    } else if (item.id === 'donations') {
+      navigation.navigate('Donations');
+    } else if (item.id === 'referees') {
+      navigation.navigate('Referees');
+    } else if (item.id === 'history') {
+      navigation.navigate('History');
+    } else if (item.id === 'settings') {
+      navigation.navigate('Settings');
     } else {
       console.log('Navigate to:', item.title);
     }
@@ -152,7 +172,7 @@ export default function MoreScreen() {
             <Headset color={COLORS.textPrimary} size={24} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
             <Bell color={COLORS.textPrimary} size={24} />
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>20</Text>

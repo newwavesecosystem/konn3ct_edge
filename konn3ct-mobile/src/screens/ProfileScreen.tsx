@@ -80,7 +80,7 @@ export default function ProfileScreen() {
             <Headset color={COLORS.textPrimary} size={24} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
             <Bell color={COLORS.textPrimary} size={24} />
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>20</Text>
