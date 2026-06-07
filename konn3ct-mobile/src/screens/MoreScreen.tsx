@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuthStore } from '../store/useAuthStore';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 40 - 16) / 2; // 2 columns, 20px padding each side, 16px gap
@@ -60,6 +61,7 @@ const LIST_ITEMS = [
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
+  const { logout } = useAuthStore();
   
   // Mock user data for the header
   const firstName = 'KAYODE';
@@ -70,7 +72,7 @@ export default function MoreScreen() {
 
   const handlePress = (item: any) => {
     if (item.action === 'logout') {
-      console.log('Logout pressed');
+      logout();
     } else {
       console.log('Navigate to:', item.title);
     }
