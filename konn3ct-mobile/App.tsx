@@ -14,6 +14,16 @@ import MainTabNavigator from './src/navigation/MainTabNavigator';
 import AuthStackNavigator from './src/navigation/AuthStackNavigator';
 import MeetingScreen from './src/screens/MeetingScreen';
 import { MeetingSummaryScreen } from './src/screens/MeetingSummaryScreen';
+import StreamingScreen from './src/screens/StreamingScreen';
+import RecordingsScreen from './src/screens/RecordingsScreen';
+import EventsScreen from './src/screens/EventsScreen';
+import AttendanceScreen from './src/screens/AttendanceScreen';
+import PaymentsScreen from './src/screens/PaymentsScreen';
+import DonationsScreen from './src/screens/DonationsScreen';
+import RefereesScreen from './src/screens/RefereesScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { useAuthStore, registerForPushNotificationsAsync } from './src/store/useAuthStore';
 import * as Notifications from 'expo-notifications';
 
@@ -29,6 +39,16 @@ export type RootStackParamList = {
   MainTabs: undefined;
   Meeting: { roomId: string };
   MeetingSummary: { roomId: string };
+  Streaming: undefined;
+  Recordings: undefined;
+  Events: undefined;
+  Attendance: undefined;
+  Payments: undefined;
+  Donations: undefined;
+  Referees: undefined;
+  Notifications: undefined;
+  History: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -84,6 +104,56 @@ export default function App() {
                 name="MeetingSummary" 
                 component={MeetingSummaryScreen} 
                 options={{ title: 'AI Intelligence', headerShown: true, headerStyle: { backgroundColor: '#1e293b' }, headerTintColor: 'white' }} 
+              />
+              <Stack.Screen 
+                name="Streaming" 
+                component={StreamingScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Recordings" 
+                component={RecordingsScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Events" 
+                component={EventsScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Attendance" 
+                component={AttendanceScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Payments" 
+                component={PaymentsScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Donations" 
+                component={DonationsScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Referees" 
+                component={RefereesScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Notifications" 
+                component={NotificationsScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="History" 
+                component={HistoryScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="Settings" 
+                component={SettingsScreen} 
+                options={{ headerShown: false }} 
               />
             </Stack.Navigator>
           ) : (
