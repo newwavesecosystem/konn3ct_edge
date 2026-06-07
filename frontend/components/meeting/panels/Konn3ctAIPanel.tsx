@@ -18,7 +18,7 @@ const COMMON_QUESTIONS = [
 ];
 
 export function Konn3ctAIPanel() {
-  const { captions, currentUser } = useMeeting();
+  const { captions, currentUser, meetingInfo } = useMeeting();
   const [messages, setMessages] = useState<AIMessage[]>([
     { role: "ai", content: "Hi! I am Konn3ct AI. I am actively reading the live meeting transcript. Ask me anything about what has been discussed!" }
   ]);
@@ -36,21 +36,21 @@ export function Konn3ctAIPanel() {
   const askKonn3ctAI = async (question: string) => {
     if (!question.trim() || isLoading) return;
 
-    // Build the transcript from captions
-    const transcript = captions
-      .map(c => `[${new Date(c.timestamp).toLocaleTimeString()}] ${c.name}: ${c.text}`)
-      .join("\n");
-
     const userMsg = question;
     setMessages(prev => [...prev, { role: "user", content: userMsg }]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/konn3ct-ai", {
+      const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://edge.konn3ct.net";
+      const res = await fetch(`${apiUrl}/api/ai/chat/${meetingInfo.roomId || meetingInfo.roomSlug}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMsg, transcript })
+        headers: { 
+          "Content-Type": "application/json",
+          ...(sessionToken && { "Authorization": `Bearer ${sessionToken}` })
+        },
+        body: JSON.stringify({ question: userMsg })
       });
 
       const data = await res.json();
