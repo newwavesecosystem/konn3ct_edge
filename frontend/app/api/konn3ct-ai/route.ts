@@ -5,8 +5,8 @@ export async function POST(req: Request) {
   try {
     const { question, transcript } = await req.json();
 
-    if (!question || !transcript) {
-      return NextResponse.json({ error: "Missing question or transcript" }, { status: 400 });
+    if (!question) {
+      return NextResponse.json({ error: "Missing question" }, { status: 400 });
     }
 
     if (!process.env.OPENAI_API_KEY) {
@@ -25,11 +25,12 @@ export async function POST(req: Request) {
           content: `You are Konn3ct AI, a helpful, polite, and intelligent in-meeting assistant. 
           Your job is to answer the user's question based strictly on the provided meeting transcript.
           If the answer is not in the transcript, politely say that you don't have that information.
+          If the transcript is completely empty, politely inform the user that nobody has spoken yet or transcription just started.
           Keep your answers concise, formatting them with markdown if helpful (bullet points, bold text).
           
           Here is the meeting transcript so far:
           ---
-          ${transcript}
+          ${transcript || "[No transcript available yet. The meeting just started or nobody has spoken.]"}
           ---
           `,
         },
