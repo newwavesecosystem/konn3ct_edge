@@ -39,7 +39,9 @@ export function SettingsPanel() {
     setIsAlwaysMuteOnJoin,
     vbMode,
     vbImageUrl,
-    handleVbSelect
+    handleVbSelect,
+    translationLanguage,
+    setTranslationLanguage
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
@@ -211,10 +213,20 @@ export function SettingsPanel() {
         <SettingsGroup label="General">
           <SettingsSelect
             icon={<Globe className="w-4 h-4" />}
-            label="Language"
-            options={["English", "French", "Yoruba", "Hausa", "Igbo"].map(l => ({ value: l, label: l }))}
-            value="English"
-            onChange={() => {}}
+            label="Caption Translation"
+            options={[
+              { value: "original", label: "Original Language" },
+              { value: "en", label: "English" },
+              { value: "fr", label: "French" },
+              { value: "es", label: "Spanish" },
+              { value: "de", label: "German" },
+              { value: "zh", label: "Chinese" },
+              { value: "yo", label: "Yoruba" },
+              { value: "ha", label: "Hausa" },
+              { value: "ig", label: "Igbo" }
+            ]}
+            value={translationLanguage}
+            onChange={(val) => setTranslationLanguage(val)}
           />
           <SettingsToggle 
             label="AI Noise Suppression (Premium)" 

@@ -4,6 +4,7 @@ import dgram from 'dgram';
 import { DeepgramClient } from '@deepgram/sdk';
 import { logger } from '../logger';
 import { EventEmitter } from 'events';
+import WebSocket from 'ws';
 
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
 const deepgram = deepgramApiKey ? new DeepgramClient({ apiKey: deepgramApiKey }) : null;
@@ -54,15 +55,12 @@ export async function startTranscription(producer: Producer, router: Router, roo
     paused: true
   });
   
-  // 3. Connect to Deepgram
-  const dgConnection = await deepgram.listen.v1.connect({
-    model: 'nova-2',
-    language: 'en',
-    smart_format: "true",
-    encoding: 'linear16',
-    sample_rate: 48000,
-    channels: 1,
-    Authorization: `Token ${deepgramApiKey}`
+  // 3. Connect to Deepgram using standard WebSocket
+  const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&encoding=linear16&sample_rate=48000&channels=1';
+  const dgSocket = new WebSocket(deepgramUrl, {
+    headers: {
+      Authorization: `Token ${deepgramApiKey}`
+    }
   });
   
   // 4. Start FFmpeg
@@ -94,9 +92,8 @@ a=rtpmap:${pt} opus/48000/2
   
   // Pipe ffmpeg stdout to Deepgram
   ffmpegProcess.stdout.on('data', (data: Buffer) => {
-    // Check if readyState is 1 (OPEN) using generic websocket property
-    if ((dgConnection.socket as any).readyState === 1) {
-      dgConnection.socket.send(data);
+    if (dgSocket.readyState === WebSocket.OPEN) {
+      dgSocket.send(data);
     }
   });
   
@@ -104,29 +101,34 @@ a=rtpmap:${pt} opus/48000/2
     logger.error(`FFmpeg error for user ${userId}:`, err);
   });
   
-  dgConnection.on('open', async () => {
+  dgSocket.on('open', async () => {
     logger.info(`[DEEPGRAM] WebSocket connected for user ${userId}`);
     await consumer.resume();
   });
   
-  dgConnection.on('message', (data: any) => {
-    if (data.type === 'Results') {
-      const text = data.channel?.alternatives?.[0]?.transcript;
-      if (text) {
-        logger.info(`[DEEPGRAM] Transcript received for user ${userId}: "${text}" (isFinal: ${data.is_final})`);
-        transcriberEvents.emit('caption', {
-          roomId,
-          userId,
-          name: userName,
-          text,
-          isFinal: data.is_final,
-          lang: 'en'
-        });
+  dgSocket.on('message', (data: any) => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === 'Results') {
+        const text = msg.channel?.alternatives?.[0]?.transcript;
+        if (text) {
+          logger.info(`[DEEPGRAM] Transcript received for user ${userId}: "${text}" (isFinal: ${msg.is_final})`);
+          transcriberEvents.emit('caption', {
+            roomId,
+            userId,
+            name: userName,
+            text,
+            isFinal: msg.is_final,
+            lang: 'en'
+          });
+        }
       }
+    } catch (e) {
+      // ignore parse errors
     }
   });
   
-  dgConnection.on('error', (err: any) => {
+  dgSocket.on('error', (err: any) => {
     logger.error(`Deepgram error for user ${userId}:`, err);
   });
   
@@ -138,7 +140,7 @@ a=rtpmap:${pt} opus/48000/2
     if (!plainTransport.closed) plainTransport.close();
     if (!ffmpegProcess.killed) ffmpegProcess.kill('SIGTERM');
     try {
-      dgConnection.socket.close();
+      dgSocket.close();
     } catch(e){}
   };
   
