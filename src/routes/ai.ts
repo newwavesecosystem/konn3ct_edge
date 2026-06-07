@@ -147,10 +147,10 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
 });
 
 // --- 4. Live Konn3ct AI Chat ---
-aiRouter.post('/chat/:roomId', async (req: Request, res: Response) => {
+aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
   try {
     const { question } = req.body;
-    const roomId = req.params.roomId as string;
+    const roomSlugOrId = req.params.roomSlug as string;
     const userId = req.user!.userId;
 
     if (!question) {
@@ -161,13 +161,22 @@ aiRouter.post('/chat/:roomId', async (req: Request, res: Response) => {
       return res.status(500).json({ error: "OpenAI API Key is missing on the server." });
     }
 
-    // Verify room access
-    const room = await db.room.findUnique({
-      where: { id: roomId },
+    // Verify room access (try by ID first, then fallback to slug)
+    let room = await db.room.findUnique({
+      where: { id: roomSlugOrId },
       include: { team: { include: { members: true } } }
     });
 
+    if (!room) {
+      room = await db.room.findUnique({
+        where: { slug: roomSlugOrId },
+        include: { team: { include: { members: true } } }
+      });
+    }
+
     if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const roomId = room.id;
 
     let hasAccess = room.ownerId === userId;
     if (!hasAccess && room.team) {
