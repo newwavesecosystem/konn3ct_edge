@@ -44,7 +44,7 @@ export function Konn3ctAIPanel() {
     try {
       const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://edge.konn3ct.net";
-      const res = await fetch(`${apiUrl}/api/ai/chat/${meetingInfo.roomId || meetingInfo.roomSlug}`, {
+      const res = await fetch(`${apiUrl}/api/ai/chat/${meetingInfo.roomSlug}`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
