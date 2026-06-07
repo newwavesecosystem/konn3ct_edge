@@ -126,7 +126,7 @@ const roomProducers = new Map<string, Array<{ producerId: string, userId: string
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
-const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
+export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 
 async function syncRoomStateToRedis(roomId: string, roomSlug: string) {
   try {

@@ -105,7 +105,15 @@ a=rtpmap:${pt} opus/48000/2
     logger.info(`[DEEPGRAM] WebSocket connected for user ${userId}`);
     await consumer.resume();
   });
-  
+
+  // Deepgram will close the connection if no audio is sent for 10-12 seconds (e.g. user is muted).
+  // We must send a KeepAlive message periodically.
+  const keepAliveInterval = setInterval(() => {
+    if (dgSocket.readyState === WebSocket.OPEN) {
+      dgSocket.send(JSON.stringify({ type: 'KeepAlive' }));
+    }
+  }, 8000);
+
   dgSocket.on('message', (data: any) => {
     try {
       const msg = JSON.parse(data.toString());
@@ -127,12 +135,18 @@ a=rtpmap:${pt} opus/48000/2
       // ignore parse errors
     }
   });
-  
+
   dgSocket.on('error', (err: any) => {
     logger.error(`Deepgram error for user ${userId}:`, err);
   });
-  
+
+  dgSocket.on('close', () => {
+    logger.warn(`[DEEPGRAM] WebSocket closed for user ${userId}`);
+    clearInterval(keepAliveInterval);
+  });
+
   const cleanup = () => {
+    clearInterval(keepAliveInterval);
     if (transcribers.has(producer.id)) {
       transcribers.delete(producer.id);
     }
