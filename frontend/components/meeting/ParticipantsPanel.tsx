@@ -187,12 +187,7 @@ function ParticipantRow({
           alt={participant.name}
           className="w-8 h-8 text-xs"
         />
-        {participant.isSpeaking && (
-          <div
-            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-brand-green border-2"
-            style={{ borderColor: "var(--mt-bg)" }}
-          />
-        )}
+        {/* isSpeaking ring disabled */}
       </div>
 
       <div className="flex-1 min-w-0">

@@ -155,15 +155,7 @@ export function ParticipantTile({
       )}
 
       {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
-      {participant.isSpeaking && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl z-20"
-          style={{
-            boxShadow:
-              "inset 0 0 0 3px var(--color-brand-green, #207450), 0 0 24px -4px rgba(32,116,80,0.55)",
-          }}
-        />
-      )}
+      {/* ── Speaking ring disabled for now ── */}
 
       {/* ── Video / avatar area ── */}
       {isCameraEffectivelyOn ? (
@@ -215,20 +207,7 @@ export function ParticipantTile({
             >
               {initials}
             </div>
-            {participant.isSpeaking && (
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-[2px]">
-                {[12, 18, 10, 16].map((h, i) => (
-                  <span
-                    key={i}
-                    className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
-                    style={{
-                      height: `${h}px`,
-                      animationDelay: `${i * 0.15}s`,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Speaking animation disabled for now */}
           </div>
         </div>
       )}

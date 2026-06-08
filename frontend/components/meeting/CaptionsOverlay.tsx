@@ -18,7 +18,7 @@ export function CaptionsOverlay() {
 
   return (
     <div 
-      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 pointer-events-none z-50"
+      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 pointer-events-none z-50 flex justify-center"
       style={{ 
         transform: `translateX(-50%) scale(${captionSize})`, 
         transformOrigin: "bottom center" 
@@ -26,7 +26,7 @@ export function CaptionsOverlay() {
     >
       <div 
         ref={scrollRef}
-        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-4 py-3 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10"
+        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10 w-fit"
       >
         {captions.map((caption, idx) => (
           <div 
