@@ -126,6 +126,7 @@ const roomProducers = new Map<string, Array<{ producerId: string, userId: string
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
+const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 
 async function syncRoomStateToRedis(roomId: string, roomSlug: string) {
@@ -458,6 +459,20 @@ export function initializeSignaling(server: Server) {
               const eCinemaLink = roomECinema.get(roomId);
               if (eCinemaLink) {
                 ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
+                
+                const eState = roomECinemaState.get(roomId);
+                if (eState) {
+                  let currentTime = eState.time;
+                  if (eState.action === 'play') {
+                    currentTime += (Date.now() - eState.serverTime) / 1000;
+                  }
+                  // Send a delayed action to ensure the player has time to load
+                  setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+                    }
+                  }, 2000);
+                }
               }
             }
           } catch (e) {
@@ -772,6 +787,8 @@ export function initializeSignaling(server: Server) {
               client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid eCinema URL.' }));
               return;
             }
+          } else {
+            roomECinemaState.delete(roomId);
           }
           roomECinema.set(roomId, data.link || null);
           broadcastToRoom(roomId, {
@@ -783,6 +800,7 @@ export function initializeSignaling(server: Server) {
 
       case 'ecinema_action':
         if (client.role === 'host' || client.role === 'presenter') {
+          roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
             action: data.action,
