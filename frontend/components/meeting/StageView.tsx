@@ -558,10 +558,7 @@ function SpeakerLayout({
                       }}
                     >
                       {initials}
-                      {/* Speaking ring */}
-                      {p.isSpeaking && (
-                        <span className="absolute inset-0 rounded-full ring-2 ring-brand-green animate-pulse" />
-                      )}
+                      {/* Speaking ring disabled */}
                     </div>
                     {/* Name + status */}
                     <div className="flex flex-col min-w-0">

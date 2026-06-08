@@ -111,6 +111,8 @@ interface MeetingContextValue {
   toggleAINoiseSuppression: (enable: boolean) => Promise<void>;
   
   // Settings
+  outputVolume: number;
+  setOutputVolume: (val: number) => void;
   isHDVideoEnabled: boolean;
   setIsHDVideoEnabled: (enabled: boolean) => void;
   isMirrorVideoEnabled: boolean;
@@ -248,6 +250,7 @@ export function MeetingProvider({
   
   // Settings State
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
+  const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
@@ -1516,26 +1519,28 @@ export function MeetingProvider({
             }
           }
         },
+        outputVolume,
+        setOutputVolume,
       }}
     >
-      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} />
+      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />
       {children}
     </MeetingContext.Provider>
   );
 }
 
-function GlobalAudioRenderer({ participants, currentUserId }: { participants: Participant[]; currentUserId: string }) {
+function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { participants: Participant[]; currentUserId: string; outputVolume: number }) {
   const { selectedDevices } = useMeeting();
   return (
     <>
       {participants.map((p) => (
-        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} />
+        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} />
       ))}
     </>
   );
 }
 
-function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string }) {
+function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
@@ -1547,6 +1552,12 @@ function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTra
       }
     }
   };
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = outputVolume / 100;
+    }
+  }, [outputVolume]);
 
   useEffect(() => {
     if (audioRef.current && track && !isLocal) {

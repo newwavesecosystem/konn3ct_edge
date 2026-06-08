@@ -45,7 +45,9 @@ export function SettingsPanel() {
     translationLanguage,
     setTranslationLanguage,
     captionSize,
-    setCaptionSize
+    setCaptionSize,
+    outputVolume,
+    setOutputVolume
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
@@ -119,7 +121,8 @@ export function SettingsPanel() {
           <SettingsSlider
             icon={<Volume2 className="w-4 h-4" />}
             label="Output Volume"
-            value={75}
+            value={outputVolume}
+            onChange={setOutputVolume}
           />
         </SettingsGroup>
 
@@ -487,27 +490,37 @@ function SettingsSlider({
   icon,
   label,
   value,
+  onChange,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  onChange?: (val: number) => void;
 }) {
   const [val, setVal] = React.useState(value);
+
+  React.useEffect(() => {
+    setVal(value);
+  }, [value]);
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1.5" style={{ color: "var(--mt-text-muted)" }}>
+      <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
         {icon}
         <span className="text-xs font-medium">{label}</span>
-        <span className="ml-auto text-[10px]" style={{ color: "var(--mt-text-faint)" }}>{val}%</span>
+        <span className="ml-auto text-xs font-semibold">{val}%</span>
       </div>
       <input
         type="range"
-        min={0}
-        max={100}
+        min="0"
+        max="100"
         value={val}
-        onChange={(e) => setVal(Number(e.target.value))}
-        className="w-full h-1 rounded-full appearance-none accent-brand-green"
-        style={{ backgroundColor: "var(--mt-bg-control-hover)" }}
+        onChange={(e) => {
+          const newVal = parseInt(e.target.value, 10);
+          setVal(newVal);
+          onChange?.(newVal);
+        }}
+        className="w-full accent-brand-green bg-black/20 h-1.5 rounded-lg appearance-none cursor-pointer"
       />
     </div>
   );
