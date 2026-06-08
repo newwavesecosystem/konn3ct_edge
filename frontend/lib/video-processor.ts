@@ -129,7 +129,7 @@ export class VideoProcessor {
             if (this.maskCanvas.width !== mask.width || this.maskCanvas.height !== mask.height) {
               this.maskCanvas.width = mask.width;
               this.maskCanvas.height = mask.height;
-              this.maskImageData = this.maskCtx.createImageData(mask.width, mask.height);
+              this.maskImageData = this.maskCtx!.createImageData(mask.width, mask.height);
             }
 
             const maskArray = mask.getAsUint8Array(); 
