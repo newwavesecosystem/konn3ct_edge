@@ -11,6 +11,10 @@ export class VideoProcessor {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   
+  private maskCanvas?: HTMLCanvasElement;
+  private maskCtx?: CanvasRenderingContext2D;
+  private maskImageData?: ImageData;
+
   private rawStream: MediaStream | null = null;
   private processedStream: MediaStream | null = null;
   private videoElement: HTMLVideoElement;
@@ -112,25 +116,41 @@ export class VideoProcessor {
           this.ctx.save();
           this.ctx.clearRect(0, 0, width, height);
 
-          // Draw the original video
-          this.ctx.drawImage(this.videoElement, 0, 0, width, height);
-
           // Apply mask
           if (result.categoryMask) {
             const mask = result.categoryMask;
-            const imageData = this.ctx.getImageData(0, 0, width, height);
-            const data32 = new Uint32Array(imageData.data.buffer);
-            const maskArray = mask.getAsUint8Array(); 
-
-            // High-performance 32-bit pixel loop
-            for (let i = 0; i < maskArray.length; i++) {
-              if (maskArray[i] === 0) {
-                data32[i] = 0; 
-              }
+            
+            // Lazy initialize mask canvas
+            if (!this.maskCanvas) {
+              this.maskCanvas = document.createElement('canvas');
+              this.maskCtx = this.maskCanvas.getContext('2d')!;
             }
-            this.ctx.putImageData(imageData, 0, 0);
+            
+            if (this.maskCanvas.width !== mask.width || this.maskCanvas.height !== mask.height) {
+              this.maskCanvas.width = mask.width;
+              this.maskCanvas.height = mask.height;
+              this.maskImageData = this.maskCtx.createImageData(mask.width, mask.height);
+            }
 
-            // Draw Background underneath
+            const maskArray = mask.getAsUint8Array(); 
+            const data = this.maskImageData!.data;
+
+            // Convert 1-channel mask to 4-channel ImageData (Alpha channel for destination-in)
+            for (let i = 0; i < maskArray.length; i++) {
+              // Selfie segmenter usually outputs >0 for person, 0 for background
+              const alpha = maskArray[i] === 0 ? 0 : 255;
+              data[i * 4 + 3] = alpha; 
+            }
+            this.maskCtx!.putImageData(this.maskImageData!, 0, 0);
+
+            // 1. Draw the person mask
+            this.ctx.drawImage(this.maskCanvas, 0, 0, width, height);
+            
+            // 2. Draw the video ON TOP of the mask, keeping only pixels where mask exists
+            this.ctx.globalCompositeOperation = 'source-in';
+            this.ctx.drawImage(this.videoElement, 0, 0, width, height);
+
+            // 3. Draw Background UNDERNEATH
             this.ctx.globalCompositeOperation = 'destination-over';
             if (this.mode === 'image' && this.backgroundImage) {
               this.ctx.drawImage(this.backgroundImage, 0, 0, width, height);
@@ -139,6 +159,9 @@ export class VideoProcessor {
               this.ctx.drawImage(this.videoElement, 0, 0, width, height);
               this.ctx.filter = 'none';
             }
+          } else {
+             // Fallback if no mask
+             this.ctx.drawImage(this.videoElement, 0, 0, width, height);
           }
           this.ctx.restore();
           
