@@ -663,11 +663,7 @@ export class WebRTCClient {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack,
         appData: { source: 'camera' },
-        encodings: [
-          { scaleResolutionDownBy: 4, maxBitrate: 100000 },
-          { scaleResolutionDownBy: 2, maxBitrate: 300000 },
-          { scaleResolutionDownBy: 1, maxBitrate: 900000 },
-        ],
+        encodings: this.isLowBandwidth ? [{ maxBitrate: 150000 }] : undefined,
         codecOptions: { videoGoogleStartBitrate: 1000 }
       });
       if (isVideoPaused) this.localVideoProducer.pause();
@@ -736,16 +732,7 @@ export class WebRTCClient {
     const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
     videoTrack = processedStream.getVideoTracks()[0];
     
-    const encodings = this.isLowBandwidth ? [
-      // Aggressively limit resolution and bitrate for bad networks
-      { scaleResolutionDownBy: 2, maxBitrate: 50000 },
-      { scaleResolutionDownBy: 1, maxBitrate: 150000 }
-    ] : [
-      // Standard 3-layer simulcast: low / medium / high
-      { scaleResolutionDownBy: 4, maxBitrate: 100000 },
-      { scaleResolutionDownBy: 2, maxBitrate: 300000 },
-      { scaleResolutionDownBy: 1, maxBitrate: 900000 },
-    ];
+    const encodings = this.isLowBandwidth ? [{ maxBitrate: 150000 }] : undefined;
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
