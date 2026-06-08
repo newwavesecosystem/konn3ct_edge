@@ -141,29 +141,41 @@ export async function connectTransport(transportId: string, dtlsParameters: any)
   await transport.connect({ dtlsParameters });
 }
 
+const audioObserversPromises = new Map<string, Promise<void>>();
+
 /**
  * Setup Audio Level Observer for a room
  */
 export async function setupAudioObserver(roomId: string, onSpeaking: (producerIds: string[]) => void) {
   if (audioObservers.has(roomId)) return;
-  const router = await getOrCreateRouter(roomId);
+  if (audioObserversPromises.has(roomId)) {
+    await audioObserversPromises.get(roomId);
+    return;
+  }
   
-  const observer = await router.createAudioLevelObserver({
-    maxEntries: 100,
-    threshold: -60, // dBov (typical silence is below -60)
-    interval: 300   // Trigger every 300ms
-  });
+  const promise = (async () => {
+    const router = await getOrCreateRouter(roomId);
+    
+    const observer = await router.createAudioLevelObserver({
+      maxEntries: 100,
+      threshold: -60, // dBov (typical silence is below -60)
+      interval: 300   // Trigger every 300ms
+    });
 
-  observer.on('volumes', (volumes) => {
-    // volumes is array of { producer, volume }
-    onSpeaking(volumes.map(v => v.producer.id));
-  });
-  
-  observer.on('silence', () => {
-    onSpeaking([]); // No one is talking
-  });
+    observer.on('volumes', (volumes) => {
+      // volumes is array of { producer, volume }
+      onSpeaking(volumes.map(v => v.producer.id));
+    });
+    
+    observer.on('silence', () => {
+      onSpeaking([]); // No one is talking
+    });
 
-  audioObservers.set(roomId, observer);
+    audioObservers.set(roomId, observer);
+  })();
+
+  audioObserversPromises.set(roomId, promise);
+  await promise;
 }
 
 /**
@@ -191,6 +203,9 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
 
   // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
   if (kind === 'audio' && roomId) {
+    if (audioObserversPromises.has(roomId)) {
+      await audioObserversPromises.get(roomId);
+    }
     const observer = audioObservers.get(roomId);
     if (observer && !producer.closed) {
       observer.addProducer({ producerId: producer.id }).catch(e => {
