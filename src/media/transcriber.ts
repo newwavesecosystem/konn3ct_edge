@@ -12,14 +12,12 @@ const deepgram = deepgramApiKey ? new DeepgramClient({ apiKey: deepgramApiKey })
 // Emitter to broadcast captions back to server.ts
 export const transcriberEvents = new EventEmitter();
 
+let nextPort = 40000;
 async function getFreePort(): Promise<number> {
-  return new Promise((resolve) => {
-    const srv = dgram.createSocket('udp4');
-    srv.bind(0, '127.0.0.1', () => {
-      const port = srv.address().port;
-      srv.close(() => resolve(port));
-    });
-  });
+  const port = nextPort;
+  nextPort += 2; // RTP and RTCP typically use even/odd pairs
+  if (nextPort > 49000) nextPort = 40000;
+  return port;
 }
 
 // Map producerId to cleanup function to avoid memory leaks
