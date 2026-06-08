@@ -289,8 +289,8 @@ export function initializeSignaling(server: Server) {
       }
 
       const currentParticipants = rooms.get(room.id)?.size || 0;
-      const maxParticipants = (decoded as any).maxParticipants ?? 100;
-      const maxWebinarAudience = (decoded as any).maxWebinarAudience ?? 1000;
+      const maxParticipants = room.maxParticipants ?? 100;
+      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
       const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
 
       // Allow hosts and bots to bypass capacity
@@ -311,7 +311,7 @@ export function initializeSignaling(server: Server) {
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
-          maxActiveCameras: (decoded as any).maxActiveCameras ?? 15,
+          maxActiveCameras: room.maxActiveCameras ?? 15,
           maxParticipants: maxParticipants,
         });
       });
