@@ -1576,10 +1576,12 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
         const stream = audioRef.current.srcObject as MediaStream;
         if (stream.getAudioTracks()[0] === track) {
           applyAudioSink(audioRef.current, audioOutput);
+          audioRef.current.volume = outputVolume / 100;
           return;
         }
       }
       audioRef.current.srcObject = new MediaStream([track]);
+      audioRef.current.volume = outputVolume / 100;
       applyAudioSink(audioRef.current, audioOutput);
       audioRef.current.play().catch((e) => {
         if (e.name !== 'AbortError') console.warn("Global audio play failed:", e);
@@ -1587,7 +1589,7 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
     } else if (audioRef.current && (!track || isLocal)) {
       audioRef.current.srcObject = null;
     }
-  }, [track, isLocal, audioOutput]);
+  }, [track, isLocal, audioOutput, outputVolume]);
 
-  return <audio ref={audioRef} autoPlay muted={isLocal} style={{ display: 'none' }} />;
+  return <audio ref={audioRef} autoPlay muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
 }
