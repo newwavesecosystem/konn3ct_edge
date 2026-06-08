@@ -79,6 +79,7 @@ model Room {
   recordingSetting String  @default("off")       // "off" | "free" | "paid"
   guestJoinAllowed Boolean @default(true)
   accessPin        String?                       // null = no PIN required
+  logoutUrl        String?                       // null = no custom logout URL
   maxParticipants  Int     @default(100)
   maxWebinarAudience Int   @default(1000)
   maxActiveCameras Int     @default(15)
