@@ -19,7 +19,7 @@ import {
   ArrowLeftRight,
   Image as ImageIcon,
   Ban,
-  Focus
+  Droplet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -173,7 +173,7 @@ export function SettingsPanel() {
                 title="Blur your background"
               >
                 <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
-                <Focus className="relative z-10 w-5 h-5 mb-1 text-white/70" />
+                <Droplet className="relative z-10 w-5 h-5 mb-1 text-white/70" />
                 <span className="relative z-10 text-[10px] text-white">Blur</span>
               </button>
               

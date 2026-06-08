@@ -668,14 +668,17 @@ export function MeetingProvider({
           );
         };
 
+        const resolveUserId = (id: string) => id === webrtcClient.current?.userId ? initialCurrentUser.id : id;
+
         client.onMuteState = (msg) => {
+          const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => {
-            const user = prev.find(p => p.id === msg.userId);
+            const user = prev.find(p => p.id === targetId);
             if (user && user.isMuted !== msg.isMuted) {
               toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
             }
             return prev.map(p =>
-              p.id === msg.userId ? { ...p, isMuted: msg.isMuted } : p
+              p.id === targetId ? { ...p, isMuted: msg.isMuted } : p
             );
           });
         };
@@ -685,12 +688,14 @@ export function MeetingProvider({
         };
 
         client.onCameraState = (msg) => {
+          const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === msg.userId ? { ...p, isCameraOn: msg.isCameraOn } : p
+            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn } : p
           ));
         };
 
         client.onHandRaise = (msg) => {
+          const targetId = resolveUserId(msg.userId);
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
@@ -708,20 +713,22 @@ export function MeetingProvider({
             } catch (e) { }
           }
           setParticipants((prev) => prev.map(p =>
-            p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
+            p.id === targetId ? { ...p, isHandRaised: msg.isHandRaised } : p
           ));
         };
 
         client.onScreenShareStarted = (userId, producerId) => {
+          const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === userId ? { ...p, isScreenSharing: true } : p
+            p.id === targetId ? { ...p, isScreenSharing: true } : p
           ));
-          toast.info(`${participants.find(p => p.id === userId)?.name || 'A participant'} started screen sharing`);
+          toast.info(`${participants.find(p => p.id === targetId)?.name || 'A participant'} started screen sharing`);
         };
 
         client.onScreenShareStopped = (userId, producerId) => {
+          const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
+            p.id === targetId ? { ...p, isScreenSharing: false, screenTrack: null } : p
           ));
           toast.info(`Screen sharing ended`);
         };
@@ -862,7 +869,7 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
-          if (user.userId === webrtcClient.current?.userId) return;
+          if (user.userId === webrtcClient.current?.userId || user.name === initialCurrentUser.name) return;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) return prev;
@@ -890,10 +897,11 @@ export function MeetingProvider({
         };
 
         client.onRoleChanged = (userId, newRole) => {
+          const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p => 
-            p.id === userId ? { ...p, role: newRole as any } : p
+            p.id === targetId ? { ...p, role: newRole as any } : p
           ));
-          if (userId === initialCurrentUser.id) {
+          if (targetId === initialCurrentUser.id) {
             toast.info(`Your role has been updated to ${newRole}`);
           }
         };

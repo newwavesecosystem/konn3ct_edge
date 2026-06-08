@@ -307,12 +307,14 @@ export function MeetingControls() {
                   />
                 )}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
-                <MoreMenuItem
-                  icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
-                  label={isRecording ? "Stop Recording" : "Record Meeting"}
-                  danger={isRecording}
-                  onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
-                />
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
+                    label={isRecording ? "Stop Recording" : "Record Meeting"}
+                    danger={isRecording}
+                    onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
+                  />
+                )}
                 {/* Desktop-only: captions & donation already shown above on mobile */}
                 <div className="hidden sm:block">
                   <MoreMenuItem
