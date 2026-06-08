@@ -184,6 +184,7 @@ export function SettingsPanel() {
               ].map((url, i) => (
                 <button
                   key={url}
+                  title={`Use Background ${i + 1}`}
                   onClick={() => handleVbSelect('image', url)}
                   className={cn(
                     "rounded-xl overflow-hidden transition-all h-14",
@@ -195,10 +196,12 @@ export function SettingsPanel() {
               ))}
 
               {/* Custom Upload */}
-              <label className={cn(
-                "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
-                vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
-              )}>
+              <label 
+                title="Upload custom background image"
+                className={cn(
+                  "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
+                  vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
+                )}>
                 <span className="text-lg text-white/50 leading-none mb-0.5">+</span>
                 <span className="text-[9px] text-white/40">Upload</span>
                 <input 
