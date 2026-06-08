@@ -396,7 +396,7 @@ function GridInner({
   if (count === 1) {
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
-        <div className="w-full h-full max-w-5xl">
+        <div className="w-full aspect-video max-h-full max-w-5xl flex justify-center">
           <MotionTile participant={participants[0]} isLarge />
         </div>
       </div>
@@ -407,17 +407,19 @@ function GridInner({
   if (count === 2) {
     const isPortrait = containerW < containerH * 1.1;
     return (
-      <div className="absolute inset-0 p-3 sm:p-4">
+      <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
         <div
           className={cn(
-            "w-full h-full flex gap-2.5 sm:gap-3",
-            isPortrait ? "flex-col" : "flex-row",
+            "w-full flex gap-2.5 sm:gap-3 max-w-7xl",
+            isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
           <AnimatePresence>
             {participants.map((p) => (
-              <div key={p.id} className="flex-1 min-w-0 min-h-0">
-                <MotionTile participant={p} isLarge />
+              <div key={p.id} className="flex-1 min-w-0 min-h-0 w-full flex justify-center">
+                <div className="w-full aspect-video max-h-full">
+                  <MotionTile participant={p} isLarge />
+                </div>
               </div>
             ))}
           </AnimatePresence>
@@ -426,48 +428,7 @@ function GridInner({
     );
   }
 
-  // ── 3 participants: 3 tall columns (Google Meet's signature) ──
-  if (count === 3 && containerW > containerH * 0.9) {
-    return (
-      <div className="absolute inset-0 p-3 sm:p-4">
-        <div className="w-full h-full flex gap-2.5 sm:gap-3">
-          <AnimatePresence>
-            {participants.map((p) => (
-              <div key={p.id} className="flex-1 min-w-0 min-h-0">
-                <MotionTile participant={p} />
-              </div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
-    );
-  }
 
-  // ── 5 participants: 3 top + 2 bottom, both rows equal height ──
-  if (count === 5 && containerW > containerH) {
-    return (
-      <div className="absolute inset-0 p-3 sm:p-4">
-        <div className="w-full h-full flex flex-col gap-2.5 sm:gap-3">
-          <AnimatePresence>
-            <div className="flex-1 min-h-0 flex gap-2.5 sm:gap-3">
-              {participants.slice(0, 3).map((p) => (
-                <div key={p.id} className="flex-1 min-w-0 min-h-0">
-                  <MotionTile participant={p} />
-                </div>
-              ))}
-            </div>
-            <div className="flex-1 min-h-0 flex gap-2.5 sm:gap-3 justify-center">
-              {participants.slice(3, 5).map((p) => (
-                <div key={p.id} className="flex-1 min-w-0 min-h-0 max-w-[calc(33.333%-7px)]">
-                  <MotionTile participant={p} />
-                </div>
-              ))}
-            </div>
-          </AnimatePresence>
-        </div>
-      </div>
-    );
-  }
 
   // ── General case: use computed best grid (4, 6, 7+) ──────
   const { cols, tileW, tileH } = solution;
@@ -686,7 +647,7 @@ function SpotlightLayout({ participants }: { participants: Participant[] }) {
         <motion.div
           layout
           layoutId={`tile-${focused.id}`}
-          className="w-full h-full max-w-6xl"
+          className="w-full aspect-video max-h-full max-w-6xl"
         >
           <ParticipantTile participant={focused} isLarge />
         </motion.div>
@@ -1057,7 +1018,14 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               }}
               className="w-full h-full"
               iframeClassName="w-full h-full border-0 pointer-events-auto"
-              onReady={(e) => { playerRef.current = e.target; }}
+              onReady={(e) => { 
+                playerRef.current = e.target; 
+                if (ecinemaAction) {
+                  if (ecinemaAction.action === 'play') e.target.playVideo();
+                  else if (ecinemaAction.action === 'pause') e.target.pauseVideo();
+                  if (ecinemaAction.time !== undefined) e.target.seekTo(ecinemaAction.time, true);
+                }
+              }}
               onPlay={handlePlay}
               onPause={handlePause}
             />

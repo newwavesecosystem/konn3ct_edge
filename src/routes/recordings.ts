@@ -101,16 +101,17 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
       }
     });
 
-    const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'app.konn3ct.net';
+    const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     const Redis = require('ioredis');
     const redis = new Redis(redisUrl);
+    const botSecret = process.env.BOT_SECRET || 'my-bot-secret-123';
     
     await redis.lpush('recorder:queue', JSON.stringify({
       roomId: room.id,
       roomSlug,
       recordingId: recording.id,
-      url: `https://${frontendDomain}/join/${roomSlug}`
+      url: `https://${frontendDomain}/meeting/${roomSlug}?bot=true&botSecret=${botSecret}`
     }));
     
     redis.disconnect();
@@ -233,6 +234,71 @@ recordingsRouter.get('/:id/play', async (req: Request, res: Response) => {
     res.status(200).json({ url: recording.url });
   } catch (error) {
     logger.error('Error accessing recording media', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Comprehensive endpoint for the Playback Page
+recordingsRouter.get('/:id/details', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const userId = req.user!.userId;
+
+    const recording = await db.recording.findUnique({ 
+      where: { id },
+      include: {
+        owner: { select: { name: true, email: true } },
+        room: { select: { name: true, slug: true } }
+      }
+    });
+    if (!recording) return res.status(404).json({ error: 'Recording not found' });
+
+    // Permissions check
+    let hasAccess = false;
+    if (recording.ownerId === userId) {
+      hasAccess = true;
+    } else if (!recording.isPaid) {
+      hasAccess = true;
+    } else {
+      const hasPaid = await db.paymentTransaction.findFirst({
+        where: {
+          userId,
+          recordingId: id,
+          status: 'success'
+        }
+      });
+      if (hasPaid) hasAccess = true;
+    }
+
+    if (!hasAccess) {
+      return res.status(402).json({ 
+        error: 'Payment required',
+        priceKobo: recording.priceKobo
+      });
+    }
+
+    // Fetch related data
+    let chatMessages: any[] = [];
+    let summary = null;
+
+    if (recording.roomId) {
+      chatMessages = await db.chatMessage.findMany({
+        where: { roomId: recording.roomId },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      summary = await db.meetingSummary.findUnique({
+        where: { roomId: recording.roomId }
+      });
+    }
+
+    res.status(200).json({
+      recording,
+      chatMessages,
+      summary
+    });
+  } catch (error) {
+    logger.error('Error fetching recording details', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import { useMeeting } from "@/lib/meeting-context";
-import { Copy, Check, Link2, Clock, Users, Shield, Radio } from "lucide-react";
+import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift } from "lucide-react";
 
 export function MeetingInfoPanel() {
-  const { meetingInfo, participants, meetingDuration } = useMeeting();
+  const { meetingInfo, participants, meetingDuration, totalDonations, currentUser } = useMeeting();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -107,6 +107,21 @@ export function MeetingInfoPanel() {
           </p>
           <p className="text-sm" style={{ color: "var(--mt-text-secondary)" }}>{hostName}</p>
         </div>
+
+        {/* Donations */}
+        {(currentUser.role === 'host' || currentUser.role === 'co-host') && (
+          <div>
+            <p
+              className="text-[11px] uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5"
+              style={{ color: "var(--mt-text-faint)" }}
+            >
+              <Gift className="w-3.5 h-3.5" /> Total Donations
+            </p>
+            <p className="text-xl font-bold text-brand-green">
+              ${totalDonations.toFixed(2)}
+            </p>
+          </div>
+        )}
 
         {/* Access code */}
         {meetingInfo.accessCode && (

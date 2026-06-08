@@ -243,4 +243,25 @@ export const apiClient = {
       return fetchApi<Array<{ id: string; status: string; rtmpUrls: string[] }>>(`/streaming/${roomSlug}`);
     },
   },
+  // ── RECORDINGS ──
+
+  recordings: {
+    getAll: async () => {
+      return fetchApi<any[]>('/recordings');
+    },
+    getDetails: async (id: string) => {
+      return fetchApi<any>(`/recordings/${id}/details`);
+    },
+    startRecording: async (data: { title: string; roomSlug: string; durationMinutes?: number }) => {
+      return fetchApi<{ message: string; recordingId: string }>('/recordings/start', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    stopRecording: async (id: string) => {
+      return fetchApi<{ message: string }>(`/recordings/${id}/stop`, {
+        method: 'POST',
+      });
+    },
+  },
 };
