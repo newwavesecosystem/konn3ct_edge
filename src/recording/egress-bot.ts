@@ -163,7 +163,7 @@ async function startRecording({
     await db.recording.update({
       where: { id: recordingDbEntry.id },
       data: { status: 'failed' },
-    }).catch((e) => logger.error('Failed to update recording status to failed', e));
+    }).catch((e: unknown) => logger.error('Failed to update recording status to failed', e));
   } finally {
     if (browser) {
       await browser.close().catch((e: unknown) => logger.warn('Failed to close browser', e));
