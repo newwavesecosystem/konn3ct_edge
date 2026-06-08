@@ -1,6 +1,7 @@
 import type { Device } from 'mediasoup-client';
 // @ts-ignore
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
+import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
 
 export class WebRTCClient {
   private ws: WebSocket | null = null;
@@ -18,6 +19,8 @@ export class WebRTCClient {
   
   // Media
   public rawAudioTrack: MediaStreamTrack | null = null;
+  private rawCameraStream: MediaStream | null = null;
+  private videoProcessor: VideoProcessor | null = null;
   private purifyInstance: any = null;
   public isAINoiseSuppressionEnabled = false;
   private messageIdCounter = 0;
@@ -30,6 +33,7 @@ export class WebRTCClient {
   public userName: string | undefined;
   public userRole: string | undefined;
   public roomName: string | undefined;
+  public maxParticipants: number | undefined;
   public sessionStatus?: string;
 
   public onNewConsumer?: (consumer: Consumer, userId: string) => void;
@@ -61,7 +65,7 @@ export class WebRTCClient {
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
-  public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
+  public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -144,6 +148,7 @@ export class WebRTCClient {
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
+          if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
           
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
@@ -293,7 +298,8 @@ export class WebRTCClient {
           this.onParticipantNetworkQuality?.(msg.userId, msg.quality);
           break;
         case 'caption':
-          this.onCaptionReceived?.(msg.userId, msg.text, msg.isFinal, msg.lang);
+          console.log('[WebRTCClient] Received caption message from server:', msg);
+          this.onCaptionReceived?.(msg.userId, msg.name, msg.text, msg.isFinal, msg.lang);
           break;
         case 'donation_status':
           this.onDonationStatusReceived?.(msg.active);
@@ -691,13 +697,33 @@ export class WebRTCClient {
       }
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({ 
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
       video: { 
-        width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
-        height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
-      } 
+        width: isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }), 
+        height: isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 }),
+        facingMode: "user"
+      },
+      audio: false 
     });
-    const videoTrack = stream.getVideoTracks()[0];
+
+    let videoTrack = this.rawCameraStream.getVideoTracks()[0];
+
+    // Initialize VideoProcessor if not exists
+    if (!this.videoProcessor) {
+      this.videoProcessor = new VideoProcessor();
+      const saved = sessionStorage.getItem("mtg_vb");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          this.videoProcessor.setMode(parsed.mode, parsed.image);
+        } catch (e) {}
+      }
+    }
+
+    // Pass the stream through the VideoProcessor to apply Virtual Background
+    const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+    videoTrack = processedStream.getVideoTracks()[0];
     
     const encodings = this.isLowBandwidth ? [
       // Aggressively limit resolution and bitrate for bad networks
@@ -723,16 +749,44 @@ export class WebRTCClient {
         codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
       });
     }
+    
     return videoTrack;
 
   }
 
+  public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
+    if (!this.videoProcessor) {
+      this.videoProcessor = new VideoProcessor();
+    }
+    this.videoProcessor.setMode(mode, imageUrl);
+    
+    if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
+      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+      const newTrack = processedStream.getVideoTracks()[0];
+      await this.localVideoProducer.replaceTrack({ track: newTrack });
+      return newTrack;
+    }
+    return null;
+  }
+
   public disableCamera() {
+    if (this.videoProcessor) {
+      this.videoProcessor.stopProcessing();
+    }
+    if (this.rawCameraStream) {
+      this.rawCameraStream.getTracks().forEach(t => t.stop());
+      this.rawCameraStream = null;
+    }
     if (this.localVideoProducer) {
-      if (this.localVideoProducer.track) {
-        this.localVideoProducer.track.stop();
+      this.localVideoProducer.close();
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ 
+          type: 'stop_producer', 
+          producerId: this.localVideoProducer.id,
+          appData: { source: 'camera' }
+        }));
       }
-      this.localVideoProducer.pause();
+      this.localVideoProducer = null;
     }
   }
 
@@ -953,7 +1007,7 @@ export class WebRTCClient {
       this.onNewConsumer?.(consumer, userId);
       
       // Tell the backend to resume sending media (unpause the consumer)
-      if (this.isAudioOnlyMode && consumerKind === 'video') {
+      if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {
         console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
       } else {
         console.log(`[WebRTC] Resuming consumer ${id} on server...`);
@@ -970,11 +1024,11 @@ export class WebRTCClient {
 
   public enableAudioOnlyMode() {
     this.isAudioOnlyMode = true;
-    this.pauseCamera();
+    this.disableCamera();
     
-    // Pause all existing video consumers locally and on server
+    // Pause all existing video consumers locally and on server, EXCEPT screenshares
     for (const [id, consumer] of this.consumers.entries()) {
-      if (consumer.kind === 'video') {
+      if (consumer.kind === 'video' && consumer.appData?.source !== 'screen') {
         this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
         consumer.pause();
       }
@@ -984,9 +1038,9 @@ export class WebRTCClient {
   public disableAudioOnlyMode() {
     this.isAudioOnlyMode = false;
     
-    // Resume all existing video consumers
+    // Resume all existing video consumers, EXCEPT screenshares (which never paused)
     for (const [id, consumer] of this.consumers.entries()) {
-      if (consumer.kind === 'video') {
+      if (consumer.kind === 'video' && consumer.appData?.source !== 'screen') {
         this.request('resume', 'resumed', { consumerId: id }).catch(console.error);
         consumer.resume();
       }

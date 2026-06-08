@@ -21,10 +21,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { roomId, sessionToken, isBot, pin } = body;
+    const { roomId, sessionToken, isBot, isPing, pin } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
+    }
+
+    if (isPing) {
+      return NextResponse.json({ token: "ping_ok" });
     }
 
     // Default values if no session (only for bots or fallback)

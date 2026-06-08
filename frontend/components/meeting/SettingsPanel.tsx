@@ -17,7 +17,11 @@ import {
   Leaf,
   LayoutGrid,
   ArrowLeftRight,
+  Image as ImageIcon,
+  Ban,
+  Focus
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function SettingsPanel() {
   const { theme, setTheme } = useMeetingTheme();
@@ -34,7 +38,14 @@ export function SettingsPanel() {
     isLowBandwidthEnabled,
     setIsLowBandwidthEnabled,
     isAlwaysMuteOnJoin,
-    setIsAlwaysMuteOnJoin
+    setIsAlwaysMuteOnJoin,
+    vbMode,
+    vbImageUrl,
+    handleVbSelect,
+    translationLanguage,
+    setTranslationLanguage,
+    captionSize,
+    setCaptionSize
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
@@ -131,16 +142,114 @@ export function SettingsPanel() {
             checked={isMirrorVideoEnabled} 
             onChange={setIsMirrorVideoEnabled}
           />
+
+          <div className="pt-2 border-t" style={{ borderColor: "var(--mt-border)" }}>
+            <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
+              <ImageIcon className="w-4 h-4" />
+              <span className="text-xs font-medium">Virtual Background</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                onClick={() => handleVbSelect('none')}
+                className={cn(
+                  "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14",
+                  vbMode === 'none' ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                )}
+                title="Turn off virtual background"
+              >
+                <Ban className="w-5 h-5 mb-1 text-white/70" />
+                <span className="text-[10px] text-white">None</span>
+              </button>
+              
+              <button
+                onClick={() => handleVbSelect('blur')}
+                className={cn(
+                  "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 relative overflow-hidden",
+                  vbMode === 'blur' ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                )}
+                title="Blur your background"
+              >
+                <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
+                <Focus className="relative z-10 w-5 h-5 mb-1 text-white/70" />
+                <span className="relative z-10 text-[10px] text-white">Blur</span>
+              </button>
+              
+              {[
+                '/backgrounds/modern_office.png',
+                '/backgrounds/cozy_cafe.png',
+                '/backgrounds/minimalist_gradient.png'
+              ].map((url, i) => (
+                <button
+                  key={url}
+                  onClick={() => handleVbSelect('image', url)}
+                  className={cn(
+                    "rounded-xl overflow-hidden transition-all h-14",
+                    vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
+                  )}
+                >
+                  <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+
+              {/* Custom Upload */}
+              <label className={cn(
+                "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
+                vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
+              )}>
+                <span className="text-lg text-white/50 leading-none mb-0.5">+</span>
+                <span className="text-[9px] text-white/40">Upload</span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      handleVbSelect('image', ev.target?.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }} 
+                />
+              </label>
+            </div>
+          </div>
         </SettingsGroup>
 
         {/* General */}
         <SettingsGroup label="General">
+          <div className="flex flex-col gap-2 pt-2 pb-3">
+            <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--mt-text-muted)" }}>
+              <span>Caption Size</span>
+              <span>{Math.round(captionSize * 100)}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="0.5" 
+              max="2.0" 
+              step="0.1" 
+              value={captionSize} 
+              onChange={(e) => setCaptionSize(parseFloat(e.target.value))}
+              className="w-full accent-brand-green"
+            />
+          </div>
           <SettingsSelect
             icon={<Globe className="w-4 h-4" />}
-            label="Language"
-            options={["English", "French", "Yoruba", "Hausa", "Igbo"].map(l => ({ value: l, label: l }))}
-            value="English"
-            onChange={() => {}}
+            label="Caption Translation"
+            options={[
+              { value: "original", label: "Original Language" },
+              { value: "en", label: "English" },
+              { value: "fr", label: "French" },
+              { value: "es", label: "Spanish" },
+              { value: "de", label: "German" },
+              { value: "zh", label: "Chinese" },
+              { value: "yo", label: "Yoruba" },
+              { value: "ha", label: "Hausa" },
+              { value: "ig", label: "Igbo" }
+            ]}
+            value={translationLanguage}
+            onChange={(val) => setTranslationLanguage(val)}
           />
           <SettingsToggle 
             label="AI Noise Suppression (Premium)" 

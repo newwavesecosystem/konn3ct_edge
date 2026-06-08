@@ -17,24 +17,29 @@ export function ReactionsLayer() {
           {reactions.map((r) => (
             <motion.div
               key={r.id}
-              initial={{ opacity: 1, y: 0, x: 0, scale: 0.5 }}
+              initial={{ opacity: 0, y: 0, x: 0, scale: 0.5 }}
               animate={{
-                opacity: 0,
-                y: -180,
-                x: Math.random() * 60 - 30,
-                scale: 1.2,
+                opacity: [0, 1, 1, 0],
+                y: -450,
+                x: Math.random() * 80 - 40,
+                scale: [0.5, 1.2, 1.2, 1],
               }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 2.5, ease: "easeOut" }}
+              transition={{ 
+                duration: 6.0, 
+                ease: "easeOut",
+                opacity: { times: [0, 0.1, 0.8, 1] }
+              }}
               className="absolute bottom-0 left-0"
             >
-              <div className="flex flex-col items-center">
-                <span className="text-3xl">{r.emoji}</span>
+              <div className="flex flex-col items-center drop-shadow-xl">
+                <span className="text-4xl drop-shadow-md" style={{ filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.3))" }}>{r.emoji}</span>
                 <span
-                  className="text-[10px] font-medium px-2 py-0.5 rounded-full mt-0.5"
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-full mt-1 shadow-md border border-white/10 whitespace-nowrap"
                   style={{
-                    color: "var(--mt-text-muted)",
-                    backgroundColor: "var(--mt-bg-control)",
+                    color: "#ffffff",
+                    backgroundColor: "rgba(0, 0, 0, 0.65)",
+                    backdropFilter: "blur(4px)"
                   }}
                 >
                   {r.senderName.split(" ")[0]}

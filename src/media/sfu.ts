@@ -177,10 +177,12 @@ export function cleanupAudioObserver(roomId: string) {
   }
 }
 
+import { startTranscription } from './transcriber';
+
 /**
  * Create a Producer (client sending media)
  */
-export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string) {
+export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string, userId?: string, userName?: string) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
@@ -196,6 +198,16 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
           logger.warn(`AudioLevelObserver addProducer failed for ${producer.id}:`, e.message);
         }
       });
+    }
+
+    // Start server-side transcription
+    if (userId && userName) {
+      const router = routers.get(roomId);
+      if (router) {
+        startTranscription(producer, router, roomId, userId, userName).catch(e => {
+          logger.error(`Failed to start transcription for ${userId}:`, e);
+        });
+      }
     }
   }
 
