@@ -119,7 +119,9 @@ export class VideoProcessor {
 
             // High-performance 32-bit pixel loop
             for (let i = 0; i < maskArray.length; i++) {
-              if (maskArray[i] > 0) {
+              // In selfie segmentation, mask > 0 is the person, 0 is the background.
+              // So we erase the background by setting it to transparent.
+              if (maskArray[i] === 0) {
                 data32[i] = 0; // Set background pixels to completely transparent (0x00000000)
               }
             }
