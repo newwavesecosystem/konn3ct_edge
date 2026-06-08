@@ -57,6 +57,7 @@ interface MeetingContextValue {
   translationLanguage: string;
   isDonationActive: boolean;
   totalDonations: number;
+  captionSize: number;
 
   // Actions
   toggleMute: () => void;
@@ -69,6 +70,7 @@ interface MeetingContextValue {
   sendDonationSuccess: (amount: number, currency: string) => void;
   setCaptionLanguage: (lang: string) => void;
   setTranslationLanguage: (lang: string) => void;
+  setCaptionSize: (size: number) => void;
   setActivePanel: (panel: SidePanel) => void;
   setHasUnreadChat: (has: boolean) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -235,6 +237,7 @@ export function MeetingProvider({
   const [captions, setCaptions] = useState<CaptionMessage[]>([]);
   const [captionLanguage, setCaptionLanguage] = useState("en-US");
   const [translationLanguage, setTranslationLanguage] = useState("original");
+  const [captionSize, setCaptionSize] = useState(1.0);
   const translationLanguageRef = useRef("original");
   const [isAINoiseSuppressionEnabled, setIsAINoiseSuppressionEnabled] = useState(false);
   
@@ -1407,6 +1410,7 @@ export function MeetingProvider({
         translationLanguage,
         isDonationActive,
         totalDonations,
+        captionSize,
         toggleMute,
         toggleCamera,
         toggleScreenShare,
@@ -1417,6 +1421,7 @@ export function MeetingProvider({
         sendDonationSuccess,
         setCaptionLanguage,
         setTranslationLanguage,
+        setCaptionSize,
         setActivePanel: handleSetActivePanel,
         setHasUnreadChat,
         setLayoutMode,

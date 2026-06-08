@@ -43,7 +43,9 @@ export function SettingsPanel() {
     vbImageUrl,
     handleVbSelect,
     translationLanguage,
-    setTranslationLanguage
+    setTranslationLanguage,
+    captionSize,
+    setCaptionSize
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
@@ -217,6 +219,21 @@ export function SettingsPanel() {
 
         {/* General */}
         <SettingsGroup label="General">
+          <div className="flex flex-col gap-2 pt-2 pb-3">
+            <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--mt-text-muted)" }}>
+              <span>Caption Size</span>
+              <span>{Math.round(captionSize * 100)}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="0.5" 
+              max="2.0" 
+              step="0.1" 
+              value={captionSize} 
+              onChange={(e) => setCaptionSize(parseFloat(e.target.value))}
+              className="w-full accent-brand-green"
+            />
+          </div>
           <SettingsSelect
             icon={<Globe className="w-4 h-4" />}
             label="Caption Translation"
