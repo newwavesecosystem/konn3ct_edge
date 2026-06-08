@@ -94,11 +94,11 @@ export class VideoProcessor {
   private processFrame = () => {
     if (!this.isProcessing || !this.rawStream) return;
 
-    if (this.videoElement.readyState >= 2 && this.segmenter) {
+    if (this.videoElement.readyState >= 2) {
       const { width, height } = this.canvas;
 
-      // Pass-through if mode is none
-      if (this.mode === 'none') {
+      // Pass-through if mode is none OR if segmenter isn't loaded yet (fallback so we don't show a black screen)
+      if (this.mode === 'none' || !this.segmenter) {
         this.ctx.drawImage(this.videoElement, 0, 0, width, height);
         this.animationFrameId = requestAnimationFrame(this.processFrame);
       } else {
@@ -119,10 +119,8 @@ export class VideoProcessor {
 
             // High-performance 32-bit pixel loop
             for (let i = 0; i < maskArray.length; i++) {
-              // In selfie segmentation, mask > 0 is the person, 0 is the background.
-              // So we erase the background by setting it to transparent.
               if (maskArray[i] === 0) {
-                data32[i] = 0; // Set background pixels to completely transparent (0x00000000)
+                data32[i] = 0; 
               }
             }
             this.ctx.putImageData(imageData, 0, 0);
@@ -132,7 +130,6 @@ export class VideoProcessor {
             if (this.mode === 'image' && this.backgroundImage) {
               this.ctx.drawImage(this.backgroundImage, 0, 0, width, height);
             } else if (this.mode === 'blur') {
-              // Native canvas blur effect
               this.ctx.filter = 'blur(15px)';
               this.ctx.drawImage(this.videoElement, 0, 0, width, height);
               this.ctx.filter = 'none';
