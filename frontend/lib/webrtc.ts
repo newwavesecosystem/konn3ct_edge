@@ -801,6 +801,24 @@ export class WebRTCClient {
     }
   }
 
+  public disableMic() {
+    if (this.rawAudioTrack) {
+      this.rawAudioTrack.stop();
+      this.rawAudioTrack = null;
+    }
+    if (this.localAudioProducer) {
+      this.localAudioProducer.close();
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId: this.localAudioProducer.id,
+          appData: { source: 'mic' }
+        }));
+      }
+      this.localAudioProducer = null;
+    }
+  }
+
   public async enableMic(): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
@@ -1074,7 +1092,10 @@ export class WebRTCClient {
     });
     this.pendingRequests.clear();
     
+    this.disableCamera();
+    this.disableMic();
     this.stopScreenShareProducer();
+    
     if (this.sendTransport) this.sendTransport.close();
     if (this.recvTransport) this.recvTransport.close();
     this.sendTransport = null;
