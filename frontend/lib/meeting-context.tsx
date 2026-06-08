@@ -87,6 +87,7 @@ interface MeetingContextValue {
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
   kickUser: (userId: string) => void;
+  changeUserRole: (userId: string, newRole: string) => void;
   forceMuteUser: (userId?: string) => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
@@ -883,6 +884,15 @@ export function MeetingProvider({
           toast.info(`${user.name} joined the meeting`);
         };
 
+        client.onRoleChanged = (userId, newRole) => {
+          setParticipants((prev) => prev.map(p => 
+            p.id === userId ? { ...p, role: newRole as any } : p
+          ));
+          if (userId === initialCurrentUser.id) {
+            toast.info(`Your role has been updated to ${newRole}`);
+          }
+        };
+
         client.onUserLeft = (userId) => {
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
@@ -1356,6 +1366,10 @@ export function MeetingProvider({
     webrtcClient.current?.sendKickUser(userId);
   }, []);
 
+  const changeUserRole = useCallback((userId: string, newRole: string) => {
+    webrtcClient.current?.sendChangeRole(userId, newRole);
+  }, []);
+
   const forceMuteUser = useCallback((userId?: string) => {
     webrtcClient.current?.sendForceMute(userId);
   }, []);
@@ -1438,6 +1452,7 @@ export function MeetingProvider({
         admitUser,
         denyUser,
         kickUser,
+        changeUserRole,
         forceMuteUser,
         endMeetingForAll,
         leaveMeeting,

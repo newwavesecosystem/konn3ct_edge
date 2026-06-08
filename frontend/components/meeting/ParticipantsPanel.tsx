@@ -16,6 +16,8 @@ import {
   X,
   UserMinus,
   Smartphone,
+  Shield,
+  ShieldOff,
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 
@@ -168,9 +170,10 @@ function ParticipantRow({
     .slice(0, 2)
     .toUpperCase();
 
-  const { currentUser, forceMuteUser, kickUser } = useMeeting();
+  const { currentUser, forceMuteUser, kickUser, changeUserRole } = useMeeting();
   const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
   const canManage = isHost && !isMe && participant.role !== 'host';
+  const canMakeCoHost = currentUser.role === 'host' && !isMe && participant.role !== 'host';
 
   return (
     <div className="flex items-center gap-3 px-2 py-2 rounded-xl transition-colors group"
@@ -243,6 +246,24 @@ function ParticipantRow({
         
         {canManage && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+            {canMakeCoHost && participant.role !== 'co-host' && (
+              <button 
+                onClick={() => changeUserRole(participant.id, 'co-host')}
+                title="Make Co-host"
+                className="p-1 rounded-lg hover:bg-blue-500/20 text-blue-400"
+              >
+                <Shield className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {canMakeCoHost && participant.role === 'co-host' && (
+              <button 
+                onClick={() => changeUserRole(participant.id, 'attendee')}
+                title="Remove Co-host"
+                className="p-1 rounded-lg hover:bg-red-500/20 text-red-400"
+              >
+                <ShieldOff className="w-3.5 h-3.5" />
+              </button>
+            )}
             {!participant.isMuted && (
               <button 
                 onClick={() => forceMuteUser(participant.id)}
