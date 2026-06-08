@@ -95,6 +95,11 @@ export class VideoProcessor {
     if (!this.isProcessing || !this.rawStream) return;
 
     if (this.videoElement.readyState >= 2) {
+      if (this.videoElement.videoWidth > 0 && this.canvas.width !== this.videoElement.videoWidth) {
+        this.canvas.width = this.videoElement.videoWidth;
+        this.canvas.height = this.videoElement.videoHeight;
+      }
+      
       const { width, height } = this.canvas;
 
       // Pass-through if mode is none OR if segmenter isn't loaded yet (fallback so we don't show a black screen)
