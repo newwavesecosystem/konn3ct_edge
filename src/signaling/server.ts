@@ -622,6 +622,22 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'change_role':
+        if (client.role === 'host') {
+          const targetClient = rooms.get(roomId)?.get(data.userId);
+          if (targetClient && data.newRole && data.userId !== client.userId) {
+            targetClient.role = data.newRole;
+            logger.info(`Host ${userId} changed role of ${data.userId} to ${data.newRole}`);
+            broadcastToRoom(roomId, { 
+              type: 'role_changed', 
+              userId: targetClient.userId, 
+              role: targetClient.role 
+            });
+            syncRoomStateToRedis(roomId, client.roomSlug);
+          }
+        }
+        break;
+
       case 'force_mute':
         if (client.role === 'host') {
           if (data.userId) {

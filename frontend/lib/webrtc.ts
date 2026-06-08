@@ -43,6 +43,7 @@ export class WebRTCClient {
   public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean }) => void;
   public onUserLeft?: (userId: string) => void;
   public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean }>) => void;
+  public onRoleChanged?: (userId: string, role: string) => void;
   
   // Collaboration Callbacks
   public onChatMessage?: (msg: any) => void;
@@ -221,6 +222,10 @@ export class WebRTCClient {
         case 'user_left':
           this.onUserLeft?.(msg.userId);
           // Cleanup consumers for this user
+          break;
+        case 'role_changed':
+          this.onRoleChanged?.(msg.userId, msg.role);
+          if (msg.userId === this.userId) this.userRole = msg.role;
           break;
         case 'chat':
           this.onChatMessage?.(msg);
@@ -452,6 +457,12 @@ export class WebRTCClient {
   public sendLeaveMeeting() {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'leave_meeting' }));
+    }
+  }
+
+  public sendChangeRole(userId: string, newRole: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'change_role', userId, newRole }));
     }
   }
 
