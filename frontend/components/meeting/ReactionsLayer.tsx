@@ -26,7 +26,7 @@ export function ReactionsLayer() {
               }}
               exit={{ opacity: 0 }}
               transition={{ 
-                duration: 3.5, 
+                duration: 6.0, 
                 ease: "easeOut",
                 opacity: { times: [0, 0.1, 0.8, 1] }
               }}

@@ -620,7 +620,7 @@ export function MeetingProvider({
             timestamp: Date.now(),
           };
           setReactions((prev) => [...prev, reaction]);
-          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), 3000);
+          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), 6000);
         };
 
         client.onPollCreate = (msg) => {
