@@ -13,6 +13,7 @@
  */
 
 import rateLimit from 'express-rate-limit';
+import { Request } from 'express';
 
 /** Standard error handler shared by all limiters */
 const rateLimitHandler = (req: any, res: any) => {
@@ -85,5 +86,5 @@ export const generalLimiter = rateLimit({
   legacyHeaders: false,
   handler: rateLimitHandler,
   // Skip rate limiting for health checks
-  skip: (req) => req.path.startsWith('/health'),
+  skip: (req: Request) => req.path.startsWith('/health'),
 });

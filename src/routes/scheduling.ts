@@ -88,7 +88,7 @@ schedulingRouter.get('/', async (req: Request, res: Response) => {
       select: { id: true }
     });
 
-    const roomIds = rooms.map(r => r.id);
+    const roomIds = rooms.map((r: { id: string }) => r.id);
 
     // Get upcoming sessions
     const sessions = await db.meetingSession.findMany({
