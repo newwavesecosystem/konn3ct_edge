@@ -1018,7 +1018,14 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               }}
               className="w-full h-full"
               iframeClassName="w-full h-full border-0 pointer-events-auto"
-              onReady={(e) => { playerRef.current = e.target; }}
+              onReady={(e) => { 
+                playerRef.current = e.target; 
+                if (ecinemaAction) {
+                  if (ecinemaAction.action === 'play') e.target.playVideo();
+                  else if (ecinemaAction.action === 'pause') e.target.pauseVideo();
+                  if (ecinemaAction.time !== undefined) e.target.seekTo(ecinemaAction.time, true);
+                }
+              }}
               onPlay={handlePlay}
               onPause={handlePause}
             />
