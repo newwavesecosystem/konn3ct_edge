@@ -18,6 +18,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { apiClient } from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
+import * as Clipboard from 'expo-clipboard';
 import {
   Video,
   Plus,
@@ -30,8 +31,8 @@ import {
   X,
   CreditCard,
   Crown,
-  Headset,
   Bell,
+  Copy,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -137,6 +138,11 @@ export default function DashboardScreen({ navigation }: Props) {
     });
   }, []);
 
+  const handleCopyPmi = async () => {
+    await Clipboard.setStringAsync('8846');
+    Alert.alert("Copied!", "Personal Meeting ID copied to clipboard.");
+  };
+
   const handleJoin = () => {
     if (!showJoinInput) {
       setShowJoinInput(true);
@@ -217,10 +223,6 @@ export default function DashboardScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.stickyHeaderRight}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-            <Headset color={COLORS.textPrimary} size={24} />
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
             <Bell color={COLORS.textPrimary} size={24} />
             <View style={styles.notificationBadge}>
@@ -314,8 +316,8 @@ export default function DashboardScreen({ navigation }: Props) {
                 <Text style={styles.pmiLabel}>PERSONAL MEETING ID</Text>
                 <View style={styles.pmiBox}>
                   <Text style={styles.pmiText}>8846</Text>
-                  <TouchableOpacity onPress={() => { /* Handle copy */ }}>
-                    <Text style={{color: 'rgba(255,255,255,0.7)'}}>📋</Text>
+                  <TouchableOpacity onPress={handleCopyPmi} activeOpacity={0.7} style={styles.pmiCopyBtn}>
+                    <Copy size={16} color="rgba(255, 255, 255, 0.8)" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -792,6 +794,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: COLORS.white,
+  },
+  pmiCopyBtn: {
+    padding: 6,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Join Input
