@@ -5,12 +5,21 @@ import { MediasoupService } from '../../webrtc/MediasoupService';
 import { Smile, Paperclip, Send, Download } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { meetingThemeTokens } from '../../theme/meetingTheme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatPanelProps {
   service: MediasoupService | null;
 }
 
-const CHAT_EMOJIS = ["👏", "👍", "👎", "😂", "❤️", "😭", "😍", "😅", "🙏", "👀", "🚀", "💡", "✨", "🎈", "🎵", "☕"];
+const CHAT_EMOJIS = [
+  // Smilies
+  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "☠️", "👽", "👾", "🤖",
+  // Gestures
+  "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝", "🙏",
+  // Objects & Symbols
+  "❤️", "🔥", "✨", "🎉", "💯", "🚀", "💡", "🎈", "🎵", "☕", "⭐", "🌟", "✅", "❌", "❓", "❗", "👀", "🧠", "💼", "📈", "📉", "📌", "📍", "✂️", "🗑️"
+];
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
   const [message, setMessage] = useState('');
@@ -21,6 +30,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
   const currentUserId = useMeetingStore(state => state.currentUserId);
   const participants = useMeetingStore(state => state.participants);
   const addChatMessage = useMeetingStore(state => state.addChatMessage);
+  const theme = useMeetingStore(state => state.theme);
+  const tokens = meetingThemeTokens[theme];
+  const styles = getStyles(tokens);
+  
+  const insets = useSafeAreaInsets();
+  const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
 
   const handleSend = () => {
     if (!message.trim() || !service || isUploading) return;
@@ -128,7 +143,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
                     <Image source={{ uri: msg.fileUrl }} style={styles.attachmentImage} />
                   ) : (
                     <TouchableOpacity style={styles.downloadBtn} onPress={() => Linking.openURL(msg.fileUrl!)}>
-                      <Download size={14} color="#38bdf8" />
+                      <Download size={14} color={tokens.primary} />
                       <Text style={styles.downloadText}>Download File</Text>
                     </TouchableOpacity>
                   )}
@@ -143,27 +158,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
       </ScrollView>
 
       {showEmojis && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiBar}>
-          {CHAT_EMOJIS.map(emoji => (
-            <TouchableOpacity key={emoji} onPress={() => setMessage(prev => prev + emoji)} style={styles.emojiBtn}>
-              <Text style={styles.emojiText}>{emoji}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <View style={styles.emojiPickerContainer}>
+          <ScrollView contentContainerStyle={styles.emojiGrid}>
+            {CHAT_EMOJIS.map(emoji => (
+              <TouchableOpacity key={emoji} onPress={() => setMessage(prev => prev + emoji)} style={styles.emojiGridBtn}>
+                <Text style={styles.emojiGridText}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { paddingBottom: safeBottom + 12 }]}>
         <TouchableOpacity style={styles.iconBtn} onPress={handleFileUpload} disabled={isUploading}>
-          <Paperclip size={20} color={isUploading ? "#64748b" : "#38bdf8"} />
+          <Paperclip size={20} color={isUploading ? tokens.textMuted : tokens.primary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconBtn} onPress={() => setShowEmojis(!showEmojis)}>
-          <Smile size={20} color="#38bdf8" />
+          <Smile size={20} color={tokens.primary} />
         </TouchableOpacity>
         
         <TextInput
           style={styles.input}
           placeholder={isUploading ? "Uploading..." : "Type a message..."}
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={tokens.textMuted}
           value={message}
           onChangeText={setMessage}
           onSubmitEditing={handleSend}
@@ -181,15 +198,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (t: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
     height: '70%',
-    backgroundColor: '#1e293b',
+    backgroundColor: t.bgElevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: t.shadowOpacity, shadowRadius: 10, elevation: 10,
     zIndex: 100,
   },
   header: {
@@ -198,44 +215,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155'
+    borderBottomColor: t.border
   },
-  title: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  title: { color: t.textPrimary, fontSize: 18, fontWeight: 'bold' },
   closeBtn: { padding: 4 },
-  closeText: { color: '#94a3b8', fontSize: 20 },
+  closeText: { color: t.textMuted, fontSize: 20 },
   messagesContainer: { flex: 1, padding: 16 },
   messageBubble: { padding: 12, borderRadius: 12, marginBottom: 12, maxWidth: '85%' },
-  messageBubbleMe: { backgroundColor: '#0284c7', alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-  messageBubbleOther: { backgroundColor: '#334155', alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
+  messageBubbleMe: { backgroundColor: t.messageMeBg, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
+  messageBubbleOther: { backgroundColor: t.messageOtherBg, alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: t.border },
   msgHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4, alignItems: 'center', gap: 12 },
-  msgSender: { color: '#38bdf8', fontWeight: 'bold', fontSize: 14 },
-  msgTime: { color: '#94a3b8', fontSize: 10 },
-  msgText: { color: 'white', fontSize: 15 },
-  emptyText: { color: '#64748b', textAlign: 'center', marginTop: 20, fontStyle: 'italic' },
-  attachmentBox: { marginTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 8 },
+  msgSender: { color: t.primary, fontWeight: 'bold', fontSize: 14 },
+  msgTime: { color: t.textMuted, fontSize: 10 },
+  msgText: { color: t.textPrimary, fontSize: 15 },
+  emptyText: { color: t.textMuted, textAlign: 'center', marginTop: 20, fontStyle: 'italic' },
+  attachmentBox: { marginTop: 8, borderTopWidth: 1, borderTopColor: t.border, paddingTop: 8 },
   attachmentImage: { width: '100%', height: 150, borderRadius: 8, resizeMode: 'cover' },
   downloadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  downloadText: { color: '#38bdf8', fontSize: 12, textDecorationLine: 'underline' },
-  emojiBar: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#0f172a', borderTopWidth: 1, borderTopColor: '#334155', maxHeight: 50 },
-  emojiBtn: { paddingHorizontal: 8, justifyContent: 'center' },
-  emojiText: { fontSize: 22 },
+  downloadText: { color: t.primary, fontSize: 12, textDecorationLine: 'underline' },
+  emojiPickerContainer: {
+    height: 180,
+    backgroundColor: t.bg,
+    borderTopWidth: 1,
+    borderTopColor: t.border,
+  },
+  emojiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+  },
+  emojiGridBtn: {
+    width: '12.5%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiGridText: {
+    fontSize: 24,
+  },
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
     borderTopWidth: 1,
-    borderTopColor: '#334155',
+    borderTopColor: t.border,
     alignItems: 'center',
     gap: 8,
   },
   iconBtn: { padding: 4 },
   input: {
     flex: 1,
-    backgroundColor: '#0f172a',
-    color: 'white',
+    backgroundColor: t.inputBg,
+    color: t.textPrimary,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: t.border,
   },
-  sendBtn: { backgroundColor: '#3b82f6', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  sendBtnDisabled: { backgroundColor: '#334155' },
+  sendBtn: { backgroundColor: t.primary, width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  sendBtnDisabled: { backgroundColor: t.messageOtherBg },
 });
