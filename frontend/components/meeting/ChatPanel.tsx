@@ -146,7 +146,7 @@ export function ChatPanel() {
               </div>
               <div
                 className={cn(
-                  "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed",
+                  "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
                   isMe
                     ? "bg-brand-green/80 text-white rounded-br-md"
                     : "rounded-bl-md"
@@ -245,13 +245,19 @@ export function ChatPanel() {
             )}
           </div>
 
-          <input
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
             placeholder={isUploading ? "Uploading..." : "Type a message..."}
             disabled={isUploading}
-            className="flex-1 bg-transparent text-sm py-2 px-1 outline-none min-w-0"
+            rows={1}
+            className="flex-1 bg-transparent text-sm py-2 px-1 outline-none min-w-0 resize-none max-h-32 overflow-y-auto"
             style={{ color: "var(--mt-text)" }}
           />
           <button

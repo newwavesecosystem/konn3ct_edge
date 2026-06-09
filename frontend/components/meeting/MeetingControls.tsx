@@ -156,14 +156,6 @@ export function MeetingControls() {
             tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
           />
 
-          {isHost && (
-            <ControlBtn
-              icon={<Gift className={cn("w-5 h-5", isDonationActive && "text-brand-green")} />}
-              active={isDonationActive}
-              onClick={() => toggleDonation()}
-              tooltip={isDonationActive ? "Stop Offering" : "Start Offering"}
-            />
-          )}
           {isDonationActive && (
             <ControlBtn
               icon={<Gift className="w-5 h-5" />}
@@ -273,7 +265,7 @@ export function MeetingControls() {
                   {isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
-                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
                   )}
@@ -331,7 +323,7 @@ export function MeetingControls() {
                   {isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
-                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
                   )}
@@ -389,14 +381,13 @@ export function MeetingControls() {
             ))}
           </div>
 
-          {/* Konn3ct AI panel toggle 
+          {/* Konn3ct AI panel toggle */}
           <PanelBtn
             icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
             active={activePanel === "ai"}
             onClick={() => setActivePanel("ai")}
             tooltip="Konn3ct AI"
           />
-          */}
           <PanelBtn
             icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}

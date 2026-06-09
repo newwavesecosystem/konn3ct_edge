@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { VideoProcessor, VirtualBackgroundMode } from "@/lib/video-processor";
 import {
   Mic,
   MicOff,
@@ -17,6 +18,7 @@ import {
   Loader2,
   Wifi,
   WifiOff,
+  Volume2,
 } from "lucide-react";
 
 export default function JoinPage({
@@ -34,8 +36,24 @@ export default function JoinPage({
   const [isJoining, setIsJoining] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [vbMode, setVbMode] = useState<VirtualBackgroundMode>('none');
+  const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
+  const [volumeLevel, setVolumeLevel] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<VideoProcessor | null>(null);
+
+  const [devices, setDevices] = useState<{
+    audioInputs: MediaDeviceInfo[];
+    videoInputs: MediaDeviceInfo[];
+    audioOutputs: MediaDeviceInfo[];
+  }>({ audioInputs: [], videoInputs: [], audioOutputs: [] });
+  const [selectedDevices, setSelectedDevices] = useState({
+    audioInput: "",
+    videoInput: "",
+    audioOutput: "",
+  });
 
   const roomName = resolvedParams.roomSlug
     .replace(/-/g, " ")
@@ -45,11 +63,11 @@ export default function JoinPage({
   useEffect(() => {
     const checkServer = async () => {
       try {
-        // Ping the server to check if it's reachable. We use isBot: true to bypass the pre-join session requirement for this simple ping.
+        // Ping the server to check if it's reachable. We use isPing: true to bypass the pre-join session requirement for this simple ping.
         const res = await fetch("/api/join", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId: resolvedParams.roomSlug, isBot: true }),
+          body: JSON.stringify({ roomId: resolvedParams.roomSlug, isPing: true }),
           signal: AbortSignal.timeout(5000),
         });
         const data = await res.json();
@@ -61,6 +79,138 @@ export default function JoinPage({
     checkServer();
   }, [resolvedParams.roomSlug]);
 
+  useEffect(() => {
+    const getDevices = async () => {
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const dev = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = dev.filter(d => d.kind === 'audioinput');
+        const audioOutputs = dev.filter(d => d.kind === 'audiooutput');
+        const videoInputs = dev.filter(d => d.kind === 'videoinput');
+        
+        setDevices({ audioInputs, audioOutputs, videoInputs });
+        
+        const saved = sessionStorage.getItem("conn3ct_devices");
+        if (saved) {
+          setSelectedDevices(JSON.parse(saved));
+        } else {
+          setSelectedDevices({
+            audioInput: audioInputs[0]?.deviceId || "",
+            audioOutput: audioOutputs[0]?.deviceId || "",
+            videoInput: videoInputs[0]?.deviceId || "",
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to enumerate devices", err);
+      }
+    };
+    getDevices();
+  }, []);
+
+  useEffect(() => {
+    if (!processorRef.current) {
+      processorRef.current = new VideoProcessor();
+    }
+    
+    // Load persisted VB setting
+    const saved = sessionStorage.getItem("mtg_vb");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setVbMode(parsed.mode);
+        setVbImageUrl(parsed.image);
+        processorRef.current.setMode(parsed.mode, parsed.image);
+      } catch (e) {}
+    }
+    
+    return () => {
+      processorRef.current?.stopProcessing();
+    };
+  }, []);
+
+  const handleVbSelect = (mode: VirtualBackgroundMode, url?: string) => {
+    setVbMode(mode);
+    setVbImageUrl(url);
+    processorRef.current?.setMode(mode, url);
+    sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: url }));
+    
+    if (streamRef.current) {
+      const processed = processorRef.current!.startProcessing(streamRef.current);
+      if (videoRef.current) videoRef.current.srcObject = processed;
+    }
+  };
+
+  const handleCustomUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      handleVbSelect('image', ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Audio meter logic
+  useEffect(() => {
+    let animationFrameId: number;
+    let audioContext: AudioContext;
+    let analyser: AnalyserNode;
+
+    const startMic = async () => {
+      try {
+        const constraints: MediaStreamConstraints = { audio: true };
+        if (selectedDevices.audioInput) {
+          constraints.audio = { deviceId: { exact: selectedDevices.audioInput } };
+        }
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        micStreamRef.current = stream;
+
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioContext = new AudioContextClass();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const updateVolume = () => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const average = sum / dataArray.length;
+          
+          // Smoothly map 0-255 to 0-100%
+          const level = Math.min(100, Math.round((average / 128) * 100));
+          setVolumeLevel(level);
+
+          animationFrameId = requestAnimationFrame(updateVolume);
+        };
+        updateVolume();
+      } catch (err) {
+        console.warn("Failed to get mic for volume meter", err);
+      }
+    };
+
+    if (!isMuted) {
+      startMic();
+    } else {
+      setVolumeLevel(0);
+    }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (audioContext && audioContext.state !== 'closed') audioContext.close();
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(t => t.stop());
+        micStreamRef.current = null;
+      }
+    };
+  }, [isMuted, selectedDevices.audioInput]);
+
   // Attempt camera preview
   useEffect(() => {
     if (!isCameraOn) {
@@ -69,20 +219,33 @@ export default function JoinPage({
       if (videoRef.current) videoRef.current.srcObject = null;
       return;
     }
+    const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    const constraints: MediaStreamConstraints = { 
+      video: isMobileDevice ? { facingMode: "user" } : true 
+    };
+    
+    if (selectedDevices.videoInput) {
+      if (typeof constraints.video === "object") {
+        constraints.video = { ...constraints.video, deviceId: { exact: selectedDevices.videoInput } };
+      } else {
+        constraints.video = { deviceId: { exact: selectedDevices.videoInput } };
+      }
+    }
     navigator.mediaDevices
-      .getUserMedia({ video: true })
+      .getUserMedia(constraints)
       .then((stream) => {
         streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        const processed = processorRef.current!.startProcessing(stream);
+        if (videoRef.current) videoRef.current.srcObject = processed;
       })
       .catch(() => {
-        // Camera not available – silently degrade
         setIsCameraOn(false);
       });
     return () => {
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
-  }, [isCameraOn]);
+  }, [isCameraOn, selectedDevices.videoInput]);
 
   const handleJoin = async () => {
     if (!name.trim() || isJoining) return;
@@ -180,6 +343,18 @@ export default function JoinPage({
                     {name} (You)
                   </div>
                 )}
+                {/* Audio Meter */}
+                {!isMuted && (
+                  <div className="absolute bottom-[4.5rem] right-3 flex items-center gap-2 bg-black/40 px-2 py-1.5 rounded-md shadow-md backdrop-blur-sm">
+                    <Mic className="w-3 h-3 text-white/70" />
+                    <div className="w-16 h-1.5 bg-black/40 rounded-full overflow-hidden flex">
+                      <div 
+                        className="h-full bg-brand-green transition-all duration-75"
+                        style={{ width: `${volumeLevel}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 {/* Preview controls */}
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
                   <button
@@ -205,6 +380,31 @@ export default function JoinPage({
                     {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
                   </button>
                   <button
+                    onClick={async () => {
+                      try {
+                        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                        if (selectedDevices.audioOutput && typeof (audioCtx as any).setSinkId === 'function') {
+                          await (audioCtx as any).setSinkId(selectedDevices.audioOutput);
+                        }
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+                        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.3);
+                      } catch (e) { }
+                    }}
+                    title="Test Speaker"
+                    className="w-11 h-11 rounded-xl flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/15 transition-all duration-200 active:scale-90"
+                  >
+                    <Volume2 className="w-5 h-5" />
+                  </button>
+                  <button
                     onClick={() => setShowSettings(!showSettings)}
                     className="w-11 h-11 rounded-xl flex items-center justify-center bg-white/10 text-white/80 hover:bg-white/15 transition-all duration-200 active:scale-90"
                   >
@@ -213,16 +413,101 @@ export default function JoinPage({
                 </div>
               </div>
 
-              {/* Device selectors */}
+              {/* Device selectors & Settings */}
               {showSettings && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   className="mt-3 bg-white/5 rounded-xl p-4 border border-white/5 space-y-3"
                 >
-                  <DeviceSelect label="Camera" options={["Default Camera"]} />
-                  <DeviceSelect label="Microphone" options={["Default Microphone"]} />
-                  <DeviceSelect label="Speaker" options={["Default Speaker"]} />
+                  <DeviceSelect 
+                    label="Camera" 
+                    options={devices.videoInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Camera' }))} 
+                    value={selectedDevices.videoInput}
+                    onChange={(val) => {
+                      const newDevs = { ...selectedDevices, videoInput: val };
+                      setSelectedDevices(newDevs);
+                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                    }}
+                  />
+                  <DeviceSelect 
+                    label="Microphone" 
+                    options={devices.audioInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Microphone' }))} 
+                    value={selectedDevices.audioInput}
+                    onChange={(val) => {
+                      const newDevs = { ...selectedDevices, audioInput: val };
+                      setSelectedDevices(newDevs);
+                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                    }}
+                  />
+                  <DeviceSelect 
+                    label="Speaker" 
+                    options={devices.audioOutputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Speaker' }))} 
+                    value={selectedDevices.audioOutput}
+                    onChange={(val) => {
+                      const newDevs = { ...selectedDevices, audioOutput: val };
+                      setSelectedDevices(newDevs);
+                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                    }}
+                  />
+
+                  {/* Virtual Background Selection UI */}
+                  {isCameraOn && (
+                    <div className="pt-4 mt-2 border-t border-white/10">
+                      <label className="block text-[11px] text-white/30 mb-2 font-medium">
+                        Virtual Background
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        <button
+                          onClick={() => handleVbSelect('none')}
+                          className={cn(
+                            "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14",
+                            vbMode === 'none' ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                          )}
+                        >
+                          <span className="text-[10px] text-white">None</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => handleVbSelect('blur')}
+                          className={cn(
+                            "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 relative overflow-hidden",
+                            vbMode === 'blur' ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                          )}
+                        >
+                          <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
+                          <span className="relative z-10 text-[10px] text-white">Blur</span>
+                        </button>
+                        
+                        {[
+                          '/backgrounds/modern_office.png',
+                          '/backgrounds/cozy_cafe.png',
+                          '/backgrounds/minimalist_gradient.png'
+                        ].map((url, i) => (
+                          <button
+                            key={url}
+                            onClick={() => handleVbSelect('image', url)}
+                            className={cn(
+                              "rounded-xl overflow-hidden transition-all h-14",
+                              vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
+                            )}
+                          >
+                            <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
+                          </button>
+                        ))}
+
+                        {/* Custom Upload */}
+                        <label className={cn(
+                          "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
+                          vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
+                        )}>
+                          <span className="text-lg text-white/50 leading-none mb-0.5">+</span>
+                          <span className="text-[9px] text-white/40">Upload</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={handleCustomUpload} />
+                        </label>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>
@@ -328,9 +613,13 @@ export default function JoinPage({
 function DeviceSelect({
   label,
   options,
+  value,
+  onChange
 }: {
   label: string;
-  options: string[];
+  options: { label: string, value: string }[];
+  value: string;
+  onChange: (val: string) => void;
 }) {
   return (
     <div>
@@ -338,10 +627,14 @@ function DeviceSelect({
         {label}
       </label>
       <div className="relative">
-        <select className="w-full bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-xs text-white/70 outline-none focus:border-brand-green/40 transition-colors appearance-none pr-8">
+        <select 
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-xs text-white/70 outline-none focus:border-brand-green/40 transition-colors appearance-none pr-8"
+        >
           {options.map((o) => (
-            <option key={o} value={o} className="bg-[#1a1a2e]">
-              {o}
+            <option key={o.value} value={o.value} className="bg-[#1a1a2e]">
+              {o.label}
             </option>
           ))}
         </select>
