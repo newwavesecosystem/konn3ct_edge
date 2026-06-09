@@ -129,7 +129,21 @@ const roomECinema = new Map<string, string | null>();
 const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 
-async function syncRoomStateToRedis(roomId: string, roomSlug: string) {
+const syncRoomTimeouts = new Map<string, NodeJS.Timeout>();
+
+export function syncRoomStateToRedis(roomId: string, roomSlug: string) {
+  const existingTimeout = syncRoomTimeouts.get(roomId);
+  if (existingTimeout) clearTimeout(existingTimeout);
+  
+  const timeout = setTimeout(() => {
+    executeSyncRoomStateToRedis(roomId, roomSlug);
+    syncRoomTimeouts.delete(roomId);
+  }, 1000); // 1 second debounce
+  
+  syncRoomTimeouts.set(roomId, timeout);
+}
+
+async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
   try {
     const clients = rooms.get(roomId);
     if (!clients || clients.size === 0) {
