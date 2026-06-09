@@ -8,7 +8,7 @@ import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService'
 import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
-import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, RefreshCw, Sun, Moon } from 'lucide-react-native';
+import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, SwitchCamera, Sun, Moon, Lock } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import PipAndroid from 'react-native-pip-android';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,6 +49,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const styles = getStyles(tokens);
   
   const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
+  const safeTop = insets.top > 0 ? insets.top + 8 : 16;
 
   const activeScreenShare = remoteStreams.find(p => p.screenStream != null);
 
@@ -329,23 +330,37 @@ export default function MeetingScreen({ route, navigation }: Props) {
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {!isPipMode && <ReactionsLayer />}
       
+      {/* Top Scrim Gradient */}
+      {!isPipMode && (
+        <LinearGradient
+          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.08)', 'transparent']}
+          style={styles.topScrim}
+          pointerEvents="none"
+        />
+      )}
+
       {/* Top Overlay */}
       {!isPipMode && (
-        <View style={styles.topOverlay} pointerEvents="box-none">
+        <View style={[styles.topOverlay, { top: safeTop }]} pointerEvents="box-none">
           <View style={styles.infoPill}>
             <View style={styles.lockIconContainer}>
-              <Text style={styles.lockIcon}>🔒</Text>
+              <Lock size={12} color={tokens.primary} strokeWidth={2.5} />
             </View>
             <Text style={styles.infoTitle} numberOfLines={1}>{roomId || 'Product Sync'}</Text>
-            <View style={styles.infoDot} />
-            <Text style={styles.infoTime}>{isConnected ? 'Active' : 'Wait'}</Text>
+            <View style={[
+              styles.infoDot,
+              isConnected ? styles.infoDotActive : styles.infoDotInactive
+            ]} />
+            <Text style={[styles.infoTime, isConnected && { color: tokens.success, fontWeight: '600' }]}>
+              {isConnected ? 'Active' : 'Wait'}
+            </Text>
           </View>
           <View style={styles.topRightActions}>
-            <TouchableOpacity style={styles.topActionBtn} onPress={copyMeetingLink}>
-              <Copy size={18} color={tokens.textPrimary} />
+            <TouchableOpacity style={styles.topActionBtn} activeOpacity={0.7} onPress={copyMeetingLink}>
+              <Copy size={16} color={tokens.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.topActionBtn} onPress={() => serviceRef.current?.switchCamera()}>
-              <RefreshCw size={18} color={tokens.textPrimary} />
+            <TouchableOpacity style={styles.topActionBtn} activeOpacity={0.7} onPress={() => serviceRef.current?.switchCamera()}>
+              <SwitchCamera size={16} color={tokens.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -742,15 +757,17 @@ const getStyles = (t: any) => StyleSheet.create({
   leaveText: { color: t.textInverse, fontWeight: '600', fontSize: 15 },
   
   // Top Overlay
-  topOverlay: { position: 'absolute', top: 16, left: 16, right: 16, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: t.toolbarBg, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity, shadowRadius: 4, elevation: 2 },
-  lockIconContainer: { marginRight: 6 },
-  lockIcon: { fontSize: 14 },
-  infoTitle: { fontFamily: 'Inter', fontSize: 14, fontWeight: '600', color: t.textPrimary, maxWidth: 120 },
-  infoDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: t.textMuted, marginHorizontal: 8 },
-  infoTime: { fontFamily: 'Inter', fontSize: 12, fontWeight: '500', color: t.textSecondary },
+  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: Platform.OS === 'android' ? 100 : 120, zIndex: 15 },
+  topOverlay: { position: 'absolute', left: 16, right: 16, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: t.toolbarBg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity * 0.5, shadowRadius: 3, elevation: 1 },
+  lockIconContainer: { marginRight: 6, justifyContent: 'center', alignItems: 'center' },
+  infoTitle: { fontFamily: 'Inter', fontSize: 13, fontWeight: '600', color: t.textPrimary, maxWidth: 120 },
+  infoDot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 8 },
+  infoDotActive: { backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4, elevation: 2 },
+  infoDotInactive: { backgroundColor: t.textMuted },
+  infoTime: { fontFamily: 'Inter', fontSize: 11, fontWeight: '500', color: t.textSecondary },
   topRightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  topActionBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: t.toolbarBg, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity, shadowRadius: 4, elevation: 2 },
+  topActionBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: t.toolbarBg, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity * 0.5, shadowRadius: 3, elevation: 1 },
   
   // Screen Share
   screenShareContainer: { height: 340, backgroundColor: '#000', width: '100%' },
