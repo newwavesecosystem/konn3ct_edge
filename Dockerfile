@@ -21,9 +21,10 @@ RUN npm run build
 # --- Production Image ---
 FROM node:20-bullseye-slim
 
-# Mediasoup requires python3 runtime for some internal tasks
+# Mediasoup requires python3 runtime for some internal tasks, ffmpeg for transcription
 RUN apt-get update && apt-get install -y \
     python3 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -41,7 +42,7 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Expose WebRTC UDP/TCP Ports for Mediasoup
-EXPOSE 10000-10100/udp
-EXPOSE 10000-10100/tcp
+EXPOSE 10000-59999/udp
+EXPOSE 10000-59999/tcp
 
 CMD ["node", "dist/server.js"]

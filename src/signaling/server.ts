@@ -9,6 +9,7 @@ import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
+import { transcriberEvents } from '../media/transcriber';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
@@ -47,16 +48,26 @@ redisSubscriber.on('message', async (channel, message) => {
       // For now, we will create a new recording record for the room
       const room = await db.room.findUnique({ where: { id: data.roomId } });
       if (room) {
-        await db.recording.create({
-          data: {
-            ownerId: room.ownerId,
-            title: `${room.name} Recording`,
-            roomId: data.roomId,
-            url: data.recordingUrl,
-            status: 'completed',
-            duration: 0, // Duration tracking can be enhanced later
-          }
-        });
+        if (data.recordingId) {
+          await db.recording.update({
+            where: { id: data.recordingId },
+            data: {
+              url: data.recordingUrl,
+              status: 'completed'
+            }
+          });
+        } else {
+          await db.recording.create({
+            data: {
+              ownerId: room.ownerId,
+              title: `${room.name} Recording`,
+              roomId: data.roomId,
+              url: data.recordingUrl,
+              status: 'completed',
+              duration: 0,
+            }
+          });
+        }
         logger.info(`Saved recording ${data.recordingUrl} to DB for room ${data.roomId}`);
       }
       
@@ -107,6 +118,7 @@ interface Client {
   transports: string[];
   isMobile: boolean;
   maxActiveCameras?: number;
+  maxParticipants?: number;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -114,7 +126,8 @@ const roomProducers = new Map<string, Array<{ producerId: string, userId: string
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
-const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
+const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
+export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 
 async function syncRoomStateToRedis(roomId: string, roomSlug: string) {
   try {
@@ -186,6 +199,31 @@ async function generateMeetingSummary(roomId: string) {
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
+
+  transcriberEvents.on('caption', (data) => {
+    const { roomId, userId, name, text, isFinal, lang } = data;
+    logger.info(`[SIGNALING] Broadcasting caption to room ${roomId} for user ${userId}: "${text}"`);
+    
+    if (isFinal) {
+      if (!roomTranscripts.has(roomId)) {
+        roomTranscripts.set(roomId, []);
+      }
+      roomTranscripts.get(roomId)!.push({
+        name,
+        text,
+        timestamp: Date.now()
+      });
+    }
+
+    broadcastToRoom(roomId, {
+      type: 'caption',
+      userId,
+      name,
+      text,
+      isFinal,
+      lang
+    });
+  });
 
   // Periodically report CPU load to Redis and Broadcast Degradation (Method 1 & 2)
   setInterval(async () => {
@@ -274,6 +312,7 @@ export function initializeSignaling(server: Server) {
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
           maxActiveCameras: (decoded as any).maxActiveCameras ?? 15,
+          maxParticipants: maxParticipants,
         });
       });
     } catch (error) {
@@ -289,7 +328,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras };
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -333,7 +372,8 @@ export function initializeSignaling(server: Server) {
         userId: client.userId,
         name: client.name,
         role: client.role,
-        roomName
+        roomName,
+        maxParticipants: client.maxParticipants
       }));
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
@@ -358,7 +398,8 @@ export function initializeSignaling(server: Server) {
         userId: client.userId,
         name: client.name,
         role: client.role,
-        roomName
+        roomName,
+        maxParticipants: client.maxParticipants
       }));
 
       if (client.status === 'active') {
@@ -418,6 +459,20 @@ export function initializeSignaling(server: Server) {
               const eCinemaLink = roomECinema.get(roomId);
               if (eCinemaLink) {
                 ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
+                
+                const eState = roomECinemaState.get(roomId);
+                if (eState) {
+                  let currentTime = eState.time;
+                  if (eState.action === 'play') {
+                    currentTime += (Date.now() - eState.serverTime) / 1000;
+                  }
+                  // Send a delayed action to ensure the player has time to load
+                  setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+                    }
+                  }, 2000);
+                }
               }
             }
           } catch (e) {
@@ -715,28 +770,8 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'caption':
-        if (!data.text || typeof data.text !== 'string' || data.text.length > 2000) return;
-        if (data.lang && typeof data.lang === 'string' && !/^[a-z]{2}(-[A-Z]{2})?$/.test(data.lang)) return;
-
-        if (data.isFinal) {
-          if (!roomTranscripts.has(roomId)) {
-            roomTranscripts.set(roomId, []);
-          }
-          roomTranscripts.get(roomId)!.push({
-            name: client.name,
-            text: data.text,
-            timestamp: Date.now()
-          });
-        }
-        
-        // In the future, we can append this to the MeetingTranscript in the database for AI Summary.
-        broadcastToRoom(roomId, {
-          type: 'caption',
-          userId,
-          text: data.text,
-          isFinal: data.isFinal,
-          lang: data.lang
-        }, userId);
+        // Client-side captions are deprecated in favor of server-side Deepgram.
+        // We safely ignore any straggler caption events from older clients.
         break;
 
       case 'ecinema_update':
@@ -752,6 +787,8 @@ export function initializeSignaling(server: Server) {
               client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid eCinema URL.' }));
               return;
             }
+          } else {
+            roomECinemaState.delete(roomId);
           }
           roomECinema.set(roomId, data.link || null);
           broadcastToRoom(roomId, {
@@ -763,6 +800,7 @@ export function initializeSignaling(server: Server) {
 
       case 'ecinema_action':
         if (client.role === 'host' || client.role === 'presenter') {
+          roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
             action: data.action,
@@ -908,7 +946,8 @@ export function initializeSignaling(server: Server) {
             if (room) {
               const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
               const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-              const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true`;
+              const botSecret = process.env.BOT_SECRET || '';
+              const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true&botSecret=${botSecret}`;
               
               const pushed = await redis.lpush('recorder:queue', JSON.stringify({
                 roomId,
@@ -1005,7 +1044,7 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId);
+        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name);
 
         // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
