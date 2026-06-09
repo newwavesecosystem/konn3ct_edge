@@ -4,10 +4,23 @@ registerGlobals();
 // @ts-ignore
 
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
+import { useAlertStore } from './src/store/useAlertStore';
+import { CustomAlert } from './src/components/CustomAlert';
+
+// Override React Native's default Alert.alert globally with modern custom modal dialogs
+Alert.alert = (title, message, buttons) => {
+  const formattedButtons = buttons?.map(btn => ({
+    text: btn.text || 'OK',
+    onPress: btn.onPress,
+    style: btn.style,
+  })) || [{ text: 'OK' }];
+
+  useAlertStore.getState().showAlert(title || '', message || '', formattedButtons);
+};
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import MainTabNavigator from './src/navigation/MainTabNavigator';
@@ -160,6 +173,7 @@ export default function App() {
             <AuthStackNavigator />
           )}
         </NavigationContainer>
+        <CustomAlert />
       </SafeAreaProvider>
     </ErrorBoundary>
   );
