@@ -57,7 +57,8 @@ interface MeetingState {
   isHandRaisedLocally: boolean;
 
   // Active UI Panes
-  activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs';
+  activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation';
+  theme: 'sage' | 'midnight';
   
   // Actions
   setCurrentUser: (userId: string, role: string) => void;
@@ -76,7 +77,8 @@ interface MeetingState {
   setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
-  setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs') => void;
+  setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation') => void;
+  setTheme: (theme: 'sage' | 'midnight') => void;
   setCaptions: (updater: (curr: CaptionMessage[]) => CaptionMessage[]) => void;
   reset: () => void;
 }
@@ -90,11 +92,13 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   captions: [],
   unreadChatCount: 0,
   activePane: 'none',
+  theme: 'sage',
   currentUserRole: null,
   currentUserId: null,
   isHandRaisedLocally: false,
 
   setCurrentUser: (userId, role) => set({ currentUserId: userId, currentUserRole: role }),
+  setTheme: (theme) => set({ theme }),
   setIsHandRaisedLocally: (isRaised) => set({ isHandRaisedLocally: isRaised }),
   setCaptions: (updater) => set((state) => ({ captions: updater(state.captions) })),
 
@@ -185,6 +189,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     reactions: [],
     unreadChatCount: 0,
     activePane: 'none',
+    theme: 'sage',
     currentUserRole: null,
     currentUserId: null,
     isHandRaisedLocally: false

@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { useMeetingStore } from '../../store/useMeetingStore';
 import { MediasoupService } from '../../webrtc/MediasoupService';
+import { meetingThemeTokens } from '../../theme/meetingTheme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Platform } from 'react-native';
 
 interface PollsPanelProps {
   service: MediasoupService | null;
@@ -13,6 +16,12 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
   const currentUserRole = useMeetingStore(state => state.currentUserRole);
   
   const isHost = currentUserRole === 'host';
+  const theme = useMeetingStore(state => state.theme);
+  const tokens = meetingThemeTokens[theme];
+  const styles = getStyles(tokens);
+  
+  const insets = useSafeAreaInsets();
+  const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
   const [isCreating, setIsCreating] = useState(false);
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
@@ -44,7 +53,7 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: safeBottom + 16 }}>
         {isHost && !isCreating && (
           <TouchableOpacity style={styles.createBtn} onPress={() => setIsCreating(true)}>
             <Text style={styles.createText}>+ Create New Poll</Text>
@@ -57,7 +66,7 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
             <TextInput
               style={styles.input}
               placeholder="E.g. What should we build next?"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={tokens.textMuted}
               value={question}
               onChangeText={setQuestion}
             />
@@ -67,7 +76,7 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
                 key={idx}
                 style={styles.input}
                 placeholder={`Option ${idx + 1}`}
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={tokens.textMuted}
                 value={opt}
                 onChangeText={text => {
                   const newOpts = [...options];
@@ -130,15 +139,15 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (t: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
     height: '70%',
-    backgroundColor: '#1e293b',
+    backgroundColor: t.bgElevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: t.shadowOpacity, shadowRadius: 10, elevation: 10,
     zIndex: 100,
   },
   header: {
@@ -147,43 +156,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155'
+    borderBottomColor: t.border
   },
-  title: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  title: { color: t.textPrimary, fontSize: 18, fontWeight: 'bold' },
   closeBtn: { padding: 4 },
-  closeText: { color: '#94a3b8', fontSize: 20 },
+  closeText: { color: t.textMuted, fontSize: 20 },
   content: { flex: 1, padding: 16 },
   createBtn: {
-    backgroundColor: '#10b981',
+    backgroundColor: t.primary,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 16,
   },
-  createText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-  createForm: { backgroundColor: '#0f172a', padding: 16, borderRadius: 12 },
-  label: { color: '#94a3b8', marginBottom: 8, fontWeight: 'bold' },
+  createText: { color: t.textInverse, fontWeight: 'bold', fontSize: 16 },
+  createForm: { backgroundColor: t.bgElevated, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: t.border },
+  label: { color: t.textSecondary, marginBottom: 8, fontWeight: 'bold' },
   input: {
-    backgroundColor: '#1e293b',
-    color: 'white',
+    backgroundColor: t.inputBg,
+    color: t.textPrimary,
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: t.border,
   },
   addOptionBtn: { padding: 8, alignItems: 'center' },
-  addOptionText: { color: '#38bdf8', fontWeight: 'bold' },
+  addOptionText: { color: t.primary, fontWeight: 'bold' },
   formActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16 },
   cancelBtn: { padding: 12, marginRight: 8 },
-  cancelText: { color: '#94a3b8', fontWeight: 'bold' },
-  submitBtn: { backgroundColor: '#10b981', padding: 12, borderRadius: 8 },
-  submitText: { color: 'white', fontWeight: 'bold' },
-  pollCard: { backgroundColor: '#0f172a', padding: 16, borderRadius: 12, marginBottom: 16 },
-  pollQuestion: { color: 'white', fontSize: 16, fontWeight: 'bold', marginBottom: 16 },
+  cancelText: { color: t.textMuted, fontWeight: 'bold' },
+  submitBtn: { backgroundColor: t.primary, padding: 12, borderRadius: 8 },
+  submitText: { color: t.textInverse, fontWeight: 'bold' },
+  pollCard: { backgroundColor: t.bgElevated, padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: t.border },
+  pollQuestion: { color: t.textPrimary, fontSize: 16, fontWeight: 'bold', marginBottom: 16 },
   optionRow: { marginBottom: 12 },
   optionContent: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  optionText: { color: 'white' },
-  optionVotes: { color: '#94a3b8', fontSize: 12 },
-  progressTrack: { height: 6, backgroundColor: '#1e293b', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#38bdf8', borderRadius: 3 },
-  emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontStyle: 'italic' }
+  optionText: { color: t.textPrimary },
+  optionVotes: { color: t.textMuted, fontSize: 12 },
+  progressTrack: { height: 6, backgroundColor: t.bg, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: t.primary, borderRadius: 3 },
+  emptyText: { color: t.textMuted, textAlign: 'center', marginTop: 40, fontStyle: 'italic' }
 });

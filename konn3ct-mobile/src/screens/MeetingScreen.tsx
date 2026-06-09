@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { mediaDevices, RTCView, MediaStream } from 'react-native-webrtc';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService';
 import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
-import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift } from 'lucide-react-native';
+import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, RefreshCw, Sun, Moon } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import PipAndroid from 'react-native-pip-android';
-
+import { LinearGradient } from 'expo-linear-gradient';
+import { meetingThemeTokens } from '../theme/meetingTheme';
 // Components
 import { ChatPanel } from '../components/meeting/ChatPanel';
 import { ParticipantsPanel } from '../components/meeting/ParticipantsPanel';
@@ -36,12 +37,18 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [isPipMode, setIsPipMode] = useState(false);
+  const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   
+  const insets = useSafeAreaInsets();
   const serviceRef = useRef<MediasoupService | null>(null);
   
   // Zustand Store
-  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, isHandRaisedLocally, setIsHandRaisedLocally } = useMeetingStore();
+  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
   const isHost = currentUserRole === 'host';
+  const tokens = meetingThemeTokens[theme];
+  const styles = getStyles(tokens);
+  
+  const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
 
   const activeScreenShare = remoteStreams.find(p => p.screenStream != null);
 
@@ -52,8 +59,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
     // Setup PiP Listener for Android
     let pipListener: any = null;
     if (Platform.OS === 'android' && PipAndroid) {
-      pipListener = PipAndroid.onPipModeChanged((isPip: boolean) => {
-        if (isMounted) setIsPipMode(isPip);
+      pipListener = PipAndroid.onPipModeChanged((isPip: Boolean) => {
+        if (isMounted) setIsPipMode(isPip.valueOf());
       });
     }
 
@@ -274,32 +281,73 @@ export default function MeetingScreen({ route, navigation }: Props) {
   if (isWaiting) {
     return (
       <SafeAreaView style={styles.waitingContainer}>
-        <Text style={styles.waitingTitle}>Waiting for Host</Text>
-        <Text style={styles.waitingSubtext}>You are in the waiting room. The meeting host will let you in soon.</Text>
-        <ActivityIndicator size="large" color="#38bdf8" style={{ marginVertical: 32 }} />
-        <TouchableOpacity style={styles.leaveWaitingBtn} onPress={handleLeave}>
-          <Text style={styles.leaveText}>Leave Meeting</Text>
-        </TouchableOpacity>
+        <View style={styles.waitingCard}>
+          <View style={styles.waitingIconWrapper}>
+            <Text style={styles.waitingIcon}>K</Text>
+          </View>
+          <Text style={styles.waitingTitle}>Waiting for Host</Text>
+          <Text style={styles.waitingSubtext}>You will join the meeting automatically once the host admits you.</Text>
+          <ActivityIndicator size="large" color="#10b981" style={{ marginVertical: 32 }} />
+          <TouchableOpacity style={styles.leaveWaitingBtn} onPress={handleLeave}>
+            <Text style={styles.leaveText}>Return to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
+  const totalItems = remoteStreams.length + (isPipMode ? 0 : 1);
+  const isHorizontalLayout = !!activeScreenShare;
+
+  const getCardStyle = () => {
+    if (isHorizontalLayout) {
+      return styles.remoteVideoWrapperHorizontal;
+    }
+    switch (totalItems) {
+      case 1:
+        return styles.cardSingle;
+      case 2:
+        return styles.cardDouble;
+      case 3:
+      case 4:
+        return styles.cardQuad;
+      default:
+        return styles.cardGrid;
+    }
+  };
+
+  const getInitials = (name: string) => {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {!isPipMode && <ReactionsLayer />}
       
+      {/* Top Overlay */}
       {!isPipMode && (
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.roomText}>Room: {roomId}</Text>
-            <TouchableOpacity onPress={copyMeetingLink} style={styles.copyBtn}>
-              <UserPlus size={14} color="#38bdf8" />
-              <Text style={styles.copyText}>  Copy Invite Link</Text>
+        <View style={styles.topOverlay} pointerEvents="box-none">
+          <View style={styles.infoPill}>
+            <View style={styles.lockIconContainer}>
+              <Text style={styles.lockIcon}>🔒</Text>
+            </View>
+            <Text style={styles.infoTitle} numberOfLines={1}>{roomId || 'Product Sync'}</Text>
+            <View style={styles.infoDot} />
+            <Text style={styles.infoTime}>{isConnected ? 'Active' : 'Wait'}</Text>
+          </View>
+          <View style={styles.topRightActions}>
+            <TouchableOpacity style={styles.topActionBtn} onPress={copyMeetingLink}>
+              <Copy size={18} color={tokens.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.topActionBtn} onPress={() => serviceRef.current?.switchCamera()}>
+              <RefreshCw size={18} color={tokens.textPrimary} />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.statusText, isConnected ? styles.statusConnected : styles.statusConnecting]}>
-            {isConnected ? 'Connected' : 'Connecting...'}
-          </Text>
         </View>
       )}
 
@@ -311,146 +359,143 @@ export default function MeetingScreen({ route, navigation }: Props) {
             objectFit="contain"
           />
           <View style={styles.screenShareLabel}>
-            <Text style={styles.nameText}>{activeScreenShare.name}'s Screen</Text>
+            <Text style={styles.screenShareName}>{activeScreenShare.name}'s Screen</Text>
           </View>
         </View>
       )}
 
       <View style={[styles.videoGrid, activeScreenShare && styles.videoGridShrunk]}>
-        <ScrollView style={styles.remoteGrid} horizontal={!!activeScreenShare}>
+        <ScrollView style={styles.remoteGrid} contentContainerStyle={styles.gridInnerScroll} horizontal={!!activeScreenShare}>
           <View style={[styles.gridInner, activeScreenShare && styles.gridInnerHorizontal]}>
             {remoteStreams.map((p) => {
               const storeParticipant = participants.find(up => up.userId === p.id);
               const isRaised = storeParticipant?.isHandRaised;
               const isSpeaking = storeParticipant?.isSpeaking;
+              // Check if stream has video tracks to determine if camera is off
+              const hasVideo = p.stream && p.stream.getVideoTracks().length > 0;
+              
+              const isRemoteMicMuted = !p.stream || p.stream.getAudioTracks().length === 0 || !p.stream.getAudioTracks()[0].enabled;
               
               return (
                 <View key={p.id} style={[
-                  styles.remoteVideoWrapper, 
-                  activeScreenShare && styles.remoteVideoWrapperHorizontal,
+                  getCardStyle(), 
                   isSpeaking && styles.activeSpeakerBorder
                 ]}>
-                  <RTCView
-                    streamURL={p.stream.toURL()}
-                    style={styles.rtcView}
-                    objectFit="cover"
-                  />
-                  <View style={styles.nameLabel}>
-                    <Text style={styles.nameText}>{p.name} {isRaised && '👋'}</Text>
+                  {!hasVideo ? (
+                    <View style={styles.cameraOff}>
+                      <View style={styles.avatarCircle}>
+                        <Text style={styles.avatarText}>{getInitials(p.name)}</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <RTCView
+                      streamURL={p.stream.toURL()}
+                      style={styles.rtcView}
+                      objectFit="cover"
+                    />
+                  )}
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />
+                  <View style={styles.nameBadgeContainer}>
+                    <Text style={styles.nameText} numberOfLines={1}>{p.name}</Text>
+                    <View style={{ marginLeft: 6 }}>
+                      {isRemoteMicMuted ? (
+                        <MicOff size={12} color="#ffb4ab" />
+                      ) : (
+                        <Mic size={12} color="#c2e7ff" />
+                      )}
+                    </View>
                   </View>
+                  {isRaised && (
+                    <View style={styles.raisedHandBadge}>
+                      <Hand size={12} color="#a83b00" fill="#a83b00" />
+                      <Text style={styles.raisedHandText}>Raised</Text>
+                    </View>
+                  )}
+                  {isSpeaking && (
+                    <View style={styles.activeSpeakerBadge}>
+                      <Radio size={12} color="#0b57d0" />
+                    </View>
+                  )}
+                  {isRemoteMicMuted && (
+                    <View style={styles.mutedBadge}>
+                      <MicOff size={14} color="white" />
+                    </View>
+                  )}
                 </View>
               );
             })}
             
-            {remoteStreams.length === 0 && !activeScreenShare && (
-              <View style={styles.emptyGrid}>
-                <Text style={styles.emptyText}>Waiting for others to join...</Text>
+            {!isPipMode && (
+              <View style={[
+                getCardStyle(), 
+                participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
+              ]}>
+                {localStream && !isCameraOff ? (
+                  <RTCView streamURL={localStream.toURL()} style={styles.rtcView} objectFit="cover" mirror={true} zOrder={1} />
+                ) : (
+                  <View style={styles.cameraOff}>
+                    <View style={styles.avatarCircle}>
+                      <Text style={styles.avatarText}>ME</Text>
+                    </View>
+                  </View>
+                )}
+                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />
+                <View style={styles.nameBadgeContainer}>
+                  <Text style={styles.nameText}>Me</Text>
+                  <View style={{ marginLeft: 6 }}>
+                    {isMicMuted ? (
+                      <MicOff size={12} color="#ffb4ab" />
+                    ) : (
+                      <Mic size={12} color="#c2e7ff" />
+                    )}
+                  </View>
+                </View>
+                {isHandRaisedLocally && (
+                  <View style={styles.raisedHandBadge}>
+                    <Hand size={12} color="#a83b00" fill="#a83b00" />
+                    <Text style={styles.raisedHandText}>Raised</Text>
+                  </View>
+                )}
+                {isMicMuted && (
+                  <View style={styles.mutedBadge}>
+                    <MicOff size={14} color="white" />
+                  </View>
+                )}
               </View>
             )}
           </View>
         </ScrollView>
-
-        {/* Local Stream PIP */}
-        {!isPipMode && (
-          <View style={[
-            styles.localVideoWrapper, 
-            participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
-          ]}>
-            {localStream && !isCameraOff ? (
-              <RTCView
-                streamURL={localStream.toURL()}
-                style={styles.rtcView}
-                objectFit="cover"
-                mirror={true}
-                zOrder={1}
-              />
-            ) : (
-              <View style={styles.cameraOff}>
-                <Text style={styles.cameraOffIcon}>📷</Text>
-                <Text style={styles.cameraOffText}>Camera Off</Text>
-              </View>
-            )}
-            {isHandRaisedLocally && (
-              <View style={styles.localHandBadge}>
-                <Text style={{ fontSize: 16 }}>👋</Text>
-              </View>
-            )}
-          </View>
-        )}
       </View>
 
       {!isPipMode && (
-        <View style={styles.toolbarScroll}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbarInner}>
-            <TouchableOpacity style={[styles.toolBtn, isMicMuted && styles.toolBtnDanger]} onPress={toggleMic}>
-              {isMicMuted ? <MicOff size={20} color="#ef4444" /> : <Mic size={20} color="white" />}
+        <View style={[
+          styles.bottomToolbarContainer, 
+          { bottom: safeBottom + 16 }
+        ]}>
+          <View style={styles.floatingBar}>
+            <TouchableOpacity style={[!isMicMuted ? styles.toolBtnActive : styles.toolBtnMuted, { marginRight: 8 }]} onPress={toggleMic}>
+              {isMicMuted ? <MicOff size={22} color={tokens.danger} /> : <Mic size={22} color={tokens.textInverse} strokeWidth={2.2} />}
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.toolBtn, isCameraOff && styles.toolBtnDanger]} onPress={toggleCamera}>
-              {isCameraOff ? <VideoOff size={20} color="#ef4444" /> : <VideoIcon size={20} color="white" />}
+            <TouchableOpacity style={[!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted, { marginRight: 8 }]} onPress={toggleCamera}>
+              {isCameraOff ? <VideoOff size={22} color={tokens.danger} /> : <VideoIcon size={22} color={tokens.textPrimary} strokeWidth={2} />}
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.toolBtn, isHandRaisedLocally && {backgroundColor: 'rgba(56, 189, 248, 0.2)'}]} onPress={toggleHandRaise}>
-              <Hand size={20} color={isHandRaisedLocally ? "#38bdf8" : "white"} />
-            </TouchableOpacity>
-            
-            {Platform.OS === 'android' && (
-              <TouchableOpacity style={styles.toolBtn} onPress={enterPip}>
-                <View style={{ width: 14, height: 10, borderWidth: 1.5, borderColor: 'white', borderRadius: 2, alignItems: 'flex-end', justifyContent: 'flex-end', padding: 1 }}>
-                  <View style={{ width: 5, height: 3, backgroundColor: 'white' }} />
-                </View>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'chat' ? 'none' : 'chat')}>
-              <MessageSquare size={20} color={activePane === 'chat' ? '#38bdf8' : 'white'} />
-              {unreadChatCount > 0 && activePane !== 'chat' && (
-                <View style={styles.badge}><Text style={styles.badgeText}>{unreadChatCount}</Text></View>
+            <TouchableOpacity style={[styles.toolBtnNeutral, { marginRight: 8 }]} onPress={() => setIsMoreMenuVisible(true)}>
+              <MoreVertical size={22} color={tokens.textPrimary} strokeWidth={2} />
+              {unreadChatCount > 0 && (
+                <View style={styles.menuBadge} />
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'participants' ? 'none' : 'participants')}>
-              <Users size={20} color={activePane === 'participants' ? '#38bdf8' : 'white'} />
-            </TouchableOpacity>
+            <View style={[styles.toolbarDivider, { marginRight: 8 }]} />
 
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'polls' ? 'none' : 'polls')}>
-              <BarChart2 size={20} color={activePane === 'polls' ? '#38bdf8' : 'white'} />
+            <TouchableOpacity style={styles.endCallBtn} onPress={handleLeave}>
+              <View style={{ transform: [{ rotate: '135deg' }] }}>
+                <Phone size={22} color={tokens.textInverse} strokeWidth={2.2} />
+              </View>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'whiteboard' ? 'none' : 'whiteboard')}>
-              <Presentation size={20} color={activePane === 'whiteboard' ? '#38bdf8' : 'white'} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'docs' ? 'none' : 'docs')}>
-              <FileText size={20} color={activePane === 'docs' ? '#38bdf8' : 'white'} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'donation' ? 'none' : 'donation')}>
-              <Gift size={20} color={activePane === 'donation' ? '#38bdf8' : 'white'} />
-            </TouchableOpacity>
-
-            {isHost && (
-              <TouchableOpacity style={[styles.toolBtn, isRecording && styles.toolBtnDanger]} onPress={toggleRecording}>
-                {isRecording ? <Square size={20} color="#ef4444" fill="#ef4444" /> : <Disc size={20} color="white" />}
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => sendReaction('👏')}>
-              <Text style={styles.toolIcon}>👏</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'streaming' ? 'none' : 'streaming')}>
-              <Radio size={22} color={activePane === 'streaming' ? "#38bdf8" : "white"} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.toolBtn} onPress={() => setActivePane(activePane === 'settings' ? 'none' : 'settings')}>
-              <Settings size={22} color={activePane === 'settings' ? "#38bdf8" : "white"} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.toolBtn, styles.leaveBtn]} onPress={handleLeave}>
-              <PhoneOff size={22} color="white" />
-            </TouchableOpacity>
-          </ScrollView>
+          </View>
         </View>
       )}
 
@@ -467,86 +512,406 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {/* Overlays */}
       {!isPipMode && <CaptionsOverlay />}
 
+      {/* More Options Modal Bottom Sheet */}
+      <Modal
+        visible={isMoreMenuVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsMoreMenuVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setIsMoreMenuVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[
+                styles.sheetContent, 
+                { paddingBottom: safeBottom + 32 }
+              ]}>
+                {/* Drag Handle */}
+                <View style={styles.dragHandle} />
+                
+                <Text style={styles.sheetTitle}>Meeting Options</Text>
+
+                {/* Quick Reactions */}
+                <View style={styles.reactionsRow}>
+                  {['👏', '👍', '❤️', '😂', '🎉', '😮'].map((emoji) => (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={styles.reactionBtn}
+                      onPress={() => {
+                        sendReaction(emoji);
+                        setIsMoreMenuVisible(false);
+                      }}
+                    >
+                      <Text style={styles.reactionText}>{emoji}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Grid Options */}
+                <View style={styles.optionsGrid}>
+                  <TouchableOpacity
+                    style={[styles.gridOption, isHandRaisedLocally && styles.gridOptionActive]}
+                    onPress={() => {
+                      toggleHandRaise();
+                      setIsMoreMenuVisible(false);
+                    }}
+                  >
+                    <View style={[styles.optionIconContainer, isHandRaisedLocally && styles.optionIconContainerActive]}>
+                      <Hand size={22} color={isHandRaisedLocally ? tokens.textInverse : tokens.textSecondary} fill={isHandRaisedLocally ? tokens.textInverse : "none"} />
+                    </View>
+                    <Text style={styles.optionLabel}>{isHandRaisedLocally ? "Lower Hand" : "Raise Hand"}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'chat' ? 'none' : 'chat');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <MessageSquare size={22} color={tokens.textSecondary} />
+                      {unreadChatCount > 0 && (
+                        <View style={styles.optionBadge}>
+                          <Text style={styles.optionBadgeText}>{unreadChatCount}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.optionLabel}>Chat</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'participants' ? 'none' : 'participants');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Users size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Participants</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'polls' ? 'none' : 'polls');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <BarChart2 size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Polls</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'whiteboard' ? 'none' : 'whiteboard');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Presentation size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Whiteboard</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'docs' ? 'none' : 'docs');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <FileText size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Docs</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'donation' ? 'none' : 'donation');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Gift size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Donation</Text>
+                  </TouchableOpacity>
+
+                  {isHost && (
+                    <TouchableOpacity
+                      style={styles.gridOption}
+                      onPress={() => {
+                        toggleRecording();
+                        setIsMoreMenuVisible(false);
+                      }}
+                    >
+                      <View style={[styles.optionIconContainer, isRecording && styles.recordingActiveContainer]}>
+                        {isRecording ? (
+                          <Square size={22} color={tokens.danger} fill={tokens.danger} />
+                        ) : (
+                          <Disc size={22} color={tokens.textSecondary} />
+                        )}
+                      </View>
+                      <Text style={styles.optionLabel}>{isRecording ? "Stop Rec" : "Record"}</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'streaming' ? 'none' : 'streaming');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Radio size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Streaming</Text>
+                  </TouchableOpacity>
+
+                  {Platform.OS === 'android' && (
+                    <TouchableOpacity
+                      style={styles.gridOption}
+                      onPress={() => {
+                        setIsMoreMenuVisible(false);
+                        enterPip();
+                      }}
+                    >
+                      <View style={styles.optionIconContainer}>
+                        <View style={styles.pipIconWrapper}>
+                          <View style={styles.pipIconDot} />
+                        </View>
+                      </View>
+                      <Text style={styles.optionLabel}>PiP Mode</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setTheme(theme === 'sage' ? 'midnight' : 'sage');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      {theme === 'sage' ? <Moon size={22} color={tokens.textSecondary} /> : <Sun size={22} color={tokens.textSecondary} />}
+                    </View>
+                    <Text style={styles.optionLabel}>{theme === 'sage' ? 'Dark Mode' : 'Light Mode'}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.gridOption}
+                    onPress={() => {
+                      setIsMoreMenuVisible(false);
+                      setActivePane(activePane === 'settings' ? 'none' : 'settings');
+                    }}
+                  >
+                    <View style={styles.optionIconContainer}>
+                      <Settings size={22} color={tokens.textSecondary} />
+                    </View>
+                    <Text style={styles.optionLabel}>Settings</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  waitingContainer: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  waitingTitle: { color: 'white', fontSize: 24, fontWeight: 'bold', marginBottom: 12 },
-  waitingSubtext: { color: '#94a3b8', fontSize: 16, textAlign: 'center' },
-  leaveWaitingBtn: { backgroundColor: '#ef4444', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#1e293b' },
-  roomText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  copyBtn: { marginTop: 4, flexDirection: 'row', alignItems: 'center' },
-  copyText: { color: '#38bdf8', fontSize: 12, fontWeight: 'bold' },
-  statusText: { fontWeight: 'bold' },
-  statusConnected: { color: '#10b981' },
-  statusConnecting: { color: '#f59e0b' },
-  screenShareContainer: {
-    height: 340,
-    backgroundColor: '#000',
-    width: '100%',
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155'
-  },
+const getStyles = (t: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: t.bg },
+  
+  // Waiting Room
+  waitingContainer: { flex: 1, backgroundColor: t.bg, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  waitingCard: { backgroundColor: t.bgElevated, padding: 32, borderRadius: 24, width: '100%', maxWidth: 360, alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: t.shadowOpacity, shadowRadius: 16, elevation: 4 },
+  waitingIconWrapper: { width: 64, height: 64, borderRadius: 32, backgroundColor: t.bgActiveBadge, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  waitingIcon: { color: t.primary, fontSize: 28, fontWeight: 'bold' },
+  waitingTitle: { color: t.textPrimary, fontSize: 20, fontWeight: '700', marginBottom: 8 },
+  waitingSubtext: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  leaveWaitingBtn: { backgroundColor: t.primary, width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center', shadowColor: t.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: t.shadowOpacity, shadowRadius: 8, elevation: 4 },
+  leaveText: { color: t.textInverse, fontWeight: '600', fontSize: 15 },
+  
+  // Top Overlay
+  topOverlay: { position: 'absolute', top: 16, left: 16, right: 16, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: t.toolbarBg, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity, shadowRadius: 4, elevation: 2 },
+  lockIconContainer: { marginRight: 6 },
+  lockIcon: { fontSize: 14 },
+  infoTitle: { fontFamily: 'Inter', fontSize: 14, fontWeight: '600', color: t.textPrimary, maxWidth: 120 },
+  infoDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: t.textMuted, marginHorizontal: 8 },
+  infoTime: { fontFamily: 'Inter', fontSize: 12, fontWeight: '500', color: t.textSecondary },
+  topRightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topActionBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: t.toolbarBg, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity, shadowRadius: 4, elevation: 2 },
+  
+  // Screen Share
+  screenShareContainer: { height: 340, backgroundColor: '#000', width: '100%' },
   screenShareView: { width: '100%', height: '100%' },
-  screenShareLabel: { position: 'absolute', bottom: 12, left: 12, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  videoGrid: { flex: 1 },
+  screenShareLabel: { position: 'absolute', bottom: 16, left: 16, backgroundColor: 'rgba(25, 27, 35, 0.8)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  screenShareName: { color: 'white', fontSize: 12, fontWeight: '600' },
+  
+  // Grid
+  videoGrid: { flex: 1, backgroundColor: t.bg },
   videoGridShrunk: { flex: 1, maxHeight: 180 },
   remoteGrid: { flex: 1, padding: 8 },
-  gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' },
+  gridInnerScroll: { flexGrow: 1, paddingBottom: 120 },
+  gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', height: '100%' },
   gridInnerHorizontal: { flexDirection: 'row', flexWrap: 'nowrap' },
-  remoteVideoWrapper: {
-    flexBasis: '48%',
-    height: 220,
-    backgroundColor: '#1e293b',
-    margin: '1%',
+  
+  // Card Sizes
+  cardSingle: {
+    width: '96%',
+    height: '96%',
+    backgroundColor: t.bgTile,
+    margin: '2%',
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1, borderColor: '#334155'
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: t.shadowOpacity,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  remoteVideoWrapperHorizontal: { flexBasis: 'auto', width: 140, height: 150, marginHorizontal: 4 },
-  activeSpeakerBorder: { borderWidth: 2, borderColor: '#10b981' },
+  cardDouble: {
+    width: '96%',
+    height: '47%',
+    backgroundColor: t.bgTile,
+    marginHorizontal: '2%',
+    marginVertical: '1.5%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: t.shadowOpacity,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardQuad: {
+    width: '47%',
+    height: '47%',
+    backgroundColor: t.bgTile,
+    margin: '1.5%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: t.shadowOpacity,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardGrid: {
+    width: '47%',
+    height: 180,
+    backgroundColor: t.bgTile,
+    margin: '1.5%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: t.shadowOpacity,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  remoteVideoWrapperHorizontal: { width: 140, height: 140, backgroundColor: t.bgTile, marginHorizontal: 6, borderRadius: 16, overflow: 'hidden', position: 'relative' },
+  activeSpeakerBorder: { borderWidth: 2.5, borderColor: t.primary },
   rtcView: { width: '100%', height: '100%' },
-  nameLabel: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  nameText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
-  emptyGrid: { width: '100%', height: 200, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { color: '#64748b', fontStyle: 'italic' },
-  localVideoWrapper: {
-    position: 'absolute', bottom: 16, right: 16,
-    width: 110, height: 160,
-    backgroundColor: 'black',
-    borderRadius: 12, overflow: 'hidden',
-    borderWidth: 2, borderColor: '#334155',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 10
+  videoGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60 },
+  
+  // Badges
+  nameBadgeContainer: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0, 0, 0, 0.4)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
+  nameText: { color: 'white', fontSize: 12, fontWeight: '600', fontFamily: 'Inter' },
+  raisedHandBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: '#ffcfbe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
+  raisedHandText: { color: '#802b00', fontSize: 10, fontWeight: '600', marginLeft: 4, fontFamily: 'Inter' },
+  activeSpeakerBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: t.bgActiveBadge, padding: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
+  mutedBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 6, borderRadius: 16 },
+  cameraOff: {
+    flex: 1,
+    backgroundColor: t.cameraOffBg,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  localHandBadge: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 4 },
-  cameraOff: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e293b' },
-  cameraOffIcon: { fontSize: 24 },
-  cameraOffText: { color: '#94a3b8', fontSize: 10, marginTop: 4 },
-  toolbarScroll: {
-    maxHeight: 76,
-    backgroundColor: '#1e293b',
-    borderTopWidth: 1, borderTopColor: '#334155'
+  avatarCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: t.avatarBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: t.shadowOpacity,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  toolbarInner: {
+  avatarText: {
+    color: t.textInverse,
+    fontSize: 40,
+    fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  
+  // Toolbar
+  bottomToolbarContainer: {
+    position: 'absolute',
+    left: 0, right: 0,
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  floatingBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 12,
+    backgroundColor: t.toolbarBg,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 36,
+    borderWidth: 1.5,
+    borderColor: t.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: t.shadowOpacity,
+    shadowRadius: 18,
+    elevation: 8,
   },
-  toolBtn: {
-    width: 44, height: 44,
-    borderRadius: 22,
-    backgroundColor: '#334155',
-    justifyContent: 'center', alignItems: 'center'
-  },
-  toolBtnDanger: { backgroundColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1, borderColor: '#ef4444' },
-  toolIcon: { fontSize: 20 },
-  badge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#ef4444', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' },
-  badgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
-  leaveBtn: { width: 60, borderRadius: 12, backgroundColor: '#ef4444' },
-  leaveText: { color: 'white', fontWeight: 'bold', fontSize: 14 }
+  toolBtnActive: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', backgroundColor: t.bgActive, ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
+  toolBtnMuted: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', backgroundColor: t.dangerHover, borderWidth: 1, borderColor: t.danger, ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
+  toolBtnNeutral: { width: 52, height: 52, borderRadius: 26, backgroundColor: t.bgElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: t.border, ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
+  menuBadge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: t.danger, borderWidth: 1.5, borderColor: t.bgElevated },
+  toolbarDivider: { width: 1, height: 32, backgroundColor: t.border, marginHorizontal: 4 },
+  endCallBtn: { width: 72, height: 52, borderRadius: 20, backgroundColor: t.danger, justifyContent: 'center', alignItems: 'center', ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
+  endCallText: { color: t.textInverse, fontSize: 16, fontWeight: '600', fontFamily: 'Inter' },
+  
+  // Modal Sheet
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  sheetContent: { backgroundColor: t.bgElevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12 },
+  dragHandle: { width: 40, height: 5, borderRadius: 3, backgroundColor: t.border, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle: { fontSize: 18, fontWeight: '700', color: t.textPrimary, marginBottom: 16, textAlign: 'center', fontFamily: 'Inter' },
+  reactionsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.border, marginBottom: 16 },
+  reactionBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: t.iconBtnBg, justifyContent: 'center', alignItems: 'center' },
+  reactionText: { fontSize: 22 },
+  optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 16 },
+  gridOption: { width: '22%', alignItems: 'center', marginVertical: 12 },
+  gridOptionActive: { opacity: 0.9 },
+  optionIconContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: t.iconBtnBg, justifyContent: 'center', alignItems: 'center', marginBottom: 6, position: 'relative' },
+  optionIconContainerActive: { backgroundColor: t.bgActive },
+  recordingActiveContainer: { backgroundColor: t.dangerHover },
+  optionLabel: { fontSize: 11, fontWeight: '500', color: t.textSecondary, textAlign: 'center', fontFamily: 'Inter' },
+  optionBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: t.danger, borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1.5, borderColor: t.bgElevated },
+  optionBadgeText: { color: t.textInverse, fontSize: 9, fontWeight: 'bold' },
+  
+  // Misc
+  pipIconWrapper: { width: 18, height: 14, borderWidth: 1.5, borderColor: t.textSecondary, borderRadius: 3, alignItems: 'flex-end', justifyContent: 'flex-end', padding: 1 },
+  pipIconDot: { width: 7, height: 5, backgroundColor: t.textSecondary, borderRadius: 1 }
 });
+

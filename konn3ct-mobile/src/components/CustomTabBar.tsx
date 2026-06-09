@@ -18,11 +18,12 @@ const COLORS = {
 const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
   const center = width / 2;
   const insets = useSafeAreaInsets();
+  const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
   
   // Base height of the nav bar before safe area
   const BASE_HEIGHT = 90;
   // Total height including the bottom safe area
-  const barHeight = BASE_HEIGHT + insets.bottom;
+  const barHeight = BASE_HEIGHT + safeBottom;
 
   // Dynamic path that creates a perfect cutout in the center regardless of device width
   const getPath = () => {
@@ -105,7 +106,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
         </Svg>
       </View>
 
-      <View style={[styles.contentContainer, { height: barHeight, paddingBottom: insets.bottom + 10 }]}>
+      <View style={[styles.contentContainer, { height: barHeight, paddingBottom: safeBottom + 10 }]}>
         {/* Left Side Tabs */}
         <View style={styles.sideContainer}>
           {renderTab('Addons')}
