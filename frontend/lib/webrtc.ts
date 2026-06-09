@@ -28,6 +28,7 @@ export class WebRTCClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectTimeoutId?: NodeJS.Timeout;
+  private isRepublishing = false;
 
   public userId: string | undefined;
   public userName: string | undefined;
@@ -529,7 +530,11 @@ export class WebRTCClient {
     this.sendTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
       if (state === 'failed' || state === 'disconnected') {
-        console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue)');
+        console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+        }
+        this.republishMedia().catch(console.error);
       }
     });
 
@@ -557,7 +562,11 @@ export class WebRTCClient {
     this.recvTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Receive Transport ICE State changed to: ${state}`);
       if (state === 'failed' || state === 'disconnected') {
-        console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue)');
+        console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+        }
+        this.republishMedia().catch(console.error);
       }
     });
 
@@ -607,8 +616,9 @@ export class WebRTCClient {
   }
 
   private async republishMedia() {
-    if (!this.device) return;
-    
+    if (!this.device || this.isRepublishing) return;
+    this.isRepublishing = true;
+    try {
     // Save current tracks
     const videoTrack = this.localVideoProducer?.track;
     const audioTrack = this.localAudioProducer?.track;
@@ -645,6 +655,17 @@ export class WebRTCClient {
       } catch (error: any) { errback(error); }
     });
 
+    this.sendTransport.on('connectionstatechange', (state: any) => {
+      console.log(`[WebRTC] Republish Send Transport ICE State changed to: ${state}`);
+      if (state === 'failed' || state === 'disconnected') {
+        console.error('[WebRTC] Send Transport connection failed! Forcing republish...');
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+        }
+        this.republishMedia().catch(console.error);
+      }
+    });
+
     const recvTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'recv' });
     this.recvTransport = this.device.createRecvTransport(recvTransportData.transportParams);
 
@@ -656,6 +677,17 @@ export class WebRTCClient {
         });
         callback();
       } catch (error: any) { errback(error); }
+    });
+
+    this.recvTransport.on('connectionstatechange', (state: any) => {
+      console.log(`[WebRTC] Republish Receive Transport ICE State changed to: ${state}`);
+      if (state === 'failed' || state === 'disconnected') {
+        console.error('[WebRTC] Receive Transport connection failed! Forcing republish...');
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+        }
+        this.republishMedia().catch(console.error);
+      }
     });
 
     // Republish saved tracks
@@ -686,6 +718,12 @@ export class WebRTCClient {
       }
     } catch (e) {
       console.error("Failed to re-sync producers after republish", e);
+    }
+    
+    } catch (err) {
+      console.error("republishMedia failed", err);
+    } finally {
+      this.isRepublishing = false;
     }
   }
 
@@ -826,12 +864,19 @@ export class WebRTCClient {
       activeTrack = denoisedStream.getAudioTracks()[0];
     }
     
-    // Only produce if we haven't already produced, otherwise replace track
     if (!this.localAudioProducer) {
       this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack });
     } else {
       await this.localAudioProducer.replaceTrack({ track: activeTrack });
     }
+
+    // Handle unexpected track ends (e.g. mic unplugged)
+    activeTrack.onended = () => {
+      console.warn("[WebRTC] Microphone track ended unexpectedly. Disabling mic.");
+      this.disableMic();
+      this.onForceMute?.();
+    };
+
     return activeTrack;
   }
 
