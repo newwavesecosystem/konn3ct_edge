@@ -162,9 +162,10 @@ export function MeetingShell() {
             {formatDuration(meetingDuration)}
           </span>
           {isRecording && (
-            <span className="hidden sm:flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded-full shrink-0">
               <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
-              Recording
+              <span className="hidden sm:inline">Recording</span>
+              <span className="sm:hidden">Rec</span>
             </span>
           )}
 
