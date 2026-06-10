@@ -40,7 +40,9 @@ const roleColor: Record<string, string> = {
 };
 
 export function ParticipantsPanel() {
-  const { participants, currentUser, waitingUsers, admitUser, denyUser, admitAllUsers, denyAllUsers } = useMeeting();
+  const { participants: allParticipants, currentUser, waitingUsers, admitUser, denyUser, admitAllUsers, denyAllUsers } = useMeeting();
+
+  const participants = allParticipants.filter(p => p.role !== "bot");
 
   const hosts = participants.filter(
     (p) => p.role === "host" || p.role === "co-host"
@@ -49,6 +51,8 @@ export function ParticipantsPanel() {
   const attendees = participants.filter(
     (p) => p.role === "attendee" || p.role === "guest"
   );
+  
+  const totalVisibleParticipants = hosts.length + presenters.length + attendees.length;
 
   return (
     <div className="flex flex-col h-full">
@@ -59,7 +63,7 @@ export function ParticipantsPanel() {
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>
           Participants{" "}
           <span style={{ color: "var(--mt-text-faint)" }} className="font-normal">
-            ({participants.length})
+            ({totalVisibleParticipants})
           </span>
         </h3>
       </div>

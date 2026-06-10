@@ -342,4 +342,39 @@ router.get('/meetings/:roomId/status', async (req, res) => {
   }
 });
 
+// 5. Room Recordings
+router.get('/meetings/:roomId/recordings', async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    if (!roomId) {
+      return res.status(400).json({ error: "Missing roomId parameter" });
+    }
+
+    const room = await db.room.findUnique({ where: { slug: roomId } });
+    if (!room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    const recordings = await db.recording.findMany({
+      where: { roomId: room.id, status: 'completed' },
+      select: {
+        id: true,
+        title: true,
+        url: true,
+        duration: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      roomId: room.slug,
+      recordings
+    });
+  } catch (error) {
+    logger.error("External API /recordings error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 export { router as externalRouter };

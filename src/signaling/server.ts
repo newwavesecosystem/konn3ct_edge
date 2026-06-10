@@ -599,6 +599,7 @@ export function initializeSignaling(server: Server) {
             cleanupAudioObserver(roomId); // Clean up talking indicator
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
+            generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
@@ -763,6 +764,7 @@ export function initializeSignaling(server: Server) {
             cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, client.roomSlug);
+            generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
