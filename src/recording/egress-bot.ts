@@ -79,12 +79,14 @@ async function startRecording({
   try {
     browser = await puppeteer.launch({
       headless: true,
+      defaultViewport: { width: 1920, height: 1080 },
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--use-fake-ui-for-media-stream',
         '--use-fake-device-for-media-stream',
+        '--window-size=1920,1080'
       ],
     });
 

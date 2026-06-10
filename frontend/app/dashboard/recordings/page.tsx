@@ -9,18 +9,10 @@ import {
   Copy, Globe, Lock, Users
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
-
-const recordings = [
-  { id: 1, title: "Q3 Planning Session", date: "Today, 11:00 AM", duration: "1h 15m", views: 12, size: "840 MB", thumbnail: "bg-gradient-to-br from-brand-blue to-blue-400" },
-  { id: 2, title: "Weekly All Hands", date: "Yesterday, 10:00 AM", duration: "45m", views: 32, size: "520 MB", thumbnail: "bg-gradient-to-br from-brand-green to-emerald-400" },
-  { id: 3, title: "Design Sync", date: "Mon, 2:00 PM", duration: "30m", views: 8, size: "380 MB", thumbnail: "bg-gradient-to-br from-purple-500 to-pink-400" },
-  { id: 4, title: "Client Pitch: Acme Corp", date: "Last Friday", duration: "1h 02m", views: 5, size: "780 MB", thumbnail: "bg-gradient-to-br from-amber-500 to-orange-400" },
-  { id: 5, title: "Onboarding Walkthrough", date: "Apr 28, 2026", duration: "22m", views: 48, size: "280 MB", thumbnail: "bg-gradient-to-br from-cyan-500 to-blue-400" },
-  { id: 6, title: "Sprint Retrospective", date: "Apr 25, 2026", duration: "38m", views: 15, size: "440 MB", thumbnail: "bg-gradient-to-br from-rose-500 to-red-400" },
-];
+import { useRouter } from "next/navigation";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -32,11 +24,27 @@ const itemVariants = {
 };
 
 export default function RecordingsPage() {
+  const router = useRouter();
+  const [recordings, setRecordings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [selectedRecording, setSelectedRecording] = useState<{title: string, date: string, duration: string} | null>(null);
+  const [selectedRecording, setSelectedRecording] = useState<any>(null);
   const [accessLevel, setAccessLevel] = useState("anyone");
   const [specificUsers, setSpecificUsers] = useState("");
   const [generatedLink, setGeneratedLink] = useState("");
+
+  useEffect(() => {
+    fetch('/api/recordings')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setRecordings(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch recordings", err);
+        setLoading(false);
+      });
+  }, []);
 
   const handleShareRecording = (rec: any) => {
     setSelectedRecording(rec);
@@ -105,7 +113,7 @@ export default function RecordingsPage() {
           <motion.div key={rec.id} variants={itemVariants}>
             <Card className="rounded-2xl border-border/60 bg-surface hover:shadow-lg hover:shadow-brand-blue/5 transition-all duration-300 overflow-hidden group">
               {/* Thumbnail */}
-              <div className={`relative h-36 ${rec.thumbnail} flex items-center justify-center`}>
+              <div className={`relative h-36 bg-gradient-to-br from-brand-blue to-blue-400 flex items-center justify-center cursor-pointer`} onClick={() => router.push(`/dashboard/recordings/${rec.id}`)}>
                 <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-brand-blue shadow-xl scale-75 group-hover:scale-100 transition-transform">
                     <Play className="h-6 w-6 ml-0.5" />
@@ -113,7 +121,7 @@ export default function RecordingsPage() {
                 </div>
                 <Play className="h-10 w-10 text-white/40" />
                 <div className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/60 text-white text-[11px] font-medium backdrop-blur-sm">
-                  {rec.duration}
+                  {rec.duration || "N/A"}
                 </div>
               </div>
 
@@ -121,7 +129,7 @@ export default function RecordingsPage() {
                 <div className="flex items-start justify-between">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-bold text-text-primary truncate">{rec.title}</h3>
-                    <p className="text-xs text-text-muted mt-0.5">{rec.date}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{new Date(rec.createdAt).toLocaleDateString()}</p>
                   </div>
                   <button className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 hover:bg-black/[0.04] text-text-muted transition-all shrink-0 ml-2">
                     <MoreVertical className="h-4 w-4" />
@@ -130,8 +138,8 @@ export default function RecordingsPage() {
 
                 <div className="flex items-center justify-between pt-2 border-t border-border/40">
                   <div className="flex items-center gap-3 text-xs text-text-muted">
-                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {rec.views}</span>
-                    <span>{rec.size}</span>
+                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {rec.views || 0}</span>
+                    <span>{rec.size || "Unknown Size"}</span>
                   </div>
                   <div className="flex gap-1">
                     <button className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-brand-green/10 text-text-muted hover:text-brand-green transition-colors" title="Download">

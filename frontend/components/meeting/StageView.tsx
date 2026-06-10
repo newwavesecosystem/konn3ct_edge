@@ -29,7 +29,7 @@ export function StageView() {
 
   // Grid view sorting (no active speaker rearranging)
   const gridSorted = useMemo(() => {
-    return [...participants].sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot').sort((a, b) => {
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
     });
@@ -37,7 +37,7 @@ export function StageView() {
 
   // Speaker view sorting (uses active speaker)
   const speakerSorted = useMemo(() => {
-    return [...participants].sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot').sort((a, b) => {
       if (a.isSpeaking !== b.isSpeaking) return a.isSpeaking ? -1 : 1;
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
