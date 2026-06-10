@@ -254,7 +254,8 @@ export class WebRTCClient {
           // Auto-Degrade to Audio-Only
           if (this.isLowBandwidth) {
             const consumer = this.consumers.get(msg.producerId);
-            if (consumer && consumer.kind === 'video' && !consumer.paused) {
+            // DO NOT pause screen shares
+            if (consumer && consumer.kind === 'video' && consumer.appData?.source !== 'screen' && !consumer.paused) {
               consumer.pause();
               console.warn("Connection poor: Paused video consumer", msg.producerId);
             }
@@ -975,7 +976,10 @@ export class WebRTCClient {
     }
     
     if (!this.localAudioProducer) {
-      this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack });
+      this.localAudioProducer = await this.sendTransport.produce({ 
+        track: activeTrack,
+        appData: { source: 'mic' }
+      });
     } else {
       await this.localAudioProducer.replaceTrack({ track: activeTrack });
     }

@@ -10,6 +10,8 @@ export function CaptionsOverlay() {
   const { captions, isCaptionsEnabled, captionSize } = useMeeting();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -19,13 +21,14 @@ export function CaptionsOverlay() {
   if (!isCaptionsEnabled || captions.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden flex items-end justify-center pb-8">
+    <div ref={containerRef} className="absolute inset-0 pointer-events-none z-50 flex items-end justify-center pb-8">
       <motion.div 
         drag
+        dragConstraints={containerRef}
         dragMomentum={false}
-        dragElastic={0}
+        dragElastic={0.1}
         style={{ scale: captionSize, transformOrigin: "bottom center" }}
-        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10 w-fit max-w-3xl cursor-grab active:cursor-grabbing"
+        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10 w-fit max-w-[calc(100%-2rem)] md:max-w-2xl cursor-grab active:cursor-grabbing"
         ref={scrollRef as any}
       >
         {captions.map((caption, idx) => (

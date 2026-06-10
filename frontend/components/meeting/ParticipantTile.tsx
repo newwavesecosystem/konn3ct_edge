@@ -89,8 +89,11 @@ export function ParticipantTile({
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
             if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+            stream.getTracks().forEach(t => stream.removeTrack(t));
+            stream.addTrack(participant.videoTrack);
+          } else {
+            el.srcObject = new MediaStream([participant.videoTrack]);
           }
-          el.srcObject = new MediaStream([participant.videoTrack]);
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Video play failed:", e);
           });
@@ -110,8 +113,11 @@ export function ParticipantTile({
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
             if (stream.getVideoTracks()[0] === participant.screenTrack) return;
+            stream.getTracks().forEach(t => stream.removeTrack(t));
+            stream.addTrack(participant.screenTrack);
+          } else {
+            el.srcObject = new MediaStream([participant.screenTrack]);
           }
-          el.srcObject = new MediaStream([participant.screenTrack]);
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
           });
