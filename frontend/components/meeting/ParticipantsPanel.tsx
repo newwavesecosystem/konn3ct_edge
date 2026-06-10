@@ -18,6 +18,10 @@ import {
   Smartphone,
   Shield,
   ShieldOff,
+  Lock,
+  Unlock,
+  MessageSquareOff,
+  VideoOff as VideoOffIcon
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 
@@ -124,6 +128,82 @@ export function ParticipantsPanel() {
           />
         )}
       </div>
+
+      {(currentUser.role === 'host' || currentUser.role === 'co-host') && (
+        <HostControlsSection />
+      )}
+    </div>
+  );
+}
+
+function HostControlsSection() {
+  const { forceMuteUser, forceVideoOffUser, roomSettings, updateRoomSettings } = useMeeting();
+  
+  return (
+    <div className="p-3" style={{ borderTop: "1px solid var(--mt-border)", backgroundColor: "var(--mt-bg-control)" }}>
+      <p className="text-[11px] uppercase tracking-wider font-semibold px-1 mb-2" style={{ color: "var(--mt-text-faint)" }}>
+        Security & Controls
+      </p>
+      
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <button
+          onClick={() => forceMuteUser(undefined, 'all_except_hosts')}
+          className="flex flex-col items-center justify-center p-2 rounded-xl hover:bg-white/5 transition-colors border"
+          style={{ borderColor: "var(--mt-border)", color: "var(--mt-text-secondary)" }}
+        >
+          <MicOff className="w-4 h-4 mb-1" />
+          <span className="text-[10px] text-center leading-tight">Mute<br/>Attendees</span>
+        </button>
+        <button
+          onClick={() => forceMuteUser(undefined, 'all_except_presenters')}
+          className="flex flex-col items-center justify-center p-2 rounded-xl hover:bg-white/5 transition-colors border"
+          style={{ borderColor: "var(--mt-border)", color: "var(--mt-text-secondary)" }}
+        >
+          <MicOff className="w-4 h-4 mb-1 text-purple-400" />
+          <span className="text-[10px] text-center leading-tight">Mute Except<br/>Presenters</span>
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1.5 mt-3">
+        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+          <div className="flex items-center gap-2">
+            <Mic className="w-3.5 h-3.5" style={{ color: roomSettings.micLocked ? "#f87171" : "var(--mt-text-muted)" }} />
+            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Lock Microphones</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={roomSettings.micLocked}
+            onChange={(e) => updateRoomSettings({ micLocked: e.target.checked })}
+            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
+          />
+        </label>
+        
+        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+          <div className="flex items-center gap-2">
+            <VideoOffIcon className="w-3.5 h-3.5" style={{ color: roomSettings.videoLocked ? "#f87171" : "var(--mt-text-muted)" }} />
+            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Lock Cameras</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={roomSettings.videoLocked}
+            onChange={(e) => updateRoomSettings({ videoLocked: e.target.checked })}
+            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
+          />
+        </label>
+        
+        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+          <div className="flex items-center gap-2">
+            <MessageSquareOff className="w-3.5 h-3.5" style={{ color: roomSettings.chatLocked ? "#f87171" : "var(--mt-text-muted)" }} />
+            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Lock Chat</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={roomSettings.chatLocked}
+            onChange={(e) => updateRoomSettings({ chatLocked: e.target.checked })}
+            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
+          />
+        </label>
+      </div>
     </div>
   );
 }
@@ -170,7 +250,7 @@ function ParticipantRow({
     .slice(0, 2)
     .toUpperCase();
 
-  const { currentUser, forceMuteUser, kickUser, changeUserRole } = useMeeting();
+  const { currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole } = useMeeting();
   const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
   const canManage = isHost && !isMe && participant.role !== 'host';
   const canMakeCoHost = currentUser.role === 'host' && !isMe && participant.role !== 'host';
@@ -267,6 +347,16 @@ function ParticipantRow({
                 style={{ color: "var(--mt-text-faint)" }}
               >
                 <MicOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {participant.isCameraOn && (
+              <button 
+                onClick={() => forceVideoOffUser(participant.id)}
+                title="Turn off video"
+                className="p-1 rounded-lg hover:bg-white/10"
+                style={{ color: "var(--mt-text-faint)" }}
+              >
+                <VideoOffIcon className="w-3.5 h-3.5" />
               </button>
             )}
             <button 

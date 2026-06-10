@@ -17,7 +17,7 @@ const roleBadge: Record<string, { icon: React.ReactNode; color: string }> = {
 };
 
 export function ChatPanel() {
-  const { chatMessages, sendMessage, currentUser, participants } = useMeeting();
+  const { chatMessages, sendMessage, currentUser, participants, roomSettings } = useMeeting();
   const [input, setInput] = useState("");
   const [targetUserId, setTargetUserId] = useState<string>("everyone");
   const [isUploading, setIsUploading] = useState(false);
@@ -25,6 +25,9 @@ export function ChatPanel() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
+  const isChatLocked = roomSettings?.chatLocked && !isHost;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -43,6 +46,10 @@ export function ChatPanel() {
   }, [chatMessages]);
 
   const handleSend = () => {
+    if (isChatLocked) {
+      toast.error("Chat is locked by the host.");
+      return;
+    }
     const trimmed = input.trim();
     if (!trimmed) return;
     sendMessage(trimmed, targetUserId !== "everyone" ? targetUserId : undefined);
@@ -50,6 +57,7 @@ export function ChatPanel() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isChatLocked) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -248,17 +256,18 @@ export function ChatPanel() {
         </div>
         <div
           className="flex items-center gap-1.5 rounded-xl px-2 py-1"
-          style={{ backgroundColor: "var(--mt-bg-input)" }}
+          style={{ backgroundColor: "var(--mt-bg-input)", opacity: isChatLocked ? 0.6 : 1 }}
         >
           <input
             type="file"
             className="hidden"
             ref={fileInputRef}
             onChange={handleFileUpload}
+            disabled={isChatLocked}
           />
           <button 
             onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
+            disabled={isUploading || isChatLocked}
             className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 disabled:opacity-50 transition-colors shrink-0"
           >
             <Paperclip className="w-4 h-4" />
@@ -267,7 +276,8 @@ export function ChatPanel() {
           <div className="relative" ref={emojiPickerRef}>
             <button 
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 transition-colors shrink-0"
+              disabled={isChatLocked}
+              className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 transition-colors shrink-0 disabled:opacity-50"
             >
               <Smile className="w-4 h-4" />
             </button>
@@ -300,8 +310,8 @@ export function ChatPanel() {
                 handleSend();
               }
             }}
-            placeholder={isUploading ? "Uploading..." : "Type a message..."}
-            disabled={isUploading}
+            placeholder={isChatLocked ? "Chat locked by host" : isUploading ? "Uploading..." : "Type a message..."}
+            disabled={isUploading || isChatLocked}
             rows={1}
             className="flex-1 bg-transparent text-sm py-2 px-1 outline-none min-w-0 resize-none max-h-32 overflow-y-auto"
             style={{ color: "var(--mt-text)" }}

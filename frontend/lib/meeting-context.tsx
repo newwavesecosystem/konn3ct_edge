@@ -88,7 +88,7 @@ interface MeetingContextValue {
   denyUser: (userId: string) => void;
   kickUser: (userId: string) => void;
   changeUserRole: (userId: string, newRole: string) => void;
-  forceMuteUser: (userId?: string) => void;
+  forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
   broadcastECinema: (link: string | null) => void;
@@ -130,6 +130,10 @@ interface MeetingContextValue {
 
   pauseRemoteVideo: (trackId: string) => void;
   resumeRemoteVideo: (trackId: string) => void;
+
+  roomSettings: { micLocked: boolean; videoLocked: boolean; chatLocked: boolean };
+  updateRoomSettings: (settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean }) => void;
+  forceVideoOffUser: (userId?: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -259,6 +263,8 @@ export function MeetingProvider({
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
+
+  const [roomSettings, setRoomSettings] = useState({ micLocked: false, videoLocked: false, chatLocked: false });
 
   // Virtual Background
   const [vbMode, setVbMode] = useState<'none' | 'blur' | 'image'>('none');
@@ -827,12 +833,33 @@ export function MeetingProvider({
           }
         };
 
-        client.onForceMute = () => {
+        client.onForceMute = (reason) => {
+          if (currentUser.role === 'host' || currentUser.role === 'co-host') return;
+          setIsMuted(true);
           webrtcClient.current?.pauseMic();
           webrtcClient.current?.sendMuteState(true);
-          setIsMuted(true);
-          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isMuted: true } : p));
-          toast.warning("The host has muted your microphone.");
+          if (reason === 'host_action') {
+            toast.error("The host has muted your microphone.");
+          } else {
+            toast.error("You have been muted by the host.");
+          }
+        };
+
+        client.onForceVideoOff = (reason) => {
+          if (currentUser.role === 'host' || currentUser.role === 'co-host') return;
+          setIsCameraOn(false);
+          webrtcClient.current?.disableCamera();
+          webrtcClient.current?.sendCameraState(false);
+          if (reason === 'host_action') {
+            toast.error("The host has turned off your camera.");
+          }
+        };
+
+        client.onRoomSettingsUpdated = (newSettings, updatedBy) => {
+          setRoomSettings(newSettings);
+          if (updatedBy && updatedBy !== currentUser.name) {
+            toast.info(`${updatedBy} updated the room security settings.`);
+          }
         };
 
         client.onECinemaUpdate = (link) => {
@@ -1386,8 +1413,18 @@ export function MeetingProvider({
     webrtcClient.current?.sendChangeRole(userId, newRole);
   }, []);
 
-  const forceMuteUser = useCallback((userId?: string) => {
-    webrtcClient.current?.sendForceMute(userId);
+  const forceMuteUser = useCallback((userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => {
+    webrtcClient.current?.sendForceMute(userId, target);
+  }, []);
+
+  const forceVideoOffUser = useCallback((userId?: string) => {
+    webrtcClient.current?.sendForceVideoOff(userId);
+  }, []);
+
+  const updateRoomSettings = useCallback((settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean }) => {
+    webrtcClient.current?.sendUpdateRoomSettings(settings);
+    // Optimistic update
+    setRoomSettings(prev => ({ ...prev, ...settings }));
   }, []);
 
   const endMeetingForAll = useCallback(() => {
@@ -1478,6 +1515,9 @@ export function MeetingProvider({
         kickUser,
         changeUserRole,
         forceMuteUser,
+        forceVideoOffUser,
+        updateRoomSettings,
+        roomSettings,
         endMeetingForAll,
         leaveMeeting,
         broadcastECinema,

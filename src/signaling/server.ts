@@ -131,6 +131,13 @@ export const roomTranscripts = new Map<string, Array<{ name: string, text: strin
 
 export const cachedRoomParticipants = new Map<string, Array<{ userId: string, name: string, role: string, isMobile: boolean }>>();
 
+export interface RoomSettings {
+  micLocked: boolean;
+  videoLocked: boolean;
+  chatLocked: boolean;
+}
+export const roomSettingsMap = new Map<string, RoomSettings>();
+
 export function addParticipantToCache(roomId: string, client: { userId: string, name: string, role: string, isMobile: boolean }) {
   let cache = cachedRoomParticipants.get(roomId);
   if (!cache) { cache = []; cachedRoomParticipants.set(roomId, cache); }
@@ -470,10 +477,17 @@ export function initializeSignaling(server: Server) {
             ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
             const chatHistory = await db.chatMessage.findMany({
-              where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
+              where: { roomId: roomId, createdAt: { gte: roomCreatedDate } },
               orderBy: { createdAt: 'asc' },
-              take: 100
+              take: 50,
             });
+
+            ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+
+            const settings = roomSettingsMap.get(roomId);
+            if (settings) {
+              ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
+            }
             const pollHistory = await db.meetingPoll.findMany({
               where: { roomId, isActive: true },
               orderBy: { createdAt: 'asc' }
@@ -483,7 +497,6 @@ export function initializeSignaling(server: Server) {
             });
 
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
               ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
               if (noteHistory) {
                 ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
@@ -672,23 +685,61 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'force_mute':
-        if (client.role === 'host') {
-          if (data.userId) {
-            const targetClient = rooms.get(roomId)?.get(data.userId);
-            if (targetClient) {
-              targetClient.ws.send(JSON.stringify({ type: 'force_mute' }));
-            }
-          } else {
-            // Mute everyone else
-            const roomClients = rooms.get(roomId);
-            if (roomClients) {
-              for (const [id, c] of roomClients.entries()) {
-                if (c.role !== 'host' && c.status === 'active') {
-                  c.ws.send(JSON.stringify({ type: 'force_mute' }));
-                }
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (!roomClients) break;
+
+          const broadcastForceMute = (predicate: (c: Client) => boolean, type: 'force_mute' | 'force_video_off' = 'force_mute') => {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'active' && predicate(c)) {
+                c.ws.send(JSON.stringify({ type, reason: 'host_action' }));
               }
             }
+          };
+
+          if (data.userId) {
+            const targetClient = roomClients.get(data.userId);
+            if (targetClient) targetClient.ws.send(JSON.stringify({ type: 'force_mute', reason: 'host_action' }));
+          } else if (data.target === 'all') {
+            broadcastForceMute(c => c.userId !== userId);
+          } else if (data.target === 'all_except_hosts') {
+            broadcastForceMute(c => c.role !== 'host' && c.role !== 'co-host');
+          } else if (data.target === 'all_except_presenters') {
+            const presenters = new Set(
+              (roomProducers.get(roomId) || [])
+                .filter(p => p.appData?.source === 'screen')
+                .map(p => p.userId)
+            );
+            broadcastForceMute(c => c.userId !== userId && !presenters.has(c.userId));
+          } else {
+            broadcastForceMute(c => c.role !== 'host');
           }
+        }
+        break;
+
+      case 'force_video_off':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (!roomClients) break;
+          for (const [id, c] of roomClients.entries()) {
+            if (c.status === 'active' && c.userId !== userId) {
+              c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+            }
+          }
+        }
+        break;
+
+      case 'update_room_settings':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false };
+          const newSettings = { ...currentSettings, ...data.settings };
+          roomSettingsMap.set(roomId, newSettings);
+          
+          broadcastToRoom(roomId, {
+            type: 'room_settings_updated',
+            settings: newSettings,
+            updatedBy: client.name
+          });
         }
         break;
 
@@ -751,6 +802,11 @@ export function initializeSignaling(server: Server) {
 
       case 'chat':
         try {
+          const settings = roomSettingsMap.get(roomId);
+          if (settings && settings.chatLocked && client.role === 'attendee') {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Chat is currently locked by the host.' }));
+            return;
+          }
           if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) return;
           if (data.message.length > 4000) {
             client.ws.send(JSON.stringify({ type: 'error', message: 'Message too long (max 4000 characters).' }));
@@ -1076,6 +1132,18 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'produce': {
+        const settings = roomSettingsMap.get(roomId);
+        if (settings) {
+          if (data.kind === 'audio' && settings.micLocked && client.role === 'attendee') {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Microphones are locked by the host.' }));
+            return;
+          }
+          if (data.kind === 'video' && data.appData?.source !== 'screen' && settings.videoLocked && client.role === 'attendee') {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
+            return;
+          }
+        }
+
         const appData: Record<string, any> = data.appData || {};
         const source = appData.source || 'camera'; // 'camera' | 'screen'
 
