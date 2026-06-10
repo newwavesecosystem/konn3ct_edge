@@ -77,6 +77,7 @@ export function MeetingControls() {
     meetingInfo,
     eCinemaLink,
     hasUnreadChat,
+    roomSettings,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -178,14 +179,28 @@ export function MeetingControls() {
           <ControlBtn
             icon={isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             danger={isMuted}
-            onClick={toggleMute}
+            disabled={roomSettings.micLocked && !isHost}
+            onClick={() => {
+              if (roomSettings.micLocked && !isHost) {
+                toast.error("Microphones are locked by the host.");
+                return;
+              }
+              toggleMute();
+            }}
             tooltip={isMuted ? "Unmute" : "Mute"}
           />
           {/* Camera */}
           <ControlBtn
             icon={isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
             danger={!isCameraOn}
-            onClick={toggleCamera}
+            disabled={roomSettings.videoLocked && !isHost}
+            onClick={() => {
+              if (roomSettings.videoLocked && !isHost) {
+                toast.error("Cameras are locked by the host.");
+                return;
+              }
+              toggleCamera();
+            }}
             tooltip={isCameraOn ? "Camera off" : "Camera on"}
           />
 
@@ -413,10 +428,10 @@ export function MeetingControls() {
 
 /* ── Control Button (center pill) ──────────────────── */
 function ControlBtn({
-  icon, danger, active, highlight, onClick, tooltip, className,
+  icon, danger, active, highlight, onClick, tooltip, className, disabled
 }: {
   icon: React.ReactNode; danger?: boolean; active?: boolean;
-  highlight?: boolean; onClick: () => void; tooltip: string; className?: string;
+  highlight?: boolean; onClick: () => void; tooltip: string; className?: string; disabled?: boolean;
 }) {
   // Derive a stable data-testid from the tooltip text (lowercase, hyphened)
   const testId = `ctrl-${tooltip.toLowerCase().replace(/\s+/g, '-')}`;
@@ -427,8 +442,9 @@ function ControlBtn({
       data-testid={testId}
       className={cn(
         "relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 active:scale-90",
-        danger && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
-        highlight && "ring-2 ring-yellow-400/50",
+        danger && !disabled && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
+        highlight && !disabled && "ring-2 ring-yellow-400/50",
+        disabled && "opacity-50 cursor-not-allowed",
         className
       )}
       style={
@@ -439,8 +455,8 @@ function ControlBtn({
             }
           : undefined
       }
-      onMouseEnter={(e) => { if (!danger) e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"; }}
-      onMouseLeave={(e) => { if (!danger) e.currentTarget.style.backgroundColor = active ? "var(--mt-bg-active)" : "transparent"; }}
+      onMouseEnter={(e) => { if (!danger && !disabled) e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"; }}
+      onMouseLeave={(e) => { if (!danger && !disabled) e.currentTarget.style.backgroundColor = active ? "var(--mt-bg-active)" : "transparent"; }}
     >
       {icon}
     </button>

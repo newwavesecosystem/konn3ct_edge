@@ -61,7 +61,9 @@ export class WebRTCClient {
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
-  public onForceMute?: () => void;
+  public onForceMute?: (reason?: string) => void;
+  public onForceVideoOff?: (reason?: string) => void;
+  public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean }, updatedBy?: string) => void;
   public onECinemaUpdate?: (link: string | null) => void;
   public onECinemaAction?: (msg: any) => void;
   public onDonationStatusReceived?: (active: boolean) => void;
@@ -295,7 +297,13 @@ export class WebRTCClient {
           }
           break;
         case 'force_mute':
-          this.onForceMute?.();
+          this.onForceMute?.(msg.reason);
+          break;
+        case 'force_video_off':
+          this.onForceVideoOff?.(msg.reason);
+          break;
+        case 'room_settings_updated':
+          this.onRoomSettingsUpdated?.(msg.settings, msg.updatedBy);
           break;
         case 'ecinema_update':
           this.onECinemaUpdate?.(msg.link);
@@ -1172,9 +1180,21 @@ export class WebRTCClient {
     }
   }
 
-  public sendForceMute(userId?: string) {
+  public sendForceMute(targetUserId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'force_mute', userId }));
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId: targetUserId, target }));
+    }
+  }
+
+  public sendForceVideoOff(targetUserId?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'force_video_off', userId: targetUserId }));
+    }
+  }
+
+  public sendUpdateRoomSettings(settings: { micLocked?: boolean, videoLocked?: boolean, chatLocked?: boolean }) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'update_room_settings', settings }));
     }
   }
 
