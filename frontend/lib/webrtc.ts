@@ -788,10 +788,23 @@ export class WebRTCClient {
 
     // Republish saved tracks
     if (videoTrack && videoTrack.readyState === 'live') {
+      const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
+      const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
+      
+      const encodings = this.isLowBandwidth 
+        ? [{ maxBitrate: 150000 }] 
+        : isSVC 
+          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }]
+          : [
+              { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
+              { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
+              { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
+            ];
+
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack,
         appData: { source: 'camera' },
-        encodings: this.isLowBandwidth ? [{ maxBitrate: 150000 }] : undefined,
+        encodings,
         codecOptions: { videoGoogleStartBitrate: 1000 }
       });
       if (isVideoPaused) this.localVideoProducer.pause();
@@ -874,14 +887,19 @@ export class WebRTCClient {
     const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
     videoTrack = processedStream.getVideoTracks()[0];
     
-    // 4. Robust Simulcast Configuration (Spatial & Temporal Scalability)
+    // 4. Robust Simulcast/SVC Configuration (Spatial & Temporal Scalability)
+    const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
+    const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
+
     const encodings = this.isLowBandwidth 
       ? [{ maxBitrate: 150000 }] 
-      : [
-          { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
-          { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
-          { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
-        ];
+      : isSVC 
+        ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }] // SVC for AV1/VP9
+        : [ // Simulcast for VP8/H264
+            { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
+            { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
+            { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
+          ];
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
