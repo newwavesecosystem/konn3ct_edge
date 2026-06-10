@@ -129,6 +129,25 @@ const roomECinema = new Map<string, string | null>();
 const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 
+export const cachedRoomParticipants = new Map<string, Array<{ userId: string, name: string, role: string, isMobile: boolean }>>();
+
+export function addParticipantToCache(roomId: string, client: { userId: string, name: string, role: string, isMobile: boolean }) {
+  let cache = cachedRoomParticipants.get(roomId);
+  if (!cache) { cache = []; cachedRoomParticipants.set(roomId, cache); }
+  if (!cache.some(p => p.userId === client.userId)) {
+    cache.push({ userId: client.userId, name: client.name, role: client.role, isMobile: client.isMobile });
+  }
+}
+
+export function removeParticipantFromCache(roomId: string, userId: string) {
+  const cache = cachedRoomParticipants.get(roomId);
+  if (cache) {
+    const newCache = cache.filter(p => p.userId !== userId);
+    if (newCache.length === 0) cachedRoomParticipants.delete(roomId);
+    else cachedRoomParticipants.set(roomId, newCache);
+  }
+}
+
 const syncRoomTimeouts = new Map<string, NodeJS.Timeout>();
 
 export function syncRoomStateToRedis(roomId: string, roomSlug: string) {
@@ -417,11 +436,12 @@ export function initializeSignaling(server: Server) {
       }));
 
       if (client.status === 'active') {
+        addParticipantToCache(roomId, client);
         broadcastToRoom(roomId, {
           type: 'user_joined',
           userId,
-          name,
-          role,
+          name: client.name,
+          role: client.role,
           isMobile: client.isMobile
         });
         
@@ -446,9 +466,7 @@ export function initializeSignaling(server: Server) {
         // Send history ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
         setImmediate(async () => {
           try {
-            const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
-              .filter(c => c.status === 'active')
-              .map(c => ({ userId: c.userId, name: c.name, role: c.role, isMobile: c.isMobile }));
+            const activeParticipants = cachedRoomParticipants.get(roomId) || [];
             ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
             const chatHistory = await db.chatMessage.findMany({
@@ -552,6 +570,7 @@ export function initializeSignaling(server: Server) {
         const roomClients = rooms.get(roomId);
         if (roomClients) {
           roomClients.delete(userId);
+          removeParticipantFromCache(roomId, userId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
@@ -1214,11 +1233,27 @@ export function initializeSignaling(server: Server) {
     if (!roomClients) return;
 
     const payload = JSON.stringify(message);
-    for (const [id, client] of roomClients.entries()) {
-      if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(payload);
+    const clientsArr = Array.from(roomClients.entries());
+    const CHUNK_SIZE = 500;
+    
+    let currentIndex = 0;
+    
+    function processChunk() {
+      const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
+      for (let i = currentIndex; i < end; i++) {
+        const [id, client] = clientsArr[i];
+        if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+      
+      currentIndex = end;
+      if (currentIndex < clientsArr.length) {
+        setImmediate(processChunk);
       }
     }
+    
+    processChunk();
   }
 
   function broadcastToHosts(roomId: string, message: any) {
@@ -1226,17 +1261,30 @@ export function initializeSignaling(server: Server) {
     if (!roomClients) return;
 
     const payload = JSON.stringify(message);
+    const clientsArr = Array.from(roomClients.entries());
+    const CHUNK_SIZE = 500;
     let sentToHost = false;
-    for (const [id, client] of roomClients.entries()) {
-      if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(payload);
-        logger.info(`Sent waiting_room_request to host ${client.userId}`);
-        sentToHost = true;
+    let currentIndex = 0;
+
+    function processChunk() {
+      const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
+      for (let i = currentIndex; i < end; i++) {
+        const [id, client] = clientsArr[i];
+        if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+          logger.info(`Sent waiting_room_request to host ${client.userId}`);
+          sentToHost = true;
+        }
+      }
+      
+      currentIndex = end;
+      if (currentIndex < clientsArr.length) {
+        setImmediate(processChunk);
+      } else if (!sentToHost) {
+        logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
       }
     }
-
-    if (!sentToHost) {
-      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
-    }
+    
+    processChunk();
   }
 }

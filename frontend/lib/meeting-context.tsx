@@ -127,6 +127,9 @@ interface MeetingContextValue {
   vbMode: 'none' | 'blur' | 'image';
   vbImageUrl?: string;
   handleVbSelect: (mode: 'none' | 'blur' | 'image', imageUrl?: string) => void;
+
+  pauseRemoteVideo: (trackId: string) => void;
+  resumeRemoteVideo: (trackId: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -1405,6 +1408,14 @@ export function MeetingProvider({
     webrtcClient.current?.sendECinemaAction(action, time);
   }, []);
 
+  const pauseRemoteVideo = (trackId: string) => {
+    webrtcClient.current?.pauseRemoteVideoByTrack(trackId);
+  };
+
+  const resumeRemoteVideo = (trackId: string) => {
+    webrtcClient.current?.resumeRemoteVideoByTrack(trackId);
+  };
+
   return (
     <MeetingContext.Provider
       value={{
@@ -1532,6 +1543,8 @@ export function MeetingProvider({
         outputVolume,
         setOutputVolume,
         logoutUrl: initialLogoutUrl,
+        pauseRemoteVideo,
+        resumeRemoteVideo,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />

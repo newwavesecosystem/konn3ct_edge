@@ -46,7 +46,33 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser, selectedDevices, isMirrorVideoEnabled } = useMeeting();
+  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo } = useMeeting();
+
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = React.useState(true);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+      },
+      { root: null, rootMargin: "200px" } // Preload slightly before it enters view
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const isSelf = participant.id === currentUser.id;
+
+  React.useEffect(() => {
+    if (!isSelf && participant.videoTrack) {
+      if (!isVisible) {
+        pauseRemoteVideo(participant.videoTrack.id);
+      } else {
+        resumeRemoteVideo(participant.videoTrack.id);
+      }
+    }
+  }, [isVisible, isSelf, participant.videoTrack, pauseRemoteVideo, resumeRemoteVideo]);
 
   const initials = participant.name
     .split(" ")
@@ -97,13 +123,11 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-
-
-  const isSelf = participant.id === currentUser.id;
-  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack;
+  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack && isVisible;
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative w-full h-full rounded-2xl overflow-hidden group",
         "transition-shadow duration-300",
@@ -118,7 +142,7 @@ export function ParticipantTile({
           Renders on TOP of the camera tile when screensharing is active.
           Camera feed stays alive underneath and shows as a PiP corner bubble.
       ──────────────────────────────────────────────────────────────────────── */}
-      {participant.screenTrack && participant.isScreenSharing && (
+      {participant.screenTrack && participant.isScreenSharing && isVisible && (
         <div className="absolute inset-0 z-20 bg-black flex items-center justify-center">
           {/* Full screen content — object-contain preserves aspect ratio */}
           <video

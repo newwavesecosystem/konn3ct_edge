@@ -1108,6 +1108,23 @@ export class WebRTCClient {
     }
   }
 
+  public async pauseRemoteVideoByTrack(trackId: string) {
+    const consumer = Array.from(this.consumers.values()).find(c => c.track.id === trackId && c.kind === 'video');
+    if (consumer && !consumer.paused && consumer.appData?.source !== 'screen') {
+      await this.request('pause_consumer', 'consumer_paused', { consumerId: consumer.id }).catch(console.error);
+      consumer.pause();
+    }
+  }
+
+  public async resumeRemoteVideoByTrack(trackId: string) {
+    if (this.isAudioOnlyMode) return;
+    const consumer = Array.from(this.consumers.values()).find(c => c.track.id === trackId && c.kind === 'video');
+    if (consumer && consumer.paused) {
+      await this.request('resume', 'resumed', { consumerId: consumer.id }).catch(console.error);
+      consumer.resume();
+    }
+  }
+
   public disconnect() {
     console.log('[WebRTC] Disconnecting gracefully...');
     this.isIntentionalDisconnect = true;
