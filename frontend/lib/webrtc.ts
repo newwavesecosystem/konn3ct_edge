@@ -250,6 +250,25 @@ export class WebRTCClient {
         case 'camera_state':
           this.onCameraState?.(msg);
           break;
+        case 'connection_poor':
+          // Auto-Degrade to Audio-Only
+          if (this.isLowBandwidth) {
+            const consumer = this.consumers.get(msg.producerId);
+            if (consumer && consumer.kind === 'video' && !consumer.paused) {
+              consumer.pause();
+              console.warn("Connection poor: Paused video consumer", msg.producerId);
+            }
+          }
+          break;
+        case 'connection_recovered':
+          if (this.isLowBandwidth) {
+            const consumer = this.consumers.get(msg.producerId);
+            if (consumer && consumer.kind === 'video' && consumer.paused) {
+              consumer.resume();
+              console.log("Connection recovered: Resumed video consumer", msg.producerId);
+            }
+          }
+          break;
         case 'hand_raise':
           this.onHandRaise?.(msg);
           break;
@@ -819,12 +838,20 @@ export class WebRTCClient {
     }
 
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // 8. Media Constraints Rescaling (Upstream optimization)
+    let videoConstraints: any = { facingMode: "user" };
+    if (this.isLowBandwidth) {
+      videoConstraints.width = { ideal: 320, max: 320 };
+      videoConstraints.height = { ideal: 240, max: 240 };
+      videoConstraints.frameRate = { ideal: 15, max: 15 };
+    } else {
+      videoConstraints.width = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 1280 } : { ideal: 640 });
+      videoConstraints.height = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 });
+    }
+
     this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
-      video: { 
-        width: isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }), 
-        height: isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 }),
-        facingMode: "user"
-      },
+      video: videoConstraints,
       audio: false 
     });
 
@@ -846,7 +873,14 @@ export class WebRTCClient {
     const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
     videoTrack = processedStream.getVideoTracks()[0];
     
-    const encodings = this.isLowBandwidth ? [{ maxBitrate: 150000 }] : undefined;
+    // 4. Robust Simulcast Configuration (Spatial & Temporal Scalability)
+    const encodings = this.isLowBandwidth 
+      ? [{ maxBitrate: 150000 }] 
+      : [
+          { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
+          { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
+          { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
+        ];
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {

@@ -244,6 +244,12 @@ export function MeetingProvider({
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+
+  // Sync isRecording with the presence of a bot participant
+  useEffect(() => {
+    const hasBot = participants.some((p) => p.role === "bot");
+    setIsRecording(hasBot);
+  }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);

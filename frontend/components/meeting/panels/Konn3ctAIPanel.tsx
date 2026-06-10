@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
 
 interface AIMessage {
   role: "user" | "ai";
@@ -98,9 +99,13 @@ export function Konn3ctAIPanel() {
               "px-4 py-2.5 rounded-2xl max-w-[85%] text-sm",
               msg.role === "user" 
                 ? "bg-[var(--mt-bg-hover)] text-[var(--mt-text)] rounded-tr-sm" 
-                : "bg-brand-green/10 text-[var(--mt-text)] rounded-tl-sm"
+                : "bg-brand-green/10 text-[var(--mt-text)] rounded-tl-sm prose prose-sm prose-invert max-w-none"
             )}>
-              {msg.content}
+              {msg.role === "ai" ? (
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              ) : (
+                msg.content
+              )}
             </div>
           </div>
         ))}

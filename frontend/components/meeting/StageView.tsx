@@ -560,12 +560,6 @@ function SpeakerLayout({
           <div ref={stripRef} className="flex gap-2.5 overflow-x-auto no-scrollbar py-1.5 px-1 scroll-smooth">
             <AnimatePresence>
               {others.map((p) => {
-                const initials = p.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase();
                 return (
                   <motion.div
                     key={p.id}
@@ -573,38 +567,9 @@ function SpeakerLayout({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.92 }}
                     transition={TILE_TRANSITION}
-                    className="shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-xl transition-shadow hover:shadow-md"
-                    style={{
-                      backgroundColor: "var(--mt-bg-tile)",
-                      border: "1px solid var(--mt-border)",
-                    }}
+                    className="shrink-0 w-40 h-24 rounded-xl overflow-hidden shadow-sm"
                   >
-                    {/* Avatar circle */}
-                    <div
-                      className="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                      style={{
-                        backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
-                        color: "var(--mt-avatar-text, var(--mt-text))",
-                      }}
-                    >
-                      {initials}
-                      {/* Speaking ring disabled */}
-                    </div>
-                    {/* Name + status */}
-                    <div className="flex flex-col min-w-0">
-                      <span
-                        className="text-[11px] font-medium truncate max-w-[72px]"
-                        style={{ color: "var(--mt-text)" }}
-                      >
-                        {p.name.split(" ")[0]}
-                      </span>
-                      <span
-                        className="text-[9px] truncate"
-                        style={{ color: p.isMuted ? "var(--mt-text-faint)" : "var(--color-brand-green)" }}
-                      >
-                        {p.isMuted ? "Muted" : "Speaking"}
-                      </span>
-                    </div>
+                    <ParticipantTile participant={p} fixedAspect />
                   </motion.div>
                 );
               })}

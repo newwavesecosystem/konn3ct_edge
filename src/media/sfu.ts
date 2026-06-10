@@ -301,7 +301,8 @@ export async function createConsumerWithCallback(
   producerId: string,
   rtpCapabilities: any,
   router: Router,
-  onProducerClose: (consumerId: string) => void
+  onProducerClose: (consumerId: string) => void,
+  onScore?: (score: number) => void
 ) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
@@ -327,6 +328,14 @@ export async function createConsumerWithCallback(
     consumer.close();
     consumers.delete(consumer.id);
     onProducerClose(consumer.id); // Notify signaling server to forward event to client
+  });
+
+  consumer.on('score', (score) => {
+    if (onScore) {
+      // score is an object like { score: 10, producerScore: 10, ... }
+      // We take the consumer's score (0-10, 10 is best)
+      onScore(score.score);
+    }
   });
 
   return {

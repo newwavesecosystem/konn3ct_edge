@@ -18,11 +18,15 @@ export const config = {
           kind: 'audio' as const,
           mimeType: 'audio/opus',
           clockRate: 48000,
-          channels: 2
+          channels: 2,
+          parameters: {
+            useinbandfec: 1,
+            usedtx: 1
+          }
         },
         {
           kind: 'video' as const,
-          mimeType: 'video/VP8',
+          mimeType: 'video/AV1',
           clockRate: 90000,
           parameters: {
             'x-google-start-bitrate': 1000
@@ -34,6 +38,14 @@ export const config = {
           clockRate: 90000,
           parameters: {
             'profile-id': 2,
+            'x-google-start-bitrate': 1000
+          }
+        },
+        {
+          kind: 'video' as const,
+          mimeType: 'video/VP8',
+          clockRate: 90000,
+          parameters: {
             'x-google-start-bitrate': 1000
           }
         },

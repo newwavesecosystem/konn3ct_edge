@@ -422,10 +422,8 @@ export function initializeSignaling(server: Server) {
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
 
+      // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
       if (client.status === 'active') {
-        // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
-        // This ensures getOrCreateRouter() is already resolved before session_status triggers
-        // initializeMediasoup() on the client side.
         try {
           await getOrCreateRouter(roomId);
         } catch (e) {
@@ -433,8 +431,6 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      // Send session_status IMMEDIATELY after router is ready (not after DB queries)
-      // We MUST include the userId and name here so the frontend knows its true identity!
       ws.send(JSON.stringify({ 
         type: 'session_status', 
         recovered: false, 
@@ -473,74 +469,76 @@ export function initializeSignaling(server: Server) {
             }
           }
         }
-
-        // Send history ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
-        setImmediate(async () => {
-          try {
-            const activeParticipants = cachedRoomParticipants.get(roomId) || [];
-            ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
-
-            const chatHistory = await db.chatMessage.findMany({
-              where: { roomId: roomId, createdAt: { gte: clientData.roomCreatedDate } },
-              orderBy: { createdAt: 'asc' },
-              take: 50,
-            });
-
-            ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
-
-            const settings = roomSettingsMap.get(roomId);
-            if (settings) {
-              ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
-            }
-            const pollHistory = await db.meetingPoll.findMany({
-              where: { roomId, isActive: true },
-              orderBy: { createdAt: 'asc' }
-            });
-            const noteHistory = await db.sharedNote.findUnique({
-              where: { roomId }
-            });
-            const qaHistory = await db.meetingQA.findMany({
-              where: { roomId },
-              orderBy: { upvotes: 'desc' }
-            });
-
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-              ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
-              if (noteHistory) {
-                ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
-              }
-              const eCinemaLink = roomECinema.get(roomId);
-              if (eCinemaLink) {
-                ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
-                
-                const eState = roomECinemaState.get(roomId);
-                if (eState) {
-                  let currentTime = eState.time;
-                  if (eState.action === 'play') {
-                    currentTime += (Date.now() - eState.serverTime) / 1000;
-                  }
-                  // Send a delayed action to ensure the player has time to load
-                  setTimeout(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                      ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
-                    }
-                  }, 2000);
-                }
-              }
-            }
-          } catch (e) {
-            logger.error("Failed to load history", e);
-          }
-        });
       } else {
-        // Send a request to hosts
+        // Send a request to hosts for admission
         broadcastToHosts(roomId, {
           type: 'waiting_room_request',
           userId,
           name,
         });
       }
+    }
+
+    // ALWAYS send history and participants ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
+    if (client.status === 'active') {
+      setImmediate(async () => {
+        try {
+          const activeParticipants = cachedRoomParticipants.get(roomId) || [];
+          ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+
+          const chatHistory = await db.chatMessage.findMany({
+            where: { roomId: roomId, createdAt: { gte: clientData.roomCreatedDate } },
+            orderBy: { createdAt: 'asc' },
+            take: 50,
+          });
+
+          ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+
+          const settings = roomSettingsMap.get(roomId);
+          if (settings) {
+            ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
+          }
+          const pollHistory = await db.meetingPoll.findMany({
+            where: { roomId, isActive: true },
+            orderBy: { createdAt: 'asc' }
+          });
+          const noteHistory = await db.sharedNote.findUnique({
+            where: { roomId }
+          });
+          const qaHistory = await db.meetingQA.findMany({
+            where: { roomId },
+            orderBy: { upvotes: 'desc' }
+          });
+
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+            ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
+            if (noteHistory) {
+              ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
+            }
+            const eCinemaLink = roomECinema.get(roomId);
+            if (eCinemaLink) {
+              ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
+              
+              const eState = roomECinemaState.get(roomId);
+              if (eState) {
+                let currentTime = eState.time;
+                if (eState.action === 'play') {
+                  currentTime += (Date.now() - eState.serverTime) / 1000;
+                }
+                // Send a delayed action to ensure the player has time to load
+                setTimeout(() => {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+                  }
+                }, 2000);
+              }
+            }
+          }
+        } catch (e) {
+          logger.error("Failed to load history", e);
+        }
+      });
     }
 
     ws.on('message', async (message: Buffer | string) => {
@@ -1332,6 +1330,20 @@ export function initializeSignaling(server: Server) {
                 }));
               }
               consumerOwners.delete(closedConsumerId);
+            },
+            (score) => {
+              // If the connection is poor, tell the client so it can pause video
+              if (score < 3 && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: 'connection_poor',
+                  producerId: data.producerId
+                }));
+              } else if (score >= 3 && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: 'connection_recovered',
+                  producerId: data.producerId
+                }));
+              }
             }
           );
           // Track which client owns this consumer for cleanup
