@@ -179,7 +179,9 @@ export function ParticipantTile({
       )}
 
       {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
-      {/* ── Speaking ring disabled for now ── */}
+      {participant.isSpeaking && !participant.isMuted && (
+        <div className="absolute inset-0 z-20 pointer-events-none rounded-2xl border-[3px] border-brand-green shadow-[inset_0_0_12px_rgba(34,197,94,0.4)]" />
+      )}
 
       {/* ── Video / avatar area ── */}
       {isCameraEffectivelyOn ? (
@@ -231,7 +233,9 @@ export function ParticipantTile({
             >
               {initials}
             </div>
-            {/* Speaking animation disabled for now */}
+            {participant.isSpeaking && !participant.isMuted && (
+              <div className="absolute inset-0 rounded-full border-4 border-brand-green/30 animate-pulse-fast scale-110 pointer-events-none" />
+            )}
           </div>
         </div>
       )}

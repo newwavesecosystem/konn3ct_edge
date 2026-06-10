@@ -4,6 +4,8 @@ import React, { useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { cn } from "@/lib/utils";
 
+import { motion } from "framer-motion";
+
 export function CaptionsOverlay() {
   const { captions, isCaptionsEnabled, captionSize } = useMeeting();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -17,16 +19,14 @@ export function CaptionsOverlay() {
   if (!isCaptionsEnabled || captions.length === 0) return null;
 
   return (
-    <div 
-      className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 pointer-events-none z-50 flex justify-center"
-      style={{ 
-        transform: `translateX(-50%) scale(${captionSize})`, 
-        transformOrigin: "bottom center" 
-      }}
-    >
-      <div 
-        ref={scrollRef}
-        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10 w-fit"
+    <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden flex items-end justify-center pb-8">
+      <motion.div 
+        drag
+        dragMomentum={false}
+        dragElastic={0}
+        style={{ scale: captionSize, transformOrigin: "bottom center" }}
+        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10 w-fit max-w-3xl cursor-grab active:cursor-grabbing"
+        ref={scrollRef as any}
       >
         {captions.map((caption, idx) => (
           <div 
@@ -45,7 +45,7 @@ export function CaptionsOverlay() {
             </span>
           </div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }
