@@ -761,8 +761,11 @@ function ScreenShareLayout({
       if (videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         if (stream.getVideoTracks()[0] === screenSharer.screenTrack) return;
+        stream.getTracks().forEach(t => stream.removeTrack(t));
+        stream.addTrack(screenSharer.screenTrack);
+      } else {
+        videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
       }
-      videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
       videoRef.current.play().catch((e) => {
         if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
       });

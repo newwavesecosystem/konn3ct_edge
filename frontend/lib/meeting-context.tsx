@@ -1686,8 +1686,14 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
           audioRef.current.volume = outputVolume / 100;
           return;
         }
+        // Update the existing MediaStream instead of replacing srcObject 
+        // to bypass iOS Safari autoplay restrictions on reconnect
+        stream.getAudioTracks().forEach(t => stream.removeTrack(t));
+        stream.addTrack(track);
+      } else {
+        audioRef.current.srcObject = new MediaStream([track]);
       }
-      audioRef.current.srcObject = new MediaStream([track]);
+      
       audioRef.current.volume = outputVolume / 100;
       applyAudioSink(audioRef.current, audioOutput);
       audioRef.current.play().catch((e) => {
@@ -1698,5 +1704,5 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
     }
   }, [track, isLocal, audioOutput, outputVolume]);
 
-  return <audio ref={audioRef} autoPlay muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
+  return <audio ref={audioRef} autoPlay playsInline muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
 }
