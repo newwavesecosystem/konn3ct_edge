@@ -16,6 +16,7 @@ import StreamingPanel from "./StreamingPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
+import { QAPanel } from "./QAPanel";
 import dynamic from "next/dynamic";
 
 const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
@@ -59,6 +60,7 @@ export function MeetingShell() {
     settings: <SettingsPanel />,
     ai: <Konn3ctAIPanel />,
     streaming: <StreamingPanel />,
+    qa: <QAPanel />,
   };
 
   if (webrtcStatus === 'waiting') {

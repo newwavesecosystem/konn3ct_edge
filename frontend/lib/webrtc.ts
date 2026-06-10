@@ -63,7 +63,9 @@ export class WebRTCClient {
   public onServerReject?: (msg: string) => void;
   public onForceMute?: (reason?: string) => void;
   public onForceVideoOff?: (reason?: string) => void;
-  public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean }, updatedBy?: string) => void;
+  public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean, bypassWaitingRoom: boolean }, updatedBy?: string) => void;
+  public onQAHistory?: (messages: any[]) => void;
+  public onQAUpdated?: (msg: any) => void;
   public onECinemaUpdate?: (link: string | null) => void;
   public onECinemaAction?: (msg: any) => void;
   public onDonationStatusReceived?: (active: boolean) => void;
@@ -260,6 +262,12 @@ export class WebRTCClient {
         case 'poll_history':
           this.onPollHistory?.(msg.polls);
           break;
+        case 'qa_history':
+          this.onQAHistory?.(msg.messages);
+          break;
+        case 'qa_updated':
+          this.onQAUpdated?.(msg);
+          break;
         case 'note_history':
           this.onNoteHistory?.(msg.content);
           break;
@@ -400,6 +408,66 @@ export class WebRTCClient {
   public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl }));
+    }
+  }
+
+  public changeUserRole(userId: string, newRole: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'change_role', userId, newRole }));
+    }
+  }
+
+  public admitAllUsers() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'admit_all' }));
+    }
+  }
+
+  public denyAllUsers() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'deny_all' }));
+    }
+  }
+
+  public updateRoomSettings(settings: { micLocked?: boolean, videoLocked?: boolean, chatLocked?: boolean, bypassWaitingRoom?: boolean }) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'update_room_settings', settings }));
+    }
+  }
+
+  public forceMuteUser(userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target }));
+    }
+  }
+
+  public forceVideoOffUser(userId?: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'force_video_off', userId }));
+    }
+  }
+
+  public askQuestion(question: string, isAnonymous: boolean) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ask_question', question, isAnonymous }));
+    }
+  }
+
+  public upvoteQuestion(questionId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'upvote_question', questionId }));
+    }
+  }
+
+  public answerQuestion(questionId: string, answerText: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'answer_question', questionId, answerText }));
+    }
+  }
+
+  public deleteQuestion(questionId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'delete_question', questionId }));
     }
   }
 
