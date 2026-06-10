@@ -39,6 +39,7 @@ import {
   MoreVertical,
   Cloudy,
   PhoneOff,
+  HelpCircle,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -412,6 +413,14 @@ export function MeetingControls() {
             tooltip="Chat"
             hasNotification={hasUnreadChat}
           />
+          {meetingInfo.roomType === "webinar" && (
+            <PanelBtn
+              icon={<HelpCircle className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
+              active={activePanel === "qa"}
+              onClick={() => setActivePanel("qa")}
+              tooltip="Q&A"
+            />
+          )}
           <PanelBtn
             icon={<Users className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "participants"}

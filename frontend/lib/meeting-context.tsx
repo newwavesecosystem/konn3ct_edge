@@ -86,6 +86,8 @@ interface MeetingContextValue {
   setIsMobilePanelOpen: (open: boolean) => void;
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
+  admitAllUsers: () => void;
+  denyAllUsers: () => void;
   kickUser: (userId: string) => void;
   changeUserRole: (userId: string, newRole: string) => void;
   forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
@@ -131,9 +133,16 @@ interface MeetingContextValue {
   pauseRemoteVideo: (trackId: string) => void;
   resumeRemoteVideo: (trackId: string) => void;
 
-  roomSettings: { micLocked: boolean; videoLocked: boolean; chatLocked: boolean };
-  updateRoomSettings: (settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean }) => void;
+  roomSettings: { micLocked: boolean; videoLocked: boolean; chatLocked: boolean; bypassWaitingRoom?: boolean };
+  updateRoomSettings: (settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean; bypassWaitingRoom?: boolean }) => void;
   forceVideoOffUser: (userId?: string) => void;
+
+  // Q&A
+  qaMessages: any[];
+  askQuestion: (question: string, isAnonymous: boolean) => void;
+  upvoteQuestion: (questionId: string) => void;
+  answerQuestion: (questionId: string, answerText: string) => void;
+  deleteQuestion: (questionId: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -212,6 +221,7 @@ export function MeetingProvider({
   const currentUser = useMemo(() => participants.find(p => p.id === initialCurrentUser.id) || initialCurrentUser, [participants, initialCurrentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [qaMessages, setQaMessages] = useState<any[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [sharedNoteContent, setSharedNoteContent] = useState<string>("");
   const formattedTitle = roomSlug
@@ -571,6 +581,23 @@ export function MeetingProvider({
 
         client.onNoteHistory = (content) => {
           setSharedNoteContent(content);
+        };
+
+        client.onQAHistory = (messages) => {
+          setQaMessages(messages);
+        };
+
+        client.onQAUpdated = (msg) => {
+          setQaMessages(prev => {
+            if (msg.action === 'ask') {
+              return [msg.message, ...prev];
+            } else if (msg.action === 'upvote' || msg.action === 'answer') {
+              return prev.map(q => q.id === msg.message.id ? msg.message : q).sort((a, b) => b.upvotes - a.upvotes);
+            } else if (msg.action === 'delete') {
+              return prev.filter(q => q.id !== msg.questionId);
+            }
+            return prev;
+          });
         };
 
         client.onNoteUpdate = (msg) => {
@@ -1512,12 +1539,19 @@ export function MeetingProvider({
         setIsMobilePanelOpen,
         admitUser,
         denyUser,
+        admitAllUsers: () => webrtcClient.current?.admitAllUsers(),
+        denyAllUsers: () => webrtcClient.current?.denyAllUsers(),
         kickUser,
         changeUserRole,
         forceMuteUser,
         forceVideoOffUser,
         updateRoomSettings,
         roomSettings,
+        qaMessages,
+        askQuestion: (question: string, isAnonymous: boolean) => webrtcClient.current?.askQuestion(question, isAnonymous),
+        upvoteQuestion: (questionId: string) => webrtcClient.current?.upvoteQuestion(questionId),
+        answerQuestion: (questionId: string, answerText: string) => webrtcClient.current?.answerQuestion(questionId, answerText),
+        deleteQuestion: (questionId: string) => webrtcClient.current?.deleteQuestion(questionId),
         endMeetingForAll,
         leaveMeeting,
         broadcastECinema,
@@ -1594,10 +1628,18 @@ export function MeetingProvider({
 }
 
 function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { participants: Participant[]; currentUserId: string; outputVolume: number }) {
-  const { selectedDevices } = useMeeting();
+  const { selectedDevices, meetingInfo } = useMeeting();
+  
+  const audioParticipants = useMemo(() => {
+    if (meetingInfo?.roomType === 'webinar') {
+      return participants.filter(p => p.role === 'host' || p.role === 'co-host' || p.role === 'presenter');
+    }
+    return participants;
+  }, [participants, meetingInfo?.roomType]);
+
   return (
     <>
-      {participants.map((p) => (
+      {audioParticipants.map((p) => (
         <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} />
       ))}
     </>

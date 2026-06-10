@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import YouTube from "react-youtube";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function StageView() {
   const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
@@ -322,10 +323,21 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   // ── SCROLL mode (default) ─────────────────────────────
   // ═══════════════════════════════════════════════════════
   const { cols, tileH } = computeScrollableGrid(containerSize.w);
+  const rowCount = Math.ceil(count / cols);
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => tileH + TILE_GAP,
+    overscan: 2,
+  });
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={containerRef}>
       <div
+        ref={scrollContainerRef}
         className="flex-1 min-h-0 overflow-y-auto"
         style={{
           scrollbarWidth: "thin",
@@ -333,22 +345,40 @@ function GridLayout({ participants }: { participants: Participant[] }) {
           paddingRight: 4,
         }}
       >
-        <motion.div
-          layout
-          className="grid"
+        <div
           style={{
-            gridTemplateColumns: `repeat(${cols}, 1fr)`,
-            gridAutoRows: `${tileH}px`,
-            gap: `${TILE_GAP}px`,
-            padding: `${TILE_PADDING_Y}px ${TILE_PADDING_X}px`,
+            height: `${virtualizer.getTotalSize() + TILE_PADDING_Y * 2}px`,
+            width: "100%",
+            position: "relative",
           }}
         >
-          <AnimatePresence>
-            {participants.map((p) => (
-              <MotionTile key={p.id} participant={p} />
-            ))}
-          </AnimatePresence>
-        </motion.div>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const rowStartIndex = virtualRow.index * cols;
+            const rowParticipants = participants.slice(rowStartIndex, rowStartIndex + cols);
+            
+            return (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${tileH}px`,
+                  transform: `translateY(${virtualRow.start + TILE_PADDING_Y}px)`,
+                  padding: `0 ${TILE_PADDING_X}px`,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  gap: `${TILE_GAP}px`,
+                }}
+              >
+                {rowParticipants.map((p) => (
+                  <MotionTile key={p.id} participant={p} />
+                ))}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Bottom breathing room */}
         <div className="h-2 shrink-0" />

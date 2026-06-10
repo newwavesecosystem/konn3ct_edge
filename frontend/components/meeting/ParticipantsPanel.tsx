@@ -40,7 +40,7 @@ const roleColor: Record<string, string> = {
 };
 
 export function ParticipantsPanel() {
-  const { participants, currentUser, waitingUsers, admitUser, denyUser } = useMeeting();
+  const { participants, currentUser, waitingUsers, admitUser, denyUser, admitAllUsers, denyAllUsers } = useMeeting();
 
   const hosts = participants.filter(
     (p) => p.role === "host" || p.role === "co-host"
@@ -67,12 +67,28 @@ export function ParticipantsPanel() {
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {currentUser.role === 'host' && waitingUsers.length > 0 && (
           <div className="px-3 py-2">
-            <p
-              className="text-[11px] uppercase tracking-wider font-semibold px-1 mb-1"
-              style={{ color: "var(--mt-text-faint)" }}
-            >
-              Waiting Room ({waitingUsers.length})
-            </p>
+            <div className="flex items-center justify-between px-1 mb-1">
+              <p
+                className="text-[11px] uppercase tracking-wider font-semibold"
+                style={{ color: "var(--mt-text-faint)" }}
+              >
+                Waiting Room ({waitingUsers.length})
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => admitAllUsers()}
+                  className="text-[10px] px-2 py-0.5 rounded bg-brand-green/10 text-brand-green hover:bg-brand-green/20 transition-colors"
+                >
+                  Admit All
+                </button>
+                <button
+                  onClick={() => denyAllUsers()}
+                  className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+                >
+                  Deny All
+                </button>
+              </div>
+            </div>
             {waitingUsers.map((u) => (
               <div key={u.userId} className="flex items-center gap-3 px-2 py-2 rounded-xl transition-colors group"
                 style={{ backgroundColor: "var(--mt-bg-hover)" }}
@@ -201,6 +217,19 @@ function HostControlsSection() {
             checked={roomSettings.chatLocked}
             onChange={(e) => updateRoomSettings({ chatLocked: e.target.checked })}
             className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
+          />
+        </label>
+
+        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer mt-1 border-t" style={{ borderColor: "var(--mt-border)" }}>
+          <div className="flex items-center gap-2 mt-1">
+            <Unlock className="w-3.5 h-3.5" style={{ color: roomSettings.bypassWaitingRoom ? "var(--brand-green)" : "var(--mt-text-muted)" }} />
+            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Bypass Waiting Room</span>
+          </div>
+          <input 
+            type="checkbox" 
+            checked={roomSettings.bypassWaitingRoom || false}
+            onChange={(e) => updateRoomSettings({ bypassWaitingRoom: e.target.checked })}
+            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent mt-1"
           />
         </label>
       </div>

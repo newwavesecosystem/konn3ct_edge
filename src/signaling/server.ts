@@ -135,6 +135,7 @@ export interface RoomSettings {
   micLocked: boolean;
   videoLocked: boolean;
   chatLocked: boolean;
+  bypassWaitingRoom: boolean;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
@@ -365,8 +366,11 @@ export function initializeSignaling(server: Server) {
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
     const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile } = clientData;
 
+    const roomSettings = roomSettingsMap.get(clientData.roomId);
+    const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
+    
     // Determine initial status
-    const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
+    const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
     const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants };
 
@@ -477,7 +481,7 @@ export function initializeSignaling(server: Server) {
             ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
             const chatHistory = await db.chatMessage.findMany({
-              where: { roomId: roomId, createdAt: { gte: roomCreatedDate } },
+              where: { roomId: roomId, createdAt: { gte: clientData.roomCreatedDate } },
               orderBy: { createdAt: 'asc' },
               take: 50,
             });
@@ -495,9 +499,14 @@ export function initializeSignaling(server: Server) {
             const noteHistory = await db.sharedNote.findUnique({
               where: { roomId }
             });
+            const qaHistory = await db.meetingQA.findMany({
+              where: { roomId },
+              orderBy: { upvotes: 'desc' }
+            });
 
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+              ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
               if (noteHistory) {
                 ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
               }
@@ -1077,6 +1086,126 @@ export function initializeSignaling(server: Server) {
           // Publish stop event to the worker
           redis.publish(`recorder:stop:${roomId}`, 'stop').catch(e => logger.error("Failed to publish stop recording", e));
           broadcastToRoom(roomId, { type: 'recording_stopped' });
+        }
+        break;
+
+      case 'admit_all':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'waiting') {
+                c.status = 'active';
+                addParticipantToCache(roomId, c);
+                c.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: c.userId, name: c.name, role: c.role }));
+                broadcastToRoom(roomId, {
+                  type: 'user_joined',
+                  userId: c.userId,
+                  name: c.name,
+                  role: c.role,
+                  isMobile: c.isMobile
+                });
+              }
+            }
+            syncRoomStateToRedis(roomId, client.roomSlug);
+          }
+        }
+        break;
+
+      case 'deny_all':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of Array.from(roomClients.entries())) {
+              if (c.status === 'waiting') {
+                c.ws.send(JSON.stringify({ type: 'error', message: 'You have been denied entry to this room.' }));
+                roomClients.delete(id);
+              }
+            }
+          }
+        }
+        break;
+
+      case 'ask_question':
+        try {
+          const newQ = await db.meetingQA.create({
+            data: {
+              roomId,
+              userId: data.isAnonymous ? null : userId,
+              authorName: data.isAnonymous ? 'Anonymous' : client.name,
+              isAnonymous: !!data.isAnonymous,
+              question: data.question,
+            }
+          });
+          broadcastToRoom(roomId, {
+            type: 'qa_updated',
+            action: 'ask',
+            message: newQ
+          });
+        } catch (e) {
+          logger.error("Failed to ask question", e);
+        }
+        break;
+
+      case 'upvote_question':
+        try {
+          const q = await db.meetingQA.findUnique({ where: { id: data.questionId } });
+          if (q) {
+            const voterIds = Array.isArray(q.voterIds) ? q.voterIds : [];
+            if (!voterIds.includes(userId)) {
+              const updated = await db.meetingQA.update({
+                where: { id: data.questionId },
+                data: {
+                  upvotes: q.upvotes + 1,
+                  voterIds: [...voterIds, userId]
+                }
+              });
+              broadcastToRoom(roomId, {
+                type: 'qa_updated',
+                action: 'upvote',
+                message: updated
+              });
+            }
+          }
+        } catch (e) {
+          logger.error("Failed to upvote question", e);
+        }
+        break;
+
+      case 'answer_question':
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            const updated = await db.meetingQA.update({
+              where: { id: data.questionId },
+              data: {
+                isAnswered: true,
+                answerText: data.answerText,
+                answeredBy: client.name
+              }
+            });
+            broadcastToRoom(roomId, {
+              type: 'qa_updated',
+              action: 'answer',
+              message: updated
+            });
+          } catch (e) {
+            logger.error("Failed to answer question", e);
+          }
+        }
+        break;
+
+      case 'delete_question':
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            await db.meetingQA.delete({ where: { id: data.questionId } });
+            broadcastToRoom(roomId, {
+              type: 'qa_updated',
+              action: 'delete',
+              questionId: data.questionId
+            });
+          } catch (e) {
+            logger.error("Failed to delete question", e);
+          }
         }
         break;
 
