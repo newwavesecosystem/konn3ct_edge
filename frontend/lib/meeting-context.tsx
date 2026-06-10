@@ -1572,7 +1572,13 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
       try {
         await (el as any).setSinkId(sinkId);
       } catch (e) {
-        console.warn("Failed to set audio output device:", e);
+        console.warn("Failed to set audio output device, falling back to default:", e);
+        // Fallover to the default system audio device ("")
+        try {
+          await (el as any).setSinkId("");
+        } catch (fallbackErr) {
+          console.error("Fallback to default audio device also failed", fallbackErr);
+        }
       }
     }
   };
