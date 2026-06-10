@@ -86,7 +86,9 @@ async function startRecording({
         '--disable-dev-shm-usage',
         '--use-fake-ui-for-media-stream',
         '--use-fake-device-for-media-stream',
-        '--window-size=1920,1080'
+        '--window-size=1920,1080',
+        '--force-device-scale-factor=1',
+        '--hide-scrollbars'
       ],
     });
 
@@ -99,9 +101,20 @@ async function startRecording({
     });
 
     // Start capturing the tab's audio+video
-    // puppeteer-stream is a community package without bundled typings
     const { getStream } = await import('puppeteer-stream');
-    const stream = await getStream(page, { audio: true, video: true });
+    const stream = await getStream(page, { 
+      audio: true, 
+      video: true,
+      videoConstraints: {
+        mandatory: {
+          minWidth: 1920,
+          minHeight: 1080,
+          maxWidth: 1920,
+          maxHeight: 1080
+        }
+      },
+      mimeType: 'video/webm;codecs=vp9,opus'
+    });
 
     const fileStream = fs.createWriteStream(tempFilePath);
     stream.pipe(fileStream);
