@@ -161,8 +161,9 @@ export class VideoProcessor {
 
             // Convert 1-channel mask to 4-channel ImageData (Alpha channel for destination-in)
             for (let i = 0; i < maskArray.length; i++) {
-              // Selfie segmenter usually outputs >0 for person, 0 for background
-              const alpha = maskArray[i] === 0 ? 0 : 255;
+              // The mask output for this model/delegate seems to return >0 for background and 0 for person,
+              // or vice-versa depending on the device. Since it's currently inverted for the user:
+              const alpha = maskArray[i] === 0 ? 255 : 0;
               data[i * 4 + 3] = alpha; 
             }
             this.maskCtx!.putImageData(this.maskImageData!, 0, 0);
