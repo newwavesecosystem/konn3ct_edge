@@ -162,10 +162,12 @@ export function MeetingProvider({
 }) {
   // Extract user info from sessionStorage (passed from Join screen)
   let storedJoinInfo: any = null;
+  let initialUrlParams: URLSearchParams | null = null;
+  
   if (typeof window !== "undefined") {
     try {
-      const searchParams = new URLSearchParams(window.location.search);
-      let sessionToken = searchParams.get("t");
+      initialUrlParams = new URLSearchParams(window.location.search);
+      let sessionToken = initialUrlParams.get("t");
       
       if (sessionToken) {
         sessionStorage.setItem("conn3ct_session_token", sessionToken);
@@ -191,7 +193,7 @@ export function MeetingProvider({
   }
 
   // For the initial render, use URL search params as a fallback for backwards compatibility
-  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const searchParams = initialUrlParams || new URLSearchParams("");
   const queryName = storedJoinInfo?.name || searchParams.get("name") || "Guest";
   const queryEmail = storedJoinInfo?.email || "guest@conn3ct.com";
   const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
@@ -204,7 +206,7 @@ export function MeetingProvider({
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
   const [initialCurrentUser] = useState<Participant>({
-    id: `u-${Math.random().toString(36).substring(2, 9)}`,
+    id: storedJoinInfo?.userId || `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
     isMuted: initialMuted,
@@ -1090,7 +1092,14 @@ export function MeetingProvider({
   const fetchDevices = async () => {
     try {
       // Must request permission first, otherwise device labels are empty
-      await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => {});
+      // Only do this if not a bot to avoid triggering fake device beep
+      if (initialCurrentUser.role !== 'bot') {
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => null);
+        if (tempStream) {
+          tempStream.getTracks().forEach(t => t.stop()); // Immediately release hardware
+        }
+      }
+      
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       
       const audioInputs = allDevices.filter((d) => d.kind === "audioinput");

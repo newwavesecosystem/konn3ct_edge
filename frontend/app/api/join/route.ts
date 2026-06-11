@@ -61,6 +61,7 @@ export async function POST(request: Request) {
         finalEmail = sessionData.email;
         finalRole = sessionData.role;
         finalIsMobile = sessionData.isMobile;
+        if (sessionData.userId) finalUserId = sessionData.userId;
       } catch (err) {
         console.error("JWT Verification failed", err);
         return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });

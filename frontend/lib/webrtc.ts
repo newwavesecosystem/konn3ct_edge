@@ -884,6 +884,9 @@ export class WebRTCClient {
       }
     }
 
+    if (!this.rawCameraStream) {
+      throw new Error("Failed to initialize camera stream");
+    }
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
     // Initialize VideoProcessor if not exists

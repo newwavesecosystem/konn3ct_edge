@@ -73,11 +73,12 @@ async function processRecordingJob(job) {
     
     browser = await launch({
       executablePath: chromePath,
-      headless: false, // Required by puppeteer-stream and extension APIs
-      defaultViewport: { width: 1280, height: 720 },
+      headless: false, // Required by getDisplayMedia
+      defaultViewport: { width: 1920, height: 1080 },
       ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
       args: [
-        '--window-size=1280,720',
+        '--window-size=1920,1080',
+        '--kiosk',
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--autoplay-policy=no-user-gesture-required',
@@ -90,7 +91,8 @@ async function processRecordingJob(job) {
         '--auto-select-tab-capture-source-by-title=BotRecord',
         '--enable-usermedia-screen-capturing',
         '--use-fake-ui-for-media-stream',
-        '--disable-web-security'
+        '--disable-web-security',
+        '--hide-scrollbars'
       ],
     });
 
@@ -163,13 +165,13 @@ async function processRecordingJob(job) {
           let stream;
           try {
             stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { displaySurface: "browser", width: 1280, height: 720 },
+              video: { displaySurface: "browser", width: 1920, height: 1080 },
               audio: true
             });
           } catch (err) {
             console.warn("getDisplayMedia with audio failed, falling back to video only:", err.toString());
             stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { displaySurface: "browser", width: 1280, height: 720 }
+              video: { displaySurface: "browser", width: 1920, height: 1080 }
             });
           }
           const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });

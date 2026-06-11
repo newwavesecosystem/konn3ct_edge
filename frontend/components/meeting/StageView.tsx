@@ -63,7 +63,7 @@ export function StageView() {
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
   const others = gridSorted.filter((p) => p.id !== activeSpeaker?.id);
 
-  if (layoutMode === "grid") {
+  if (layoutMode === "grid" || currentUser.role === 'bot') {
     return <GridLayout participants={gridSorted} />;
   }
 
@@ -408,12 +408,50 @@ function GridInner({
   containerW: number;
   containerH: number;
 }) {
+  const { currentUser } = useMeeting();
   const count = participants.length;
+  const isBotViewer = currentUser.role === 'bot';
+
+  // For bots, we want 0 padding and 0 gap to perfectly fill the screen
+  const paddingX = isBotViewer ? 0 : TILE_PADDING_X;
+  const paddingY = isBotViewer ? 0 : TILE_PADDING_Y;
+  const gap = isBotViewer ? 0 : TILE_GAP;
+
+  const computeDynamicGrid = (c: number, w: number, h: number) => {
+    const availW = Math.max(0, w - paddingX * 2);
+    const availH = Math.max(0, h - paddingY * 2);
+
+    let best: GridSolution = { cols: 1, rows: c, tileW: 0, tileH: 0 };
+    let bestScore = -Infinity;
+
+    const maxCols = Math.min(c, 6);
+
+    for (let cols = 1; cols <= maxCols; cols++) {
+      const rows = Math.ceil(c / cols);
+      const tileW = (availW - gap * (cols - 1)) / cols;
+      const tileH = (availH - gap * (rows - 1)) / rows;
+
+      if (tileW < 80 || tileH < 60) continue;
+
+      const area = tileW * tileH;
+      const aspect = tileW / tileH;
+      const targetAspect = 16 / 9;
+      const aspectPenalty = Math.abs(Math.log(aspect / targetAspect));
+      const score = area - aspectPenalty * 8000;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = { cols, rows, tileW, tileH };
+      }
+    }
+
+    return best;
+  };
 
   // Hooks always run.
   const solution = useMemo(
-    () => computeBestGrid(count, containerW, containerH),
-    [count, containerW, containerH],
+    () => computeDynamicGrid(count, containerW, containerH),
+    [count, containerW, containerH, isBotViewer],
   );
 
   if (count === 0) {
@@ -424,6 +462,16 @@ function GridInner({
 
   // ── 1 participant: hero ─────────────────────────────────
   if (count === 1) {
+    if (isBotViewer) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-full h-full">
+            <ParticipantTile participant={participants[0]} isLarge fixedAspect={false} />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
         <div className="w-full aspect-video max-h-full flex justify-center">
@@ -437,18 +485,23 @@ function GridInner({
   if (count === 2) {
     const isPortrait = containerW < containerH * 1.1;
     return (
-      <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
+      <div className={cn("absolute inset-0 flex items-center justify-center", !isBotViewer && "p-3 sm:p-4")}>
         <div
           className={cn(
-            "w-full flex gap-2.5 sm:gap-3",
+            "w-full flex",
+            isBotViewer ? "gap-0 h-full" : "gap-2.5 sm:gap-3",
             isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
           <AnimatePresence>
             {participants.map((p) => (
               <div key={p.id} className="flex-1 min-w-0 min-h-0 w-full flex justify-center">
-                <div className="w-full aspect-video max-h-full">
-                  <MotionTile participant={p} isLarge />
+                <div className={cn("w-full max-h-full", isBotViewer ? "h-full" : "aspect-video")}>
+                  {isBotViewer ? (
+                    <ParticipantTile participant={p} isLarge fixedAspect={false} />
+                  ) : (
+                    <MotionTile participant={p} isLarge />
+                  )}
                 </div>
               </div>
             ))}
@@ -458,25 +511,31 @@ function GridInner({
     );
   }
 
-
-
   // ── General case: use computed best grid (4, 6, 7+) ──────
   const { cols, tileW, tileH } = solution;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center" style={{ padding: TILE_PADDING_Y }}>
+    <div className="absolute inset-0 flex items-center justify-center" style={{ padding: paddingY }}>
       <motion.div
         layout
         className="grid"
         style={{
           gridTemplateColumns: `repeat(${cols}, ${tileW}px)`,
           gridAutoRows: `${tileH}px`,
-          gap: `${TILE_GAP}px`,
+          gap: `${gap}px`,
+          width: isBotViewer ? "100%" : undefined,
+          height: isBotViewer ? "100%" : undefined,
         }}
       >
         <AnimatePresence>
           {participants.map((p) => (
-            <MotionTile key={p.id} participant={p} />
+            isBotViewer ? (
+              <div key={p.id} className="w-full h-full min-h-0 min-w-0 overflow-hidden">
+                <ParticipantTile participant={p} fixedAspect={false} />
+              </div>
+            ) : (
+              <MotionTile key={p.id} participant={p} />
+            )
           ))}
         </AnimatePresence>
       </motion.div>

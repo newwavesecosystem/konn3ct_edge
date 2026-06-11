@@ -611,7 +611,7 @@ export function initializeSignaling(server: Server) {
           }
         }
         disconnectTimeouts.delete(`${userId}:${roomId}`);
-      }, 30000); // 30 seconds
+      }, 5000); // 5 seconds
 
       disconnectTimeouts.set(`${userId}:${roomId}`, timeout);
     });
