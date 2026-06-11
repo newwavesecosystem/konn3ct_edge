@@ -40,6 +40,7 @@ import {
   Cloudy,
   PhoneOff,
   HelpCircle,
+  Shield,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -427,6 +428,14 @@ export function MeetingControls() {
             onClick={() => setActivePanel("participants")}
             tooltip="People"
           />
+          {isHost && (
+            <PanelBtn
+              icon={<Shield className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
+              active={activePanel === "security"}
+              onClick={() => setActivePanel("security")}
+              tooltip="Security"
+            />
+          )}
         </div>
       </div>
 

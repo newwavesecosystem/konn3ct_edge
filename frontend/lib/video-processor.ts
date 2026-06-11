@@ -2,6 +2,11 @@ import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision';
 
 export type VirtualBackgroundMode = 'none' | 'blur' | 'image';
 
+let globalSegmenter: ImageSegmenter | null = null;
+let globalVision: any = null;
+let isInitializingModel = false;
+let modelInitPromise: Promise<void> | null = null;
+
 export class VideoProcessor {
   private mode: VirtualBackgroundMode = 'none';
   private imageUrl: string | null = null;
@@ -36,23 +41,42 @@ export class VideoProcessor {
   }
 
   private async initModel() {
-    try {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-      );
-      this.segmenter = await ImageSegmenter.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-          delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        outputCategoryMask: true,
-        outputConfidenceMasks: false
-      });
-      console.log("[VideoProcessor] Canvas 2D MediaPipe Engine Initialized");
-    } catch (e) {
-      console.error("[VideoProcessor] Failed to initialize MediaPipe model:", e);
+    if (globalSegmenter) {
+      this.segmenter = globalSegmenter;
+      return;
     }
+    
+    if (isInitializingModel && modelInitPromise) {
+      await modelInitPromise;
+      this.segmenter = globalSegmenter;
+      return;
+    }
+
+    isInitializingModel = true;
+    modelInitPromise = (async () => {
+      try {
+        globalVision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+        globalSegmenter = await ImageSegmenter.createFromOptions(globalVision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          outputCategoryMask: true,
+          outputConfidenceMasks: false
+        });
+        console.log("[VideoProcessor] Canvas 2D MediaPipe Engine Initialized Globally");
+      } catch (e) {
+        console.error("[VideoProcessor] Failed to initialize MediaPipe model:", e);
+      } finally {
+        isInitializingModel = false;
+      }
+    })();
+    
+    await modelInitPromise;
+    this.segmenter = globalSegmenter;
   }
 
   public setMode(mode: VirtualBackgroundMode, imageUrl?: string) {

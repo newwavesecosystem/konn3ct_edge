@@ -956,7 +956,9 @@ export function MeetingProvider({
             setParticipants(curr => curr.map(p => p.id === user.userId ? { ...p, isConnecting: false } : p));
           }, 4000);
 
-          toast.info(`${user.name} joined the meeting`);
+          if (user.role !== 'bot') {
+            toast.info(`${user.name} joined the meeting`);
+          }
         };
 
         client.onRoleChanged = (userId, newRole) => {
@@ -973,7 +975,9 @@ export function MeetingProvider({
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
             if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
-               toast.info(`${user.name} left the meeting`);
+               if (user.role !== 'bot') {
+                 toast.info(`${user.name} left the meeting`);
+               }
             }
             return prev.filter(p => p.id !== userId);
           });

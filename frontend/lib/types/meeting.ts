@@ -95,4 +95,4 @@ export interface DocNote {
   lastEditedAt: string;
 }
 
-export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | "streaming" | "qa" | null;
+export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | "streaming" | "qa" | "security" | null;

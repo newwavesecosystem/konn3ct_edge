@@ -21,7 +21,8 @@ import {
   Lock,
   Unlock,
   MessageSquareOff,
-  VideoOff as VideoOffIcon
+  VideoOff as VideoOffIcon,
+  Search
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 
@@ -41,8 +42,11 @@ const roleColor: Record<string, string> = {
 
 export function ParticipantsPanel() {
   const { participants: allParticipants, currentUser, waitingUsers, admitUser, denyUser, admitAllUsers, denyAllUsers } = useMeeting();
+  const [searchQuery, setSearchQuery] = React.useState("");
 
-  const participants = allParticipants.filter(p => p.role !== "bot");
+  const participants = allParticipants.filter(p => 
+    p.role !== "bot" && p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const hosts = participants.filter(
     (p) => p.role === "host" || p.role === "co-host"
@@ -57,15 +61,33 @@ export function ParticipantsPanel() {
   return (
     <div className="flex flex-col h-full">
       <div
-        className="px-4 py-3 flex items-center justify-between"
+        className="px-4 py-3 flex flex-col gap-3"
         style={{ borderBottom: "1px solid var(--mt-border)" }}
       >
-        <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>
-          Participants{" "}
-          <span style={{ color: "var(--mt-text-faint)" }} className="font-normal">
-            ({totalVisibleParticipants})
-          </span>
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>
+            Participants{" "}
+            <span style={{ color: "var(--mt-text-faint)" }} className="font-normal">
+              ({totalVisibleParticipants})
+            </span>
+          </h3>
+        </div>
+        
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--mt-text-muted)" }} />
+          <input
+            type="text"
+            placeholder="Search participants..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 rounded-lg text-sm outline-none transition-colors"
+            style={{ 
+              backgroundColor: "var(--mt-bg-input)", 
+              color: "var(--mt-text)",
+              border: "1px solid var(--mt-border)"
+            }}
+          />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar">
@@ -147,95 +169,6 @@ export function ParticipantsPanel() {
             currentUserId={currentUser.id}
           />
         )}
-      </div>
-
-      {(currentUser.role === 'host' || currentUser.role === 'co-host') && (
-        <HostControlsSection />
-      )}
-    </div>
-  );
-}
-
-function HostControlsSection() {
-  const { forceMuteUser, forceVideoOffUser, roomSettings, updateRoomSettings } = useMeeting();
-  
-  return (
-    <div className="p-3" style={{ borderTop: "1px solid var(--mt-border)", backgroundColor: "var(--mt-bg-control)" }}>
-      <p className="text-[11px] uppercase tracking-wider font-semibold px-1 mb-2" style={{ color: "var(--mt-text-faint)" }}>
-        Security & Controls
-      </p>
-      
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        <button
-          onClick={() => forceMuteUser(undefined, 'all_except_hosts')}
-          className="flex flex-col items-center justify-center p-2 rounded-xl hover:bg-white/5 transition-colors border"
-          style={{ borderColor: "var(--mt-border)", color: "var(--mt-text-secondary)" }}
-        >
-          <MicOff className="w-4 h-4 mb-1" />
-          <span className="text-[10px] text-center leading-tight">Mute<br/>Attendees</span>
-        </button>
-        <button
-          onClick={() => forceMuteUser(undefined, 'all_except_presenters')}
-          className="flex flex-col items-center justify-center p-2 rounded-xl hover:bg-white/5 transition-colors border"
-          style={{ borderColor: "var(--mt-border)", color: "var(--mt-text-secondary)" }}
-        >
-          <MicOff className="w-4 h-4 mb-1 text-purple-400" />
-          <span className="text-[10px] text-center leading-tight">Mute Except<br/>Presenters</span>
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-1.5 mt-3">
-        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
-          <div className="flex items-center gap-2">
-            <Mic className="w-3.5 h-3.5" style={{ color: roomSettings.micLocked ? "#f87171" : "var(--mt-text-muted)" }} />
-            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Lock Microphones</span>
-          </div>
-          <input 
-            type="checkbox" 
-            checked={roomSettings.micLocked}
-            onChange={(e) => updateRoomSettings({ micLocked: e.target.checked })}
-            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
-          />
-        </label>
-        
-        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
-          <div className="flex items-center gap-2">
-            <VideoOffIcon className="w-3.5 h-3.5" style={{ color: roomSettings.videoLocked ? "#f87171" : "var(--mt-text-muted)" }} />
-            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Lock Cameras</span>
-          </div>
-          <input 
-            type="checkbox" 
-            checked={roomSettings.videoLocked}
-            onChange={(e) => updateRoomSettings({ videoLocked: e.target.checked })}
-            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
-          />
-        </label>
-        
-        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
-          <div className="flex items-center gap-2">
-            <MessageSquareOff className="w-3.5 h-3.5" style={{ color: roomSettings.chatLocked ? "#f87171" : "var(--mt-text-muted)" }} />
-            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Lock Chat</span>
-          </div>
-          <input 
-            type="checkbox" 
-            checked={roomSettings.chatLocked}
-            onChange={(e) => updateRoomSettings({ chatLocked: e.target.checked })}
-            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
-          />
-        </label>
-
-        <label className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer mt-1 border-t" style={{ borderColor: "var(--mt-border)" }}>
-          <div className="flex items-center gap-2 mt-1">
-            <Unlock className="w-3.5 h-3.5" style={{ color: roomSettings.bypassWaitingRoom ? "var(--brand-green)" : "var(--mt-text-muted)" }} />
-            <span className="text-xs" style={{ color: "var(--mt-text)" }}>Bypass Waiting Room</span>
-          </div>
-          <input 
-            type="checkbox" 
-            checked={roomSettings.bypassWaitingRoom || false}
-            onChange={(e) => updateRoomSettings({ bypassWaitingRoom: e.target.checked })}
-            className="rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent mt-1"
-          />
-        </label>
       </div>
     </div>
   );
