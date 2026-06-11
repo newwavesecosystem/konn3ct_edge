@@ -111,7 +111,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
       roomId: room.id,
       roomSlug,
       recordingId: recording.id,
-      url: `https://${frontendDomain}/meeting/${roomSlug}?bot=true&botSecret=${botSecret}`
+      url: `https://${frontendDomain}/meeting/${roomSlug}?bot=true&botSecret=${botSecret}&mic=false&camera=false&role=bot`
     }));
     
     redis.disconnect();
