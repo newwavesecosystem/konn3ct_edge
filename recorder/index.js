@@ -257,6 +257,7 @@ async function processRecordingJob(job) {
               ffmpeg(outputPathRaw)
                 .outputOptions([
                   '-preset veryfast',
+                  '-threads 1',
                   '-c:v libx264',
                   '-c:a aac',
                   '-max_muxing_queue_size 9999'
