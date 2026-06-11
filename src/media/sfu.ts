@@ -83,6 +83,8 @@ function getWorker(): Worker {
   return worker;
 }
 
+const routersPromises = new Map<string, Promise<Router>>();
+
 /**
  * Create or get a Router for a specific room
  */
@@ -90,14 +92,28 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   if (routers.has(roomId)) {
     return routers.get(roomId)!;
   }
+  
+  if (routersPromises.has(roomId)) {
+    return routersPromises.get(roomId)!;
+  }
 
-  const worker = getWorker();
-  const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+  const promise = (async () => {
+    const worker = getWorker();
+    const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+    
+    routers.set(roomId, router);
+    logger.info(`Router created for room ${roomId}`);
+    return router;
+  })();
+
+  routersPromises.set(roomId, promise);
   
-  routers.set(roomId, router);
-  logger.info(`Router created for room ${roomId}`);
-  
-  return router;
+  try {
+    const router = await promise;
+    return router;
+  } finally {
+    routersPromises.delete(roomId);
+  }
 }
 
 /**

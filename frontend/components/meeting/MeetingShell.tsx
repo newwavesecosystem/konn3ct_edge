@@ -17,6 +17,7 @@ import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
+import { SecurityPanel } from "./SecurityPanel";
 import dynamic from "next/dynamic";
 
 const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
@@ -61,6 +62,7 @@ export function MeetingShell() {
     ai: <Konn3ctAIPanel />,
     streaming: <StreamingPanel />,
     qa: <QAPanel />,
+    security: <SecurityPanel />,
   };
 
   if (webrtcStatus === 'waiting') {
@@ -194,7 +196,7 @@ export function MeetingShell() {
             style={{ color: "var(--mt-text-faint)" }}
           >
             {meetingInfo.roomType === "webinar" ? "Webinar" : "Meeting"} ·{" "}
-            {participants.length} participants
+            {participants.filter(p => p.role !== 'bot').length} participants
           </span>
         </div>
       </div>
