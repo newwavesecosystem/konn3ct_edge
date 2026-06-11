@@ -864,10 +864,25 @@ export class WebRTCClient {
       videoConstraints.height = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 });
     }
 
-    this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
-      video: videoConstraints,
-      audio: false 
-    });
+    // Retry logic for Windows/Chrome hardware release latency (AbortError: Timeout starting video source)
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
+          video: videoConstraints,
+          audio: false 
+        });
+        break;
+      } catch (err: any) {
+        retries--;
+        if (err.name === 'AbortError' && retries > 0) {
+          console.warn(`Camera start timeout, retrying... (${retries} left)`);
+          await new Promise(r => setTimeout(r, 800)); // Wait for hardware to release
+        } else {
+          throw err;
+        }
+      }
+    }
 
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 

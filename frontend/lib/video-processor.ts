@@ -208,10 +208,15 @@ export class VideoProcessor {
     if (this.videoElement) {
       this.videoElement.pause();
       this.videoElement.srcObject = null;
+      this.videoElement.removeAttribute('src');
+      this.videoElement.load();
     }
 
     if (this.processedStream) {
-      this.processedStream.getTracks().forEach(t => t.stop());
+      this.processedStream.getTracks().forEach(t => {
+        t.stop();
+        this.processedStream?.removeTrack(t);
+      });
     }
     
     this.rawStream = null;
