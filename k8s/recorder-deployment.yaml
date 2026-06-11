@@ -14,16 +14,6 @@ spec:
       labels:
         app: conn3ct-recorder
     spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - conn3ct-backend
-            topologyKey: kubernetes.io/hostname
       containers:
       - name: recorder
         image: registry.digitalocean.com/konn3ct-registry/conn3ct-recorder:latest
