@@ -58,7 +58,7 @@ async function startRecording({
     { expiresIn: '2h' }
   );
 
-  const meetingUrl = `${frontendUrl}?t=${botToken}&name=RecordingBot&role=bot`;
+  const meetingUrl = `${frontendUrl}?t=${botToken}&name=RecordingBot&role=bot&mic=false&camera=false`;
 
   // Resolve the room owner so we can set ownerId on the recording
   const room = await db.room.findUnique({ where: { id: roomId } });

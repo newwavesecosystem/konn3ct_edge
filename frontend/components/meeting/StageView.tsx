@@ -426,7 +426,7 @@ function GridInner({
   if (count === 1) {
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
-        <div className="w-full aspect-video max-h-full max-w-5xl flex justify-center">
+        <div className="w-full aspect-video max-h-full flex justify-center">
           <MotionTile participant={participants[0]} isLarge />
         </div>
       </div>
@@ -440,7 +440,7 @@ function GridInner({
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
         <div
           className={cn(
-            "w-full flex gap-2.5 sm:gap-3 max-w-7xl",
+            "w-full flex gap-2.5 sm:gap-3",
             isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
