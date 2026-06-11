@@ -152,6 +152,7 @@ export async function POST(request: Request) {
       email: finalEmail,
       name: finalName,
       role: finalRole,
+      roomId: roomId,
       isBot: !!isBot,
       isMobile: finalIsMobile,
       ...fetchedRoomLimits

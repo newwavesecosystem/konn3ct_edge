@@ -99,7 +99,7 @@ export function Konn3ctAIPanel() {
               "px-4 py-2.5 rounded-2xl max-w-[85%] text-sm",
               msg.role === "user" 
                 ? "bg-[var(--mt-bg-hover)] text-[var(--mt-text)] rounded-tr-sm" 
-                : "bg-brand-green/10 text-[var(--mt-text)] rounded-tl-sm prose prose-sm prose-invert max-w-none"
+                : "bg-brand-green/10 text-[var(--mt-text)] rounded-tl-sm prose prose-sm max-w-none prose-p:text-current prose-strong:text-[var(--mt-text-strong,var(--mt-text))] prose-li:text-current prose-headings:text-current"
             )}>
               {msg.role === "ai" ? (
                 <ReactMarkdown>{msg.content}</ReactMarkdown>
