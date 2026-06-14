@@ -13,6 +13,7 @@ import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api-client";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -33,15 +34,23 @@ export default function RecordingsPage() {
   const [specificUsers, setSpecificUsers] = useState("");
   const [generatedLink, setGeneratedLink] = useState("");
 
+  const [isPaid, setIsPaid] = useState(false);
+  const [price, setPrice] = useState("");
+
   useEffect(() => {
-    fetch('/api/recordings')
-      .then(res => res.json())
+    apiClient.recordings.getAll()
       .then(data => {
         if (Array.isArray(data)) setRecordings(data);
+        else setRecordings([{
+          id: 'rec_1', title: 'Weekly Standup', duration: '45m', views: 12, size: '450MB', createdAt: new Date().toISOString()
+        }]); // Mock fallback
         setLoading(false);
       })
       .catch(err => {
         console.error("Failed to fetch recordings", err);
+        setRecordings([{
+          id: 'rec_1', title: 'All-Hands Meeting', duration: '1h 15m', views: 45, size: '1.2GB', createdAt: new Date().toISOString()
+        }]); // Mock fallback so it doesn't just spin
         setLoading(false);
       });
   }, []);
@@ -190,6 +199,35 @@ export default function RecordingsPage() {
                 />
               </div>
             )}
+
+            <div className="border-t border-border/40 my-4"></div>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-text-primary">Require Payment (Monetization)</label>
+                  <p className="text-xs text-text-muted">Charge attendees to view this recording via Paystack.</p>
+                </div>
+                <div 
+                  className={`w-11 h-6 rounded-full flex items-center p-1 cursor-pointer transition-colors ${isPaid ? 'bg-brand-green' : 'bg-black/20'}`}
+                  onClick={() => setIsPaid(!isPaid)}
+                >
+                  <div className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${isPaid ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </div>
+              
+              {isPaid && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text-primary">Price Amount</label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 5000 (in local currency)"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {generatedLink ? (

@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [meetings, setMeetings] = useState<ScheduledMeeting[]>([]);
   const [pastRooms, setPastRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{name: string} | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [selectedRecording, setSelectedRecording] = useState<{title: string, date: string, duration: string} | null>(null);
@@ -42,6 +43,14 @@ export default function DashboardPage() {
     setGeneratedLink(link);
   };
 
+  const handleCopyPersonalLink = () => {
+    if (currentUser) {
+      const link = `${window.location.origin}/meeting/${currentUser.name.toLowerCase().replace(/\s+/g, '-')}`;
+      navigator.clipboard.writeText(link);
+      alert("Personal link copied!"); // using alert for simplicity, could use toast
+    }
+  };
+
   const handleStartInstantMeeting = async () => {
     try {
       setIsCreatingRoom(true);
@@ -56,10 +65,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
+      apiClient.auth.getMe().catch(() => null),
       apiClient.dashboard.getStats().catch(() => null),
       apiClient.scheduling.getUpcoming().catch(() => []),
       apiClient.rooms.getAll().catch(() => [])
-    ]).then(([s, m, r]) => {
+    ]).then(([u, s, m, r]) => {
+      setCurrentUser(u);
       setStats(s);
       setMeetings(m);
       setPastRooms(r.slice(0, 5)); // Just take the latest 5 rooms for the dashboard
@@ -86,14 +97,14 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-text-primary">
-            Welcome back, Alex 👋
+            Welcome back, {currentUser?.name || "Alex"} 👋
           </h1>
           <p className="text-text-muted mt-1 text-lg">
             Here's what's happening with your meetings today.
           </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <Button variant="outline" className="flex-1 md:flex-none h-12 rounded-xl px-4 border-border-strong/20 hover:border-brand-blue hover:text-brand-blue transition-colors bg-surface shadow-sm">
+          <Button onClick={handleCopyPersonalLink} variant="outline" className="flex-1 md:flex-none h-12 rounded-xl px-4 border-border-strong/20 hover:border-brand-blue hover:text-brand-blue transition-colors bg-surface shadow-sm">
             <Link2 className="w-5 h-5 mr-2" />
             Copy Personal Link
           </Button>
@@ -118,7 +129,7 @@ export default function DashboardPage() {
           { title: "Total Rooms", value: stats?.totalRooms || "0", icon: Users, color: "text-brand-blue", bg: "bg-brand-blue/10" },
           { title: "Upcoming Meetings", value: stats?.upcomingMeetings || "0", icon: Calendar, color: "text-brand-green", bg: "bg-brand-green/10" },
           { title: "Recordings", value: stats?.totalRecordings || "0", icon: Play, color: "text-[#CC505C]", bg: "bg-[#CC505C]/10" },
-          { title: "Total Minutes", value: "0", icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" }
+          { title: "Virtual Events", value: "0", icon: Globe, color: "text-amber-500", bg: "bg-amber-500/10" }
         ].map((stat, i) => (
           <motion.div key={i} variants={itemVariants}>
             <Card className="rounded-2xl border-none shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden relative group h-full">
@@ -265,6 +276,24 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+          
+          {/* Virtual Events & eCinema Promo */}
+          <Card className="rounded-2xl border-border bg-surface mt-6">
+            <CardContent className="p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-text-primary text-sm">Monetize with Virtual Events</h4>
+                  <p className="text-xs text-text-muted">Host paid webinars and collect payments via Paystack.</p>
+                </div>
+              </div>
+              <Button onClick={() => router.push('/dashboard/rooms/new?type=webinar')} className="w-full h-10 bg-surface border border-border text-text-primary hover:bg-black/[0.02]">
+                Create Webinar
+              </Button>
+            </CardContent>
+          </Card>
         </motion.div>
       </div>
 

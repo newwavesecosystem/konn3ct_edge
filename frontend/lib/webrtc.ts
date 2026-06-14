@@ -1021,10 +1021,13 @@ export class WebRTCClient {
     }
 
     // Handle unexpected track ends (e.g. mic unplugged)
-    activeTrack.onended = () => {
-      console.warn("[WebRTC] Microphone track ended unexpectedly. Disabling mic.");
-      this.disableMic();
-      this.onForceMute?.();
+    activeTrack.onended = async () => {
+      console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
+      try {
+        await this.enableMic();
+      } catch (err) {
+        console.error("Failed to re-initialize mic:", err);
+      }
     };
 
     return activeTrack;
@@ -1122,8 +1125,16 @@ export class WebRTCClient {
     }
   }
 
-  public resumeMic() {
+  public async resumeMic() {
     if (this.localAudioProducer && this.localAudioProducer.paused) {
+      if (this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
+        console.warn("[WebRTC] Microphone track is ended during resume. Re-initializing hardware.");
+        try {
+          await this.enableMic();
+        } catch (e) {
+          console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
+        }
+      }
       this.localAudioProducer.resume();
     }
   }
@@ -1215,6 +1226,24 @@ export class WebRTCClient {
       });
 
       this.consumers.set(consumer.id, consumer);
+      
+      // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
+      consumer.on('pause', () => {
+        if (consumerKind === 'video' && source !== 'screen') {
+          this.onCameraState?.({ userId, isCameraOn: false });
+        } else if (consumerKind === 'audio') {
+          this.onMuteState?.({ userId, isMuted: true });
+        }
+      });
+
+      consumer.on('resume', () => {
+        if (consumerKind === 'video' && source !== 'screen') {
+          this.onCameraState?.({ userId, isCameraOn: true });
+        } else if (consumerKind === 'audio') {
+          this.onMuteState?.({ userId, isMuted: false });
+        }
+      });
+
       this.onNewConsumer?.(consumer, userId);
       
       // Tell the backend to resume sending media (unpause the consumer)
