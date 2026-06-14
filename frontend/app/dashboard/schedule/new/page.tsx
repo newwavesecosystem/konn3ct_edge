@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/Input";
 import {
   ArrowLeft, Calendar as CalendarIcon, Clock, Users,
   Video, MonitorPlay, AlignLeft, Globe, Mail, X, Check,
-  ChevronLeft, ChevronRight, ChevronDown,
+  ChevronLeft, ChevronRight, ChevronDown, Repeat, UploadCloud, Plus
 } from "lucide-react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { MOCK_ROOMS } from "@/lib/mock/schedule";
 import { Select } from "@/components/ui/Select";
@@ -288,35 +289,81 @@ export default function NewSchedulePage() {
   const [mode, setMode] = useState<"meeting" | "webinar">("meeting");
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState("");
+  const [selectedOrgUsers, setSelectedOrgUsers] = useState<string[]>([]);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const mockOrgUsers = [
+    { id: "1", name: "Alex Johnson", role: "Engineering" },
+    { id: "2", name: "Sarah Michaels", role: "Marketing" },
+    { id: "3", name: "David Chen", role: "Design" },
+    { id: "4", name: "Emily Davis", role: "Leadership" },
+    { id: "5", name: "Michael Brown", role: "Sales" }
+  ];
+  const mockRecentUsers = [
+    { name: "John Doe", email: "john@example.com" },
+    { name: "Jane Smith", email: "jane@partner.com" },
+    { name: "Bob Wilson", email: "b.wilson@client.net" }
+  ];
 
   // Date & time state
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [startDate, setStartDate] = useState<Date | null>(new Date());
+  const [endDate, setEndDate] = useState<Date | null>(new Date());
+  const [datePickerMode, setDatePickerMode] = useState<"start" | "end">("start");
   const [startH, setStartH] = useState(9);
   const [startM, setStartM] = useState(0);
   const [endH, setEndH] = useState(10);
   const [endM, setEndM] = useState(0);
   const [selectedRoom, setSelectedRoom] = useState("");
   const [timezone, setTimezone] = useState("Africa/Lagos");
+  const [recurrence, setRecurrence] = useState("none");
 
-  const formattedDate = selectedDate
-    ? selectedDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
-    : null;
+  const processEmails = (input: string) => {
+    const rawEmails = input.split(/[\s,;]+/);
+    const validEmails = rawEmails.filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    const newEmails = validEmails.filter(e => !emails.includes(e));
+    if (newEmails.length > 0) {
+      setEmails(prev => [...prev, ...newEmails]);
+      setEmailInput("");
+    }
+  };
 
   const handleAddEmail = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      const newEmail = emailInput.trim();
-      if (newEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) && !emails.includes(newEmail)) {
-        setEmails([...emails, newEmail]);
-        setEmailInput("");
-      }
+      processEmails(emailInput);
     }
   };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    processEmails(e.clipboardData.getData("text"));
+  };
+
+  const handleMockCsvUpload = () => {
+    toast.info("Importing from CSV...");
+    setTimeout(() => {
+      const mockList = ["alex.boss@example.com", "sarah.m@example.com", "dev-team@example.com"];
+      const newEmails = mockList.filter(e => !emails.includes(e));
+      if (newEmails.length > 0) {
+        setEmails(prev => [...prev, ...newEmails]);
+      }
+      toast.success(`Imported ${newEmails.length} attendees from CSV`);
+    }, 1000);
+  };
+
   const removeEmail = (emailToRemove: string) => setEmails(emails.filter(e => e !== emailToRemove));
+
+  const addRecentUser = (email: string) => {
+    if (!emails.includes(email)) setEmails(prev => [...prev, email]);
+  };
+
+  const toggleOrgUser = (userId: string) => {
+    setSelectedOrgUsers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setTimeout(() => router.push("/dashboard/schedule"), 600);
+    toast.success("Event scheduled successfully!");
+    setTimeout(() => router.push("/dashboard/schedule"), 1000);
   };
 
   return (
@@ -405,36 +452,53 @@ export default function NewSchedulePage() {
         {/* ── Date & Time Card ── */}
         <Card className="rounded-2xl border-border/60 bg-surface overflow-hidden">
           <CardContent className="p-0">
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-border/40">
-              <CalendarIcon className="w-5 h-5 text-brand-green" />
-              <h3 className="text-lg font-bold text-text-primary">Date & Time</h3>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border/40">
+              <div className="flex items-center gap-3">
+                <CalendarIcon className="w-5 h-5 text-brand-green" />
+                <h3 className="text-lg font-bold text-text-primary">Date & Time</h3>
+              </div>
+              <div className="flex items-center gap-2 text-sm bg-black/[0.03] p-1 rounded-lg">
+                <button 
+                  type="button" 
+                  onClick={() => setDatePickerMode("start")} 
+                  className={`px-3 py-1.5 rounded-md font-semibold transition-all ${datePickerMode === "start" ? "bg-white shadow-sm text-text-primary" : "text-text-muted hover:text-text-primary"}`}>
+                  Start Date
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setDatePickerMode("end")} 
+                  className={`px-3 py-1.5 rounded-md font-semibold transition-all ${datePickerMode === "end" ? "bg-white shadow-sm text-text-primary" : "text-text-muted hover:text-text-primary"}`}>
+                  End Date
+                </button>
+              </div>
             </div>
 
             <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40">
               {/* ── Left: Calendar ── */}
               <div className="p-6 space-y-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-text-muted">Select Date</span>
-                  {selectedDate && (
-                    <span className="text-xs font-semibold text-brand-green bg-brand-green/10 px-2 py-0.5 rounded-md">
-                      {selectedDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                    </span>
-                  )}
+                  <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
+                    {datePickerMode === "start" ? "Select Start Date" : "Select End Date"}
+                  </span>
                 </div>
                 <CalendarPicker
-                  value={selectedDate}
-                  onChange={setSelectedDate}
-                  minDate={new Date()}
+                  value={datePickerMode === "start" ? startDate : endDate}
+                  onChange={(d) => {
+                    if (datePickerMode === "start") {
+                      setStartDate(d);
+                      if (endDate && d > endDate) setEndDate(d); // Auto-push end date
+                    } else {
+                      setEndDate(d);
+                      if (startDate && d < startDate) setStartDate(d); // Auto-pull start date
+                    }
+                  }}
+                  minDate={datePickerMode === "end" && startDate ? startDate : new Date()}
                 />
-                {selectedDate && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-3 p-3 rounded-xl bg-brand-green/5 border border-brand-green/20 text-sm text-brand-green font-semibold text-center"
-                  >
-                    {formattedDate}
-                  </motion.div>
-                )}
+                
+                <div className="mt-3 text-sm flex flex-col gap-1 text-center bg-black/[0.02] p-2 rounded-xl">
+                  {startDate && <div className="text-text-primary"><span className="font-semibold text-text-muted">Start:</span> {startDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>}
+                  {endDate && <div className="text-text-primary"><span className="font-semibold text-text-muted">End:</span> {endDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>}
+                </div>
               </div>
 
               {/* ── Right: Time ── */}
@@ -443,7 +507,7 @@ export default function NewSchedulePage() {
 
                 <div className="flex flex-col gap-6">
                   <TimePicker
-                    label="Start"
+                    label="Start Time"
                     hour={startH}
                     minute={startM}
                     onChange={(h, m) => { setStartH(h); setStartM(m); }}
@@ -454,22 +518,44 @@ export default function NewSchedulePage() {
                     <div className="flex-1 h-px bg-border/60" />
                     <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider px-2 py-1 bg-black/[0.03] rounded-lg border border-border/40">
                       {(() => {
-                        const dur = (endH * 60 + endM) - (startH * 60 + startM);
-                        const d = ((dur % 1440) + 1440) % 1440;
-                        const h = Math.floor(d / 60); const m = d % 60;
-                        return `${h > 0 ? `${h}h ` : ""}${m > 0 ? `${m}m` : ""}` || "0m";
+                        if (!startDate || !endDate) return "0m";
+                        const startMs = startDate.getTime() + (startH * 60 + startM) * 60000;
+                        const endMs = endDate.getTime() + (endH * 60 + endM) * 60000;
+                        const diffMins = Math.max(0, Math.floor((endMs - startMs) / 60000));
+                        const d = Math.floor(diffMins / 1440);
+                        const h = Math.floor((diffMins % 1440) / 60); 
+                        const m = diffMins % 60;
+                        return `${d > 0 ? `${d}d ` : ""}${h > 0 ? `${h}h ` : ""}${m > 0 ? `${m}m` : ""}` || "0m";
                       })()}
                     </span>
                     <div className="flex-1 h-px bg-border/60" />
                   </div>
 
                   <TimePicker
-                    label="End"
+                    label="End Time"
                     hour={endH}
                     minute={endM}
                     onChange={(h, m) => { setEndH(h); setEndM(m); }}
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* ── Recurring Row ── */}
+            <div className="px-6 py-4 border-t border-border/40 bg-black/[0.01] flex items-center gap-4">
+              <Repeat className="w-4 h-4 text-text-muted shrink-0" />
+              <label className="text-sm font-semibold text-text-primary shrink-0">Recurrence</label>
+              <div className="flex-1 max-w-xs">
+                <Select
+                  value={recurrence}
+                  onChange={setRecurrence}
+                  options={[
+                    { value: "none", label: "Does not repeat" },
+                    { value: "daily", label: "Daily" },
+                    { value: "weekly", label: "Weekly" },
+                    { value: "monthly", label: "Monthly" },
+                  ]}
+                />
               </div>
             </div>
 
@@ -509,10 +595,76 @@ export default function NewSchedulePage() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                <Mail className="w-4 h-4 text-text-muted" /> Invite Attendees
-              </label>
+            <div className="space-y-6">
+              <div className="space-y-2 relative">
+                <label className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                  <Users className="w-4 h-4 text-text-muted" /> Select Team Members
+                </label>
+                <div 
+                  className="w-full min-h-[44px] p-2 rounded-xl border border-border/60 bg-black/[0.02] cursor-pointer flex flex-wrap gap-2 items-center relative z-10"
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                >
+                  {selectedOrgUsers.length === 0 && (
+                    <span className="text-sm text-text-muted ml-1">Select users from your organization...</span>
+                  )}
+                  {selectedOrgUsers.map(id => {
+                    const user = mockOrgUsers.find(u => u.id === id);
+                    if (!user) return null;
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-blue/10 text-brand-blue text-xs font-semibold">
+                        {user.name}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); toggleOrgUser(id); }} className="hover:bg-brand-blue/20 rounded-full p-0.5 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                  <ChevronDown className="w-4 h-4 text-text-muted ml-auto mr-2" />
+                </div>
+                
+                <AnimatePresence>
+                  {isUserDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsUserDropdownOpen(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute top-[72px] left-0 w-full max-h-[240px] overflow-y-auto rounded-xl border border-border/60 bg-surface shadow-xl z-50 p-1"
+                      >
+                        {mockOrgUsers.map(user => (
+                          <div 
+                            key={user.id}
+                            onClick={() => toggleOrgUser(user.id)}
+                            className="flex items-center justify-between p-3 rounded-lg hover:bg-black/[0.04] cursor-pointer transition-colors"
+                          >
+                            <div>
+                              <p className="text-sm font-semibold text-text-primary">{user.name}</p>
+                              <p className="text-xs text-text-muted">{user.role}</p>
+                            </div>
+                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                              selectedOrgUsers.includes(user.id) ? "bg-brand-blue border-brand-blue text-white" : "border-border/60"
+                            }`}>
+                              {selectedOrgUsers.includes(user.id) && <Check className="w-3 h-3" />}
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+                <p className="text-xs text-text-muted">Selected team members will automatically see this session on their dashboard and receive calendar invites.</p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-text-muted" /> Invite Guest Users
+                  </label>
+                  <Button type="button" variant="outline" size="sm" onClick={handleMockCsvUpload} className="h-8 text-xs px-3">
+                    <UploadCloud className="w-3.5 h-3.5 mr-1.5" /> Import CSV
+                  </Button>
+                </div>
               <div className="p-3 min-h-[90px] border border-border/60 rounded-xl bg-black/[0.02] flex flex-wrap gap-2 items-start focus-within:ring-2 focus-within:ring-brand-green/50 focus-within:bg-surface transition-all">
                 {emails.map(email => (
                   <span key={email} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-green/10 text-brand-green text-xs font-semibold">
@@ -523,15 +675,33 @@ export default function NewSchedulePage() {
                   </span>
                 ))}
                 <input
-                  type="email"
+                  type="text"
                   value={emailInput}
                   onChange={e => setEmailInput(e.target.value)}
                   onKeyDown={handleAddEmail}
-                  placeholder={emails.length === 0 ? "Type email and press Enter..." : ""}
+                  onPaste={handlePaste}
+                  placeholder={emails.length === 0 ? "Type or paste emails and press Enter..." : ""}
                   className="flex-1 min-w-[200px] bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted placeholder:text-xs"
                 />
               </div>
-              <p className="text-xs text-text-muted">Invited users will receive a calendar invite with the join link.</p>
+
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-1">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Recently Invited:</span>
+                {mockRecentUsers.map(user => (
+                  <button 
+                    key={user.email}
+                    type="button"
+                    onClick={() => addRecentUser(user.email)}
+                    disabled={emails.includes(user.email)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/[0.03] hover:bg-black/[0.06] border border-border/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-xs font-medium text-text-primary">{user.name}</span>
+                    {!emails.includes(user.email) && <Plus className="w-3 h-3 text-text-muted" />}
+                  </button>
+                ))}
+              </div>
+                <p className="text-xs text-text-muted mt-2">Tip: You can paste a comma-separated list of emails directly.</p>
+              </div>
             </div>
           </CardContent>
         </Card>

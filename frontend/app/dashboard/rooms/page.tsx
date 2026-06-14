@@ -51,6 +51,37 @@ export default function RoomsPage() {
     "from-purple-500 to-pink-400"
   ];
 
+  const handleDeleteRoom = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this room?")) return;
+    try {
+      await apiClient.rooms.delete(id);
+      setRooms(prev => prev.filter(r => r.id !== id));
+      toast.success("Room deleted successfully");
+    } catch (err) {
+      toast.error("Failed to delete room");
+    }
+  };
+
+  const handleDuplicateRoom = async (room: UIRoom, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newRoom = await apiClient.rooms.create({ name: `${room.name} (Copy)`, mode: room.mode });
+      const formatted: UIRoom = {
+        ...newRoom,
+        participants: 0,
+        type: newRoom.mode === 'webinar' ? 'Webinar' : 'Meeting',
+        isLocked: false,
+        lastUsed: new Date(newRoom.createdAt).toLocaleDateString(),
+        color: colors[rooms.length % colors.length]
+      };
+      setRooms(prev => [formatted, ...prev]);
+      toast.success("Room duplicated successfully");
+    } catch (err) {
+      toast.error("Failed to duplicate room");
+    }
+  };
+
   useEffect(() => {
     apiClient.rooms.getAll()
       .then(data => {
@@ -58,7 +89,7 @@ export default function RoomsPage() {
         const formatted = data.map((r, i) => ({
           ...r,
           participants: Math.floor(Math.random() * 5),
-          type: "Team",
+          type: r.mode === 'webinar' ? 'Webinar' : 'Meeting',
           isLocked: false,
           lastUsed: new Date(r.createdAt).toLocaleDateString(),
           color: colors[i % colors.length]
@@ -160,14 +191,20 @@ export default function RoomsPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="p-1.5 space-y-0.5">
-                            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-primary hover:bg-black/[0.04] transition-colors">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/rooms/${room.id}`); }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-primary hover:bg-black/[0.04] transition-colors">
                               <Edit className="h-4 w-4 text-text-muted" /> Edit Room
                             </button>
-                            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-primary hover:bg-black/[0.04] transition-colors">
+                            <button 
+                              onClick={(e) => handleDuplicateRoom(room, e)}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-primary hover:bg-black/[0.04] transition-colors">
                               <Copy className="h-4 w-4 text-text-muted" /> Duplicate
                             </button>
                             <div className="h-px w-full bg-border/60 my-1" />
-                            <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">
+                            <button 
+                              onClick={(e) => handleDeleteRoom(room.id, e)}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">
                               <Trash2 className="h-4 w-4" /> Delete
                             </button>
                           </div>

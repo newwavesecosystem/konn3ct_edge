@@ -59,6 +59,18 @@ export default function TeamsPage() {
     toast.success(`Invite sent to ${data.email}`);
   };
 
+  const handleRemoveMember = (id: number, name: string) => {
+    if (!confirm(`Are you sure you want to remove ${name} from the team?`)) return;
+    setMembersList(membersList.filter(m => m.id !== id));
+    toast.success(`${name} has been removed.`);
+  };
+
+  const handleSuspendMember = (id: number, name: string) => {
+    setMembersList(membersList.map(m => m.id === id ? { ...m, status: "Suspended" } : m));
+    setActiveDropdown(null);
+    toast.success(`${name} has been suspended.`);
+  };
+
   return (
     <div className="flex flex-col gap-8 pb-10">
       {/* Header */}
@@ -165,7 +177,9 @@ export default function TeamsPage() {
                 <button className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-brand-blue/10 hover:text-brand-blue text-text-muted transition-colors" title="Edit Role">
                   <Edit2 className="h-4 w-4" />
                 </button>
-                <button className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-red-500/10 hover:text-red-500 text-text-muted transition-colors" title="Remove Member">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleRemoveMember(member.id, member.name); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-red-500/10 hover:text-red-500 text-text-muted transition-colors" title="Remove Member">
                   <Trash2 className="h-4 w-4" />
                 </button>
                 <button 
@@ -203,7 +217,7 @@ export default function TeamsPage() {
                       </button>
                       <div className="my-1 border-t border-border/40" />
                       <button 
-                        onClick={() => { setActiveDropdown(null); toast.error(`${member.name} has been suspended.`); }}
+                        onClick={(e) => { e.stopPropagation(); handleSuspendMember(member.id, member.name); }}
                         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-amber-600 hover:bg-amber-500/10 transition-colors"
                       >
                         <LogOut className="h-4 w-4" /> Suspend User
