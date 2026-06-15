@@ -1193,17 +1193,21 @@ export function MeetingProvider({
     };
   }, []);
 
-  // ── Muted Talking Detection ────────────────────────────
+  // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
   useEffect(() => {
-    if (!isMuted || !localAudioTrackRef.current) return;
+    const trackToMonitor = webrtcClient.current?.rawAudioTrack || localAudioTrackRef.current;
+    if (!trackToMonitor) return;
 
     let lastAlertTime = 0;
+    let silentFrames = 0;
+    let hasWarnedSystemMute = false;
+
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
 
     const audioContext = new AudioContextClass();
     const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(new MediaStream([localAudioTrackRef.current]));
+    const microphone = audioContext.createMediaStreamSource(new MediaStream([trackToMonitor]));
     microphone.connect(analyser);
 
     analyser.fftSize = 256;
@@ -1218,22 +1222,46 @@ export function MeetingProvider({
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const average = sum / bufferLength;
 
-      if (average > 15 && Date.now() - lastAlertTime > 5000) {
-        toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
-        try {
-          const beep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
-          beep.volume = 0.2;
-          beep.play().catch(() => { });
-        } catch (e) { }
-        lastAlertTime = Date.now();
+      if (isMuted) {
+        if (average > 15 && Date.now() - lastAlertTime > 5000) {
+          toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
+          try {
+            const beep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
+            beep.volume = 0.2;
+            beep.play().catch(() => { });
+          } catch (e) { }
+          lastAlertTime = Date.now();
+        }
+      } else {
+        if (average === 0) {
+          silentFrames++;
+          // Approx 60 frames per second. 60 * 15 = 900 frames for 15 seconds of absolute silence
+          if (silentFrames > 900 && !hasWarnedSystemMute) {
+            toast.error("We aren't receiving any audio. Your system mic might be muted or blocked.", { duration: 6000 });
+            hasWarnedSystemMute = true;
+          }
+        } else {
+          silentFrames = 0;
+          // Reset warning if sound is detected again
+          hasWarnedSystemMute = false;
+        }
       }
+
       animationFrameId = requestAnimationFrame(checkVolume);
     };
     checkVolume();
 
+    const handleHardwareMute = () => {
+      if (!isMuted) {
+        toast.error("Your microphone is muted at the system/hardware level.");
+      }
+    };
+    trackToMonitor.addEventListener("mute", handleHardwareMute);
+
     return () => {
       cancelAnimationFrame(animationFrameId);
       audioContext.close().catch(() => { });
+      trackToMonitor.removeEventListener("mute", handleHardwareMute);
     };
   }, [isMuted]);
 

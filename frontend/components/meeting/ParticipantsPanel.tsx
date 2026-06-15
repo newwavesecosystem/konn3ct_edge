@@ -217,6 +217,7 @@ function ParticipantRow({
     .toUpperCase();
 
   const { currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole } = useMeeting();
+  const isSpeaking = participant.isSpeaking;
   const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
   const canManage = isHost && !isMe && participant.role !== 'host';
   const canMakeCoHost = currentUser.role === 'host' && !isMe && participant.role !== 'host';
@@ -231,9 +232,11 @@ function ParticipantRow({
         <Avatar
           fallback={initials}
           alt={participant.name}
-          className="w-8 h-8 text-xs"
+          className={cn(
+            "w-8 h-8 text-xs transition-shadow duration-200",
+            isSpeaking && "ring-2 ring-brand-green ring-offset-2 ring-offset-transparent"
+          )}
         />
-        {/* isSpeaking ring disabled */}
       </div>
 
       <div className="flex-1 min-w-0">
