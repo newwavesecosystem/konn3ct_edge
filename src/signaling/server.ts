@@ -128,6 +128,7 @@ const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
 const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
+const roomAdmissions = new Map<string, Set<string>>();
 
 export const cachedRoomParticipants = new Map<string, Array<{ userId: string, name: string, role: string, isMobile: boolean }>>();
 
@@ -368,9 +369,10 @@ export function initializeSignaling(server: Server) {
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
+    const hasBeenAdmitted = roomAdmissions.get(roomId)?.has(userId) === true;
     
     // Determine initial status
-    const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
+    const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
     const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants };
 
@@ -401,6 +403,12 @@ export function initializeSignaling(server: Server) {
     const existingClient = rooms.get(roomId)!.get(userId);
     if (existingClient && existingClient.status === 'active') {
       client.status = 'active';
+    }
+
+    if (client.status === 'active') {
+      let admissions = roomAdmissions.get(roomId);
+      if (!admissions) { admissions = new Set(); roomAdmissions.set(roomId, admissions); }
+      admissions.add(userId);
     }
 
     rooms.get(roomId)!.set(userId, client);
@@ -594,6 +602,7 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
+            roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
@@ -632,6 +641,9 @@ export function initializeSignaling(server: Server) {
           const targetClient = rooms.get(roomId)?.get(data.userId);
           if (targetClient && targetClient.status === 'waiting') {
             targetClient.status = 'active';
+            let admissions = roomAdmissions.get(roomId);
+            if (!admissions) { admissions = new Set(); roomAdmissions.set(roomId, admissions); }
+            admissions.add(data.userId);
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
             broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
             
@@ -761,6 +773,7 @@ export function initializeSignaling(server: Server) {
           if (rc.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId);
+            roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, client.roomSlug);

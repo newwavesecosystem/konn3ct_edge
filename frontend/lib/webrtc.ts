@@ -553,6 +553,12 @@ export class WebRTCClient {
     }
   }
 
+  public admitAll() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'admit_all' }));
+    }
+  }
+
   public denyUser(userId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'deny_user', userId }));
@@ -1376,6 +1382,12 @@ export class WebRTCClient {
   public sendAdmitUser(userId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'admit_user', userId }));
+    }
+  }
+
+  public sendAdmitAll() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'admit_all' }));
     }
   }
 
