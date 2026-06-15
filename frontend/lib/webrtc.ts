@@ -182,16 +182,14 @@ export class WebRTCClient {
             console.log("Session lost by server. Executing Client-Side Auto-Republish...");
             this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
-          } else if (msg.recovered && msg.status === 'active') {
-            console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes (e.g. WiFi to Mobile)...");
-            this.needsRepublish = false;
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-            }
-            this.republishMedia().catch(console.error);
-            this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
-            // First time active
+            // First time active or recovered after a full page refresh
+            if (msg.recovered) {
+              console.log("Session recovered after a page refresh. Resetting server WebRTC state...");
+              if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+              }
+            }
             this.initializeMediasoup().then(async () => {
               try {
                 const res = await this.request('getProducers', 'producersList');
@@ -211,6 +209,15 @@ export class WebRTCClient {
               console.error("Failed to initialize mediasoup", err); 
               this.onConnectionStateChange?.('failed');
             });
+          } else if (msg.recovered && msg.status === 'active') {
+            // Session recovered without page refresh (e.g. WiFi -> 4G switch)
+            console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes...");
+            this.needsRepublish = false;
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+            }
+            this.republishMedia().catch(console.error);
+            this.onConnectionStateChange?.('connected');
           } else if (msg.status === 'active') {
             this.onConnectionStateChange?.('connected');
           }
@@ -625,7 +632,9 @@ export class WebRTCClient {
 
     this.sendTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
-      if (state === 'failed' || state === 'disconnected') {
+      if (state === 'disconnected') {
+        console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
+      } else if (state === 'failed') {
         console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
@@ -657,7 +666,9 @@ export class WebRTCClient {
 
     this.recvTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Receive Transport ICE State changed to: ${state}`);
-      if (state === 'failed' || state === 'disconnected') {
+      if (state === 'disconnected') {
+        console.warn('[WebRTC] Receive Transport ICE State disconnected. Waiting for auto-recovery...');
+      } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
@@ -753,7 +764,9 @@ export class WebRTCClient {
 
     this.sendTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Republish Send Transport ICE State changed to: ${state}`);
-      if (state === 'failed' || state === 'disconnected') {
+      if (state === 'disconnected') {
+        console.warn('[WebRTC] Republish Send Transport ICE State disconnected. Waiting for auto-recovery...');
+      } else if (state === 'failed') {
         console.error('[WebRTC] Send Transport connection failed! Forcing republish...');
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
@@ -777,7 +790,9 @@ export class WebRTCClient {
 
     this.recvTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Republish Receive Transport ICE State changed to: ${state}`);
-      if (state === 'failed' || state === 'disconnected') {
+      if (state === 'disconnected') {
+        console.warn('[WebRTC] Republish Receive Transport ICE State disconnected. Waiting for auto-recovery...');
+      } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! Forcing republish...');
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
@@ -811,7 +826,10 @@ export class WebRTCClient {
     }
     
     if (audioTrack && audioTrack.readyState === 'live') {
-      this.localAudioProducer = await this.sendTransport.produce({ track: audioTrack });
+      this.localAudioProducer = await this.sendTransport.produce({ 
+        track: audioTrack, 
+        appData: { source: 'mic' } 
+      });
       if (isAudioPaused) this.localAudioProducer.pause();
     }
     
