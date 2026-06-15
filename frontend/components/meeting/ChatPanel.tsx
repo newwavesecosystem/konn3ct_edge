@@ -16,6 +16,44 @@ const roleBadge: Record<string, { icon: React.ReactNode; color: string }> = {
   presenter: { icon: <User className="w-3 h-3" />, color: "text-purple-400" },
 };
 
+const LinkifiedText = ({ text }: { text: string }) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 hover:underline break-all"
+            >
+              {part}
+            </a>
+          );
+        }
+        
+        // Process mentions within the non-url parts
+        return (
+          <span key={index} className="whitespace-pre-wrap break-words">
+            {part.split(/(@\w+)/g).map((subPart, subIndex) => 
+              subPart.startsWith("@") ? (
+                <span key={subIndex} className="text-brand-green-soft font-semibold">{subPart}</span>
+              ) : (
+                <span key={subIndex}>{subPart}</span>
+              )
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+};
+
 export function ChatPanel() {
   const { chatMessages, sendMessage, currentUser, participants, roomSettings } = useMeeting();
   const [input, setInput] = useState("");
@@ -209,13 +247,7 @@ export function ChatPanel() {
                       </div>
                     </div>
                   ) : (
-                    msg.content.split(/(@\w+)/g).map((part, i) =>
-                      part.startsWith("@") ? (
-                        <span key={i} className="text-brand-green-soft font-semibold">{part}</span>
-                      ) : (
-                        <span key={i}>{part}</span>
-                      )
-                    )
+                    <LinkifiedText text={msg.content} />
                   )}
                   
                   {msg.fileUrl && (
