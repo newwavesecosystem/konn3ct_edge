@@ -258,6 +258,7 @@ export function MeetingProvider({
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [micError, setMicError] = useState<{ name: string; message: string } | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState(0);
