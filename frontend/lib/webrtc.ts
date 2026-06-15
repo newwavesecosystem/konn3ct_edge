@@ -58,6 +58,7 @@ export class WebRTCClient {
   public onChatHistory?: (messages: any[]) => void;
   public onPollHistory?: (polls: any[]) => void;
   public onNoteHistory?: (content: string) => void;
+  public onMicError?: (error: Error) => void;
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
@@ -1012,43 +1013,48 @@ export class WebRTCClient {
   public async enableMic(): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      audio: { 
-        noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
-        echoCancellation: true 
-      } 
-    });
-    this.rawAudioTrack = stream.getAudioTracks()[0];
-    
-    let activeTrack = this.rawAudioTrack;
-    
-    // Apply AI Noise Suppression if enabled
-    if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
-      const rawStream = new MediaStream([this.rawAudioTrack]);
-      const denoisedStream = await this.purifyInstance.processStream(rawStream);
-      activeTrack = denoisedStream.getAudioTracks()[0];
-    }
-    
-    if (!this.localAudioProducer) {
-      this.localAudioProducer = await this.sendTransport.produce({ 
-        track: activeTrack,
-        appData: { source: 'mic' }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
+          echoCancellation: true 
+        } 
       });
-    } else {
-      await this.localAudioProducer.replaceTrack({ track: activeTrack });
-    }
-
-    // Handle unexpected track ends (e.g. mic unplugged)
-    activeTrack.onended = async () => {
-      console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
-      try {
-        await this.enableMic();
-      } catch (err) {
-        console.error("Failed to re-initialize mic:", err);
+      this.rawAudioTrack = stream.getAudioTracks()[0];
+      
+      let activeTrack = this.rawAudioTrack;
+      
+      // Apply AI Noise Suppression if enabled
+      if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
+        const rawStream = new MediaStream([this.rawAudioTrack]);
+        const denoisedStream = await this.purifyInstance.processStream(rawStream);
+        activeTrack = denoisedStream.getAudioTracks()[0];
       }
-    };
+      
+      if (!this.localAudioProducer || this.localAudioProducer.closed) {
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: activeTrack,
+          appData: { source: 'mic' }
+        });
+      } else {
+        await this.localAudioProducer.replaceTrack({ track: activeTrack });
+      }
 
-    return activeTrack;
+      // Handle unexpected track ends (e.g. mic unplugged)
+      activeTrack.onended = async () => {
+        console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
+        try {
+          await this.enableMic();
+        } catch (err) {
+          console.error("Failed to re-initialize mic:", err);
+        }
+      };
+
+      return activeTrack;
+    } catch (err: any) {
+      this.onMicError?.(err);
+      throw err;
+    }
   }
 
   public async setAINoiseSuppression(enable: boolean) {
@@ -1087,7 +1093,11 @@ export class WebRTCClient {
         activeTrack = denoisedStream.getAudioTracks()[0];
       }
 
-      await this.localAudioProducer.replaceTrack({ track: activeTrack });
+      if (!this.localAudioProducer.closed) {
+        await this.localAudioProducer.replaceTrack({ track: activeTrack });
+      } else {
+        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+      }
       return activeTrack;
     }
     return undefined;
@@ -1112,7 +1122,7 @@ export class WebRTCClient {
 
     const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
 
-    if (producer) {
+    if (producer && !producer.closed) {
       const oldTrack = producer.track;
 
       if (kind === 'audio') {
@@ -1130,6 +1140,19 @@ export class WebRTCClient {
       if (oldTrack) {
         oldTrack.stop();
       }
+    } else {
+      if (kind === 'audio') {
+        this.rawAudioTrack = newTrack;
+        let activeTrack = newTrack;
+        if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
+          const rawStream = new MediaStream([this.rawAudioTrack]);
+          const denoisedStream = await this.purifyInstance.processStream(rawStream);
+          activeTrack = denoisedStream.getAudioTracks()[0];
+        }
+        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+      } else {
+        this.localVideoProducer = await this.sendTransport.produce({ track: newTrack, appData: { source: 'camera' } });
+      }
     }
 
     return newTrack;
@@ -1144,15 +1167,14 @@ export class WebRTCClient {
   }
 
   public async resumeMic() {
-    if (this.localAudioProducer && this.localAudioProducer.paused) {
-      if (this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
-        console.warn("[WebRTC] Microphone track is ended during resume. Re-initializing hardware.");
-        try {
-          await this.enableMic();
-        } catch (e) {
-          console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
-        }
+    if (!this.localAudioProducer || this.localAudioProducer.closed || this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
+      console.warn("[WebRTC] Microphone track is ended or producer is closed. Re-initializing hardware.");
+      try {
+        await this.enableMic();
+      } catch (e) {
+        console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
       }
+    } else if (this.localAudioProducer.paused) {
       this.localAudioProducer.resume();
     }
   }
