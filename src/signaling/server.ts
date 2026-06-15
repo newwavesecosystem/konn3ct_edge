@@ -667,6 +667,7 @@ export function initializeSignaling(server: Server) {
           if (targetClient && targetClient.role !== 'host') {
             // Remove first so the close handler skips grace period
             rooms.get(roomId)?.delete(data.userId);
+            removeParticipantFromCache(roomId, data.userId);
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
             broadcastToRoom(roomId, { type: 'user_left', userId: data.userId });
@@ -756,6 +757,7 @@ export function initializeSignaling(server: Server) {
         const rc = rooms.get(roomId);
         if (rc) {
           rc.delete(userId);
+          removeParticipantFromCache(roomId, userId);
           if (rc.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId);
