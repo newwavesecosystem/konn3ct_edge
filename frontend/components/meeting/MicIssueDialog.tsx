@@ -40,7 +40,7 @@ export function MicIssueDialog() {
             onClick={() => {
               setMicError(null);
               // Attempt to unmute again
-              toggleMute(false);
+              toggleMute();
             }}
             className="flex-1 px-4 py-2.5 rounded-xl font-medium transition-colors bg-brand-green hover:bg-green-600 text-white shadow-lg shadow-green-500/20"
           >
