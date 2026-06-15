@@ -832,15 +832,34 @@ export function MeetingProvider({
             console.warn("Failed to play doorbell sound", e);
           }
 
-          toast(`${msg.name} is waiting to join`, {
-            action: {
-              label: 'Admit',
-              onClick: () => {
-                webrtcClient.current?.sendAdmitUser(msg.userId);
-                notifiedWaitingUsersRef.current.delete(msg.userId);
-              }
-            }
-          });
+          toast.custom((t) => (
+            <div className="bg-[var(--mt-bg-elevated)] text-[var(--mt-text)] p-4 rounded-xl shadow-lg border border-[var(--mt-border)] w-full flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+              <div className="font-medium text-sm text-balance leading-tight">{msg.name} is waiting to join</div>
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => { 
+                    webrtcClient.current?.sendAdmitUser(msg.userId); 
+                    notifiedWaitingUsersRef.current.delete(msg.userId);
+                    toast.dismiss(t);
+                  }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border border-[var(--mt-border)]"
+                  style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text)" }}
+                >
+                  Admit
+                </button>
+                <button 
+                  onClick={() => {
+                    webrtcClient.current?.sendAdmitAll();
+                    notifiedWaitingUsersRef.current.clear();
+                    toast.dismiss(t);
+                  }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors bg-brand-green hover:bg-brand-green/90 text-white"
+                >
+                  Admit All
+                </button>
+              </div>
+            </div>
+          ), { duration: 10000 });
 
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
