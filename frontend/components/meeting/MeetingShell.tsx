@@ -15,6 +15,7 @@ import { Konn3ctAIPanel } from "./panels/Konn3ctAIPanel";
 import StreamingPanel from "./StreamingPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
+import { MicIssueDialog } from "./MicIssueDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
 import { SecurityPanel } from "./SecurityPanel";
@@ -311,6 +312,7 @@ export function MeetingShell() {
       {/* Floating layers */}
       <ReactionsLayer />
       <LeaveDialog />
+      <MicIssueDialog />
       {showDonationModal && <DonationModal onClose={() => setShowDonationModal(false)} />}
     </div>
   );

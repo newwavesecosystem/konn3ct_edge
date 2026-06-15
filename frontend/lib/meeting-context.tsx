@@ -143,6 +143,10 @@ interface MeetingContextValue {
   upvoteQuestion: (questionId: string) => void;
   answerQuestion: (questionId: string, answerText: string) => void;
   deleteQuestion: (questionId: string) => void;
+
+  // Error Handling
+  micError: { name: string; message: string } | null;
+  setMicError: (error: { name: string; message: string } | null) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -427,6 +431,12 @@ export function MeetingProvider({
         client.isLowBandwidth = isLowBandwidthEnabled;
 
         // --- Collaboration Event Listeners ---
+        client.onMicError = (error: Error) => {
+          setMicError({ name: error.name || 'Microphone Error', message: error.message || 'Unable to access your microphone.' });
+          // Ensure the local state reflects that mic is off if it failed to turn on
+          setIsMuted(true);
+        };
+
         client.onServerLoadHigh = () => {
           toast.warning("Server is under heavy load. Optimizing video feeds to maintain stability...");
           if (client) {
@@ -1640,6 +1650,8 @@ export function MeetingProvider({
         logoutUrl: initialLogoutUrl,
         pauseRemoteVideo,
         resumeRemoteVideo,
+        micError,
+        setMicError,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />
