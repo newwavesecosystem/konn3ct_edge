@@ -61,7 +61,7 @@ export function StageView() {
   }
 
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
-  const others = gridSorted.filter((p) => p.id !== activeSpeaker?.id);
+  const others = gridSorted; // Keep all participants in the strip to prevent swapping/rearranging
 
   if (layoutMode === "grid" || currentUser.role === 'bot') {
     return <GridLayout participants={gridSorted} />;
@@ -587,16 +587,19 @@ function SpeakerLayout({
   return (
     <div className="flex-1 flex flex-col gap-2 p-2 sm:p-3 overflow-hidden">
       {/* Main speaker */}
-      <div className="flex-1 min-h-0">
-        <motion.div
-          key={activeSpeaker.id}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-          className="w-full h-full"
-        >
-          <ParticipantTile participant={activeSpeaker} isLarge />
-        </motion.div>
+      <div className="flex-1 min-h-0 relative">
+        <AnimatePresence>
+          <motion.div
+            key={activeSpeaker.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+            className="absolute inset-0 w-full h-full"
+          >
+            <ParticipantTile participant={activeSpeaker} isLarge />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Filmstrip — clean avatar cards */}
