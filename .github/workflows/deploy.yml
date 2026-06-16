@@ -9,8 +9,11 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'staging' || 'production' }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      LATEST_TAG: ${{ github.ref == 'refs/heads/main' && 'staging-latest' || 'prod-latest' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,25 +30,25 @@ jobs:
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
           docker build -t $IMAGE_NAME:${{ github.sha }} .
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.LATEST_TAG }}
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ env.LATEST_TAG }}
 
       - name: Build and Push Frontend Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
           docker build --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} -t $IMAGE_NAME:${{ github.sha }} ./frontend
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.LATEST_TAG }}
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ env.LATEST_TAG }}
 
       - name: Build and Push Recorder Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
           docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.LATEST_TAG }}
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ env.LATEST_TAG }}
 
       # - name: Build and Push Streaming Worker Docker Image
       #   run: |
@@ -57,11 +60,14 @@ jobs:
 
       - name: Authenticate with Kubernetes Cluster
         run: |
-          # IMPORTANT: Update 'conn3ct-cluster' to match the exact name of your cluster in DigitalOcean
-          doctl kubernetes cluster kubeconfig save k8s-1-35-1-do-5-atl1-newkonn3ct
+          # The cluster name is now pulled from the environment-specific secrets
+          doctl kubernetes cluster kubeconfig save ${{ secrets.DO_CLUSTER_NAME }}
 
       - name: Deploy Manifests to Kubernetes
         run: |
+          # Replace :latest with the environment-specific tag in all k8s manifests
+          sed -i "s/:latest/:${{ env.LATEST_TAG }}/g" k8s/*.yaml
+          
           # Safely inject GitHub Secrets into a Kubernetes Secret called 'conn3ct-secrets'
           kubectl create secret generic conn3ct-secrets \
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
