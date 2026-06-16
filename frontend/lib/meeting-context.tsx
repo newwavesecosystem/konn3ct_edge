@@ -25,6 +25,8 @@ import {
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
 
+export const REACTION_DURATION = 8000;
+
 interface MeetingContextValue {
   // State
   participants: Participant[];
@@ -686,7 +688,7 @@ export function MeetingProvider({
             timestamp: Date.now(),
           };
           setReactions((prev) => [...prev, reaction]);
-          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), 6000);
+          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), REACTION_DURATION);
         };
 
         client.onPollCreate = (msg) => {
@@ -1433,7 +1435,7 @@ export function MeetingProvider({
       setReactions((prev) => [...prev, reaction]);
       setTimeout(() => {
         setReactions((prev) => prev.filter((r) => r.id !== reaction.id));
-      }, 3000);
+      }, REACTION_DURATION);
     },
     [currentUser]
   );
