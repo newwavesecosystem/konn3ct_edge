@@ -190,6 +190,7 @@ export function MeetingControls() {
               toggleMute();
             }}
             tooltip={isMuted ? "Unmute" : "Mute"}
+            className={(!isMuted && currentUser.isSpeaking) ? "shadow-[0_0_12px_rgba(34,197,94,0.6)] ring-2 ring-brand-green/50 bg-brand-green/10 text-brand-green transition-all duration-75" : ""}
           />
           {/* Camera */}
           <ControlBtn

@@ -386,6 +386,7 @@ export function MeetingProvider({
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
+  const localIsSpeakingRef = useRef<boolean>(false);
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
@@ -801,10 +802,12 @@ export function MeetingProvider({
         };
 
         client.onActiveSpeaker = (userIds) => {
-          setParticipants((prev) => prev.map(p => ({
-            ...p,
-            isSpeaking: userIds.includes(p.id) || (p.id === currentUser.id && userIds.includes(webrtcClient.current?.userId || ''))
-          })));
+          setParticipants((prev) => prev.map(p => {
+            if (p.id === currentUser.id) {
+              return { ...p, isSpeaking: localIsSpeakingRef.current || userIds.includes(p.id) || userIds.includes(webrtcClient.current?.userId || '') };
+            }
+            return { ...p, isSpeaking: userIds.includes(p.id) };
+          }));
         };
 
         client.onWaitingRoomRequest = (msg) => {
@@ -1244,6 +1247,11 @@ export function MeetingProvider({
       const average = sum / bufferLength;
 
       if (isMuted) {
+        if (localIsSpeakingRef.current) {
+          localIsSpeakingRef.current = false;
+          setParticipants((prev) => prev.map(p => p.id === currentUser.id ? { ...p, isSpeaking: false } : p));
+        }
+
         if (average > 15 && Date.now() - lastAlertTime > 5000) {
           toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
           try {
@@ -1254,6 +1262,12 @@ export function MeetingProvider({
           lastAlertTime = Date.now();
         }
       } else {
+        const currentlySpeaking = average > 5;
+        if (currentlySpeaking !== localIsSpeakingRef.current) {
+          localIsSpeakingRef.current = currentlySpeaking;
+          setParticipants((prev) => prev.map(p => p.id === currentUser.id ? { ...p, isSpeaking: currentlySpeaking } : p));
+        }
+
         if (average === 0) {
           silentFrames++;
           // Approx 60 frames per second. 60 * 15 = 900 frames for 15 seconds of absolute silence
