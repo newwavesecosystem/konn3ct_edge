@@ -25,6 +25,8 @@ import {
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
 
+export const REACTION_DURATION = 8000;
+
 interface MeetingContextValue {
   // State
   participants: Participant[];
@@ -86,8 +88,11 @@ interface MeetingContextValue {
   setIsMobilePanelOpen: (open: boolean) => void;
   admitUser: (userId: string) => void;
   denyUser: (userId: string) => void;
+  admitAllUsers: () => void;
+  denyAllUsers: () => void;
   kickUser: (userId: string) => void;
-  forceMuteUser: (userId?: string) => void;
+  changeUserRole: (userId: string, newRole: string) => void;
+  forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
   broadcastECinema: (link: string | null) => void;
@@ -110,6 +115,9 @@ interface MeetingContextValue {
   toggleAINoiseSuppression: (enable: boolean) => Promise<void>;
   
   // Settings
+  logoutUrl: string | null;
+  outputVolume: number;
+  setOutputVolume: (val: number) => void;
   isHDVideoEnabled: boolean;
   setIsHDVideoEnabled: (enabled: boolean) => void;
   isMirrorVideoEnabled: boolean;
@@ -123,6 +131,24 @@ interface MeetingContextValue {
   vbMode: 'none' | 'blur' | 'image';
   vbImageUrl?: string;
   handleVbSelect: (mode: 'none' | 'blur' | 'image', imageUrl?: string) => void;
+
+  pauseRemoteVideo: (trackId: string) => void;
+  resumeRemoteVideo: (trackId: string) => void;
+
+  roomSettings: { micLocked: boolean; videoLocked: boolean; chatLocked: boolean; bypassWaitingRoom?: boolean };
+  updateRoomSettings: (settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean; bypassWaitingRoom?: boolean }) => void;
+  forceVideoOffUser: (userId?: string) => void;
+
+  // Q&A
+  qaMessages: any[];
+  askQuestion: (question: string, isAnonymous: boolean) => void;
+  upvoteQuestion: (questionId: string) => void;
+  answerQuestion: (questionId: string, answerText: string) => void;
+  deleteQuestion: (questionId: string) => void;
+
+  // Error Handling
+  micError: { name: string; message: string } | null;
+  setMicError: (error: { name: string; message: string } | null) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -142,10 +168,12 @@ export function MeetingProvider({
 }) {
   // Extract user info from sessionStorage (passed from Join screen)
   let storedJoinInfo: any = null;
+  let initialUrlParams: URLSearchParams | null = null;
+  
   if (typeof window !== "undefined") {
     try {
-      const searchParams = new URLSearchParams(window.location.search);
-      let sessionToken = searchParams.get("t");
+      initialUrlParams = new URLSearchParams(window.location.search);
+      let sessionToken = initialUrlParams.get("t");
       
       if (sessionToken) {
         sessionStorage.setItem("conn3ct_session_token", sessionToken);
@@ -171,19 +199,20 @@ export function MeetingProvider({
   }
 
   // For the initial render, use URL search params as a fallback for backwards compatibility
-  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const searchParams = initialUrlParams || new URLSearchParams("");
   const queryName = storedJoinInfo?.name || searchParams.get("name") || "Guest";
   const queryEmail = storedJoinInfo?.email || "guest@conn3ct.com";
   const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
   const initialCameraOn = storedJoinInfo && storedJoinInfo.camera !== undefined ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
   const initialMuted = storedJoinInfo && storedJoinInfo.mic !== undefined ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
+  const initialLogoutUrl = storedJoinInfo?.logoutUrl || null;
 
   // ── State ────────────────────────────────────────────
   const isMobileClient = typeof navigator !== 'undefined' ? 
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
   const [initialCurrentUser] = useState<Participant>({
-    id: `u-${Math.random().toString(36).substring(2, 9)}`,
+    id: storedJoinInfo?.userId || `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
     isMuted: initialMuted,
@@ -200,6 +229,7 @@ export function MeetingProvider({
   const currentUser = useMemo(() => participants.find(p => p.id === initialCurrentUser.id) || initialCurrentUser, [participants, initialCurrentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [qaMessages, setQaMessages] = useState<any[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [sharedNoteContent, setSharedNoteContent] = useState<string>("");
   const formattedTitle = roomSlug
@@ -222,8 +252,15 @@ export function MeetingProvider({
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+
+  // Sync isRecording with the presence of a bot participant
+  useEffect(() => {
+    const hasBot = participants.some((p) => p.role === "bot");
+    setIsRecording(hasBot);
+  }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [micError, setMicError] = useState<{ name: string; message: string } | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState(0);
@@ -247,9 +284,12 @@ export function MeetingProvider({
   
   // Settings State
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
+  const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
+
+  const [roomSettings, setRoomSettings] = useState({ micLocked: false, videoLocked: false, chatLocked: false });
 
   // Virtual Background
   const [vbMode, setVbMode] = useState<'none' | 'blur' | 'image'>('none');
@@ -346,6 +386,7 @@ export function MeetingProvider({
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
+  const localIsSpeakingRef = useRef<boolean>(false);
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
@@ -394,11 +435,18 @@ export function MeetingProvider({
         client.isLowBandwidth = isLowBandwidthEnabled;
 
         // --- Collaboration Event Listeners ---
+        client.onMicError = (error: Error) => {
+          setMicError({ name: error.name || 'Microphone Error', message: error.message || 'Unable to access your microphone.' });
+          // Ensure the local state reflects that mic is off if it failed to turn on
+          setIsMuted(true);
+        };
+
         client.onServerLoadHigh = () => {
           toast.warning("Server is under heavy load. Optimizing video feeds to maintain stability...");
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
+            setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: false } : p));
           }
         };
 
@@ -407,6 +455,7 @@ export function MeetingProvider({
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
+            setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: false } : p));
           }
         };
         let lastNetworkToastTime = 0;
@@ -558,6 +607,23 @@ export function MeetingProvider({
           setSharedNoteContent(content);
         };
 
+        client.onQAHistory = (messages) => {
+          setQaMessages(messages);
+        };
+
+        client.onQAUpdated = (msg) => {
+          setQaMessages(prev => {
+            if (msg.action === 'ask') {
+              return [msg.message, ...prev];
+            } else if (msg.action === 'upvote' || msg.action === 'answer') {
+              return prev.map(q => q.id === msg.message.id ? msg.message : q).sort((a, b) => b.upvotes - a.upvotes);
+            } else if (msg.action === 'delete') {
+              return prev.filter(q => q.id !== msg.questionId);
+            }
+            return prev;
+          });
+        };
+
         client.onNoteUpdate = (msg) => {
           if (msg.userId !== webrtcClient.current?.userId) {
             setSharedNoteContent(msg.content);
@@ -623,7 +689,7 @@ export function MeetingProvider({
             timestamp: Date.now(),
           };
           setReactions((prev) => [...prev, reaction]);
-          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), 6000);
+          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), REACTION_DURATION);
         };
 
         client.onPollCreate = (msg) => {
@@ -662,14 +728,17 @@ export function MeetingProvider({
           );
         };
 
+        const resolveUserId = (id: string) => id === webrtcClient.current?.userId ? initialCurrentUser.id : id;
+
         client.onMuteState = (msg) => {
+          const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => {
-            const user = prev.find(p => p.id === msg.userId);
+            const user = prev.find(p => p.id === targetId);
             if (user && user.isMuted !== msg.isMuted) {
               toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
             }
             return prev.map(p =>
-              p.id === msg.userId ? { ...p, isMuted: msg.isMuted } : p
+              p.id === targetId ? { ...p, isMuted: msg.isMuted } : p
             );
           });
         };
@@ -679,12 +748,14 @@ export function MeetingProvider({
         };
 
         client.onCameraState = (msg) => {
+          const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === msg.userId ? { ...p, isCameraOn: msg.isCameraOn } : p
+            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn } : p
           ));
         };
 
         client.onHandRaise = (msg) => {
+          const targetId = resolveUserId(msg.userId);
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
@@ -702,20 +773,22 @@ export function MeetingProvider({
             } catch (e) { }
           }
           setParticipants((prev) => prev.map(p =>
-            p.id === msg.userId ? { ...p, isHandRaised: msg.isHandRaised } : p
+            p.id === targetId ? { ...p, isHandRaised: msg.isHandRaised } : p
           ));
         };
 
         client.onScreenShareStarted = (userId, producerId) => {
+          const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === userId ? { ...p, isScreenSharing: true } : p
+            p.id === targetId ? { ...p, isScreenSharing: true } : p
           ));
-          toast.info(`${participants.find(p => p.id === userId)?.name || 'A participant'} started screen sharing`);
+          toast.info(`${participants.find(p => p.id === targetId)?.name || 'A participant'} started screen sharing`);
         };
 
         client.onScreenShareStopped = (userId, producerId) => {
+          const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
+            p.id === targetId ? { ...p, isScreenSharing: false, screenTrack: null } : p
           ));
           toast.info(`Screen sharing ended`);
         };
@@ -729,10 +802,12 @@ export function MeetingProvider({
         };
 
         client.onActiveSpeaker = (userIds) => {
-          setParticipants((prev) => prev.map(p => ({
-            ...p,
-            isSpeaking: userIds.includes(p.id) || (p.id === currentUser.id && userIds.includes(webrtcClient.current?.userId || ''))
-          })));
+          setParticipants((prev) => prev.map(p => {
+            if (p.id === currentUser.id) {
+              return { ...p, isSpeaking: localIsSpeakingRef.current || userIds.includes(p.id) || userIds.includes(webrtcClient.current?.userId || '') };
+            }
+            return { ...p, isSpeaking: userIds.includes(p.id) };
+          }));
         };
 
         client.onWaitingRoomRequest = (msg) => {
@@ -762,15 +837,34 @@ export function MeetingProvider({
             console.warn("Failed to play doorbell sound", e);
           }
 
-          toast(`${msg.name} is waiting to join`, {
-            action: {
-              label: 'Admit',
-              onClick: () => {
-                webrtcClient.current?.sendAdmitUser(msg.userId);
-                notifiedWaitingUsersRef.current.delete(msg.userId);
-              }
-            }
-          });
+          toast.custom((t) => (
+            <div className="bg-[var(--mt-bg-elevated)] text-[var(--mt-text)] p-4 rounded-xl shadow-lg border border-[var(--mt-border)] w-full flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+              <div className="font-medium text-sm text-balance leading-tight">{msg.name} is waiting to join</div>
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => { 
+                    webrtcClient.current?.sendAdmitUser(msg.userId); 
+                    notifiedWaitingUsersRef.current.delete(msg.userId);
+                    toast.dismiss(t);
+                  }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border border-[var(--mt-border)]"
+                  style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text)" }}
+                >
+                  Admit
+                </button>
+                <button 
+                  onClick={() => {
+                    webrtcClient.current?.sendAdmitAll();
+                    notifiedWaitingUsersRef.current.clear();
+                    toast.dismiss(t);
+                  }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors bg-brand-green hover:bg-brand-green/90 text-white"
+                >
+                  Admit All
+                </button>
+              </div>
+            </div>
+          ), { duration: 10000 });
 
           setWaitingUsers(prev => {
             if (prev.find(u => u.userId === msg.userId)) return prev;
@@ -811,12 +905,33 @@ export function MeetingProvider({
           }
         };
 
-        client.onForceMute = () => {
+        client.onForceMute = (reason) => {
+          if (currentUser.role === 'host' || currentUser.role === 'co-host') return;
+          setIsMuted(true);
           webrtcClient.current?.pauseMic();
           webrtcClient.current?.sendMuteState(true);
-          setIsMuted(true);
-          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isMuted: true } : p));
-          toast.warning("The host has muted your microphone.");
+          if (reason === 'host_action') {
+            toast.error("The host has muted your microphone.");
+          } else {
+            toast.error("You have been muted by the host.");
+          }
+        };
+
+        client.onForceVideoOff = (reason) => {
+          if (currentUser.role === 'host' || currentUser.role === 'co-host') return;
+          setIsCameraOn(false);
+          webrtcClient.current?.disableCamera();
+          webrtcClient.current?.sendCameraState(false);
+          if (reason === 'host_action') {
+            toast.error("The host has turned off your camera.");
+          }
+        };
+
+        client.onRoomSettingsUpdated = (newSettings, updatedBy) => {
+          setRoomSettings(newSettings);
+          if (updatedBy && updatedBy !== currentUser.name) {
+            toast.info(`${updatedBy} updated the room security settings.`);
+          }
         };
 
         client.onECinemaUpdate = (link) => {
@@ -856,7 +971,7 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
-          if (user.userId === webrtcClient.current?.userId) return;
+          if (user.userId === webrtcClient.current?.userId || user.name === initialCurrentUser.name) return;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) return prev;
@@ -880,14 +995,28 @@ export function MeetingProvider({
             setParticipants(curr => curr.map(p => p.id === user.userId ? { ...p, isConnecting: false } : p));
           }, 4000);
 
-          toast.info(`${user.name} joined the meeting`);
+          if (user.role !== 'bot') {
+            toast.info(`${user.name} joined the meeting`);
+          }
+        };
+
+        client.onRoleChanged = (userId, newRole) => {
+          const targetId = resolveUserId(userId);
+          setParticipants((prev) => prev.map(p => 
+            p.id === targetId ? { ...p, role: newRole as any } : p
+          ));
+          if (targetId === initialCurrentUser.id) {
+            toast.info(`Your role has been updated to ${newRole}`);
+          }
         };
 
         client.onUserLeft = (userId) => {
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
             if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
-               toast.info(`${user.name} left the meeting`);
+               if (user.role !== 'bot') {
+                 toast.info(`${user.name} left the meeting`);
+               }
             }
             return prev.filter(p => p.id !== userId);
           });
@@ -1000,7 +1129,14 @@ export function MeetingProvider({
   const fetchDevices = async () => {
     try {
       // Must request permission first, otherwise device labels are empty
-      await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => {});
+      // Only do this if not a bot to avoid triggering fake device beep
+      if (initialCurrentUser.role !== 'bot') {
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => null);
+        if (tempStream) {
+          tempStream.getTracks().forEach(t => t.stop()); // Immediately release hardware
+        }
+      }
+      
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       
       const audioInputs = allDevices.filter((d) => d.kind === "audioinput");
@@ -1081,17 +1217,21 @@ export function MeetingProvider({
     };
   }, []);
 
-  // ── Muted Talking Detection ────────────────────────────
+  // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
   useEffect(() => {
-    if (!isMuted || !localAudioTrackRef.current) return;
+    const trackToMonitor = webrtcClient.current?.rawAudioTrack || localAudioTrackRef.current;
+    if (!trackToMonitor) return;
 
     let lastAlertTime = 0;
+    let silentFrames = 0;
+    let hasWarnedSystemMute = false;
+
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
 
     const audioContext = new AudioContextClass();
     const analyser = audioContext.createAnalyser();
-    const microphone = audioContext.createMediaStreamSource(new MediaStream([localAudioTrackRef.current]));
+    const microphone = audioContext.createMediaStreamSource(new MediaStream([trackToMonitor]));
     microphone.connect(analyser);
 
     analyser.fftSize = 256;
@@ -1106,22 +1246,57 @@ export function MeetingProvider({
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const average = sum / bufferLength;
 
-      if (average > 15 && Date.now() - lastAlertTime > 5000) {
-        toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
-        try {
-          const beep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
-          beep.volume = 0.2;
-          beep.play().catch(() => { });
-        } catch (e) { }
-        lastAlertTime = Date.now();
+      if (isMuted) {
+        if (localIsSpeakingRef.current) {
+          localIsSpeakingRef.current = false;
+          setParticipants((prev) => prev.map(p => p.id === currentUser.id ? { ...p, isSpeaking: false } : p));
+        }
+
+        if (average > 15 && Date.now() - lastAlertTime > 5000) {
+          toast.warning("Your mic is muted. Unmute to speak", { duration: 3000 });
+          try {
+            const beep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
+            beep.volume = 0.2;
+            beep.play().catch(() => { });
+          } catch (e) { }
+          lastAlertTime = Date.now();
+        }
+      } else {
+        const currentlySpeaking = average > 5;
+        if (currentlySpeaking !== localIsSpeakingRef.current) {
+          localIsSpeakingRef.current = currentlySpeaking;
+          setParticipants((prev) => prev.map(p => p.id === currentUser.id ? { ...p, isSpeaking: currentlySpeaking } : p));
+        }
+
+        if (average === 0) {
+          silentFrames++;
+          // Approx 60 frames per second. 60 * 15 = 900 frames for 15 seconds of absolute silence
+          if (silentFrames > 900 && !hasWarnedSystemMute) {
+            toast.error("We aren't receiving any audio. Your system mic might be muted or blocked.", { duration: 6000 });
+            hasWarnedSystemMute = true;
+          }
+        } else {
+          silentFrames = 0;
+          // Reset warning if sound is detected again
+          hasWarnedSystemMute = false;
+        }
       }
+
       animationFrameId = requestAnimationFrame(checkVolume);
     };
     checkVolume();
 
+    const handleHardwareMute = () => {
+      if (!isMuted) {
+        toast.error("Your microphone is muted at the system/hardware level.");
+      }
+    };
+    trackToMonitor.addEventListener("mute", handleHardwareMute);
+
     return () => {
       cancelAnimationFrame(animationFrameId);
       audioContext.close().catch(() => { });
+      trackToMonitor.removeEventListener("mute", handleHardwareMute);
     };
   }, [isMuted]);
 
@@ -1274,7 +1449,7 @@ export function MeetingProvider({
       setReactions((prev) => [...prev, reaction]);
       setTimeout(() => {
         setReactions((prev) => prev.filter((r) => r.id !== reaction.id));
-      }, 3000);
+      }, REACTION_DURATION);
     },
     [currentUser]
   );
@@ -1356,8 +1531,22 @@ export function MeetingProvider({
     webrtcClient.current?.sendKickUser(userId);
   }, []);
 
-  const forceMuteUser = useCallback((userId?: string) => {
-    webrtcClient.current?.sendForceMute(userId);
+  const changeUserRole = useCallback((userId: string, newRole: string) => {
+    webrtcClient.current?.sendChangeRole(userId, newRole);
+  }, []);
+
+  const forceMuteUser = useCallback((userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => {
+    webrtcClient.current?.sendForceMute(userId, target);
+  }, []);
+
+  const forceVideoOffUser = useCallback((userId?: string) => {
+    webrtcClient.current?.sendForceVideoOff(userId);
+  }, []);
+
+  const updateRoomSettings = useCallback((settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean }) => {
+    webrtcClient.current?.sendUpdateRoomSettings(settings);
+    // Optimistic update
+    setRoomSettings(prev => ({ ...prev, ...settings }));
   }, []);
 
   const endMeetingForAll = useCallback(() => {
@@ -1377,6 +1566,14 @@ export function MeetingProvider({
     // We don't optimistically update here because the YouTube player handles its own state for the host
     webrtcClient.current?.sendECinemaAction(action, time);
   }, []);
+
+  const pauseRemoteVideo = (trackId: string) => {
+    webrtcClient.current?.pauseRemoteVideoByTrack(trackId);
+  };
+
+  const resumeRemoteVideo = (trackId: string) => {
+    webrtcClient.current?.resumeRemoteVideoByTrack(trackId);
+  };
 
   return (
     <MeetingContext.Provider
@@ -1437,8 +1634,19 @@ export function MeetingProvider({
         setIsMobilePanelOpen,
         admitUser,
         denyUser,
+        admitAllUsers: () => webrtcClient.current?.admitAllUsers(),
+        denyAllUsers: () => webrtcClient.current?.denyAllUsers(),
         kickUser,
+        changeUserRole,
         forceMuteUser,
+        forceVideoOffUser,
+        updateRoomSettings,
+        roomSettings,
+        qaMessages,
+        askQuestion: (question: string, isAnonymous: boolean) => webrtcClient.current?.askQuestion(question, isAnonymous),
+        upvoteQuestion: (questionId: string) => webrtcClient.current?.upvoteQuestion(questionId),
+        answerQuestion: (questionId: string, answerText: string) => webrtcClient.current?.answerQuestion(questionId, answerText),
+        deleteQuestion: (questionId: string) => webrtcClient.current?.deleteQuestion(questionId),
         endMeetingForAll,
         leaveMeeting,
         broadcastECinema,
@@ -1501,26 +1709,41 @@ export function MeetingProvider({
             }
           }
         },
+        outputVolume,
+        setOutputVolume,
+        logoutUrl: initialLogoutUrl,
+        pauseRemoteVideo,
+        resumeRemoteVideo,
+        micError,
+        setMicError,
       }}
     >
-      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} />
+      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />
       {children}
     </MeetingContext.Provider>
   );
 }
 
-function GlobalAudioRenderer({ participants, currentUserId }: { participants: Participant[]; currentUserId: string }) {
-  const { selectedDevices } = useMeeting();
+function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { participants: Participant[]; currentUserId: string; outputVolume: number }) {
+  const { selectedDevices, meetingInfo } = useMeeting();
+  
+  const audioParticipants = useMemo(() => {
+    if (meetingInfo?.roomType === 'webinar') {
+      return participants.filter(p => p.role === 'host' || p.role === 'co-host' || p.role === 'presenter');
+    }
+    return participants;
+  }, [participants, meetingInfo?.roomType]);
+
   return (
     <>
-      {participants.map((p) => (
-        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} />
+      {audioParticipants.map((p) => (
+        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} />
       ))}
     </>
   );
 }
 
-function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string }) {
+function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
@@ -1528,10 +1751,22 @@ function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTra
       try {
         await (el as any).setSinkId(sinkId);
       } catch (e) {
-        console.warn("Failed to set audio output device:", e);
+        console.warn("Failed to set audio output device, falling back to default:", e);
+        // Fallover to the default system audio device ("")
+        try {
+          await (el as any).setSinkId("");
+        } catch (fallbackErr) {
+          console.error("Fallback to default audio device also failed", fallbackErr);
+        }
       }
     }
   };
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = outputVolume / 100;
+    }
+  }, [outputVolume]);
 
   useEffect(() => {
     if (audioRef.current && track && !isLocal) {
@@ -1539,10 +1774,18 @@ function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTra
         const stream = audioRef.current.srcObject as MediaStream;
         if (stream.getAudioTracks()[0] === track) {
           applyAudioSink(audioRef.current, audioOutput);
+          audioRef.current.volume = outputVolume / 100;
           return;
         }
+        // Update the existing MediaStream instead of replacing srcObject 
+        // to bypass iOS Safari autoplay restrictions on reconnect
+        stream.getAudioTracks().forEach(t => stream.removeTrack(t));
+        stream.addTrack(track);
+      } else {
+        audioRef.current.srcObject = new MediaStream([track]);
       }
-      audioRef.current.srcObject = new MediaStream([track]);
+      
+      audioRef.current.volume = outputVolume / 100;
       applyAudioSink(audioRef.current, audioOutput);
       audioRef.current.play().catch((e) => {
         if (e.name !== 'AbortError') console.warn("Global audio play failed:", e);
@@ -1550,7 +1793,7 @@ function AudioRenderer({ track, isLocal, audioOutput }: { track?: MediaStreamTra
     } else if (audioRef.current && (!track || isLocal)) {
       audioRef.current.srcObject = null;
     }
-  }, [track, isLocal, audioOutput]);
+  }, [track, isLocal, audioOutput, outputVolume]);
 
-  return <audio ref={audioRef} autoPlay muted={isLocal} style={{ display: 'none' }} />;
+  return <audio ref={audioRef} autoPlay playsInline muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
 }

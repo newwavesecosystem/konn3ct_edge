@@ -46,7 +46,33 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser, selectedDevices, isMirrorVideoEnabled } = useMeeting();
+  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo } = useMeeting();
+
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = React.useState(true);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+      },
+      { root: null, rootMargin: "200px" } // Preload slightly before it enters view
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const isSelf = participant.id === currentUser.id;
+
+  React.useEffect(() => {
+    if (!isSelf && participant.videoTrack) {
+      if (!isVisible) {
+        pauseRemoteVideo(participant.videoTrack.id);
+      } else {
+        resumeRemoteVideo(participant.videoTrack.id);
+      }
+    }
+  }, [isVisible, isSelf, participant.videoTrack, pauseRemoteVideo, resumeRemoteVideo]);
 
   const initials = participant.name
     .split(" ")
@@ -63,8 +89,11 @@ export function ParticipantTile({
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
             if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+            stream.getTracks().forEach(t => stream.removeTrack(t));
+            stream.addTrack(participant.videoTrack);
+          } else {
+            el.srcObject = new MediaStream([participant.videoTrack]);
           }
-          el.srcObject = new MediaStream([participant.videoTrack]);
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Video play failed:", e);
           });
@@ -84,8 +113,11 @@ export function ParticipantTile({
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
             if (stream.getVideoTracks()[0] === participant.screenTrack) return;
+            stream.getTracks().forEach(t => stream.removeTrack(t));
+            stream.addTrack(participant.screenTrack);
+          } else {
+            el.srcObject = new MediaStream([participant.screenTrack]);
           }
-          el.srcObject = new MediaStream([participant.screenTrack]);
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
           });
@@ -97,13 +129,11 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-
-
-  const isSelf = participant.id === currentUser.id;
-  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack;
+  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack && isVisible;
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative w-full h-full rounded-2xl overflow-hidden group",
         "transition-shadow duration-300",
@@ -118,7 +148,7 @@ export function ParticipantTile({
           Renders on TOP of the camera tile when screensharing is active.
           Camera feed stays alive underneath and shows as a PiP corner bubble.
       ──────────────────────────────────────────────────────────────────────── */}
-      {participant.screenTrack && participant.isScreenSharing && (
+      {participant.screenTrack && participant.isScreenSharing && isVisible && (
         <div className="absolute inset-0 z-20 bg-black flex items-center justify-center">
           {/* Full screen content — object-contain preserves aspect ratio */}
           <video
@@ -155,14 +185,8 @@ export function ParticipantTile({
       )}
 
       {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
-      {participant.isSpeaking && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl z-20"
-          style={{
-            boxShadow:
-              "inset 0 0 0 3px var(--color-brand-green, #207450), 0 0 24px -4px rgba(32,116,80,0.55)",
-          }}
-        />
+      {participant.isSpeaking && !participant.isMuted && (
+        <div className="absolute inset-0 z-20 pointer-events-none rounded-2xl border-[3px] border-brand-green shadow-[inset_0_0_12px_rgba(34,197,94,0.4)]" />
       )}
 
       {/* ── Video / avatar area ── */}
@@ -215,19 +239,8 @@ export function ParticipantTile({
             >
               {initials}
             </div>
-            {participant.isSpeaking && (
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-[2px]">
-                {[12, 18, 10, 16].map((h, i) => (
-                  <span
-                    key={i}
-                    className="inline-block w-[3px] bg-brand-green rounded-full animate-pulse"
-                    style={{
-                      height: `${h}px`,
-                      animationDelay: `${i * 0.15}s`,
-                    }}
-                  />
-                ))}
-              </div>
+            {participant.isSpeaking && !participant.isMuted && (
+              <div className="absolute inset-0 rounded-full border-4 border-brand-green/30 animate-pulse-fast scale-110 pointer-events-none" />
             )}
           </div>
         </div>

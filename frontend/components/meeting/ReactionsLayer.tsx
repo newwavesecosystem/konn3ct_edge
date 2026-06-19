@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useMeeting } from "@/lib/meeting-context";
+import { useMeeting, REACTION_DURATION } from "@/lib/meeting-context";
 import { REACTION_EMOJIS } from "@/lib/mock/meeting";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -12,7 +12,7 @@ export function ReactionsLayer() {
   return (
     <>
       {/* Floating reactions */}
-      <div className="fixed bottom-32 left-4 z-50 pointer-events-none">
+      <div className="fixed bottom-32 left-8 z-50 pointer-events-none">
         <AnimatePresence>
           {reactions.map((r) => (
             <motion.div
@@ -20,15 +20,15 @@ export function ReactionsLayer() {
               initial={{ opacity: 0, y: 0, x: 0, scale: 0.5 }}
               animate={{
                 opacity: [0, 1, 1, 0],
-                y: -450,
-                x: Math.random() * 80 - 40,
-                scale: [0.5, 1.2, 1.2, 1],
+                y: -600, // Float higher across the screen
+                x: Math.random() * 100 - 50, // Slightly wider spread
+                scale: [0.5, 1.3, 1.3, 1], // Slightly larger max scale
               }}
               exit={{ opacity: 0 }}
               transition={{ 
-                duration: 6.0, 
+                duration: REACTION_DURATION / 1000, 
                 ease: "easeOut",
-                opacity: { times: [0, 0.1, 0.8, 1] }
+                opacity: { times: [0, 0.1, 0.85, 1] }
               }}
               className="absolute bottom-0 left-0"
             >

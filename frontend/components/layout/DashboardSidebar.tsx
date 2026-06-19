@@ -14,12 +14,14 @@ import {
   LifeBuoy,
   LogOut,
   ChevronRight,
-  X
+  X,
+  Globe
 } from "lucide-react"
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "Rooms", href: "/dashboard/rooms", icon: Video },
+  { name: "Virtual Events", href: "/dashboard/events", icon: Globe },
   { name: "Schedule", href: "/dashboard/schedule", icon: Calendar },
   { name: "Teams", href: "/dashboard/teams", icon: Users },
   { name: "Recordings", href: "/dashboard/recordings", icon: Film },

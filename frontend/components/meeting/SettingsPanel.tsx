@@ -19,7 +19,7 @@ import {
   ArrowLeftRight,
   Image as ImageIcon,
   Ban,
-  Focus
+  Droplet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +45,9 @@ export function SettingsPanel() {
     translationLanguage,
     setTranslationLanguage,
     captionSize,
-    setCaptionSize
+    setCaptionSize,
+    outputVolume,
+    setOutputVolume
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
@@ -119,7 +121,8 @@ export function SettingsPanel() {
           <SettingsSlider
             icon={<Volume2 className="w-4 h-4" />}
             label="Output Volume"
-            value={75}
+            value={outputVolume}
+            onChange={setOutputVolume}
           />
         </SettingsGroup>
 
@@ -170,7 +173,7 @@ export function SettingsPanel() {
                 title="Blur your background"
               >
                 <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
-                <Focus className="relative z-10 w-5 h-5 mb-1 text-white/70" />
+                <Droplet className="relative z-10 w-5 h-5 mb-1 text-white/70" />
                 <span className="relative z-10 text-[10px] text-white">Blur</span>
               </button>
               
@@ -181,6 +184,7 @@ export function SettingsPanel() {
               ].map((url, i) => (
                 <button
                   key={url}
+                  title={`Use Background ${i + 1}`}
                   onClick={() => handleVbSelect('image', url)}
                   className={cn(
                     "rounded-xl overflow-hidden transition-all h-14",
@@ -192,10 +196,12 @@ export function SettingsPanel() {
               ))}
 
               {/* Custom Upload */}
-              <label className={cn(
-                "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
-                vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
-              )}>
+              <label 
+                title="Upload custom background image"
+                className={cn(
+                  "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
+                  vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
+                )}>
                 <span className="text-lg text-white/50 leading-none mb-0.5">+</span>
                 <span className="text-[9px] text-white/40">Upload</span>
                 <input 
@@ -487,27 +493,37 @@ function SettingsSlider({
   icon,
   label,
   value,
+  onChange,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  onChange?: (val: number) => void;
 }) {
   const [val, setVal] = React.useState(value);
+
+  React.useEffect(() => {
+    setVal(value);
+  }, [value]);
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1.5" style={{ color: "var(--mt-text-muted)" }}>
+      <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
         {icon}
         <span className="text-xs font-medium">{label}</span>
-        <span className="ml-auto text-[10px]" style={{ color: "var(--mt-text-faint)" }}>{val}%</span>
+        <span className="ml-auto text-xs font-semibold">{val}%</span>
       </div>
       <input
         type="range"
-        min={0}
-        max={100}
+        min="0"
+        max="100"
         value={val}
-        onChange={(e) => setVal(Number(e.target.value))}
-        className="w-full h-1 rounded-full appearance-none accent-brand-green"
-        style={{ backgroundColor: "var(--mt-bg-control-hover)" }}
+        onChange={(e) => {
+          const newVal = parseInt(e.target.value, 10);
+          setVal(newVal);
+          onChange?.(newVal);
+        }}
+        className="w-full accent-brand-green bg-black/20 h-1.5 rounded-lg appearance-none cursor-pointer"
       />
     </div>
   );

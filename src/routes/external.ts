@@ -58,6 +58,7 @@ router.post('/meetings', async (req, res) => {
       recordingSetting = 'off',  // "off" | "free" | "paid"
       guestJoinAllowed = true,
       accessPin,
+      logoutUrl,
       maxParticipants,
       maxWebinarAudience,
       maxActiveCameras,
@@ -96,6 +97,7 @@ router.post('/meetings', async (req, res) => {
         recordingSetting,
         guestJoinAllowed,
         accessPin: accessPin || null,
+        logoutUrl: logoutUrl || null,
         maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : 100,
         maxWebinarAudience: maxWebinarAudience ? parseInt(maxWebinarAudience, 10) : 1000,
         maxActiveCameras: maxActiveCameras ? parseInt(maxActiveCameras, 10) : 15,
@@ -108,6 +110,7 @@ router.post('/meetings', async (req, res) => {
       recordingSetting: room.recordingSetting,
       guestJoinAllowed: room.guestJoinAllowed,
       isWaitingRoomEnabled: room.isWaitingRoomEnabled,
+      logoutUrl: room.logoutUrl,
       maxParticipants: room.maxParticipants,
       maxWebinarAudience: room.maxWebinarAudience,
       maxActiveCameras: room.maxActiveCameras,
@@ -175,6 +178,7 @@ router.post('/meetings/join', async (req, res) => {
       isMobile: !!isMobile,
       camera: camera !== false,
       mic: mic !== false,
+      logoutUrl: room.logoutUrl,
     };
 
     const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
@@ -207,6 +211,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
       recordingSetting = 'off',
       guestJoinAllowed = true,
       accessPin,
+      logoutUrl,
       maxParticipants,
       maxWebinarAudience,
       maxActiveCameras,
@@ -257,6 +262,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
           recordingSetting,
           guestJoinAllowed,
           accessPin: accessPin || null,
+          logoutUrl: logoutUrl || null,
           maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : 100,
           maxWebinarAudience: maxWebinarAudience ? parseInt(maxWebinarAudience, 10) : 1000,
           maxActiveCameras: maxActiveCameras ? parseInt(maxActiveCameras, 10) : 15,
@@ -273,6 +279,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
       isMobile: !!isMobile,
       camera: camera !== false,
       mic: mic !== false,
+      logoutUrl: room.logoutUrl,
     };
 
     const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
@@ -331,6 +338,41 @@ router.get('/meetings/:roomId/status', async (req, res) => {
 
   } catch (error) {
     logger.error("External API /status error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// 5. Room Recordings
+router.get('/meetings/:roomId/recordings', async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    if (!roomId) {
+      return res.status(400).json({ error: "Missing roomId parameter" });
+    }
+
+    const room = await db.room.findUnique({ where: { slug: roomId } });
+    if (!room) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    const recordings = await db.recording.findMany({
+      where: { roomId: room.id, status: 'completed' },
+      select: {
+        id: true,
+        title: true,
+        url: true,
+        duration: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      roomId: room.slug,
+      recordings
+    });
+  } catch (error) {
+    logger.error("External API /recordings error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

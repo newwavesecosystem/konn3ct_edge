@@ -34,8 +34,12 @@ export async function POST(request: Request) {
     const secureRole = "attendee";
     const finalEmail = email?.trim() || "guest@conn3ct.com";
 
+    // Generate a random stable userId for guests
+    const guestUserId = `guest_${Math.random().toString(36).substring(2, 10)}`;
+
     // Create the session payload
     const sessionData = {
+      userId: guestUserId,
       roomId,
       name: name.trim(),
       email: finalEmail,

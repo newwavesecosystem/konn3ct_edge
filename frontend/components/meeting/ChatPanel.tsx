@@ -3,8 +3,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { cn } from "@/lib/utils";
-import { Send, Crown, Shield, User, Paperclip, Smile, Lock, MessageSquare } from "lucide-react";
+import { Send, Crown, Shield, User, Paperclip, Smile, Lock, MessageSquare, Copy } from "lucide-react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
 import { REACTION_EMOJIS } from "@/lib/mock/meeting";
 
 const CHAT_EMOJIS = [...REACTION_EMOJIS, "😭", "😍", "😅", "🙏", "👀", "🚀", "💡", "✨", "🎈", "🎵", "☕"];
@@ -15,8 +16,46 @@ const roleBadge: Record<string, { icon: React.ReactNode; color: string }> = {
   presenter: { icon: <User className="w-3 h-3" />, color: "text-purple-400" },
 };
 
+const LinkifiedText = ({ text }: { text: string }) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 hover:underline break-all"
+            >
+              {part}
+            </a>
+          );
+        }
+        
+        // Process mentions within the non-url parts
+        return (
+          <span key={index} className="whitespace-pre-wrap break-words">
+            {part.split(/(@\w+)/g).map((subPart, subIndex) => 
+              subPart.startsWith("@") ? (
+                <span key={subIndex} className="text-brand-green-soft font-semibold">{subPart}</span>
+              ) : (
+                <span key={subIndex}>{subPart}</span>
+              )
+            )}
+          </span>
+        );
+      })}
+    </>
+  );
+};
+
 export function ChatPanel() {
-  const { chatMessages, sendMessage, currentUser, participants } = useMeeting();
+  const { chatMessages, sendMessage, currentUser, participants, roomSettings } = useMeeting();
   const [input, setInput] = useState("");
   const [targetUserId, setTargetUserId] = useState<string>("everyone");
   const [isUploading, setIsUploading] = useState(false);
@@ -24,6 +63,9 @@ export function ChatPanel() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
+  const isChatLocked = roomSettings?.chatLocked && !isHost;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -42,6 +84,10 @@ export function ChatPanel() {
   }, [chatMessages]);
 
   const handleSend = () => {
+    if (isChatLocked) {
+      toast.error("Chat is locked by the host.");
+      return;
+    }
     const trimmed = input.trim();
     if (!trimmed) return;
     sendMessage(trimmed, targetUserId !== "everyone" ? targetUserId : undefined);
@@ -49,6 +95,7 @@ export function ChatPanel() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isChatLocked) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -107,79 +154,118 @@ export function ChatPanel() {
             <p className="text-xs mt-1" style={{ color: "var(--mt-text-ghost)" }}>Start the conversation!</p>
           </div>
         )}
-        {chatMessages.map((msg) => {
+        {chatMessages.map((msg, index) => {
+          const prevMsg = index > 0 ? chatMessages[index - 1] : null;
+          const msgDate = new Date(msg.timestamp).toLocaleDateString();
+          const prevDate = prevMsg ? new Date(prevMsg.timestamp).toLocaleDateString() : null;
+          const showDate = msgDate !== prevDate;
+          const isAI = msg.senderName && (msg.senderName.includes("Konn3ct AI") || msg.senderName.includes("AI"));
+
+          const dateDivider = showDate && (
+            <div className="flex justify-center my-4 w-full">
+              <span
+                className="text-[10px] font-medium px-3 py-1 rounded-full shadow-sm"
+                style={{
+                  color: "var(--mt-text-muted)",
+                  backgroundColor: "var(--mt-bg-control)",
+                  border: "1px solid var(--mt-border)",
+                }}
+              >
+                {new Date(msg.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            </div>
+          );
+
           if (msg.isSystem) {
             return (
-              <div key={msg.id} className="flex justify-center">
-                <span
-                  className="text-[11px] px-3 py-1 rounded-full"
-                  style={{
-                    color: "var(--mt-text-faint)",
-                    backgroundColor: "var(--mt-bg-control)",
-                  }}
-                >
-                  {msg.content}
-                </span>
-              </div>
+              <React.Fragment key={msg.id}>
+                {dateDivider}
+                <div className="flex justify-center">
+                  <span
+                    className="text-[11px] px-3 py-1 rounded-full"
+                    style={{
+                      color: "var(--mt-text-faint)",
+                      backgroundColor: "var(--mt-bg-control)",
+                    }}
+                  >
+                    {msg.content}
+                  </span>
+                </div>
+              </React.Fragment>
             );
           }
+          
           const isMe = msg.senderId === currentUser.id;
           const badge = roleBadge[msg.senderRole];
           return (
-            <div
-              key={msg.id}
-              className={cn("flex flex-col gap-0.5", isMe && "items-end")}
-            >
-              <div className="flex items-center gap-1.5">
-                {badge && <span className={badge.color}>{badge.icon}</span>}
-                <span className="text-[11px] font-medium" style={{ color: "var(--mt-text-muted)" }}>
-                  {isMe ? "You" : msg.senderName}
-                </span>
-                {msg.isPrivate && (
-                  <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">
-                    <Lock className="w-2.5 h-2.5" /> Private
-                  </span>
-                )}
-                <span className="text-[10px]" style={{ color: "var(--mt-text-ghost)" }}>
-                  {formatTime(msg.timestamp)}
-                </span>
-              </div>
+            <React.Fragment key={msg.id}>
+              {dateDivider}
               <div
-                className={cn(
-                  "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
-                  isMe
-                    ? "bg-brand-green/80 text-white rounded-br-md"
-                    : "rounded-bl-md"
-                )}
-                style={!isMe ? {
-                  backgroundColor: "var(--mt-bg-control)",
-                  color: "var(--mt-text-secondary)",
-                } : undefined}
+                className={cn("flex flex-col gap-0.5", isMe && "items-end")}
               >
-                {/* Safe mention highlighting — no dangerouslySetInnerHTML */}
-                {msg.content.split(/(@\w+)/g).map((part, i) =>
-                  part.startsWith("@") ? (
-                    <span key={i} className="text-brand-green-soft font-semibold">{part}</span>
+                <div className="flex items-center gap-1.5">
+                  {badge && <span className={badge.color}>{badge.icon}</span>}
+                  <span className="text-[11px] font-medium" style={{ color: "var(--mt-text-muted)" }}>
+                    {isMe ? "You" : msg.senderName}
+                  </span>
+                  {msg.isPrivate && (
+                    <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                      <Lock className="w-2.5 h-2.5" /> Private
+                    </span>
+                  )}
+                  <span className="text-[10px]" style={{ color: "var(--mt-text-ghost)" }}>
+                    {formatTime(msg.timestamp)}
+                  </span>
+                </div>
+                <div
+                  className={cn(
+                    "max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
+                    isMe
+                      ? "bg-brand-green/80 text-white rounded-br-md"
+                      : "rounded-bl-md"
+                  )}
+                  style={!isMe ? {
+                    backgroundColor: "var(--mt-bg-control)",
+                    color: "var(--mt-text-secondary)",
+                  } : undefined}
+                >
+                  {isAI ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="prose prose-invert max-w-none text-sm prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                      <div className="flex justify-end pt-1 mt-1 border-t border-white/10">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content);
+                            toast.success("Copied to clipboard");
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium opacity-70 hover:opacity-100 hover:bg-white/10 transition-colors"
+                        >
+                          <Copy className="w-3 h-3" /> Copy
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <span key={i}>{part}</span>
-                  )
-                )}
-                
-                {msg.fileUrl && (
-                  <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--mt-border)" }}>
-                    {msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                      <a href={msg.fileUrl} target="_blank" rel="noreferrer">
-                        <img src={msg.fileUrl} alt="attachment" className="max-w-full rounded-lg max-h-48 object-cover" />
-                      </a>
-                    ) : (
-                      <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs underline opacity-80 hover:opacity-100">
-                        <Paperclip className="w-3.5 h-3.5" /> Download File
-                      </a>
-                    )}
-                  </div>
-                )}
+                    <LinkifiedText text={msg.content} />
+                  )}
+                  
+                  {msg.fileUrl && (
+                    <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--mt-border)" }}>
+                      {msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                        <a href={msg.fileUrl} target="_blank" rel="noreferrer">
+                          <img src={msg.fileUrl} alt="attachment" className="max-w-full rounded-lg max-h-48 object-cover" />
+                        </a>
+                      ) : (
+                        <a href={msg.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs underline opacity-80 hover:opacity-100">
+                          <Paperclip className="w-3.5 h-3.5" /> Download File
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            </React.Fragment>
           );
         })}
         <div ref={bottomRef} />
@@ -202,17 +288,18 @@ export function ChatPanel() {
         </div>
         <div
           className="flex items-center gap-1.5 rounded-xl px-2 py-1"
-          style={{ backgroundColor: "var(--mt-bg-input)" }}
+          style={{ backgroundColor: "var(--mt-bg-input)", opacity: isChatLocked ? 0.6 : 1 }}
         >
           <input
             type="file"
             className="hidden"
             ref={fileInputRef}
             onChange={handleFileUpload}
+            disabled={isChatLocked}
           />
           <button 
             onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
+            disabled={isUploading || isChatLocked}
             className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 disabled:opacity-50 transition-colors shrink-0"
           >
             <Paperclip className="w-4 h-4" />
@@ -221,7 +308,8 @@ export function ChatPanel() {
           <div className="relative" ref={emojiPickerRef}>
             <button 
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 transition-colors shrink-0"
+              disabled={isChatLocked}
+              className="p-1.5 rounded-lg text-brand-green-soft hover:bg-brand-green/10 transition-colors shrink-0 disabled:opacity-50"
             >
               <Smile className="w-4 h-4" />
             </button>
@@ -254,8 +342,8 @@ export function ChatPanel() {
                 handleSend();
               }
             }}
-            placeholder={isUploading ? "Uploading..." : "Type a message..."}
-            disabled={isUploading}
+            placeholder={isChatLocked ? "Chat locked by host" : isUploading ? "Uploading..." : "Type a message..."}
+            disabled={isUploading || isChatLocked}
             rows={1}
             className="flex-1 bg-transparent text-sm py-2 px-1 outline-none min-w-0 resize-none max-h-32 overflow-y-auto"
             style={{ color: "var(--mt-text)" }}
