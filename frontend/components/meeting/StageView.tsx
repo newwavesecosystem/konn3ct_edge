@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import YouTube from "react-youtube";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function StageView() {
   const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
@@ -28,7 +29,7 @@ export function StageView() {
 
   // Grid view sorting (no active speaker rearranging)
   const gridSorted = useMemo(() => {
-    return [...participants].sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot').sort((a, b) => {
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
     });
@@ -36,7 +37,7 @@ export function StageView() {
 
   // Speaker view sorting (uses active speaker)
   const speakerSorted = useMemo(() => {
-    return [...participants].sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot').sort((a, b) => {
       if (a.isSpeaking !== b.isSpeaking) return a.isSpeaking ? -1 : 1;
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
@@ -60,9 +61,9 @@ export function StageView() {
   }
 
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
-  const others = gridSorted.filter((p) => p.id !== activeSpeaker?.id);
+  const others = gridSorted; // Keep all participants in the strip to prevent swapping/rearranging
 
-  if (layoutMode === "grid") {
+  if (layoutMode === "grid" || currentUser.role === 'bot') {
     return <GridLayout participants={gridSorted} />;
   }
 
@@ -322,10 +323,21 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   // ── SCROLL mode (default) ─────────────────────────────
   // ═══════════════════════════════════════════════════════
   const { cols, tileH } = computeScrollableGrid(containerSize.w);
+  const rowCount = Math.ceil(count / cols);
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => tileH + TILE_GAP,
+    overscan: 2,
+  });
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={containerRef}>
       <div
+        ref={scrollContainerRef}
         className="flex-1 min-h-0 overflow-y-auto"
         style={{
           scrollbarWidth: "thin",
@@ -333,22 +345,40 @@ function GridLayout({ participants }: { participants: Participant[] }) {
           paddingRight: 4,
         }}
       >
-        <motion.div
-          layout
-          className="grid"
+        <div
           style={{
-            gridTemplateColumns: `repeat(${cols}, 1fr)`,
-            gridAutoRows: `${tileH}px`,
-            gap: `${TILE_GAP}px`,
-            padding: `${TILE_PADDING_Y}px ${TILE_PADDING_X}px`,
+            height: `${virtualizer.getTotalSize() + TILE_PADDING_Y * 2}px`,
+            width: "100%",
+            position: "relative",
           }}
         >
-          <AnimatePresence>
-            {participants.map((p) => (
-              <MotionTile key={p.id} participant={p} />
-            ))}
-          </AnimatePresence>
-        </motion.div>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const rowStartIndex = virtualRow.index * cols;
+            const rowParticipants = participants.slice(rowStartIndex, rowStartIndex + cols);
+            
+            return (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${tileH}px`,
+                  transform: `translateY(${virtualRow.start + TILE_PADDING_Y}px)`,
+                  padding: `0 ${TILE_PADDING_X}px`,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  gap: `${TILE_GAP}px`,
+                }}
+              >
+                {rowParticipants.map((p) => (
+                  <MotionTile key={p.id} participant={p} />
+                ))}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Bottom breathing room */}
         <div className="h-2 shrink-0" />
@@ -378,12 +408,50 @@ function GridInner({
   containerW: number;
   containerH: number;
 }) {
+  const { currentUser } = useMeeting();
   const count = participants.length;
+  const isBotViewer = currentUser.role === 'bot';
+
+  // For bots, we want 0 padding and 0 gap to perfectly fill the screen
+  const paddingX = isBotViewer ? 0 : TILE_PADDING_X;
+  const paddingY = isBotViewer ? 0 : TILE_PADDING_Y;
+  const gap = isBotViewer ? 0 : TILE_GAP;
+
+  const computeDynamicGrid = (c: number, w: number, h: number) => {
+    const availW = Math.max(0, w - paddingX * 2);
+    const availH = Math.max(0, h - paddingY * 2);
+
+    let best: GridSolution = { cols: 1, rows: c, tileW: 0, tileH: 0 };
+    let bestScore = -Infinity;
+
+    const maxCols = Math.min(c, 6);
+
+    for (let cols = 1; cols <= maxCols; cols++) {
+      const rows = Math.ceil(c / cols);
+      const tileW = (availW - gap * (cols - 1)) / cols;
+      const tileH = (availH - gap * (rows - 1)) / rows;
+
+      if (tileW < 80 || tileH < 60) continue;
+
+      const area = tileW * tileH;
+      const aspect = tileW / tileH;
+      const targetAspect = 16 / 9;
+      const aspectPenalty = Math.abs(Math.log(aspect / targetAspect));
+      const score = area - aspectPenalty * 8000;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = { cols, rows, tileW, tileH };
+      }
+    }
+
+    return best;
+  };
 
   // Hooks always run.
   const solution = useMemo(
-    () => computeBestGrid(count, containerW, containerH),
-    [count, containerW, containerH],
+    () => computeDynamicGrid(count, containerW, containerH),
+    [count, containerW, containerH, isBotViewer],
   );
 
   if (count === 0) {
@@ -394,9 +462,19 @@ function GridInner({
 
   // ── 1 participant: hero ─────────────────────────────────
   if (count === 1) {
+    if (isBotViewer) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-full h-full">
+            <ParticipantTile participant={participants[0]} isLarge fixedAspect={false} />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
-        <div className="w-full aspect-video max-h-full max-w-5xl flex justify-center">
+        <div className="w-full aspect-video max-h-full flex justify-center">
           <MotionTile participant={participants[0]} isLarge />
         </div>
       </div>
@@ -407,18 +485,23 @@ function GridInner({
   if (count === 2) {
     const isPortrait = containerW < containerH * 1.1;
     return (
-      <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
+      <div className={cn("absolute inset-0 flex items-center justify-center", !isBotViewer && "p-3 sm:p-4")}>
         <div
           className={cn(
-            "w-full flex gap-2.5 sm:gap-3 max-w-7xl",
+            "w-full flex",
+            isBotViewer ? "gap-0 h-full" : "gap-2.5 sm:gap-3",
             isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
           <AnimatePresence>
             {participants.map((p) => (
               <div key={p.id} className="flex-1 min-w-0 min-h-0 w-full flex justify-center">
-                <div className="w-full aspect-video max-h-full">
-                  <MotionTile participant={p} isLarge />
+                <div className={cn("w-full max-h-full", isBotViewer ? "h-full" : "aspect-video")}>
+                  {isBotViewer ? (
+                    <ParticipantTile participant={p} isLarge fixedAspect={false} />
+                  ) : (
+                    <MotionTile participant={p} isLarge />
+                  )}
                 </div>
               </div>
             ))}
@@ -428,25 +511,31 @@ function GridInner({
     );
   }
 
-
-
   // ── General case: use computed best grid (4, 6, 7+) ──────
   const { cols, tileW, tileH } = solution;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center" style={{ padding: TILE_PADDING_Y }}>
+    <div className="absolute inset-0 flex items-center justify-center" style={{ padding: paddingY }}>
       <motion.div
         layout
         className="grid"
         style={{
           gridTemplateColumns: `repeat(${cols}, ${tileW}px)`,
           gridAutoRows: `${tileH}px`,
-          gap: `${TILE_GAP}px`,
+          gap: `${gap}px`,
+          width: isBotViewer ? "100%" : undefined,
+          height: isBotViewer ? "100%" : undefined,
         }}
       >
         <AnimatePresence>
           {participants.map((p) => (
-            <MotionTile key={p.id} participant={p} />
+            isBotViewer ? (
+              <div key={p.id} className="w-full h-full min-h-0 min-w-0 overflow-hidden">
+                <ParticipantTile participant={p} fixedAspect={false} />
+              </div>
+            ) : (
+              <MotionTile key={p.id} participant={p} />
+            )
           ))}
         </AnimatePresence>
       </motion.div>
@@ -498,16 +587,19 @@ function SpeakerLayout({
   return (
     <div className="flex-1 flex flex-col gap-2 p-2 sm:p-3 overflow-hidden">
       {/* Main speaker */}
-      <div className="flex-1 min-h-0">
-        <motion.div
-          key={activeSpeaker.id}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-          className="w-full h-full"
-        >
-          <ParticipantTile participant={activeSpeaker} isLarge />
-        </motion.div>
+      <div className="flex-1 min-h-0 relative">
+        <AnimatePresence>
+          <motion.div
+            key={activeSpeaker.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+            className="absolute inset-0 w-full h-full"
+          >
+            <ParticipantTile participant={activeSpeaker} isLarge />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Filmstrip — clean avatar cards */}
@@ -530,12 +622,6 @@ function SpeakerLayout({
           <div ref={stripRef} className="flex gap-2.5 overflow-x-auto no-scrollbar py-1.5 px-1 scroll-smooth">
             <AnimatePresence>
               {others.map((p) => {
-                const initials = p.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase();
                 return (
                   <motion.div
                     key={p.id}
@@ -543,41 +629,9 @@ function SpeakerLayout({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.92 }}
                     transition={TILE_TRANSITION}
-                    className="shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-xl transition-shadow hover:shadow-md"
-                    style={{
-                      backgroundColor: "var(--mt-bg-tile)",
-                      border: "1px solid var(--mt-border)",
-                    }}
+                    className="shrink-0 w-40 h-24 rounded-xl overflow-hidden shadow-sm"
                   >
-                    {/* Avatar circle */}
-                    <div
-                      className="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                      style={{
-                        backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
-                        color: "var(--mt-avatar-text, var(--mt-text))",
-                      }}
-                    >
-                      {initials}
-                      {/* Speaking ring */}
-                      {p.isSpeaking && (
-                        <span className="absolute inset-0 rounded-full ring-2 ring-brand-green animate-pulse" />
-                      )}
-                    </div>
-                    {/* Name + status */}
-                    <div className="flex flex-col min-w-0">
-                      <span
-                        className="text-[11px] font-medium truncate max-w-[72px]"
-                        style={{ color: "var(--mt-text)" }}
-                      >
-                        {p.name.split(" ")[0]}
-                      </span>
-                      <span
-                        className="text-[9px] truncate"
-                        style={{ color: p.isMuted ? "var(--mt-text-faint)" : "var(--color-brand-green)" }}
-                      >
-                        {p.isMuted ? "Muted" : "Speaking"}
-                      </span>
-                    </div>
+                    <ParticipantTile participant={p} fixedAspect />
                   </motion.div>
                 );
               })}
@@ -769,8 +823,11 @@ function ScreenShareLayout({
       if (videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         if (stream.getVideoTracks()[0] === screenSharer.screenTrack) return;
+        stream.getTracks().forEach(t => stream.removeTrack(t));
+        stream.addTrack(screenSharer.screenTrack);
+      } else {
+        videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
       }
-      videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
       videoRef.current.play().catch((e) => {
         if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
       });

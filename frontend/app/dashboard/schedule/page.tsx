@@ -1,21 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import {
   Plus, Clock, Users, Copy, CalendarDays,
-  ChevronLeft, ChevronRight, Play, MoreVertical
+  ChevronLeft, ChevronRight, Play, Trash2
 } from "lucide-react";
 import { MOCK_SESSIONS } from "@/lib/mock/schedule";
+import { toast } from "sonner";
 
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const dates = [4, 5, 6, 7, 8, 9, 10];
 const today = 5; // Simulating Tuesday, May 5, 2026
 
 export default function SchedulePage() {
-  const upcomingSessions = MOCK_SESSIONS.filter(s => s.status === "upcoming" || s.status === "live");
+  const [sessions, setSessions] = useState(MOCK_SESSIONS);
+  const upcomingSessions = sessions.filter(s => s.status === "upcoming" || s.status === "live");
+
+  const cancelSession = (id: string) => {
+    setSessions(prev => prev.filter(s => s.id !== id));
+    toast.success("Meeting canceled successfully.");
+  };
 
   return (
     <div className="flex flex-col gap-8 pb-10">
@@ -141,6 +149,11 @@ export default function SchedulePage() {
                             <ChevronRight className="h-4 w-4" />
                           </button>
                         </Link>
+                        <button 
+                          onClick={() => cancelSession(session.id)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-danger/10 text-danger transition-colors" title="Cancel Meeting">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                         <Button size="sm" className="h-8 rounded-lg bg-brand-green hover:bg-[#287854] text-xs font-semibold px-3">
                           <Play className="h-3.5 w-3.5 mr-1" /> Join
                         </Button>

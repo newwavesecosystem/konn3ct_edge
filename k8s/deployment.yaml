@@ -18,6 +18,16 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - conn3ct-recorder
+            topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
           image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:latest

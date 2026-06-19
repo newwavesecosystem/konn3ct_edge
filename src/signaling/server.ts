@@ -128,8 +128,50 @@ const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
 const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
+const roomAdmissions = new Map<string, Set<string>>();
 
-async function syncRoomStateToRedis(roomId: string, roomSlug: string) {
+export const cachedRoomParticipants = new Map<string, Array<{ userId: string, name: string, role: string, isMobile: boolean }>>();
+
+export interface RoomSettings {
+  micLocked: boolean;
+  videoLocked: boolean;
+  chatLocked: boolean;
+  bypassWaitingRoom: boolean;
+}
+export const roomSettingsMap = new Map<string, RoomSettings>();
+
+export function addParticipantToCache(roomId: string, client: { userId: string, name: string, role: string, isMobile: boolean }) {
+  let cache = cachedRoomParticipants.get(roomId);
+  if (!cache) { cache = []; cachedRoomParticipants.set(roomId, cache); }
+  if (!cache.some(p => p.userId === client.userId)) {
+    cache.push({ userId: client.userId, name: client.name, role: client.role, isMobile: client.isMobile });
+  }
+}
+
+export function removeParticipantFromCache(roomId: string, userId: string) {
+  const cache = cachedRoomParticipants.get(roomId);
+  if (cache) {
+    const newCache = cache.filter(p => p.userId !== userId);
+    if (newCache.length === 0) cachedRoomParticipants.delete(roomId);
+    else cachedRoomParticipants.set(roomId, newCache);
+  }
+}
+
+const syncRoomTimeouts = new Map<string, NodeJS.Timeout>();
+
+export function syncRoomStateToRedis(roomId: string, roomSlug: string) {
+  const existingTimeout = syncRoomTimeouts.get(roomId);
+  if (existingTimeout) clearTimeout(existingTimeout);
+  
+  const timeout = setTimeout(() => {
+    executeSyncRoomStateToRedis(roomId, roomSlug);
+    syncRoomTimeouts.delete(roomId);
+  }, 1000); // 1 second debounce
+  
+  syncRoomTimeouts.set(roomId, timeout);
+}
+
+async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
   try {
     const clients = rooms.get(roomId);
     if (!clients || clients.size === 0) {
@@ -289,8 +331,8 @@ export function initializeSignaling(server: Server) {
       }
 
       const currentParticipants = rooms.get(room.id)?.size || 0;
-      const maxParticipants = (decoded as any).maxParticipants ?? 100;
-      const maxWebinarAudience = (decoded as any).maxWebinarAudience ?? 1000;
+      const maxParticipants = room.maxParticipants ?? 100;
+      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
       const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
 
       // Allow hosts and bots to bypass capacity
@@ -311,7 +353,7 @@ export function initializeSignaling(server: Server) {
           role,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
-          maxActiveCameras: (decoded as any).maxActiveCameras ?? 15,
+          maxActiveCameras: room.maxActiveCameras ?? 15,
           maxParticipants: maxParticipants,
         });
       });
@@ -325,8 +367,12 @@ export function initializeSignaling(server: Server) {
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
     const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile } = clientData;
 
+    const roomSettings = roomSettingsMap.get(clientData.roomId);
+    const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
+    const hasBeenAdmitted = roomAdmissions.get(roomId)?.has(userId) === true;
+    
     // Determine initial status
-    const initialStatus = (isWaitingRoomEnabled && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
+    const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
     const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants };
 
@@ -359,6 +405,12 @@ export function initializeSignaling(server: Server) {
       client.status = 'active';
     }
 
+    if (client.status === 'active') {
+      let admissions = roomAdmissions.get(roomId);
+      if (!admissions) { admissions = new Set(); roomAdmissions.set(roomId, admissions); }
+      admissions.add(userId);
+    }
+
     rooms.get(roomId)!.set(userId, client);
 
     if (disconnectTimeouts.has(`${userId}:${roomId}`)) {
@@ -378,10 +430,8 @@ export function initializeSignaling(server: Server) {
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
 
+      // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
       if (client.status === 'active') {
-        // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
-        // This ensures getOrCreateRouter() is already resolved before session_status triggers
-        // initializeMediasoup() on the client side.
         try {
           await getOrCreateRouter(roomId);
         } catch (e) {
@@ -389,8 +439,6 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      // Send session_status IMMEDIATELY after router is ready (not after DB queries)
-      // We MUST include the userId and name here so the frontend knows its true identity!
       ws.send(JSON.stringify({ 
         type: 'session_status', 
         recovered: false, 
@@ -403,11 +451,12 @@ export function initializeSignaling(server: Server) {
       }));
 
       if (client.status === 'active') {
+        addParticipantToCache(roomId, client);
         broadcastToRoom(roomId, {
           type: 'user_joined',
           userId,
-          name,
-          role,
+          name: client.name,
+          role: client.role,
           isMobile: client.isMobile
         });
         
@@ -428,65 +477,76 @@ export function initializeSignaling(server: Server) {
             }
           }
         }
-
-        // Send history ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
-        setImmediate(async () => {
-          try {
-            const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
-              .filter(c => c.status === 'active')
-              .map(c => ({ userId: c.userId, name: c.name, role: c.role, isMobile: c.isMobile }));
-            ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
-
-            const chatHistory = await db.chatMessage.findMany({
-              where: { roomId, OR: [{ isPrivate: false }, { targetUserId: userId }, { userId }] },
-              orderBy: { createdAt: 'asc' },
-              take: 100
-            });
-            const pollHistory = await db.meetingPoll.findMany({
-              where: { roomId, isActive: true },
-              orderBy: { createdAt: 'asc' }
-            });
-            const noteHistory = await db.sharedNote.findUnique({
-              where: { roomId }
-            });
-
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
-              ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-              if (noteHistory) {
-                ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
-              }
-              const eCinemaLink = roomECinema.get(roomId);
-              if (eCinemaLink) {
-                ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
-                
-                const eState = roomECinemaState.get(roomId);
-                if (eState) {
-                  let currentTime = eState.time;
-                  if (eState.action === 'play') {
-                    currentTime += (Date.now() - eState.serverTime) / 1000;
-                  }
-                  // Send a delayed action to ensure the player has time to load
-                  setTimeout(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                      ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
-                    }
-                  }, 2000);
-                }
-              }
-            }
-          } catch (e) {
-            logger.error("Failed to load history", e);
-          }
-        });
       } else {
-        // Send a request to hosts
+        // Send a request to hosts for admission
         broadcastToHosts(roomId, {
           type: 'waiting_room_request',
           userId,
           name,
         });
       }
+    }
+
+    // ALWAYS send history and participants ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
+    if (client.status === 'active') {
+      setImmediate(async () => {
+        try {
+          const activeParticipants = cachedRoomParticipants.get(roomId) || [];
+          ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+
+          const chatHistory = await db.chatMessage.findMany({
+            where: { roomId: roomId, createdAt: { gte: clientData.roomCreatedDate } },
+            orderBy: { createdAt: 'asc' },
+            take: 50,
+          });
+
+          ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+
+          const settings = roomSettingsMap.get(roomId);
+          if (settings) {
+            ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
+          }
+          const pollHistory = await db.meetingPoll.findMany({
+            where: { roomId, isActive: true },
+            orderBy: { createdAt: 'asc' }
+          });
+          const noteHistory = await db.sharedNote.findUnique({
+            where: { roomId }
+          });
+          const qaHistory = await db.meetingQA.findMany({
+            where: { roomId },
+            orderBy: { upvotes: 'desc' }
+          });
+
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+            ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
+            if (noteHistory) {
+              ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
+            }
+            const eCinemaLink = roomECinema.get(roomId);
+            if (eCinemaLink) {
+              ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
+              
+              const eState = roomECinemaState.get(roomId);
+              if (eState) {
+                let currentTime = eState.time;
+                if (eState.action === 'play') {
+                  currentTime += (Date.now() - eState.serverTime) / 1000;
+                }
+                // Send a delayed action to ensure the player has time to load
+                setTimeout(() => {
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+                  }
+                }, 2000);
+              }
+            }
+          }
+        } catch (e) {
+          logger.error("Failed to load history", e);
+        }
+      });
     }
 
     ws.on('message', async (message: Buffer | string) => {
@@ -538,12 +598,15 @@ export function initializeSignaling(server: Server) {
         const roomClients = rooms.get(roomId);
         if (roomClients) {
           roomClients.delete(userId);
+          removeParticipantFromCache(roomId, userId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
+            roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
+            generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
@@ -557,7 +620,7 @@ export function initializeSignaling(server: Server) {
           }
         }
         disconnectTimeouts.delete(`${userId}:${roomId}`);
-      }, 30000); // 30 seconds
+      }, 5000); // 5 seconds
 
       disconnectTimeouts.set(`${userId}:${roomId}`, timeout);
     });
@@ -578,6 +641,9 @@ export function initializeSignaling(server: Server) {
           const targetClient = rooms.get(roomId)?.get(data.userId);
           if (targetClient && targetClient.status === 'waiting') {
             targetClient.status = 'active';
+            let admissions = roomAdmissions.get(roomId);
+            if (!admissions) { admissions = new Set(); roomAdmissions.set(roomId, admissions); }
+            admissions.add(data.userId);
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
             broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
             
@@ -613,6 +679,7 @@ export function initializeSignaling(server: Server) {
           if (targetClient && targetClient.role !== 'host') {
             // Remove first so the close handler skips grace period
             rooms.get(roomId)?.delete(data.userId);
+            removeParticipantFromCache(roomId, data.userId);
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
             broadcastToRoom(roomId, { type: 'user_left', userId: data.userId });
@@ -622,24 +689,78 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
-      case 'force_mute':
+      case 'change_role':
         if (client.role === 'host') {
-          if (data.userId) {
-            const targetClient = rooms.get(roomId)?.get(data.userId);
-            if (targetClient) {
-              targetClient.ws.send(JSON.stringify({ type: 'force_mute' }));
-            }
-          } else {
-            // Mute everyone else
-            const roomClients = rooms.get(roomId);
-            if (roomClients) {
-              for (const [id, c] of roomClients.entries()) {
-                if (c.role !== 'host' && c.status === 'active') {
-                  c.ws.send(JSON.stringify({ type: 'force_mute' }));
-                }
+          const targetClient = rooms.get(roomId)?.get(data.userId);
+          if (targetClient && data.newRole && data.userId !== client.userId) {
+            targetClient.role = data.newRole;
+            logger.info(`Host ${userId} changed role of ${data.userId} to ${data.newRole}`);
+            broadcastToRoom(roomId, { 
+              type: 'role_changed', 
+              userId: targetClient.userId, 
+              role: targetClient.role 
+            });
+            syncRoomStateToRedis(roomId, client.roomSlug);
+          }
+        }
+        break;
+
+      case 'force_mute':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (!roomClients) break;
+
+          const broadcastForceMute = (predicate: (c: Client) => boolean, type: 'force_mute' | 'force_video_off' = 'force_mute') => {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'active' && predicate(c)) {
+                c.ws.send(JSON.stringify({ type, reason: 'host_action' }));
               }
             }
+          };
+
+          if (data.userId) {
+            const targetClient = roomClients.get(data.userId);
+            if (targetClient) targetClient.ws.send(JSON.stringify({ type: 'force_mute', reason: 'host_action' }));
+          } else if (data.target === 'all') {
+            broadcastForceMute(c => c.userId !== userId);
+          } else if (data.target === 'all_except_hosts') {
+            broadcastForceMute(c => c.role !== 'host' && c.role !== 'co-host');
+          } else if (data.target === 'all_except_presenters') {
+            const presenters = new Set(
+              (roomProducers.get(roomId) || [])
+                .filter(p => p.appData?.source === 'screen')
+                .map(p => p.userId)
+            );
+            broadcastForceMute(c => c.userId !== userId && !presenters.has(c.userId));
+          } else {
+            broadcastForceMute(c => c.role !== 'host');
           }
+        }
+        break;
+
+      case 'force_video_off':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (!roomClients) break;
+          for (const [id, c] of roomClients.entries()) {
+            if (c.status === 'active' && c.userId !== userId) {
+              c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+            }
+          }
+        }
+        break;
+
+      case 'update_room_settings':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false };
+          const newSettings = { ...currentSettings, ...data.settings };
+          roomSettingsMap.set(roomId, newSettings);
+          
+          broadcastToRoom(roomId, {
+            type: 'room_settings_updated',
+            settings: newSettings,
+            updatedBy: client.name
+          });
         }
         break;
 
@@ -648,12 +769,15 @@ export function initializeSignaling(server: Server) {
         const rc = rooms.get(roomId);
         if (rc) {
           rc.delete(userId);
+          removeParticipantFromCache(roomId, userId);
           if (rc.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId);
+            roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, client.roomSlug);
+            generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
@@ -702,6 +826,11 @@ export function initializeSignaling(server: Server) {
 
       case 'chat':
         try {
+          const settings = roomSettingsMap.get(roomId);
+          if (settings && settings.chatLocked && client.role === 'attendee') {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Chat is currently locked by the host.' }));
+            return;
+          }
           if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) return;
           if (data.message.length > 4000) {
             client.ws.send(JSON.stringify({ type: 'error', message: 'Message too long (max 4000 characters).' }));
@@ -975,6 +1104,126 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'admit_all':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'waiting') {
+                c.status = 'active';
+                addParticipantToCache(roomId, c);
+                c.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: c.userId, name: c.name, role: c.role }));
+                broadcastToRoom(roomId, {
+                  type: 'user_joined',
+                  userId: c.userId,
+                  name: c.name,
+                  role: c.role,
+                  isMobile: c.isMobile
+                });
+              }
+            }
+            syncRoomStateToRedis(roomId, client.roomSlug);
+          }
+        }
+        break;
+
+      case 'deny_all':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            for (const [id, c] of Array.from(roomClients.entries())) {
+              if (c.status === 'waiting') {
+                c.ws.send(JSON.stringify({ type: 'error', message: 'You have been denied entry to this room.' }));
+                roomClients.delete(id);
+              }
+            }
+          }
+        }
+        break;
+
+      case 'ask_question':
+        try {
+          const newQ = await db.meetingQA.create({
+            data: {
+              roomId,
+              userId: data.isAnonymous ? null : userId,
+              authorName: data.isAnonymous ? 'Anonymous' : client.name,
+              isAnonymous: !!data.isAnonymous,
+              question: data.question,
+            }
+          });
+          broadcastToRoom(roomId, {
+            type: 'qa_updated',
+            action: 'ask',
+            message: newQ
+          });
+        } catch (e) {
+          logger.error("Failed to ask question", e);
+        }
+        break;
+
+      case 'upvote_question':
+        try {
+          const q = await db.meetingQA.findUnique({ where: { id: data.questionId } });
+          if (q) {
+            const voterIds = Array.isArray(q.voterIds) ? q.voterIds : [];
+            if (!voterIds.includes(userId)) {
+              const updated = await db.meetingQA.update({
+                where: { id: data.questionId },
+                data: {
+                  upvotes: q.upvotes + 1,
+                  voterIds: [...voterIds, userId]
+                }
+              });
+              broadcastToRoom(roomId, {
+                type: 'qa_updated',
+                action: 'upvote',
+                message: updated
+              });
+            }
+          }
+        } catch (e) {
+          logger.error("Failed to upvote question", e);
+        }
+        break;
+
+      case 'answer_question':
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            const updated = await db.meetingQA.update({
+              where: { id: data.questionId },
+              data: {
+                isAnswered: true,
+                answerText: data.answerText,
+                answeredBy: client.name
+              }
+            });
+            broadcastToRoom(roomId, {
+              type: 'qa_updated',
+              action: 'answer',
+              message: updated
+            });
+          } catch (e) {
+            logger.error("Failed to answer question", e);
+          }
+        }
+        break;
+
+      case 'delete_question':
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            await db.meetingQA.delete({ where: { id: data.questionId } });
+            broadcastToRoom(roomId, {
+              type: 'qa_updated',
+              action: 'delete',
+              questionId: data.questionId
+            });
+          } catch (e) {
+            logger.error("Failed to delete question", e);
+          }
+        }
+        break;
+
       // --- WebRTC Media Signaling ---
       case 'getRouterRtpCapabilities': {
         const router = await getOrCreateRouter(roomId);
@@ -1027,6 +1276,18 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'produce': {
+        const settings = roomSettingsMap.get(roomId);
+        if (settings) {
+          if (data.kind === 'audio' && settings.micLocked && client.role === 'attendee') {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Microphones are locked by the host.' }));
+            return;
+          }
+          if (data.kind === 'video' && data.appData?.source !== 'screen' && settings.videoLocked && client.role === 'attendee') {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
+            return;
+          }
+        }
+
         const appData: Record<string, any> = data.appData || {};
         const source = appData.source || 'camera'; // 'camera' | 'screen'
 
@@ -1084,6 +1345,20 @@ export function initializeSignaling(server: Server) {
                 }));
               }
               consumerOwners.delete(closedConsumerId);
+            },
+            (score) => {
+              // If the connection is poor, tell the client so it can pause video
+              if (score < 3 && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: 'connection_poor',
+                  producerId: data.producerId
+                }));
+              } else if (score >= 3 && client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: 'connection_recovered',
+                  producerId: data.producerId
+                }));
+              }
             }
           );
           // Track which client owns this consumer for cleanup
@@ -1184,11 +1459,27 @@ export function initializeSignaling(server: Server) {
     if (!roomClients) return;
 
     const payload = JSON.stringify(message);
-    for (const [id, client] of roomClients.entries()) {
-      if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(payload);
+    const clientsArr = Array.from(roomClients.entries());
+    const CHUNK_SIZE = 500;
+    
+    let currentIndex = 0;
+    
+    function processChunk() {
+      const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
+      for (let i = currentIndex; i < end; i++) {
+        const [id, client] = clientsArr[i];
+        if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+        }
+      }
+      
+      currentIndex = end;
+      if (currentIndex < clientsArr.length) {
+        setImmediate(processChunk);
       }
     }
+    
+    processChunk();
   }
 
   function broadcastToHosts(roomId: string, message: any) {
@@ -1196,17 +1487,30 @@ export function initializeSignaling(server: Server) {
     if (!roomClients) return;
 
     const payload = JSON.stringify(message);
+    const clientsArr = Array.from(roomClients.entries());
+    const CHUNK_SIZE = 500;
     let sentToHost = false;
-    for (const [id, client] of roomClients.entries()) {
-      if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(payload);
-        logger.info(`Sent waiting_room_request to host ${client.userId}`);
-        sentToHost = true;
+    let currentIndex = 0;
+
+    function processChunk() {
+      const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
+      for (let i = currentIndex; i < end; i++) {
+        const [id, client] = clientsArr[i];
+        if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(payload);
+          logger.info(`Sent waiting_room_request to host ${client.userId}`);
+          sentToHost = true;
+        }
+      }
+      
+      currentIndex = end;
+      if (currentIndex < clientsArr.length) {
+        setImmediate(processChunk);
+      } else if (!sentToHost) {
+        logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
       }
     }
-
-    if (!sentToHost) {
-      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
-    }
+    
+    processChunk();
   }
 }

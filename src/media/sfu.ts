@@ -83,6 +83,8 @@ function getWorker(): Worker {
   return worker;
 }
 
+const routersPromises = new Map<string, Promise<Router>>();
+
 /**
  * Create or get a Router for a specific room
  */
@@ -90,14 +92,28 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   if (routers.has(roomId)) {
     return routers.get(roomId)!;
   }
+  
+  if (routersPromises.has(roomId)) {
+    return routersPromises.get(roomId)!;
+  }
 
-  const worker = getWorker();
-  const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+  const promise = (async () => {
+    const worker = getWorker();
+    const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+    
+    routers.set(roomId, router);
+    logger.info(`Router created for room ${roomId}`);
+    return router;
+  })();
+
+  routersPromises.set(roomId, promise);
   
-  routers.set(roomId, router);
-  logger.info(`Router created for room ${roomId}`);
-  
-  return router;
+  try {
+    const router = await promise;
+    return router;
+  } finally {
+    routersPromises.delete(roomId);
+  }
 }
 
 /**
@@ -141,29 +157,41 @@ export async function connectTransport(transportId: string, dtlsParameters: any)
   await transport.connect({ dtlsParameters });
 }
 
+const audioObserversPromises = new Map<string, Promise<void>>();
+
 /**
  * Setup Audio Level Observer for a room
  */
 export async function setupAudioObserver(roomId: string, onSpeaking: (producerIds: string[]) => void) {
   if (audioObservers.has(roomId)) return;
-  const router = await getOrCreateRouter(roomId);
+  if (audioObserversPromises.has(roomId)) {
+    await audioObserversPromises.get(roomId);
+    return;
+  }
   
-  const observer = await router.createAudioLevelObserver({
-    maxEntries: 100,
-    threshold: -60, // dBov (typical silence is below -60)
-    interval: 300   // Trigger every 300ms
-  });
+  const promise = (async () => {
+    const router = await getOrCreateRouter(roomId);
+    
+    const observer = await router.createAudioLevelObserver({
+      maxEntries: 100,
+      threshold: -60, // dBov (typical silence is below -60)
+      interval: 300   // Trigger every 300ms
+    });
 
-  observer.on('volumes', (volumes) => {
-    // volumes is array of { producer, volume }
-    onSpeaking(volumes.map(v => v.producer.id));
-  });
-  
-  observer.on('silence', () => {
-    onSpeaking([]); // No one is talking
-  });
+    observer.on('volumes', (volumes) => {
+      // volumes is array of { producer, volume }
+      onSpeaking(volumes.map(v => v.producer.id));
+    });
+    
+    observer.on('silence', () => {
+      onSpeaking([]); // No one is talking
+    });
 
-  audioObservers.set(roomId, observer);
+    audioObservers.set(roomId, observer);
+  })();
+
+  audioObserversPromises.set(roomId, promise);
+  await promise;
 }
 
 /**
@@ -191,6 +219,9 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
 
   // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
   if (kind === 'audio' && roomId) {
+    if (audioObserversPromises.has(roomId)) {
+      await audioObserversPromises.get(roomId);
+    }
     const observer = audioObservers.get(roomId);
     if (observer && !producer.closed) {
       observer.addProducer({ producerId: producer.id }).catch(e => {
@@ -286,7 +317,8 @@ export async function createConsumerWithCallback(
   producerId: string,
   rtpCapabilities: any,
   router: Router,
-  onProducerClose: (consumerId: string) => void
+  onProducerClose: (consumerId: string) => void,
+  onScore?: (score: number) => void
 ) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
@@ -312,6 +344,14 @@ export async function createConsumerWithCallback(
     consumer.close();
     consumers.delete(consumer.id);
     onProducerClose(consumer.id); // Notify signaling server to forward event to client
+  });
+
+  consumer.on('score', (score) => {
+    if (onScore) {
+      // score is an object like { score: 10, producerScore: 10, ... }
+      // We take the consumer's score (0-10, 10 is best)
+      onScore(score.score);
+    }
   });
 
   return {

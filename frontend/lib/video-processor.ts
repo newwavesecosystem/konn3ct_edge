@@ -2,6 +2,11 @@ import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision';
 
 export type VirtualBackgroundMode = 'none' | 'blur' | 'image';
 
+let globalSegmenter: ImageSegmenter | null = null;
+let globalVision: any = null;
+let isInitializingModel = false;
+let modelInitPromise: Promise<void> | null = null;
+
 export class VideoProcessor {
   private mode: VirtualBackgroundMode = 'none';
   private imageUrl: string | null = null;
@@ -11,6 +16,10 @@ export class VideoProcessor {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   
+  private maskCanvas?: HTMLCanvasElement;
+  private maskCtx?: CanvasRenderingContext2D;
+  private maskImageData?: ImageData;
+
   private rawStream: MediaStream | null = null;
   private processedStream: MediaStream | null = null;
   private videoElement: HTMLVideoElement;
@@ -32,23 +41,42 @@ export class VideoProcessor {
   }
 
   private async initModel() {
-    try {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-      );
-      this.segmenter = await ImageSegmenter.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-          delegate: "GPU"
-        },
-        runningMode: "VIDEO",
-        outputCategoryMask: true,
-        outputConfidenceMasks: false
-      });
-      console.log("[VideoProcessor] Canvas 2D MediaPipe Engine Initialized");
-    } catch (e) {
-      console.error("[VideoProcessor] Failed to initialize MediaPipe model:", e);
+    if (globalSegmenter) {
+      this.segmenter = globalSegmenter;
+      return;
     }
+    
+    if (isInitializingModel && modelInitPromise) {
+      await modelInitPromise;
+      this.segmenter = globalSegmenter;
+      return;
+    }
+
+    isInitializingModel = true;
+    modelInitPromise = (async () => {
+      try {
+        globalVision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+        globalSegmenter = await ImageSegmenter.createFromOptions(globalVision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          outputCategoryMask: true,
+          outputConfidenceMasks: false
+        });
+        console.log("[VideoProcessor] Canvas 2D MediaPipe Engine Initialized Globally");
+      } catch (e) {
+        console.error("[VideoProcessor] Failed to initialize MediaPipe model:", e);
+      } finally {
+        isInitializingModel = false;
+      }
+    })();
+    
+    await modelInitPromise;
+    this.segmenter = globalSegmenter;
   }
 
   public setMode(mode: VirtualBackgroundMode, imageUrl?: string) {
@@ -94,11 +122,16 @@ export class VideoProcessor {
   private processFrame = () => {
     if (!this.isProcessing || !this.rawStream) return;
 
-    if (this.videoElement.readyState >= 2 && this.segmenter) {
+    if (this.videoElement.readyState >= 2) {
+      if (this.videoElement.videoWidth > 0 && this.canvas.width !== this.videoElement.videoWidth) {
+        this.canvas.width = this.videoElement.videoWidth;
+        this.canvas.height = this.videoElement.videoHeight;
+      }
+      
       const { width, height } = this.canvas;
 
-      // Pass-through if mode is none
-      if (this.mode === 'none') {
+      // Pass-through if mode is none OR if segmenter isn't loaded yet (fallback so we don't show a black screen)
+      if (this.mode === 'none' || !this.segmenter) {
         this.ctx.drawImage(this.videoElement, 0, 0, width, height);
         this.animationFrameId = requestAnimationFrame(this.processFrame);
       } else {
@@ -107,36 +140,53 @@ export class VideoProcessor {
           this.ctx.save();
           this.ctx.clearRect(0, 0, width, height);
 
-          // Draw the original video
-          this.ctx.drawImage(this.videoElement, 0, 0, width, height);
-
           // Apply mask
           if (result.categoryMask) {
             const mask = result.categoryMask;
-            const imageData = this.ctx.getImageData(0, 0, width, height);
-            const data32 = new Uint32Array(imageData.data.buffer);
-            const maskArray = mask.getAsUint8Array(); 
-
-            // High-performance 32-bit pixel loop
-            for (let i = 0; i < maskArray.length; i++) {
-              // In selfie segmentation, mask > 0 is the person, 0 is the background.
-              // So we erase the background by setting it to transparent.
-              if (maskArray[i] === 0) {
-                data32[i] = 0; // Set background pixels to completely transparent (0x00000000)
-              }
+            
+            // Lazy initialize mask canvas
+            if (!this.maskCanvas) {
+              this.maskCanvas = document.createElement('canvas');
+              this.maskCtx = this.maskCanvas.getContext('2d')!;
             }
-            this.ctx.putImageData(imageData, 0, 0);
+            
+            if (this.maskCanvas.width !== mask.width || this.maskCanvas.height !== mask.height) {
+              this.maskCanvas.width = mask.width;
+              this.maskCanvas.height = mask.height;
+              this.maskImageData = this.maskCtx!.createImageData(mask.width, mask.height);
+            }
 
-            // Draw Background underneath
+            const maskArray = mask.getAsUint8Array(); 
+            const data = this.maskImageData!.data;
+
+            // Convert 1-channel mask to 4-channel ImageData (Alpha channel for destination-in)
+            for (let i = 0; i < maskArray.length; i++) {
+              // The mask output for this model/delegate seems to return >0 for background and 0 for person,
+              // or vice-versa depending on the device. Since it's currently inverted for the user:
+              const alpha = maskArray[i] === 0 ? 255 : 0;
+              data[i * 4 + 3] = alpha; 
+            }
+            this.maskCtx!.putImageData(this.maskImageData!, 0, 0);
+
+            // 1. Draw the person mask
+            this.ctx.drawImage(this.maskCanvas, 0, 0, width, height);
+            
+            // 2. Draw the video ON TOP of the mask, keeping only pixels where mask exists
+            this.ctx.globalCompositeOperation = 'source-in';
+            this.ctx.drawImage(this.videoElement, 0, 0, width, height);
+
+            // 3. Draw Background UNDERNEATH
             this.ctx.globalCompositeOperation = 'destination-over';
             if (this.mode === 'image' && this.backgroundImage) {
               this.ctx.drawImage(this.backgroundImage, 0, 0, width, height);
             } else if (this.mode === 'blur') {
-              // Native canvas blur effect
               this.ctx.filter = 'blur(15px)';
               this.ctx.drawImage(this.videoElement, 0, 0, width, height);
               this.ctx.filter = 'none';
             }
+          } else {
+             // Fallback if no mask
+             this.ctx.drawImage(this.videoElement, 0, 0, width, height);
           }
           this.ctx.restore();
           
@@ -158,10 +208,15 @@ export class VideoProcessor {
     if (this.videoElement) {
       this.videoElement.pause();
       this.videoElement.srcObject = null;
+      this.videoElement.removeAttribute('src');
+      this.videoElement.load();
     }
 
     if (this.processedStream) {
-      this.processedStream.getTracks().forEach(t => t.stop());
+      this.processedStream.getTracks().forEach(t => {
+        t.stop();
+        this.processedStream?.removeTrack(t);
+      });
     }
     
     this.rawStream = null;

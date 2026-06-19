@@ -138,12 +138,26 @@ a=rtpmap:${pt} opus/48000/2
     logger.error(`Deepgram error for user ${userId}:`, err);
   });
 
+  let intentionalClose = false;
+
   dgSocket.on('close', () => {
     logger.warn(`[DEEPGRAM] WebSocket closed for user ${userId}`);
     clearInterval(keepAliveInterval);
+    if (!intentionalClose && !producer.closed) {
+        logger.info(`[DEEPGRAM] Reconnecting for user ${userId} in 2 seconds...`);
+        cleanup(); // Cleanup old resources
+        setTimeout(() => {
+            if (!producer.closed) {
+               startTranscription(producer, router, roomId, userId, userName).catch(e => {
+                 logger.error(`Failed to restart transcription for ${userId}:`, e);
+               });
+            }
+        }, 2000);
+    }
   });
 
   const cleanup = () => {
+    intentionalClose = true;
     clearInterval(keepAliveInterval);
     if (transcribers.has(producer.id)) {
       transcribers.delete(producer.id);

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
-  ArrowLeft, Video, Shield, Mic, Lock, Globe, Users, Radio
+  ArrowLeft, Video, Shield, Mic, Lock, Globe, Users, Radio, PlayCircle, Heart, Zap
 } from "lucide-react";
 import Link from "next/link";
 import { apiClient, CreateRoomPayload } from "@/lib/api-client";
@@ -31,6 +31,10 @@ export default function NewRoomPage() {
   const [maxParticipants, setMaxParticipants] = useState(100);
   const [maxWebinarAudience, setMaxWebinarAudience] = useState(1000);
   const [maxActiveCameras, setMaxActiveCameras] = useState(15);
+  
+  // Engagement features
+  const [enableECinema, setEnableECinema] = useState(false);
+  const [enableDonations, setEnableDonations] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,6 +252,59 @@ export default function NewRoomPage() {
                 <p className="text-xs text-text-muted">Digits only, 4–12 characters.</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Engagement Features */}
+        <Card className="rounded-2xl border-border/60 bg-surface">
+          <CardContent className="p-6 space-y-5">
+            <h3 className="text-lg font-bold text-text-primary border-b border-border/40 pb-3 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-brand-green" /> Engagement Features
+            </h3>
+
+            {/* eCinema */}
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/60">
+              <div className="flex items-center gap-3">
+                <PlayCircle className="w-5 h-5 text-text-muted" />
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">Enable eCinema Broadcast</p>
+                  <p className="text-xs text-text-muted">Synchronize external content streaming (e.g. YouTube) to all participants.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnableECinema(!enableECinema)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none
+                  ${enableECinema ? "bg-brand-green" : "bg-border"}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                    ${enableECinema ? "translate-x-6" : "translate-x-1"}`}
+                />
+              </button>
+            </div>
+
+            {/* Donations */}
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/60">
+              <div className="flex items-center gap-3">
+                <Heart className="w-5 h-5 text-text-muted" />
+                <div>
+                  <p className="text-sm font-semibold text-text-primary">Enable Live Donations</p>
+                  <p className="text-xs text-text-muted">Allow attendees to donate during the meeting via Paystack.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnableDonations(!enableDonations)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none
+                  ${enableDonations ? "bg-brand-green" : "bg-border"}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                    ${enableDonations ? "translate-x-6" : "translate-x-1"}`}
+                />
+              </button>
+            </div>
           </CardContent>
         </Card>
 
