@@ -7,15 +7,15 @@ import { LogOut, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function LeaveDialog() {
-  const { currentUser, showLeaveDialog, setShowLeaveDialog, endMeetingForAll, leaveMeeting, logoutUrl } = useMeeting();
+  const { currentUser, showLeaveDialog, setShowLeaveDialog, endMeetingForAll, leaveMeeting, logoutUrl, meetingInfo } = useMeeting();
   const router = useRouter();
 
   const navigateAway = () => {
-    if (logoutUrl) {
-      window.location.href = logoutUrl;
-    } else {
-      router.push("/dashboard");
-    }
+    const params = new URLSearchParams();
+    if (currentUser.role) params.set("role", currentUser.role);
+    if (logoutUrl) params.set("logoutUrl", logoutUrl);
+    
+    router.push(`/post-meeting/${meetingInfo.roomSlug}?${params.toString()}`);
   };
 
   const handleLeave = () => {

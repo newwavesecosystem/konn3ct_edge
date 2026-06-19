@@ -39,6 +39,8 @@ export function MeetingShell() {
     webrtcStatus,
     showDonationModal,
     setShowDonationModal,
+    currentUser,
+    logoutUrl
   } = useMeeting();
 
   const formatDuration = (s: number) => {
@@ -52,6 +54,15 @@ export function MeetingShell() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const isBot = searchParams?.get('bot') === 'true';
+
+  React.useEffect(() => {
+    if (webrtcStatus === 'ended') {
+      const params = new URLSearchParams();
+      if (currentUser?.role) params.set("role", currentUser.role);
+      if (logoutUrl) params.set("logoutUrl", logoutUrl);
+      router.push(`/post-meeting/${meetingInfo.roomSlug}?${params.toString()}`);
+    }
+  }, [webrtcStatus, router, currentUser?.role, logoutUrl, meetingInfo.roomSlug]);
 
   const panelContent: Record<string, React.ReactNode> = {
     chat: <ChatPanel />,
@@ -89,14 +100,13 @@ export function MeetingShell() {
     );
   }
 
-  if (['denied', 'kicked', 'failed', 'ended', 'invalid-session'].includes(webrtcStatus)) {
+  if (['denied', 'kicked', 'failed', 'invalid-session'].includes(webrtcStatus)) {
     const errorDetails = {
       denied: { title: "Entry Denied", desc: "The host has declined your request to join this meeting." },
       kicked: { title: "Removed from Meeting", desc: "You have been removed from this meeting by the host." },
       failed: { title: "Connection Failed", desc: "We couldn't connect you to the meeting. Please try again." },
-      ended:  { title: "Meeting Ended", desc: "The host has ended this meeting for everyone." },
       'invalid-session': { title: "Invalid Session", desc: "Your join session is invalid or expired. Please start over from the join page." },
-    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'ended' | 'invalid-session'];
+    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session'];
 
     return (
       <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
