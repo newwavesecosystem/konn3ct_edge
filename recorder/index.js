@@ -74,7 +74,7 @@ async function processRecordingJob(job) {
     browser = await launch({
       executablePath: chromePath,
       headless: false, // Required by getDisplayMedia
-      defaultViewport: { width: 1920, height: 1080 },
+      defaultViewport: null,
       ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
       args: [
         '--window-size=1920,1080',
@@ -146,7 +146,7 @@ async function processRecordingJob(job) {
     });
 
     const port = await new Promise((resolve) => {
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(3300, '127.0.0.1', () => {
         resolve(server.address().port);
       });
     });

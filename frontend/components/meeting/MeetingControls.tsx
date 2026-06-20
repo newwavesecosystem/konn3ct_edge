@@ -317,13 +317,13 @@ export function MeetingControls() {
                     onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
                   />
                 )}
-                {isHost && (
+                {/* {isHost && (
                   <MoreMenuItem
                     icon={<Radio className="w-4 h-4" />}
                     label="Live Streaming"
                     onClick={() => { setActivePanel("streaming"); setShowMoreMenu(false); }}
                   />
-                )}
+                )} */}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 {isHost && (
                   <MoreMenuItem
