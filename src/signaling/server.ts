@@ -1106,7 +1106,6 @@ export function initializeSignaling(server: Server) {
             for (const [id, c] of roomClients.entries()) {
               if (c.status === 'waiting') {
                 c.status = 'active';
-                addParticipantToCache(roomId, c);
                 c.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: c.userId, name: c.name, role: c.role }));
                 broadcastToRoom(roomId, {
                   type: 'user_joined',
