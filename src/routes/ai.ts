@@ -182,7 +182,7 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
     if (!hasAccess && room.team) {
       hasAccess = room.team.members.some((m: any) => m.userId === userId);
     }
-    if (!hasAccess && (req.user as any).roomId === roomId) {
+    if (!hasAccess && ((req.user as any).roomId === roomId || (req.user as any).roomId === room.slug)) {
       hasAccess = true;
     }
     if (!hasAccess) return res.status(403).json({ error: 'Forbidden' });

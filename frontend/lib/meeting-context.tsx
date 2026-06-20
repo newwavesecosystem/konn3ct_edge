@@ -1086,6 +1086,10 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
+          if (initialCurrentUser.role === 'bot') {
+            return;
+          }
+
           let videoTrack: MediaStreamTrack | null = null;
           let audioTrack: MediaStreamTrack | null = null;
 

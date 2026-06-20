@@ -130,7 +130,23 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 
-export const cachedRoomParticipants = new Map<string, Array<{ userId: string, name: string, role: string, isMobile: boolean }>>();
+export function getActiveRoomParticipants(roomId: string) {
+  const activeParticipants: Array<{ userId: string, name: string, role: string, isMobile: boolean }> = [];
+  const roomClients = rooms.get(roomId);
+  if (roomClients) {
+    for (const client of roomClients.values()) {
+      if (client.status === 'active') {
+        activeParticipants.push({
+          userId: client.userId,
+          name: client.name,
+          role: client.role,
+          isMobile: client.isMobile
+        });
+      }
+    }
+  }
+  return activeParticipants;
+}
 
 export interface RoomSettings {
   micLocked: boolean;
@@ -139,23 +155,6 @@ export interface RoomSettings {
   bypassWaitingRoom: boolean;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
-
-export function addParticipantToCache(roomId: string, client: { userId: string, name: string, role: string, isMobile: boolean }) {
-  let cache = cachedRoomParticipants.get(roomId);
-  if (!cache) { cache = []; cachedRoomParticipants.set(roomId, cache); }
-  if (!cache.some(p => p.userId === client.userId)) {
-    cache.push({ userId: client.userId, name: client.name, role: client.role, isMobile: client.isMobile });
-  }
-}
-
-export function removeParticipantFromCache(roomId: string, userId: string) {
-  const cache = cachedRoomParticipants.get(roomId);
-  if (cache) {
-    const newCache = cache.filter(p => p.userId !== userId);
-    if (newCache.length === 0) cachedRoomParticipants.delete(roomId);
-    else cachedRoomParticipants.set(roomId, newCache);
-  }
-}
 
 const syncRoomTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -451,7 +450,6 @@ export function initializeSignaling(server: Server) {
       }));
 
       if (client.status === 'active') {
-        addParticipantToCache(roomId, client);
         broadcastToRoom(roomId, {
           type: 'user_joined',
           userId,
@@ -491,7 +489,7 @@ export function initializeSignaling(server: Server) {
     if (client.status === 'active') {
       setImmediate(async () => {
         try {
-          const activeParticipants = cachedRoomParticipants.get(roomId) || [];
+          const activeParticipants = getActiveRoomParticipants(roomId);
           ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
           const chatHistory = await db.chatMessage.findMany({
@@ -598,7 +596,6 @@ export function initializeSignaling(server: Server) {
         const roomClients = rooms.get(roomId);
         if (roomClients) {
           roomClients.delete(userId);
-          removeParticipantFromCache(roomId, userId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
@@ -679,7 +676,6 @@ export function initializeSignaling(server: Server) {
           if (targetClient && targetClient.role !== 'host') {
             // Remove first so the close handler skips grace period
             rooms.get(roomId)?.delete(data.userId);
-            removeParticipantFromCache(roomId, data.userId);
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
             broadcastToRoom(roomId, { type: 'user_left', userId: data.userId });
@@ -769,7 +765,6 @@ export function initializeSignaling(server: Server) {
         const rc = rooms.get(roomId);
         if (rc) {
           rc.delete(userId);
-          removeParticipantFromCache(roomId, userId);
           if (rc.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId);
