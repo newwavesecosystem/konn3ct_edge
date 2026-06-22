@@ -974,6 +974,7 @@ function ScreenShareLayout({
 
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isPlayerReady, setIsPlayerReady] = React.useState(false);
   const { broadcastECinema, currentUser, sendECinemaAction, ecinemaAction } = useMeeting();
   const playerRef = React.useRef<any>(null);
 
@@ -995,7 +996,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
 
   // Sync player when receiving actions
   React.useEffect(() => {
-    if (ecinemaAction && playerRef.current) {
+    if (isPlayerReady && ecinemaAction && playerRef.current) {
       if (ecinemaAction.action === 'play') {
         playerRef.current.playVideo();
       } else if (ecinemaAction.action === 'pause') {
@@ -1006,7 +1007,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         playerRef.current.seekTo(ecinemaAction.time, true);
       }
     }
-  }, [ecinemaAction]);
+  }, [ecinemaAction, isPlayerReady]);
 
   const handlePlay = (e: any) => {
     if (currentUser.role === 'host' || currentUser.role === 'co-host') {
@@ -1077,11 +1078,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               iframeClassName="w-full h-full border-0 pointer-events-auto"
               onReady={(e) => { 
                 playerRef.current = e.target; 
-                if (ecinemaAction) {
-                  if (ecinemaAction.action === 'play') e.target.playVideo();
-                  else if (ecinemaAction.action === 'pause') e.target.pauseVideo();
-                  if (ecinemaAction.time !== undefined) e.target.seekTo(ecinemaAction.time, true);
-                }
+                setIsPlayerReady(true);
               }}
               onPlay={handlePlay}
               onPause={handlePause}

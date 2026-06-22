@@ -37,7 +37,7 @@ export class WebRTCClient {
   public maxParticipants: number | undefined;
   public sessionStatus?: string;
 
-  public onNewConsumer?: (consumer: Consumer, userId: string) => void;
+  public onNewConsumer?: (consumer: Consumer, userId: string, userName?: string) => void;
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
@@ -194,11 +194,9 @@ export class WebRTCClient {
             this.initializeMediasoup().then(async () => {
               try {
                 const res = await this.request('getProducers', 'producersList');
-                for (const p of res.producers || []) {
-                  try {
-                    await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
-                  } catch (err) {
-                    console.error(`Failed to consume producer ${p.producerId}:`, err);
+                if (res.producers) {
+                  for (const p of res.producers) {
+                    await this.consumeRemoteStream(p.producerId, p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -224,7 +222,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
+          this.consumeRemoteStream(msg.producerId, msg.userId, msg.name, msg.kind, msg.appData).catch(console.error);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -1249,7 +1247,7 @@ export class WebRTCClient {
     }
   }
 
-  private async consumeRemoteStream(producerId: string, userId: string, kind: string, appData?: Record<string, any>) {
+  private async consumeRemoteStream(producerId: string, userId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
     if (!this.device || !this.recvTransport) return;
 
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
@@ -1290,7 +1288,7 @@ export class WebRTCClient {
         }
       });
 
-      this.onNewConsumer?.(consumer, userId);
+      this.onNewConsumer?.(consumer, userId, userName);
       
       // Tell the backend to resume sending media (unpause the consumer)
       if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {
