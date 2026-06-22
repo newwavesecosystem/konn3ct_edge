@@ -94,6 +94,17 @@ export class WebRTCClient {
   public isLowBandwidth: boolean = false;
   private needsRepublish: boolean = false;
 
+  public selectedVideoInputId?: string;
+  public selectedAudioInputId?: string;
+
+  public setVideoInputDevice(deviceId: string) {
+    this.selectedVideoInputId = deviceId;
+  }
+  
+  public setAudioInputDevice(deviceId: string) {
+    this.selectedAudioInputId = deviceId;
+  }
+
   constructor(private roomId: string, private token: string) {}
 
   public async connect() {
@@ -877,7 +888,13 @@ export class WebRTCClient {
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
     // 8. Media Constraints Rescaling (Upstream optimization)
-    let videoConstraints: any = { facingMode: "user" };
+    let videoConstraints: any = {};
+    if (this.selectedVideoInputId) {
+      videoConstraints = { deviceId: { exact: this.selectedVideoInputId } };
+    } else {
+      videoConstraints = { facingMode: "user" };
+    }
+
     if (this.isLowBandwidth) {
       videoConstraints.width = { ideal: 320, max: 320 };
       videoConstraints.height = { ideal: 240, max: 240 };
@@ -943,13 +960,15 @@ export class WebRTCClient {
 
     const encodings = this.isLowBandwidth 
       ? [{ maxBitrate: 150000 }] 
-      : isSVC 
-        ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }] // SVC for AV1/VP9
-        : [ // Simulcast for VP8/H264
-            { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
-            { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
-            { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
-          ];
+      : isMobileDevice
+        ? [{ maxBitrate: 600000, maxFramerate: 30 }] // Single layer for mobile (Safari/iOS compatibility)
+        : isSVC 
+          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }] // SVC for AV1/VP9
+          : [ // Simulcast for VP8/H264
+              { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
+              { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
+              { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
+            ];
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
@@ -1035,6 +1054,7 @@ export class WebRTCClient {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: { 
+          deviceId: this.selectedAudioInputId ? { exact: this.selectedAudioInputId } : undefined,
           noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
           echoCancellation: true 
         } 

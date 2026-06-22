@@ -1137,15 +1137,10 @@ export function MeetingProvider({
   // ── Device Management ────────────────────────────────
   const fetchDevices = async () => {
     try {
-      // Must request permission first, otherwise device labels are empty
-      // Only do this if not a bot to avoid triggering fake device beep
-      if (initialCurrentUser.role !== 'bot') {
-        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => null);
-        if (tempStream) {
-          tempStream.getTracks().forEach(t => t.stop()); // Immediately release hardware
-        }
-      }
-      
+      // Removed `tempStream` hardware request. 
+      // 1. Permissions are already requested on the Join screen.
+      // 2. Requesting and immediately stopping tracks on iOS Safari locks the hardware,
+      //    causing `enableCamera` (which fires concurrently) to permanently fail.
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       
       const audioInputs = allDevices.filter((d) => d.kind === "audioinput");
@@ -1187,6 +1182,13 @@ export function MeetingProvider({
       navigator.mediaDevices.removeEventListener("devicechange", fetchDevices);
     };
   }, []);
+
+  useEffect(() => {
+    if (webrtcClient.current) {
+      if (selectedDevices.audioInput) webrtcClient.current.setAudioInputDevice(selectedDevices.audioInput);
+      if (selectedDevices.videoInput) webrtcClient.current.setVideoInputDevice(selectedDevices.videoInput);
+    }
+  }, [selectedDevices.audioInput, selectedDevices.videoInput, webrtcStatus]);
 
   const switchDevice = useCallback(async (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => {
     setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
