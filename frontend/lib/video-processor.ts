@@ -19,6 +19,9 @@ export class VideoProcessor {
   private maskCanvas?: HTMLCanvasElement;
   private maskCtx?: CanvasRenderingContext2D;
   private maskImageData?: ImageData;
+  
+  private blurCanvas?: HTMLCanvasElement;
+  private blurCtx?: CanvasRenderingContext2D;
 
   private rawStream: MediaStream | null = null;
   private processedStream: MediaStream | null = null;
@@ -157,14 +160,14 @@ export class VideoProcessor {
             }
 
             const maskArray = mask.getAsUint8Array(); 
-            const data = this.maskImageData!.data;
+            const data32 = new Uint32Array(this.maskImageData!.data.buffer);
+            const len = maskArray.length;
 
-            // Convert 1-channel mask to 4-channel ImageData (Alpha channel for destination-in)
-            for (let i = 0; i < maskArray.length; i++) {
-              // The mask output for this model/delegate seems to return >0 for background and 0 for person,
-              // or vice-versa depending on the device. Since it's currently inverted for the user:
-              const alpha = maskArray[i] === 0 ? 255 : 0;
-              data[i * 4 + 3] = alpha; 
+            // Convert 1-channel mask to 4-channel ImageData using 32-bit writes for 4x performance
+            for (let i = 0; i < len; i++) {
+              // Write 0xFF000000 (Alpha 255) for background, 0x00000000 for person.
+              // Assuming Little Endian (which practically all modern devices are).
+              data32[i] = maskArray[i] === 0 ? 0xFF000000 : 0x00000000;
             }
             this.maskCtx!.putImageData(this.maskImageData!, 0, 0);
 
@@ -180,9 +183,23 @@ export class VideoProcessor {
             if (this.mode === 'image' && this.backgroundImage) {
               this.ctx.drawImage(this.backgroundImage, 0, 0, width, height);
             } else if (this.mode === 'blur') {
-              this.ctx.filter = 'blur(15px)';
-              this.ctx.drawImage(this.videoElement, 0, 0, width, height);
-              this.ctx.filter = 'none';
+              // Fast Blur Optimization: downscale 4x, blur 4px, upscale back
+              if (!this.blurCanvas) {
+                this.blurCanvas = document.createElement('canvas');
+                this.blurCtx = this.blurCanvas.getContext('2d')!;
+              }
+              const bw = Math.max(1, Math.floor(width / 4));
+              const bh = Math.max(1, Math.floor(height / 4));
+              
+              if (this.blurCanvas.width !== bw || this.blurCanvas.height !== bh) {
+                this.blurCanvas.width = bw;
+                this.blurCanvas.height = bh;
+              }
+              
+              this.blurCtx!.filter = 'blur(4px)';
+              this.blurCtx!.drawImage(this.videoElement, 0, 0, bw, bh);
+              
+              this.ctx.drawImage(this.blurCanvas, 0, 0, width, height);
             }
           } else {
              // Fallback if no mask
