@@ -28,6 +28,9 @@ async function recordMeeting() {
         '--auto-select-tab-capture-source-by-title=BotRecord',
         '--enable-usermedia-screen-capturing',
         '--use-fake-ui-for-media-stream',
+        `--use-file-for-fake-audio-capture=${path.join(__dirname, 'silent.wav')}`,
+        '--disable-web-security',
+        '--hide-scrollbars'
       ],
     });
 

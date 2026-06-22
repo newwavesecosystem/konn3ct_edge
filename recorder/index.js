@@ -91,6 +91,7 @@ async function processRecordingJob(job) {
         '--auto-select-tab-capture-source-by-title=BotRecord',
         '--enable-usermedia-screen-capturing',
         '--use-fake-ui-for-media-stream',
+        `--use-file-for-fake-audio-capture=${require('path').join(__dirname, 'silent.wav')}`,
         '--disable-web-security',
         '--hide-scrollbars'
       ],
@@ -256,11 +257,16 @@ async function processRecordingJob(job) {
               // Convert WebM to MP4 using fluent-ffmpeg
               ffmpeg(outputPathRaw)
                 .outputOptions([
+                  '-y', // Force overwrite to prevent hanging on prompt
                   '-preset veryfast',
                   '-c:v libx264',
                   '-c:a aac',
-                  '-max_muxing_queue_size 9999'
+                  '-max_muxing_queue_size 9999',
+                  '-vsync 2'
                 ])
+              .on('progress', (progress) => {
+                console.log(`Processing: ${progress.percent}% done (Time: ${progress.timemark})`);
+              })
               .save(outputPathMp4)
               .on('error', (err, stdout, stderr) => {
                 console.error('FFmpeg stderr:', stderr);

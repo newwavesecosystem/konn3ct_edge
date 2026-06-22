@@ -119,10 +119,11 @@ interface Client {
   isMobile: boolean;
   maxActiveCameras?: number;
   maxParticipants?: number;
+  roomCreatedDate: Date;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
-const roomProducers = new Map<string, Array<{ producerId: string, userId: string, kind: string, appData?: Record<string, any> }>>();
+const roomProducers = new Map<string, Array<{ producerId: string, userId: string, name: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
@@ -155,6 +156,68 @@ export interface RoomSettings {
   bypassWaitingRoom: boolean;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
+
+export async function sendRoomHistoryAndState(client: Client) {
+  const { ws, roomId, roomCreatedDate } = client;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  try {
+    const activeParticipants = getActiveRoomParticipants(roomId);
+    ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+
+    const chatHistory = await db.chatMessage.findMany({
+      where: { roomId: roomId, createdAt: { gte: roomCreatedDate } },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+
+    ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+
+    const settings = roomSettingsMap.get(roomId);
+    if (settings) {
+      ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
+    }
+    const pollHistory = await db.meetingPoll.findMany({
+      where: { roomId, isActive: true },
+      orderBy: { createdAt: 'asc' }
+    });
+    const noteHistory = await db.sharedNote.findUnique({
+      where: { roomId }
+    });
+    const qaHistory = await db.meetingQA.findMany({
+      where: { roomId },
+      orderBy: { upvotes: 'desc' }
+    });
+
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
+      ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
+      if (noteHistory) {
+        ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
+      }
+      const eCinemaLink = roomECinema.get(roomId);
+      if (eCinemaLink) {
+        ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
+        
+        const eState = roomECinemaState.get(roomId);
+        if (eState) {
+          let currentTime = eState.time;
+          if (eState.action === 'play') {
+            currentTime += (Date.now() - eState.serverTime) / 1000;
+          }
+          // Send a delayed action to ensure the player has time to load
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+            }
+          }, 2000);
+        }
+      }
+    }
+  } catch (e) {
+    logger.error("Failed to load history", e);
+  }
+}
 
 const syncRoomTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -373,7 +436,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants };
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -487,63 +550,8 @@ export function initializeSignaling(server: Server) {
 
     // ALWAYS send history and participants ASYNCHRONOUSLY — this must NOT block the routerCapabilities flow
     if (client.status === 'active') {
-      setImmediate(async () => {
-        try {
-          const activeParticipants = getActiveRoomParticipants(roomId);
-          ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
-
-          const chatHistory = await db.chatMessage.findMany({
-            where: { roomId: roomId, createdAt: { gte: clientData.roomCreatedDate } },
-            orderBy: { createdAt: 'asc' },
-            take: 50,
-          });
-
-          ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
-
-          const settings = roomSettingsMap.get(roomId);
-          if (settings) {
-            ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
-          }
-          const pollHistory = await db.meetingPoll.findMany({
-            where: { roomId, isActive: true },
-            orderBy: { createdAt: 'asc' }
-          });
-          const noteHistory = await db.sharedNote.findUnique({
-            where: { roomId }
-          });
-          const qaHistory = await db.meetingQA.findMany({
-            where: { roomId },
-            orderBy: { upvotes: 'desc' }
-          });
-
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-            ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
-            if (noteHistory) {
-              ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
-            }
-            const eCinemaLink = roomECinema.get(roomId);
-            if (eCinemaLink) {
-              ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
-              
-              const eState = roomECinemaState.get(roomId);
-              if (eState) {
-                let currentTime = eState.time;
-                if (eState.action === 'play') {
-                  currentTime += (Date.now() - eState.serverTime) / 1000;
-                }
-                // Send a delayed action to ensure the player has time to load
-                setTimeout(() => {
-                  if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
-                  }
-                }, 2000);
-              }
-            }
-          }
-        } catch (e) {
-          logger.error("Failed to load history", e);
-        }
+      setImmediate(() => {
+        sendRoomHistoryAndState(client);
       });
     }
 
@@ -644,10 +652,7 @@ export function initializeSignaling(server: Server) {
             targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
             broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
             
-            const activeParticipants = Array.from(rooms.get(roomId)?.values() || [])
-              .filter(c => c.status === 'active')
-              .map(c => ({ userId: c.userId, name: c.name, role: c.role }));
-            targetClient.ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
+            sendRoomHistoryAndState(targetClient);
             syncRoomStateToRedis(roomId, client.roomSlug);
           }
         }
@@ -1114,6 +1119,7 @@ export function initializeSignaling(server: Server) {
                   role: c.role,
                   isMobile: c.isMobile
                 });
+                sendRoomHistoryAndState(c);
               }
             }
             syncRoomStateToRedis(roomId, client.roomSlug);
@@ -1303,12 +1309,12 @@ export function initializeSignaling(server: Server) {
 
         // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
-        roomProducers.get(roomId)!.push({ producerId, userId, kind: data.kind, appData });
+        roomProducers.get(roomId)!.push({ producerId, userId, name: client.name, kind: data.kind, appData });
 
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
 
         // Broadcast to others — include appData.source so they render screen share correctly
-        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, kind: data.kind, appData }, userId);
+        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, name: client.name, kind: data.kind, appData }, userId);
 
         // For screen share, send a dedicated state event so peers update isScreenSharing immediately
         if (source === 'screen') {

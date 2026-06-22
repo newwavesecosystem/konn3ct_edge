@@ -946,7 +946,10 @@ export function MeetingProvider({
             const newParticipants = [...prev];
             for (const p of backendParticipants) {
               if (p.userId === webrtcClient.current?.userId) continue;
-              if (!newParticipants.some(existing => existing.id === p.userId)) {
+              const existingIndex = newParticipants.findIndex(existing => existing.id === p.userId);
+              if (existingIndex !== -1) {
+                newParticipants[existingIndex] = { ...newParticipants[existingIndex], name: p.name, role: p.role as any, isMobile: p.isMobile };
+              } else {
                 newParticipants.push({
                   id: p.userId,
                   name: p.name,
@@ -971,10 +974,12 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
-          if (user.userId === webrtcClient.current?.userId || user.name === initialCurrentUser.name) return;
+          if (user.userId === webrtcClient.current?.userId) return;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
-            if (prev.some(p => p.id === user.userId)) return prev;
+            if (prev.some(p => p.id === user.userId)) {
+              return prev.map(p => p.id === user.userId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile } : p);
+            }
             return [...prev, {
               id: user.userId,
               name: user.name,
@@ -1022,7 +1027,7 @@ export function MeetingProvider({
           });
         };
 
-        client.onNewConsumer = (consumer, userId) => {
+        client.onNewConsumer = (consumer, userId, userName) => {
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
           setParticipants((prev) => {
@@ -1045,7 +1050,7 @@ export function MeetingProvider({
             } else {
               const newParticipant: Participant = {
                 id: userId,
-                name: `Participant ${userId.substring(5, 9)}`,
+                name: userName || `Participant ${userId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
                 isCameraOn: consumer.kind === "video" && source !== 'screen',
