@@ -913,20 +913,29 @@ export class WebRTCClient {
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
     // Initialize VideoProcessor if not exists
+    let activeMode: VirtualBackgroundMode = 'none';
     if (!this.videoProcessor) {
       this.videoProcessor = new VideoProcessor();
       const saved = sessionStorage.getItem("mtg_vb");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          activeMode = parsed.mode;
           this.videoProcessor.setMode(parsed.mode, parsed.image);
         } catch (e) {}
       }
+    } else {
+      activeMode = this.videoProcessor.getMode();
     }
 
-    // Pass the stream through the VideoProcessor to apply Virtual Background
-    const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
-    videoTrack = processedStream.getVideoTracks()[0];
+    // Pass the stream through the VideoProcessor to apply Virtual Background only if needed
+    if (activeMode !== 'none') {
+      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+      videoTrack = processedStream.getVideoTracks()[0];
+    } else {
+      this.videoProcessor.stopProcessing();
+      videoTrack = this.rawCameraStream.getVideoTracks()[0];
+    }
     
     // 4. Robust Simulcast/SVC Configuration (Spatial & Temporal Scalability)
     const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
@@ -967,8 +976,14 @@ export class WebRTCClient {
     this.videoProcessor.setMode(mode, imageUrl);
     
     if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
-      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
-      const newTrack = processedStream.getVideoTracks()[0];
+      let newTrack: MediaStreamTrack;
+      if (mode === 'none') {
+        this.videoProcessor.stopProcessing();
+        newTrack = this.rawCameraStream.getVideoTracks()[0];
+      } else {
+        const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+        newTrack = processedStream.getVideoTracks()[0];
+      }
       await this.localVideoProducer.replaceTrack({ track: newTrack });
       return newTrack;
     }
