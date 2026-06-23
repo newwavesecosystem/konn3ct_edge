@@ -131,14 +131,18 @@ export class MediasoupService {
     const participants: RemoteParticipant[] = [];
     const allIds = new Set([...this.remoteStreams.keys(), ...this.remoteScreenStreams.keys()]);
     
+    // Look up real names from the meeting store
+    const storeParticipants = useMeetingStore.getState().participants;
+    
     allIds.forEach((id) => {
       const stream = this.remoteStreams.get(id);
       const screenStream = this.remoteScreenStreams.get(id);
       
       if (stream || screenStream) {
+        const storeP = storeParticipants.find(p => p.userId === id);
         participants.push({
           id,
-          name: `User ${id.substring(0, 4)}`,
+          name: storeP?.name || `User ${id.substring(0, 4)}`,
           stream: stream || new MediaStream(),
           screenStream
         });

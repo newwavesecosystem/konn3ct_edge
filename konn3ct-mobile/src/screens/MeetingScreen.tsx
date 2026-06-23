@@ -45,6 +45,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
   
   // Zustand Store
   const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
+  const user = useAuthStore((s) => s.user);
+  const localUserName = user?.name || 'Me';
   const isHost = currentUserRole === 'host';
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
@@ -412,8 +414,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
               const storeParticipant = participants.find(up => up.userId === p.id);
               const isRaised = storeParticipant?.isHandRaised;
               const isSpeaking = storeParticipant?.isSpeaking;
-              // Check if stream has video tracks to determine if camera is off
-              const hasVideo = p.stream && p.stream.getVideoTracks().length > 0;
+              // Check if stream has an active, enabled, unmuted video track
+              const videoTrack = p.stream?.getVideoTracks()?.[0];
+              const hasVideo = !!videoTrack && videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
               
               const isRemoteMicMuted = !p.stream || p.stream.getAudioTracks().length === 0 || !p.stream.getAudioTracks()[0].enabled;
               
@@ -485,13 +488,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 ) : (
                   <View style={styles.cameraOff}>
                     <View style={styles.avatarCircle}>
-                      <Text style={styles.avatarText}>ME</Text>
+                      <Text style={styles.avatarText}>{getInitials(localUserName)}</Text>
                     </View>
                   </View>
                 )}
                 {localStream && !isCameraOff && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
                 <View style={styles.nameBadgeContainer}>
-                  <Text style={styles.nameText}>Me</Text>
+                  <Text style={styles.nameText}>{localUserName}</Text>
                   <View style={{ marginLeft: 6 }}>
                     {isMicMuted ? (
                       <MicOff size={12} color="#ffb4ab" />
