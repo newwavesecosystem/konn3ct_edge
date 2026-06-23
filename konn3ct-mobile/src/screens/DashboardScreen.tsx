@@ -342,6 +342,7 @@ export default function DashboardScreen({ navigation }: Props) {
         setShowJoinInput(false);
         setJoinRoomId('');
         setJoinStatus('Join Room');
+        setIsJoining(false);
         navigation.navigate('Meeting', { roomId, meetingToken });
         return;
       } catch (e: any) {
