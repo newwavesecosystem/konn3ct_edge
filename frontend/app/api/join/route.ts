@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import { timingSafeEqual } from "crypto";
 import Redis from "ioredis";
@@ -14,7 +14,7 @@ const redis = new Redis(redisUrl, {
 });
 redis.on("error", () => {});
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   if (!process.env.JWT_SECRET) {
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
@@ -39,12 +39,20 @@ export async function POST(request: Request) {
     let finalIsMobile = false;
 
     if (isBot) {
-      const botSecret = process.env.BOT_SECRET;
-      const providedBotSecret = request.headers.get('x-bot-secret');
-      if (!botSecret || providedBotSecret !== botSecret) {
-        return NextResponse.json({ error: 'Unauthorized bot request' }, { status: 401 });
+      const botToken = request.nextUrl.searchParams.get('botToken') || request.headers.get('Authorization')?.split(' ')[1];
+      if (!botToken) {
+        return NextResponse.json({ error: 'Unauthorized: missing bot token' }, { status: 401 });
+      }
+      try {
+        const decoded = jwt.verify(botToken, process.env.JWT_SECRET!) as any;
+        if (decoded.purpose !== 'recording_bot' || decoded.role !== 'recorder' || decoded.roomId !== roomId) {
+          return NextResponse.json({ error: 'Invalid bot token' }, { status: 403 });
+        }
+      } catch (err) {
+        return NextResponse.json({ error: 'Expired or malformed bot token' }, { status: 401 });
       }
       finalUserId = 'bot_recorder';
+      finalRole = 'bot';
     } else {
       if (!sessionToken) {
         return NextResponse.json({ error: "Missing session token" }, { status: 403 });

@@ -83,6 +83,7 @@ export class WebRTCClient {
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
   public onSyncPanel?: (panel: string | null) => void;
+  public onVbDegraded?: (severity: 'warning' | 'emergency') => void;
 
   // Network monitoring
   public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
@@ -96,6 +97,34 @@ export class WebRTCClient {
 
   public selectedVideoInputId?: string;
   public selectedAudioInputId?: string;
+
+  public getDiagnostics() {
+    return {
+      wsState: this.ws?.readyState,
+      sendTransportState: this.sendTransport?.connectionState,
+      recvTransportState: this.recvTransport?.connectionState,
+      iceConnectionState: this.sendTransport?.iceState || this.recvTransport?.iceState,
+      reconnectAttempts: this.reconnectAttempts,
+      producers: {
+        audio: !!this.localAudioProducer,
+        video: !!this.localVideoProducer,
+        screen: !!this.screenShareProducer
+      },
+      consumersCount: this.consumers.size,
+      audioTrack: {
+        readyState: this.rawAudioTrack?.readyState,
+        enabled: this.rawAudioTrack?.enabled,
+        muted: this.rawAudioTrack?.muted
+      },
+      videoProcessor: {
+        active: !!this.videoProcessor,
+        mode: (this.videoProcessor as any)?.mode,
+        degradations: 0,
+        lastDegradation: "none",
+        fallbackMode: false
+      }
+    };
+  }
 
   public setVideoInputDevice(deviceId: string) {
     this.selectedVideoInputId = deviceId;
@@ -918,6 +947,16 @@ export class WebRTCClient {
         if (err.name === 'AbortError' && retries > 0) {
           console.warn(`Camera start timeout, retrying... (${retries} left)`);
           await new Promise(r => setTimeout(r, 800)); // Wait for hardware to release
+        } else if (err.name === 'OverconstrainedError' && retries > 0) {
+          console.warn(`OverconstrainedError: camera does not support constraints, falling back...`);
+          if (videoConstraints.deviceId && videoConstraints.deviceId.exact) {
+             delete videoConstraints.deviceId;
+             videoConstraints.facingMode = "user";
+          } else {
+             delete videoConstraints.width;
+             delete videoConstraints.height;
+             delete videoConstraints.frameRate;
+          }
         } else {
           throw err;
         }
@@ -972,9 +1011,18 @@ export class WebRTCClient {
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
-      await this.localVideoProducer.replaceTrack({ track: videoTrack });
-      this.localVideoProducer.resume();
-    } else {
+      try {
+        await this.localVideoProducer.replaceTrack({ track: videoTrack });
+        this.localVideoProducer.resume();
+      } catch (err) {
+        console.error("Track replacement failed, will recreate producer:", err);
+        this.localVideoProducer.close();
+        this.localVideoProducer = null;
+        // Fall back to creating a new producer below
+      }
+    }
+
+    if (!this.localVideoProducer || this.localVideoProducer.closed) {
       // First time or after producer was closed — create with full simulcast encodings
       this.localVideoProducer = await this.sendTransport.produce({
         track: videoTrack,
@@ -989,20 +1037,29 @@ export class WebRTCClient {
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
+    if (mode === 'none') {
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
+      if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
+        const nativeTrack = this.rawCameraStream.getVideoTracks()[0];
+        await this.localVideoProducer.replaceTrack({ track: nativeTrack });
+        return nativeTrack;
+      }
+      return null;
+    }
+
     if (!this.videoProcessor) {
       this.videoProcessor = new VideoProcessor();
+      this.videoProcessor.onDegraded = (severity) => {
+        if (this.onVbDegraded) this.onVbDegraded(severity);
+      };
     }
     this.videoProcessor.setMode(mode, imageUrl);
     
     if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
-      let newTrack: MediaStreamTrack;
-      if (mode === 'none') {
-        this.videoProcessor.stopProcessing();
-        newTrack = this.rawCameraStream.getVideoTracks()[0];
-      } else {
-        const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
-        newTrack = processedStream.getVideoTracks()[0];
-      }
+      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+      const newTrack = processedStream.getVideoTracks()[0];
       await this.localVideoProducer.replaceTrack({ track: newTrack });
       return newTrack;
     }
@@ -1052,13 +1109,30 @@ export class WebRTCClient {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          deviceId: this.selectedAudioInputId ? { exact: this.selectedAudioInputId } : undefined,
-          noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
-          echoCancellation: true 
-        } 
-      });
+      let audioConstraints: any = { 
+        deviceId: this.selectedAudioInputId ? { exact: this.selectedAudioInputId } : undefined,
+        noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
+        echoCancellation: true 
+      };
+
+      let stream: MediaStream | null = null;
+      let retries = 2;
+      while (retries > 0) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+          break;
+        } catch (err: any) {
+          retries--;
+          if (err.name === 'OverconstrainedError' && retries > 0) {
+            console.warn("OverconstrainedError on mic, falling back to default device...");
+            delete audioConstraints.deviceId;
+          } else {
+            throw err;
+          }
+        }
+      }
+      
+      if (!stream) throw new Error("Failed to initialize mic");
       this.rawAudioTrack = stream.getAudioTracks()[0];
       
       let activeTrack = this.rawAudioTrack;

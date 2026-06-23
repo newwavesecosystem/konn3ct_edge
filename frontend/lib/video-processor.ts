@@ -122,6 +122,10 @@ export class VideoProcessor {
     return this.processedStream;
   }
 
+  public onDegraded?: (severity: 'warning' | 'emergency') => void;
+  private warningFrameCount = 0;
+  private emergencyFrameCount = 0;
+
   private processFrame = () => {
     if (!this.isProcessing || !this.rawStream) return;
 
@@ -140,6 +144,30 @@ export class VideoProcessor {
       } else {
         const startTimeMs = performance.now();
         this.segmenter.segmentForVideo(this.videoElement, startTimeMs, (result) => {
+          const processTime = performance.now() - startTimeMs;
+          
+          if (processTime > 120) {
+            this.emergencyFrameCount++;
+            this.warningFrameCount++;
+            if (this.emergencyFrameCount > 5) {
+              console.warn("[VideoProcessor] Auto-degrading VB due to severe performance (emergency)");
+              this.emergencyFrameCount = 0;
+              this.warningFrameCount = 0;
+              if (this.onDegraded) this.onDegraded('emergency');
+            }
+          } else if (processTime > 80) {
+            this.warningFrameCount++;
+            this.emergencyFrameCount = Math.max(0, this.emergencyFrameCount - 1);
+            if (this.warningFrameCount > 15) {
+              console.warn("[VideoProcessor] Auto-degrading VB due to poor performance (warning)");
+              this.warningFrameCount = 0;
+              if (this.onDegraded) this.onDegraded('warning');
+            }
+          } else {
+            this.warningFrameCount = Math.max(0, this.warningFrameCount - 1);
+            this.emergencyFrameCount = Math.max(0, this.emergencyFrameCount - 1);
+          }
+
           this.ctx.save();
           this.ctx.clearRect(0, 0, width, height);
 

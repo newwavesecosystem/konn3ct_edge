@@ -55,9 +55,11 @@ async function startWorker() {
 }
 
 async function processRecordingJob(job) {
-  const { roomId, url, recordingId } = job;
+  const { roomId, url, recordingId, botToken } = job;
   let browser = null;
   let stream = null;
+  
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
   
   const outputPathRaw = path.join(__dirname, `${roomId}_raw.webm`);
   const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
@@ -198,6 +200,16 @@ async function processRecordingJob(job) {
     }, port);
 
     console.log(`Recording started for ${roomId}`);
+    
+    // Notify Backend that recording has started
+    try {
+      await fetch(`${backendUrl}/api/recordings/${recordingId}/callback/started`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${botToken}` }
+      });
+    } catch (err) {
+      console.error('Failed to notify backend of start:', err);
+    }
 
     // Subscribe to stop event
     return new Promise((resolve, reject) => {
@@ -254,6 +266,19 @@ async function processRecordingJob(job) {
               console.log('Closing browser and converting to MP4...');
               await browser.close();
               
+              try {
+                await fetch(`${backendUrl}/api/recordings/${recordingId}/callback/finalized`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${botToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ status: 'processing' })
+                });
+              } catch (err) {
+                console.error('Failed to notify backend of processing state:', err);
+              }
+              
               // Convert WebM to MP4 using fluent-ffmpeg
               ffmpeg(outputPathRaw)
                 .outputOptions([
@@ -283,7 +308,6 @@ async function processRecordingJob(job) {
                       Bucket: BUCKET_NAME,
                       Key: `recordings/${roomId}/${Date.now()}.mp4`,
                       Body: fileStreamForUpload,
-                      ACL: 'public-read',
                       ContentType: 'video/mp4',
                     },
                   };
@@ -292,12 +316,26 @@ async function processRecordingJob(job) {
                   const data = await uploader.done();
                   console.log(`Upload successful: ${data.Location}`);
                   
-                  // Publish completion back to signaling server so it can update DB
-                  await redis.publish('recorder:completed', JSON.stringify({
-                    roomId,
-                    recordingId,
-                    recordingUrl: data.Location
-                  }));
+                  // Publish completion back to signaling server via secure callback
+                  try {
+                    await fetch(`${backendUrl}/api/recordings/${recordingId}/callback/finalized`, {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${botToken}`,
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        status: 'completed',
+                        url: data.Location,
+                        storageKey: uploadParams.params.Key,
+                        storageBucket: uploadParams.params.Bucket,
+                        contentType: uploadParams.params.ContentType,
+                        duration: 0 // Duration calculation can be added later
+                      })
+                    });
+                  } catch (err) {
+                    console.error('Failed to notify backend of completion:', err);
+                  }
 
                   // Cleanup
                   fs.unlinkSync(outputPathRaw);
@@ -335,6 +373,26 @@ async function processRecordingJob(job) {
   } catch (err) {
     console.error('Error in processRecordingJob:', err);
     if (browser) await browser.close();
+    
+    // Notify backend of failure
+    if (job.recordingId && job.botToken) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+        await fetch(`${backendUrl}/api/recordings/${job.recordingId}/callback/finalized`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${job.botToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            status: 'failed',
+            failureReason: err.toString()
+          })
+        });
+      } catch (e) {
+        console.error('Failed to notify backend of failure:', e);
+      }
+    }
   }
 }
 

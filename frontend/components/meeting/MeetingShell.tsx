@@ -19,6 +19,7 @@ import { MicIssueDialog } from "./MicIssueDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
 import { SecurityPanel } from "./SecurityPanel";
+import { QADiagnosticsOverlay } from "./QADiagnosticsOverlay";
 import dynamic from "next/dynamic";
 
 const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
@@ -53,7 +54,7 @@ export function MeetingShell() {
 
   const searchParams = useSearchParams();
   const router = useRouter();
-  const isBot = searchParams?.get('bot') === 'true';
+  const isBot = !!searchParams?.get('botToken');
 
   React.useEffect(() => {
     if (webrtcStatus === 'ended') {
@@ -79,7 +80,7 @@ export function MeetingShell() {
 
   if (webrtcStatus === 'waiting') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
+      <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
         <div className="p-8 rounded-2xl max-w-md w-full text-center" style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}>
           <div className="w-16 h-16 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center mx-auto mb-6">
             <span className="text-2xl font-bold">K</span>
@@ -109,7 +110,7 @@ export function MeetingShell() {
     }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session'];
 
     return (
-      <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
+      <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
         <div className="p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col items-center" style={{ backgroundColor: "var(--mt-dialog-bg)", border: "1px solid var(--mt-border-strong)" }}>
           <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-5 ring-8 ring-red-500/5">
             <X className="w-8 h-8" />
@@ -138,7 +139,7 @@ export function MeetingShell() {
 
   return (
     <div
-      className="flex flex-col h-screen overflow-hidden"
+      className="flex flex-col h-[100dvh] overflow-hidden"
       style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}
     >
       {/* Top bar — minimal */}
@@ -320,6 +321,7 @@ export function MeetingShell() {
       {!isBot && <MeetingControls />}
 
       {/* Floating layers */}
+      <QADiagnosticsOverlay />
       <ReactionsLayer />
       <LeaveDialog />
       <MicIssueDialog />

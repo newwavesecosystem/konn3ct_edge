@@ -149,6 +149,9 @@ interface MeetingContextValue {
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
+
+  // QA Diagnostics
+  webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -398,12 +401,15 @@ export function MeetingProvider({
         // Call our new Next.js endpoint to get a secure JWT
         const searchParamsData = new URLSearchParams(window.location.search);
         const isBot = searchParamsData.get('bot') === 'true';
-        const botSecret = searchParamsData.get('botSecret') || '';
+        const botToken = searchParamsData.get('botToken');
         const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
 
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (isBot && botSecret) {
-          headers["x-bot-secret"] = botSecret;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        
+        if (botToken) {
+          headers["Authorization"] = `Bearer ${botToken}`;
         }
 
         const res = await fetch("/api/join", {
@@ -411,9 +417,9 @@ export function MeetingProvider({
           headers,
           body: JSON.stringify({
             roomId: roomSlug,
-            sessionToken,
-            isBot
-          })
+            sessionToken: sessionToken || undefined,
+            isBot: !!botToken,
+          }),
         });
 
         const data = await res.json();
@@ -1706,11 +1712,30 @@ export function MeetingProvider({
         
         vbMode,
         vbImageUrl,
-        handleVbSelect: async (mode: 'none' | 'blur' | 'image', imageUrl?: string) => {
+        handleVbSelect: async function handleVbSelectFn(mode: 'none' | 'blur' | 'image', imageUrl?: string) {
           setVbMode(mode);
           setVbImageUrl(imageUrl);
           sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: imageUrl }));
           if (isCameraOn && webrtcClient.current) {
+            webrtcClient.current.onVbDegraded = (severity) => {
+              if (severity === 'warning' && mode === 'image') {
+                toast.warning("Virtual background is slowing this device. Degraded to basic blur.");
+                handleVbSelectFn('blur');
+              } else {
+                toast.error("Virtual background may slow this device. We switched to normal video for better meeting quality.");
+                setVbMode('none');
+                setVbImageUrl(undefined);
+                sessionStorage.setItem("mtg_vb", JSON.stringify({ mode: 'none' }));
+                webrtcClient.current?.setVirtualBackground('none').then(track => {
+                  if (track) {
+                    localCameraTrackRef.current = track;
+                    setParticipants(prev => prev.map(p => 
+                      p.id === currentUser.id ? { ...p, videoTrack: track } : p
+                    ));
+                  }
+                });
+              }
+            };
             const track = await webrtcClient.current.setVirtualBackground(mode, imageUrl);
             if (track) {
               localCameraTrackRef.current = track;
@@ -1727,6 +1752,7 @@ export function MeetingProvider({
         resumeRemoteVideo,
         micError,
         setMicError,
+        webrtcClientRef: webrtcClient,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />

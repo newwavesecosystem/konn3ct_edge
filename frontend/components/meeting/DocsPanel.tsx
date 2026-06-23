@@ -154,12 +154,9 @@ export function DocsPanel() {
   };
 
   return (
-    <div className={`flex flex-col bg-[var(--mt-bg)] ${isExpanded ? "fixed inset-0 z-[100] h-screen w-screen" : "h-full"}`}>
+    <div className={`flex flex-col bg-[var(--mt-bg)] ${isExpanded ? "fixed inset-0 z-[100] h-[100dvh] w-[100dvw]" : "h-full"}`}>
       {/* Header */}
-      <div
-        className="px-4 py-3 flex items-center justify-between shrink-0"
-        style={{ borderBottom: "1px solid var(--mt-border)" }}
-      >
+      <div className="shrink-0 flex items-center justify-between p-3 border-b" style={{ borderColor: "var(--mt-border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Workspace</h3>
         <div className="flex items-center gap-1">
          
