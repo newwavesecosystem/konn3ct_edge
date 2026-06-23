@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Modal,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +23,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { fetchMeetingAttendanceList, fetchAttendanceDetails, MeetingAttendanceSession, MeetingParticipant } from '../api/attendance';
 
 const COLORS = {
   pageBg: '#f4f6f9',
@@ -34,39 +37,16 @@ const COLORS = {
   danger: '#ef4444',
 };
 
-const MOCK_ATTENDANCE = [
-  {
-    id: 'att-1',
-    host: 'Kayode Admin',
-    date: 'Oct 24, 2026',
-    time: '10:00 AM',
-  },
-  {
-    id: 'att-2',
-    host: 'UX Team',
-    date: 'Oct 22, 2026',
-    time: '02:00 PM',
-  },
-  {
-    id: 'att-3',
-    host: 'John Doe',
-    date: 'Oct 18, 2026',
-    time: '09:00 AM',
-  },
-  {
-    id: 'att-4',
-    host: 'Marketing Dept',
-    date: 'Oct 15, 2026',
-    time: '11:30 AM',
-  },
-];
-
-const MOCK_PARTICIPANTS = [
-  { id: 'p1', name: 'Alice Smith', email: 'alice@example.com', joinTime: '10:00 AM', leaveTime: '11:00 AM', duration: '60 min' },
-  { id: 'p2', name: 'Bob Johnson', email: 'bob@example.com', joinTime: '10:05 AM', leaveTime: '11:00 AM', duration: '55 min' },
-  { id: 'p3', name: 'Charlie Davis', email: 'charlie@example.com', joinTime: '10:15 AM', leaveTime: '10:45 AM', duration: '30 min' },
-  { id: 'p4', name: 'Diana Prince', email: 'diana@example.com', joinTime: '10:00 AM', leaveTime: '10:50 AM', duration: '50 min' },
-];
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+};
 
 export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
@@ -75,18 +55,54 @@ export default function AttendanceScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
 
-  const handleAction = (action: string, id: string) => {
-    if (action === 'View Participants') {
-      setSelectedMeetingId(id);
-      setModalVisible(true);
-    } else {
-      console.log(`${action} triggered for meeting`, id);
+  const [attendanceList, setAttendanceList] = useState<MeetingAttendanceSession[]>([]);
+  const [participantsList, setParticipantsList] = useState<MeetingParticipant[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingParticipants, setIsLoadingParticipants] = useState(false);
+
+  const loadAttendance = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchMeetingAttendanceList();
+      setAttendanceList(data);
+    } catch (e) {
+      console.error('Failed to load attendance:', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const renderAttendanceCard = (meeting: typeof MOCK_ATTENDANCE[0], index: number) => {
+  React.useEffect(() => {
+    loadAttendance();
+  }, []);
+
+  const handleAction = async (action: string, meeting: MeetingAttendanceSession) => {
+    if (action === 'View Participants') {
+      const roomId = meeting.room_id || meeting.roomId || meeting.id;
+      const meetingId = meeting.meeting_id || meeting.meetingId || meeting.id;
+      setSelectedMeetingId(String(meeting.id));
+      setModalVisible(true);
+      
+      setIsLoadingParticipants(true);
+      setParticipantsList([]);
+      try {
+        const details = await fetchAttendanceDetails(String(roomId), String(meetingId));
+        setParticipantsList(details);
+      } catch (e) {
+        console.error('Failed to load participants:', e);
+      } finally {
+        setIsLoadingParticipants(false);
+      }
+    }
+  };
+
+  const renderAttendanceCard = (meeting: MeetingAttendanceSession, index: number) => {
+    const host = meeting.host || meeting.host_name || meeting.hostname || 'Unknown Host';
+    const date = meeting.date ? formatDate(meeting.date) : meeting.created_at ? formatDate(meeting.created_at) : 'No date';
+    const time = meeting.time || '—';
+
     return (
-      <View key={meeting.id} style={styles.card}>
+      <View key={meeting.id || index} style={styles.card}>
         <LinearGradient
           colors={['#34d399', '#3b82f6']}
           start={{ x: 0, y: 0 }}
@@ -99,7 +115,7 @@ export default function AttendanceScreen() {
           <View style={styles.cardHeader}>
             <View style={styles.hostBadge}>
               <UserCircle color={COLORS.brandBlue} size={16} />
-              <Text style={styles.hostName} numberOfLines={1}>{meeting.host}</Text>
+              <Text style={styles.hostName} numberOfLines={1}>{host}</Text>
             </View>
             <View style={styles.indexBadge}>
               <Text style={styles.indexBadgeText}>#{index + 1}</Text>
@@ -109,14 +125,14 @@ export default function AttendanceScreen() {
           {/* Date & Time */}
           <View style={styles.metaRow}>
             <CalendarDays color={COLORS.textMuted} size={16} />
-            <Text style={styles.metaText}>{meeting.date} • {meeting.time}</Text>
+            <Text style={styles.metaText}>{date} • {time}</Text>
           </View>
 
           {/* Footer Action */}
           <TouchableOpacity 
             style={styles.participantsBtn} 
             activeOpacity={0.8}
-            onPress={() => handleAction('View Participants', meeting.id)}
+            onPress={() => handleAction('View Participants', meeting)}
           >
             <Users color={COLORS.brandGreen} size={16} />
             <Text style={styles.participantsBtnText}>View Participants</Text>
@@ -142,6 +158,7 @@ export default function AttendanceScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadAttendance} />}
       >
         {/* Stats Row */}
         <View style={styles.statsRow}>
@@ -149,13 +166,19 @@ export default function AttendanceScreen() {
           {/* Stats Box */}
           <View style={styles.statsBox}>
             <Text style={styles.statLabel}>Total Meetings</Text>
-            <Text style={styles.statValue}>{MOCK_ATTENDANCE.length}</Text>
+            <Text style={styles.statValue}>{attendanceList.length}</Text>
           </View>
         </View>
 
         {/* List */}
         <View style={styles.listContainer}>
-          {MOCK_ATTENDANCE.map((meeting, index) => renderAttendanceCard(meeting, index))}
+          {attendanceList.length === 0 && !isLoading ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ color: COLORS.textMuted }}>No past meetings found.</Text>
+            </View>
+          ) : (
+            attendanceList.map((meeting, index) => renderAttendanceCard(meeting, index))
+          )}
         </View>
       </ScrollView>
 
@@ -181,32 +204,45 @@ export default function AttendanceScreen() {
             contentContainerStyle={styles.modalScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {MOCK_PARTICIPANTS.map((participant) => (
-              <View key={participant.id} style={styles.participantCard}>
-                <View style={styles.participantHeader}>
-                  <View style={styles.participantAvatar}>
-                    <Text style={styles.participantInitial}>{participant.name.charAt(0)}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.participantName}>{participant.name}</Text>
-                    <Text style={styles.participantEmail}>{participant.email}</Text>
-                  </View>
-                  <View style={styles.durationBadge}>
-                    <Text style={styles.durationText}>{participant.duration}</Text>
-                  </View>
-                </View>
-                <View style={styles.participantTimeline}>
-                  <View style={styles.timelineItem}>
-                    <Text style={styles.timelineLabel}>Joined</Text>
-                    <Text style={styles.timelineTime}>{participant.joinTime}</Text>
-                  </View>
-                  <View style={styles.timelineItem}>
-                    <Text style={styles.timelineLabel}>Left</Text>
-                    <Text style={styles.timelineTime}>{participant.leaveTime}</Text>
-                  </View>
-                </View>
+            {isLoadingParticipants ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={COLORS.brandGreen} />
+                <Text style={{ marginTop: 12, color: COLORS.textMuted }}>Loading participants...</Text>
               </View>
-            ))}
+            ) : participantsList.length === 0 ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{ color: COLORS.textMuted }}>No participants logged for this session.</Text>
+              </View>
+            ) : (
+              participantsList.map((participant, i) => (
+                <View key={participant.id || i} style={styles.participantCard}>
+                  <View style={styles.participantHeader}>
+                    <View style={styles.participantAvatar}>
+                      <Text style={styles.participantInitial}>{(participant.name || '?').charAt(0)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.participantName}>{participant.name || 'Unknown User'}</Text>
+                      <Text style={styles.participantEmail}>{participant.email || '—'}</Text>
+                    </View>
+                    {participant.duration && (
+                      <View style={styles.durationBadge}>
+                        <Text style={styles.durationText}>{participant.duration}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.participantTimeline}>
+                    <View style={styles.timelineItem}>
+                      <Text style={styles.timelineLabel}>Joined</Text>
+                      <Text style={styles.timelineTime}>{participant.join_time || participant.joinTime || '—'}</Text>
+                    </View>
+                    <View style={styles.timelineItem}>
+                      <Text style={styles.timelineLabel}>Left</Text>
+                      <Text style={styles.timelineTime}>{participant.leave_time || participant.leaveTime || '—'}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
             <View style={{height: 40}} />
           </ScrollView>
         </View>

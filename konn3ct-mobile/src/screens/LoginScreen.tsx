@@ -12,10 +12,14 @@ import {
   ScrollView,
   Platform,
   Dimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useAuthStore } from '../store/useAuthStore';
-import { apiClient } from '../api/client';
+import { apiClient, IS_DEV } from '../api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Fingerprint, Eye, EyeOff, Mail, Lock, Square, CheckSquare } from 'lucide-react-native';
@@ -36,14 +40,29 @@ const COLORS = {
   inputFocus: '#207450', // Changed to brandGreen
   dangerBg: '#fef2f2',
   danger: '#cc505c',
+  successBg: '#f0fdf4',
+  success: '#207450',
   white: '#ffffff',
 };
 
 export default function LoginScreen() {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const route = useRoute<any>();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    if (route.params?.successMessage) {
+      setError('');
+      setSuccess(route.params.successMessage);
+      navigation.setParams({ successMessage: undefined });
+    }
+  }, [route.params?.successMessage]);
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -105,32 +124,55 @@ export default function LoginScreen() {
     
     setLoading(true);
     setError('');
+    setSuccess('');
     
     try {
-      const response = await apiClient.post('/auth/login', { email, password });
+      // Branch API logic depending on whether we are in dev or prod mode
+      const endpoint = IS_DEV ? '/login' : '/auth/login';
+      const payload = IS_DEV ? { username: email, password } : { email, password };
       
-      if (response.data && response.data.token) {
+      const response = await apiClient.post(endpoint, payload);
+      const resData = response.data;
+      
+      // Determine success based on the environment's response structure
+      const isSuccess = IS_DEV 
+        ? (resData && resData.success && resData.token) 
+        : (resData && resData.token);
+      
+      if (isSuccess) {
         if (rememberMe) {
           await AsyncStorage.setItem('@konn3ct_email', email);
         } else {
           await AsyncStorage.removeItem('@konn3ct_email');
         }
         
-        const userObj = response.data.user || {
-          id: 'unknown-id',
-          email: email,
-          name: email.split('@')[0]
-        };
+        let userObj;
+        
+        if (IS_DEV) {
+          const userData = resData.data || {};
+          userObj = {
+            id: userData.id || 'unknown-id',
+            email: userData.email || email,
+            name: userData.firstname ? `${userData.firstname} ${userData.lastname || ''}`.trim() : email.split('@')[0],
+            ...userData,
+          };
+        } else {
+          userObj = resData.user || {
+            id: 'unknown-id',
+            email: email,
+            name: email.split('@')[0]
+          };
+        }
 
-        await SecureStore.setItemAsync('konn3ct_token', response.data.token);
+        await SecureStore.setItemAsync('konn3ct_token', resData.token);
         await SecureStore.setItemAsync('konn3ct_user', JSON.stringify(userObj));
 
-        login(userObj, response.data.token);
+        login(userObj, resData.token);
       } else {
-        setError('Login succeeded but API returned invalid format.');
+        setError(resData?.message || 'Login failed. Please try again.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to login. Please try again.');
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to login. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -172,13 +214,8 @@ export default function LoginScreen() {
         </Svg>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="none"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Logo positioned over the wave transition */}
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
         <View style={styles.logoContainer}>
           <Image
             source={require('../../assets/konn3ct_logo.png')}
@@ -187,22 +224,42 @@ export default function LoginScreen() {
           />
         </View>
 
+        <Animated.View style={[styles.titleSection, { opacity: fadeAnim }]}>
+          <Text style={[styles.title, { color: COLORS.white }]}>Sign in</Text>
+          <View style={[styles.titleUnderline, { backgroundColor: COLORS.white }]} />
+        </Animated.View>
+      </View>
+
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 20, 40) }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        extraScrollHeight={Platform.OS === 'ios' ? 20 : 40}
+      >
         <Animated.View
           style={[
             styles.contentContainer,
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          {/* Sign In Title */}
-          <View style={styles.titleSection}>
-            <Text style={styles.title}>Sign in</Text>
-            <View style={styles.titleUnderline} />
-          </View>
 
           {/* Error Message */}
           {error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {/* Success Message */}
+          {success ? (
+            <View style={styles.successBox}>
+              <Text style={styles.successText}>{success}</Text>
             </View>
           ) : null}
 
@@ -322,13 +379,13 @@ export default function LoginScreen() {
           {/* Footer Sign Up Link */}
           <View style={styles.footerRow}>
             <Text style={styles.footerText}>Don't have an Account ? </Text>
-            <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} onPress={() => navigation.navigate('Signup')}>
               <Text style={styles.signUpText}>Sign up</Text>
             </TouchableOpacity>
           </View>
 
         </Animated.View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
@@ -346,13 +403,18 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: 120,
     paddingBottom: 40,
+  },
+  fixedHeader: {
+    paddingHorizontal: 30,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    zIndex: 10,
   },
   logoContainer: {
     alignItems: 'center',
     marginTop: 20,
-    marginBottom: 180, // Increased to ensure all text starts below the blue wave
+    marginBottom: 20,
   },
   logo: {
     height: 45,
@@ -362,10 +424,10 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 30,
-    flex: 1,
+    flexGrow: 1,
   },
   titleSection: {
-    marginBottom: 40,
+    marginBottom: 25,
     alignItems: 'flex-start',
   },
   title: {
@@ -427,7 +489,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 25,
   },
   rememberBtn: {
     flexDirection: 'row',
@@ -490,8 +552,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 'auto',
-    paddingTop: 30,
+    marginTop: 15,
+    paddingTop: 10,
+    paddingBottom: 24,
   },
   footerText: {
     color: COLORS.textMuted,
@@ -501,5 +564,17 @@ const styles = StyleSheet.create({
     color: COLORS.brandGreen,
     fontWeight: '700',
     fontSize: 14,
+  },
+  successBox: {
+    backgroundColor: COLORS.successBg,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.success,
+  },
+  successText: {
+    color: COLORS.success,
+    fontSize: 13,
   },
 });

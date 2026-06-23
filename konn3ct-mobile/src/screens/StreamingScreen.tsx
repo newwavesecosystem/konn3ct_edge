@@ -6,9 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { fetchStreamings, startStreaming, startComboStreaming, stopStreaming, StreamingItem } from '../api/streamings';
+import { fetchMyRooms, Room } from '../api/rooms';
 import {
   Radio,
   PlayCircle,
@@ -38,41 +45,107 @@ const COLORS = {
   inactive: '#9ca3af',
 };
 
-const MOCK_STATS = [
-  { id: 'total', label: 'Total Streams', value: '14', icon: Radio, color: COLORS.brandBlue },
-  { id: 'active', label: 'Active Streams', value: '2', icon: PlayCircle, color: COLORS.brandGreen },
-];
-
-const MOCK_STREAMS = [
-  {
-    id: 'stream-1',
-    roomName: 'Global Marketing Webinar',
-    type: 'Youtube',
-    isRunning: true,
-    startedAt: 'Oct 24, 2026',
-    endedAt: null,
-  },
-  {
-    id: 'stream-2',
-    roomName: 'Product Launch Q3',
-    type: 'Facebook',
-    isRunning: true,
-    startedAt: 'Oct 24, 2026',
-    endedAt: null,
-  },
-  {
-    id: 'stream-3',
-    roomName: 'Engineering Sync',
-    type: 'Combo',
-    isRunning: false,
-    startedAt: 'Oct 20, 2026',
-    endedAt: 'Oct 20, 2026',
-  },
-];
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '---';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+};
 
 export default function StreamingScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+
+  // API States
+  const [streamings, setStreamings] = React.useState<StreamingItem[]>([]);
+  const [myRooms, setMyRooms] = React.useState<Room[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  // Modal States
+  const [isModalVisible, setModalVisible] = React.useState(false);
+  const [streamType, setStreamType] = React.useState<'Youtube' | 'Facebook' | 'Combo'>('Youtube');
+  const [roomId, setRoomId] = React.useState('');
+  const [streamKey, setStreamKey] = React.useState('');
+  const [youtubeKey, setYoutubeKey] = React.useState('');
+  const [facebookKey, setFacebookKey] = React.useState('');
+  const [isStarting, setIsStarting] = React.useState(false);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [streamingsData, roomsData] = await Promise.all([
+        fetchStreamings(),
+        fetchMyRooms()
+      ]);
+      setStreamings(streamingsData);
+      setMyRooms(roomsData);
+      
+      // Auto-select first room if none selected
+      if (roomsData.length > 0 && !roomId) {
+        setRoomId(String(roomsData[0].id));
+      }
+    } catch (error) {
+      console.error('Failed to load streamings or rooms', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleStopStream = async (id: string | number) => {
+    try {
+      await stopStreaming(id);
+      Alert.alert('Success', 'Stream stopped successfully');
+      loadData();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to stop stream');
+    }
+  };
+
+  const handleStartStream = async () => {
+    if (!roomId) {
+      Alert.alert('Error', 'Room ID is required');
+      return;
+    }
+    setIsStarting(true);
+    try {
+      if (streamType === 'Combo') {
+        if (!youtubeKey || !facebookKey) {
+          Alert.alert('Error', 'Both Youtube and Facebook keys are required for Combo streaming.');
+          setIsStarting(false);
+          return;
+        }
+        await startComboStreaming({ room_id: roomId, youtube_key: youtubeKey, facebook_key: facebookKey });
+      } else {
+        if (!streamKey) {
+          Alert.alert('Error', 'Stream key is required.');
+          setIsStarting(false);
+          return;
+        }
+        await startStreaming({ room_id: roomId, type: streamType, key: streamKey });
+      }
+      
+      Alert.alert('Success', 'Stream started successfully');
+      setModalVisible(false);
+      setRoomId('');
+      setStreamKey('');
+      setYoutubeKey('');
+      setFacebookKey('');
+      loadData();
+    } catch (e: any) {
+      const msg = e.response?.data?.message || 'Failed to start stream';
+      Alert.alert('Error', msg);
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   const getPlatformIcon = (type: string) => {
     switch (type) {
@@ -168,6 +241,17 @@ export default function StreamingScreen() {
     );
   };
 
+  const totalStreams = streamings.length;
+  const activeStreams = streamings.filter(s => {
+    const stat = String(s.status || '').toLowerCase();
+    return stat === 'running' || s.is_running === true || stat === 'active' || stat === '1';
+  }).length;
+
+  const dynamicStats = [
+    { id: 'total', label: 'Total Streams', value: String(totalStreams), icon: Radio, color: COLORS.brandBlue },
+    { id: 'active', label: 'Active Streams', value: String(activeStreams), icon: PlayCircle, color: COLORS.brandGreen },
+  ];
+
   return (
     <View style={styles.container}>
       {/* ===== HEADER ===== */}
@@ -184,11 +268,12 @@ export default function StreamingScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadData} />}
       >
 
         {/* Action Button */}
         <View style={styles.actionRow}>
-          <TouchableOpacity activeOpacity={0.85} style={{ flex: 1 }}>
+          <TouchableOpacity activeOpacity={0.85} style={{ flex: 1 }} onPress={() => setModalVisible(true)}>
             <LinearGradient
               colors={[COLORS.brandBlue, COLORS.brandBlueDark]}
               start={{ x: 0, y: 0 }}
@@ -207,14 +292,204 @@ export default function StreamingScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.statsContainer}
         >
-          {MOCK_STATS.map(renderStatCard)}
+          {dynamicStats.map(renderStatCard)}
         </ScrollView>
 
         {/* Streams List */}
         <View style={styles.streamsList}>
-          {MOCK_STREAMS.map(renderStreamCard)}
+          {streamings.length === 0 && !isLoading ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ color: COLORS.textMuted }}>No active or past streams found.</Text>
+            </View>
+          ) : (
+            streamings.map((stream, i) => {
+              const platform = stream.type || stream.platform || 'Youtube';
+              const PlatformIcon = getPlatformIcon(platform);
+              const roomName = stream.room_name || stream.room?.name || `Room ${stream.room_id || 'Unknown'}`;
+              
+              const statusStr = String(stream.status || '').toLowerCase();
+              const isRunning = statusStr === 'running' || stream.is_running === true || statusStr === 'active' || statusStr === '1';
+              
+              const gradientColors = isRunning 
+                ? [COLORS.brandGreen, '#34d399'] 
+                : [COLORS.inactive, '#d1d5db'];
+              const iconBgColor = isRunning ? COLORS.brandGreen : COLORS.inactive;
+
+              return (
+                <View key={stream.id || i} style={styles.streamCard}>
+                  <LinearGradient
+                    colors={gradientColors}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.cardTopStrip}
+                  />
+                  
+                  <View style={styles.cardContent}>
+                    {/* Header Row */}
+                    <View style={styles.cardHeader}>
+                      <View style={styles.titleGroup}>
+                        <View style={[styles.platformIconBox, { backgroundColor: iconBgColor }]}>
+                          <PlatformIcon color="#ffffff" size={20} />
+                        </View>
+                        <View style={styles.textGroup}>
+                          <Text style={styles.roomName} numberOfLines={1}>{roomName}</Text>
+                          <Text style={styles.platformType} numberOfLines={1}>{platform}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={[styles.statusBadge, isRunning ? styles.statusBadgeActive : styles.statusBadgeEnded]}>
+                        <Text style={[styles.statusBadgeText, isRunning ? styles.statusBadgeTextActive : styles.statusBadgeTextEnded]}>
+                          {isRunning ? 'Running' : 'Ended'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Meta Row */}
+                    <View style={styles.metaRow}>
+                      <View style={styles.metaItem}>
+                        <Calendar color={COLORS.textMuted} size={14} />
+                        <Text style={styles.metaText}>Started: <Text style={styles.metaValue}>{formatDate(stream.created_at)}</Text></Text>
+                      </View>
+                      <View style={styles.metaItem}>
+                        <Clock color={COLORS.textMuted} size={14} />
+                        <Text style={styles.metaText}>Updated: <Text style={styles.metaValue}>{formatDate(stream.updated_at)}</Text></Text>
+                      </View>
+                    </View>
+
+                    {/* Footer Action */}
+                    <View style={styles.cardFooter}>
+                      {isRunning ? (
+                        <TouchableOpacity 
+                          style={styles.stopBtn} 
+                          activeOpacity={0.8}
+                          onPress={() => handleStopStream(stream.id)}
+                        >
+                          <StopCircle color="#ffffff" size={16} />
+                          <Text style={styles.stopBtnText}>Stop Streaming</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.endedBtn}>
+                          <Text style={styles.endedBtnText}>Stream Ended</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
+
+      {/* Start Stream Modal */}
+      <Modal
+        visible={isModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Start New Stream</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <X color={COLORS.textMuted} size={24} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>Select Room</Text>
+              {myRooms.length === 0 ? (
+                <Text style={{ color: COLORS.textMuted, fontSize: 13, marginBottom: 12 }}>No rooms available. Create a room first.</Text>
+              ) : (
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 8, paddingBottom: 12 }}
+                >
+                  {myRooms.map((r) => {
+                    const rId = String(r.id);
+                    const isSelected = roomId === rId;
+                    return (
+                      <TouchableOpacity
+                        key={rId}
+                        style={[styles.roomChip, isSelected && styles.roomChipActive]}
+                        onPress={() => setRoomId(rId)}
+                      >
+                        <Text style={[styles.roomChipText, isSelected && styles.roomChipTextActive]}>
+                          {r.name || `Room ${rId}`}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+              <Text style={styles.inputLabel}>Platform Type</Text>
+              <View style={styles.typeSelector}>
+                {['Youtube', 'Facebook', 'Combo'].map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeBtn, streamType === t && styles.typeBtnActive]}
+                    onPress={() => setStreamType(t as any)}
+                  >
+                    <Text style={[styles.typeBtnText, streamType === t && styles.typeBtnTextActive]}>
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {streamType === 'Combo' ? (
+                <>
+                  <Text style={styles.inputLabel}>YouTube Stream Key</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Enter YouTube Key"
+                    value={youtubeKey}
+                    onChangeText={setYoutubeKey}
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.inputLabel}>Facebook Stream Key</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder="Enter Facebook Key"
+                    value={facebookKey}
+                    onChangeText={setFacebookKey}
+                    autoCapitalize="none"
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.inputLabel}>{streamType} Stream Key</Text>
+                  <TextInput
+                    style={styles.inputField}
+                    placeholder={`Enter ${streamType} Key`}
+                    value={streamKey}
+                    onChangeText={setStreamKey}
+                    autoCapitalize="none"
+                  />
+                </>
+              )}
+
+              <TouchableOpacity 
+                style={[styles.btnPrimary, { marginTop: 24, marginBottom: 40 }]} 
+                onPress={handleStartStream}
+                disabled={isStarting}
+              >
+                {isStarting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Cast color="#ffffff" size={16} />
+                    <Text style={styles.btnPrimaryText}>Start Broadcasting</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -435,5 +710,85 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.textMuted,
+  },
+  
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  inputField: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: COLORS.textPrimary,
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  typeBtnActive: {
+    backgroundColor: `${COLORS.brandBlue}10`,
+    borderColor: COLORS.brandBlue,
+  },
+  typeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  typeBtnTextActive: {
+    color: COLORS.brandBlue,
+  },
+  roomChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  roomChipActive: {
+    backgroundColor: `${COLORS.brandBlue}10`,
+    borderColor: COLORS.brandBlue,
+  },
+  roomChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  roomChipTextActive: {
+    color: COLORS.brandBlue,
   },
 });
