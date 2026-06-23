@@ -17,7 +17,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow Konn3ct to access your camera for video meetings.",
-        "NSMicrophoneUsageDescription": "Allow Konn3ct to access your microphone for video meetings."
+        "NSMicrophoneUsageDescription": "Allow Konn3ct to access your microphone for video meetings.",
+        "NSPhotoLibraryUsageDescription": "Allow Konn3ct to access your photo library to upload event images."
       }
     },
     "android": {
@@ -32,7 +33,9 @@
         "RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",
         "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -55,6 +58,12 @@
         }
       ],
       "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Konn3ct to access your photos to upload event images."
+        }
+      ],
       "./plugins/withPiP"
     ]
   }

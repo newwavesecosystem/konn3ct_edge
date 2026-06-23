@@ -28,12 +28,13 @@ import { CaptionsOverlay } from '../components/meeting/CaptionsOverlay';
 type Props = NativeStackScreenProps<RootStackParamList, 'Meeting'>;
 
 export default function MeetingScreen({ route, navigation }: Props) {
-  const { roomId } = route.params;
+  const { roomId, meetingToken } = route.params;
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteParticipant[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0); // bumped on every toggle to force RTCView remount
   const [isRecording, setIsRecording] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [isPipMode, setIsPipMode] = useState(false);
@@ -164,7 +165,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
           Alert.alert("Recording Stopped", "Cloud recording has been stopped.");
         };
 
-        const initialStatus = await service.connect();
+        const initialStatus = await service.connect(meetingToken);
         if (!isMounted) return;
         
         if (initialStatus === 'active') {
@@ -174,8 +175,20 @@ export default function MeetingScreen({ route, navigation }: Props) {
           setIsWaiting(true);
         }
 
-      } catch (err) {
+      } catch (err: any) {
         console.error("Meeting failed to initialize", err);
+        if (isMounted) {
+          const reason = err?.message || '';
+          // The WS close reason contains HTTP status when upgrade fails
+          const is404 = reason.includes('404');
+          Alert.alert(
+            is404 ? 'Room Not Found' : 'Connection Failed',
+            is404
+              ? `Could not find room "${roomId}".\n\nRoom IDs are case-sensitive — make sure the capitalisation matches exactly.`
+              : 'Failed to connect to the meeting. Please check your connection and try again.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+        }
       }
     }
 
@@ -202,9 +215,12 @@ export default function MeetingScreen({ route, navigation }: Props) {
   };
 
   const copyMeetingLink = async () => {
-    const meetingUrl = `https://konn3ctedge.konn3ct.net/join/${roomId}`;
-    await Clipboard.setStringAsync(meetingUrl);
-    Alert.alert("Link Copied!", "The meeting link has been copied to your clipboard.");
+    await Clipboard.setStringAsync(roomId);
+    Alert.alert(
+      "Room ID Copied! 🎉",
+      `Room ID: ${roomId}\n\nShare this ID with others so they can tap Join and enter it to join your meeting.`,
+      [{ text: 'OK' }]
+    );
   };
 
   const toggleMic = () => {
@@ -227,12 +243,17 @@ export default function MeetingScreen({ route, navigation }: Props) {
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
+        // Determine the INTENDED new state BEFORE flipping the track
+        const cameraShouldBeOff = videoTrack.enabled; // currently on → turning off
         videoTrack.enabled = !videoTrack.enabled;
-        const newCameraState = !videoTrack.enabled;
-        setIsCameraOff(newCameraState);
+        setIsCameraOff(cameraShouldBeOff);
+        // Bump key to force RTCView to fully unmount/remount on Android.
+        // Android's GL surface freezes when a track is disabled and won't
+        // recover without a full remount — toggling enabled alone is not enough.
+        setCameraKey(k => k + 1);
         
         if (serviceRef.current) {
-          if (newCameraState) serviceRef.current.pauseCamera();
+          if (cameraShouldBeOff) serviceRef.current.pauseCamera();
           else serviceRef.current.resumeCamera();
         }
       }
@@ -356,8 +377,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
             </Text>
           </View>
           <View style={styles.topRightActions}>
-            <TouchableOpacity style={styles.topActionBtn} activeOpacity={0.7} onPress={copyMeetingLink}>
-              <Copy size={16} color={tokens.textPrimary} />
+            <TouchableOpacity
+              style={styles.inviteBtn}
+              activeOpacity={0.7}
+              onPress={copyMeetingLink}
+            >
+              <UserPlus size={14} color="#fff" />
+              <Text style={styles.inviteBtnText}>Invite</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.topActionBtn} activeOpacity={0.7} onPress={() => serviceRef.current?.switchCamera()}>
               <SwitchCamera size={16} color={tokens.textPrimary} />
@@ -409,7 +435,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
                       objectFit="cover"
                     />
                   )}
-                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />
+                  {hasVideo && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
                   <View style={styles.nameBadgeContainer}>
                     <Text style={styles.nameText} numberOfLines={1}>{p.name}</Text>
                     <View style={{ marginLeft: 6 }}>
@@ -446,7 +472,16 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
               ]}>
                 {localStream && !isCameraOff ? (
-                  <RTCView streamURL={localStream.toURL()} style={styles.rtcView} objectFit="cover" mirror={true} zOrder={1} />
+                  // key forces a full unmount+remount on Android every toggle.
+                  // Without this, the GL surface freezes green and won't recover.
+                  <RTCView
+                    key={`local-cam-${cameraKey}`}
+                    streamURL={localStream.toURL()}
+                    style={styles.rtcView}
+                    objectFit="cover"
+                    mirror={true}
+                    zOrder={0}
+                  />
                 ) : (
                   <View style={styles.cameraOff}>
                     <View style={styles.avatarCircle}>
@@ -454,7 +489,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
                     </View>
                   </View>
                 )}
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />
+                {localStream && !isCameraOff && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
                 <View style={styles.nameBadgeContainer}>
                   <Text style={styles.nameText}>Me</Text>
                   <View style={{ marginLeft: 6 }}>
@@ -487,27 +522,27 @@ export default function MeetingScreen({ route, navigation }: Props) {
           styles.bottomToolbarContainer, 
           { bottom: safeBottom + 16 }
         ]}>
-          <View style={styles.floatingBar}>
-            <TouchableOpacity style={[!isMicMuted ? styles.toolBtnActive : styles.toolBtnMuted, { marginRight: 8 }]} onPress={toggleMic}>
-              {isMicMuted ? <MicOff size={22} color={tokens.danger} /> : <Mic size={22} color={tokens.textInverse} strokeWidth={2.2} />}
+          <View style={[styles.floatingBar, { gap: 6 }]}>
+            <TouchableOpacity style={!isMicMuted ? styles.toolBtnActive : styles.toolBtnMuted} onPress={toggleMic}>
+              {isMicMuted ? <MicOff size={20} color={tokens.danger} /> : <Mic size={20} color={tokens.textInverse} strokeWidth={2.2} />}
             </TouchableOpacity>
 
-            <TouchableOpacity style={[!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted, { marginRight: 8 }]} onPress={toggleCamera}>
-              {isCameraOff ? <VideoOff size={22} color={tokens.danger} /> : <VideoIcon size={22} color={tokens.textPrimary} strokeWidth={2} />}
+            <TouchableOpacity style={!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted} onPress={toggleCamera}>
+              {isCameraOff ? <VideoOff size={20} color={tokens.danger} /> : <VideoIcon size={20} color={tokens.textPrimary} strokeWidth={2} />}
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.toolBtnNeutral, { marginRight: 8 }]} onPress={() => setIsMoreMenuVisible(true)}>
-              <MoreVertical size={22} color={tokens.textPrimary} strokeWidth={2} />
+            <TouchableOpacity style={styles.toolBtnNeutral} onPress={() => setIsMoreMenuVisible(true)}>
+              <MoreVertical size={20} color={tokens.textPrimary} strokeWidth={2} />
               {unreadChatCount > 0 && (
                 <View style={styles.menuBadge} />
               )}
             </TouchableOpacity>
 
-            <View style={[styles.toolbarDivider, { marginRight: 8 }]} />
+            <View style={styles.toolbarDivider} />
 
             <TouchableOpacity style={styles.endCallBtn} onPress={handleLeave}>
               <View style={{ transform: [{ rotate: '135deg' }] }}>
-                <Phone size={22} color={tokens.textInverse} strokeWidth={2.2} />
+                <Phone size={20} color={tokens.textInverse} strokeWidth={2.2} />
               </View>
             </TouchableOpacity>
           </View>
@@ -748,55 +783,96 @@ const getStyles = (t: any) => StyleSheet.create({
   
   // Waiting Room
   waitingContainer: { flex: 1, backgroundColor: t.bg, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  waitingCard: { backgroundColor: t.bgElevated, padding: 32, borderRadius: 24, width: '100%', maxWidth: 360, alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: t.shadowOpacity, shadowRadius: 16, elevation: 4 },
-  waitingIconWrapper: { width: 64, height: 64, borderRadius: 32, backgroundColor: t.bgActiveBadge, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  waitingIcon: { color: t.primary, fontSize: 28, fontWeight: 'bold' },
-  waitingTitle: { color: t.textPrimary, fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  waitingSubtext: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  leaveWaitingBtn: { backgroundColor: t.primary, width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center', shadowColor: t.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: t.shadowOpacity, shadowRadius: 8, elevation: 4 },
-  leaveText: { color: t.textInverse, fontWeight: '600', fontSize: 15 },
+  waitingCard: { backgroundColor: t.bgElevated, padding: 36, borderRadius: 28, width: '100%', maxWidth: 360, alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: t.shadowOpacity, shadowRadius: 24, elevation: 6 },
+  waitingIconWrapper: { width: 72, height: 72, borderRadius: 36, backgroundColor: t.bgActiveBadge, justifyContent: 'center', alignItems: 'center', marginBottom: 28 },
+  waitingIcon: { color: t.primary, fontSize: 30, fontWeight: 'bold' },
+  waitingTitle: { color: t.textPrimary, fontSize: 22, fontWeight: '700', marginBottom: 10, letterSpacing: -0.3 },
+  waitingSubtext: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  leaveWaitingBtn: { backgroundColor: t.primary, width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', shadowColor: t.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 5 },
+  leaveText: { color: t.textInverse, fontWeight: '700', fontSize: 15, letterSpacing: 0.2 },
   
   // Top Overlay
-  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: Platform.OS === 'android' ? 100 : 120, zIndex: 15 },
-  topOverlay: { position: 'absolute', left: 16, right: 16, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: t.toolbarBg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity * 0.5, shadowRadius: 3, elevation: 1 },
+  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: Platform.OS === 'android' ? 110 : 130, zIndex: 15 },
+  topOverlay: { position: 'absolute', left: 12, right: 12, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: t.toolbarBg,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: t.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: t.shadowOpacity * 0.6,
+    shadowRadius: 12,
+    elevation: 3,
+  },
   lockIconContainer: { marginRight: 6, justifyContent: 'center', alignItems: 'center' },
-  infoTitle: { fontFamily: 'Inter', fontSize: 13, fontWeight: '600', color: t.textPrimary, maxWidth: 120 },
-  infoDot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 8 },
-  infoDotActive: { backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4, elevation: 2 },
+  infoTitle: { fontFamily: 'Inter', fontSize: 13, fontWeight: '600', color: t.textPrimary, maxWidth: 120, letterSpacing: -0.2 },
+  infoDot: { width: 7, height: 7, borderRadius: 3.5, marginHorizontal: 8 },
+  infoDotActive: { backgroundColor: '#0FA97A', shadowColor: '#0FA97A', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 5, elevation: 2 },
   infoDotInactive: { backgroundColor: t.textMuted },
-  infoTime: { fontFamily: 'Inter', fontSize: 11, fontWeight: '500', color: t.textSecondary },
+  infoTime: { fontFamily: 'Inter', fontSize: 11, fontWeight: '600', color: t.textSecondary, letterSpacing: 0.2 },
   topRightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  topActionBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: t.toolbarBg, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: t.shadowOpacity * 0.5, shadowRadius: 3, elevation: 1 },
-  
+  topActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: t.toolbarBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: t.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: t.shadowOpacity * 0.5,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  inviteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: t.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    height: 40,
+    shadowColor: t.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  inviteBtnText: { color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Inter', letterSpacing: 0.3 },
+
   // Screen Share
   screenShareContainer: { height: 340, backgroundColor: '#000', width: '100%' },
   screenShareView: { width: '100%', height: '100%' },
-  screenShareLabel: { position: 'absolute', bottom: 16, left: 16, backgroundColor: 'rgba(25, 27, 35, 0.8)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  screenShareLabel: { position: 'absolute', bottom: 16, left: 16, backgroundColor: 'rgba(25, 27, 35, 0.8)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 },
   screenShareName: { color: 'white', fontSize: 12, fontWeight: '600' },
   
   // Grid
   videoGrid: { flex: 1, backgroundColor: t.bg },
   videoGridShrunk: { flex: 1, maxHeight: 180 },
-  remoteGrid: { flex: 1, padding: 8 },
+  remoteGrid: { flex: 1, padding: 6 },
   gridInnerScroll: { flexGrow: 1, paddingBottom: 120 },
   gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', height: '100%' },
   gridInnerHorizontal: { flexDirection: 'row', flexWrap: 'nowrap' },
   
-  // Card Sizes
+  // Card Sizes — Modern rounded cards
   cardSingle: {
     width: '96%',
     height: '96%',
     backgroundColor: t.bgTile,
     margin: '2%',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: t.shadowOpacity,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
   },
   cardDouble: {
     width: '96%',
@@ -804,55 +880,56 @@ const getStyles = (t: any) => StyleSheet.create({
     backgroundColor: t.bgTile,
     marginHorizontal: '2%',
     marginVertical: '1.5%',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: t.shadowOpacity,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
   },
   cardQuad: {
     width: '47%',
     height: '47%',
     backgroundColor: t.bgTile,
     margin: '1.5%',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: t.shadowOpacity,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
   },
   cardGrid: {
     width: '47%',
     height: 180,
     backgroundColor: t.bgTile,
     margin: '1.5%',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: t.shadowOpacity,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
   },
-  remoteVideoWrapperHorizontal: { width: 140, height: 140, backgroundColor: t.bgTile, marginHorizontal: 6, borderRadius: 16, overflow: 'hidden', position: 'relative' },
-  activeSpeakerBorder: { borderWidth: 2.5, borderColor: t.primary },
+  remoteVideoWrapperHorizontal: { width: 140, height: 140, backgroundColor: t.bgTile, marginHorizontal: 6, borderRadius: 20, overflow: 'hidden', position: 'relative' },
+  activeSpeakerBorder: { borderColor: t.primary },
   rtcView: { width: '100%', height: '100%' },
-  videoGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 60 },
+  videoGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 70 },
   
   // Badges
-  nameBadgeContainer: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0, 0, 0, 0.4)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, flexDirection: 'row', alignItems: 'center' },
+  nameBadgeContainer: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   nameText: { color: 'white', fontSize: 12, fontWeight: '600', fontFamily: 'Inter' },
-  raisedHandBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: '#ffcfbe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  raisedHandText: { color: '#802b00', fontSize: 10, fontWeight: '600', marginLeft: 4, fontFamily: 'Inter' },
-  activeSpeakerBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: t.bgActiveBadge, padding: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  mutedBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 6, borderRadius: 16 },
+  raisedHandBadge: { position: 'absolute', top: 10, left: 10, backgroundColor: '#FFF3E0', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  raisedHandText: { color: '#E65100', fontSize: 10, fontWeight: '700', marginLeft: 5, fontFamily: 'Inter', letterSpacing: 0.2 },
+  activeSpeakerBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: t.bgActiveBadge, padding: 6, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  mutedBadge: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0, 0, 0, 0.45)', padding: 6, borderRadius: 14 },
   cameraOff: {
     flex: 1,
     backgroundColor: t.cameraOffBg,
@@ -860,26 +937,22 @@ const getStyles = (t: any) => StyleSheet.create({
     alignItems: 'center',
   },
   avatarCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: t.avatarBg,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: t.shadowOpacity,
-    shadowRadius: 4,
-    elevation: 2,
   },
   avatarText: {
     color: t.textInverse,
-    fontSize: 40,
+    fontSize: 28,
     fontWeight: '700',
     fontFamily: 'Inter',
+    letterSpacing: 1,
   },
   
-  // Toolbar
+  // Toolbar — Modern floating pill bar
   bottomToolbarContainer: {
     position: 'absolute',
     left: 0, right: 0,
@@ -890,40 +963,90 @@ const getStyles = (t: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: t.toolbarBg,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 36,
-    borderWidth: 1.5,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderRadius: 32,
+    borderWidth: 1,
     borderColor: t.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: t.shadowOpacity,
-    shadowRadius: 18,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: t.shadowOpacity * 1.5,
+    shadowRadius: 24,
+    elevation: 10,
   },
-  toolBtnActive: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', backgroundColor: t.bgActive, ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
-  toolBtnMuted: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center', backgroundColor: t.dangerHover, borderWidth: 1, borderColor: t.danger, ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
-  toolBtnNeutral: { width: 52, height: 52, borderRadius: 26, backgroundColor: t.bgElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: t.border, ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
-  menuBadge: { position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: t.danger, borderWidth: 1.5, borderColor: t.bgElevated },
-  toolbarDivider: { width: 1, height: 32, backgroundColor: t.border, marginHorizontal: 4 },
-  endCallBtn: { width: 72, height: 52, borderRadius: 20, backgroundColor: t.danger, justifyContent: 'center', alignItems: 'center', ...Platform.select({ web: { outlineStyle: 'none' as any } }) },
+  toolBtnActive: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: t.bgActive,
+    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
+  },
+  toolBtnMuted: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: t.dangerHover,
+    borderWidth: 1.5,
+    borderColor: t.danger,
+    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
+  },
+  toolBtnNeutral: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: t.bgElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: t.border,
+    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
+  },
+  menuBadge: { position: 'absolute', top: 8, right: 8, width: 9, height: 9, borderRadius: 4.5, backgroundColor: t.danger, borderWidth: 2, borderColor: t.bgElevated },
+  toolbarDivider: { width: 1, height: 28, backgroundColor: t.border, marginHorizontal: 6, borderRadius: 1 },
+  endCallBtn: {
+    width: 68,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: t.danger,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: t.danger,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
+  },
   endCallText: { color: t.textInverse, fontSize: 16, fontWeight: '600', fontFamily: 'Inter' },
   
-  // Modal Sheet
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-  sheetContent: { backgroundColor: t.bgElevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12 },
-  dragHandle: { width: 40, height: 5, borderRadius: 3, backgroundColor: t.border, alignSelf: 'center', marginBottom: 16 },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: t.textPrimary, marginBottom: 16, textAlign: 'center', fontFamily: 'Inter' },
-  reactionsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.border, marginBottom: 16 },
-  reactionBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: t.iconBtnBg, justifyContent: 'center', alignItems: 'center' },
-  reactionText: { fontSize: 22 },
+  // Modal Sheet — Modern bottom sheet
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.45)', justifyContent: 'flex-end' },
+  sheetContent: { backgroundColor: t.bgElevated, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12 },
+  dragHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: t.border, alignSelf: 'center', marginBottom: 18 },
+  sheetTitle: { fontSize: 17, fontWeight: '700', color: t.textPrimary, marginBottom: 16, textAlign: 'center', fontFamily: 'Inter', letterSpacing: -0.2 },
+  reactionsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: t.border, marginBottom: 18 },
+  reactionBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: t.iconBtnBg, justifyContent: 'center', alignItems: 'center' },
+  reactionText: { fontSize: 24 },
   optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 16 },
-  gridOption: { width: '22%', alignItems: 'center', marginVertical: 12 },
+  gridOption: { width: '22%', alignItems: 'center', marginVertical: 14 },
   gridOptionActive: { opacity: 0.9 },
-  optionIconContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: t.iconBtnBg, justifyContent: 'center', alignItems: 'center', marginBottom: 6, position: 'relative' },
+  optionIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: t.iconBtnBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    position: 'relative',
+  },
   optionIconContainerActive: { backgroundColor: t.bgActive },
   recordingActiveContainer: { backgroundColor: t.dangerHover },
-  optionLabel: { fontSize: 11, fontWeight: '500', color: t.textSecondary, textAlign: 'center', fontFamily: 'Inter' },
+  optionLabel: { fontSize: 11, fontWeight: '600', color: t.textSecondary, textAlign: 'center', fontFamily: 'Inter', letterSpacing: 0.1 },
   optionBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: t.danger, borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 1.5, borderColor: t.bgElevated },
   optionBadgeText: { color: t.textInverse, fontSize: 9, fontWeight: 'bold' },
   

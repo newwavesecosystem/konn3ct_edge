@@ -14,6 +14,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { apiClient } from '../api/client';
+import { fetchSchedules, createSchedule, cancelSchedule } from '../api/schedule';
+import { fetchMyRooms } from '../api/rooms';
+import { useAuthStore } from '../store/useAuthStore';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
@@ -21,6 +24,8 @@ type Props = {
 
 export default function ScheduleScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const user = useAuthStore(state => state.user);
+  
   const [meetings, setMeetings] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -34,6 +39,7 @@ export default function ScheduleScreen({ navigation }: Props) {
   const [title, setTitle] = useState('');
   const [hostname, setHostname] = useState('');
   const [additional, setAdditional] = useState('');
+  const [recurrence, setRecurrence] = useState('once');
   const [date, setDate] = useState(new Date());
   
   const [rooms, setRooms] = useState<any[]>([]);
@@ -57,13 +63,16 @@ export default function ScheduleScreen({ navigation }: Props) {
   const fetchData = async () => {
     try {
       const [meetRes, roomsRes] = await Promise.all([
-        apiClient.get('/scheduling').catch(() => ({ data: [] })),
-        apiClient.get('/rooms').catch(() => ({ data: [] }))
+        fetchSchedules().catch(() => []),
+        fetchMyRooms().catch(() => [])
       ]);
-      setMeetings(meetRes.data || []);
-      setRooms(roomsRes.data || []);
-      if (roomsRes.data?.length > 0 && !roomId) {
-        setRoomId(roomsRes.data[0].id);
+      setMeetings(Array.isArray(meetRes) ? meetRes : meetRes?.data || []);
+      
+      const parsedRooms = Array.isArray(roomsRes) ? roomsRes : roomsRes?.data || [];
+      setRooms(parsedRooms);
+      
+      if (parsedRooms.length > 0 && !roomId) {
+        setRoomId(parsedRooms[0].id);
       }
     } catch (e) {
       console.error("Failed to fetch data", e);
@@ -109,30 +118,51 @@ export default function ScheduleScreen({ navigation }: Props) {
     }
     setIsSubmitting(true);
     try {
-      // Sending data formatted for the scheduling endpoint. 
-      // Including extra fields which might be used by the backend if they update to match dashboard.
-      await apiClient.post('/scheduling', {
+      // Create end time (default to 1 hour after start)
+      const endDate = new Date(date);
+      endDate.setHours(endDate.getHours() + 1);
+
+      await createSchedule({
         title: title.trim(),
-        startTime: date.toISOString(),
-        durationMin: 60,
-        roomId: roomId,
-        hostname: hostname.trim(),
-        mode,
-        additional: additional.trim(),
+        description: additional.trim(),
+        room_id: roomId,
+        recurrence: recurrence,
+        date: date.toISOString().split('T')[0],
+        fromtime: date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+        totime: endDate.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
         timezone,
-        guests
+        guest: guests.length > 0 ? guests.join(',') : (user?.email || 'host@konn3ct.net'),
       });
       
       setModalVisible(false);
       resetForm();
       fetchData();
       Alert.alert("Success", "Session scheduled successfully!");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      Alert.alert("Error", "Failed to schedule session.");
+      Alert.alert("Error", e.response?.data?.message || "Failed to schedule session.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleCancelSchedule = async (id: string | number) => {
+    Alert.alert("Cancel Session", "Are you sure you want to cancel this scheduled session?", [
+      { text: "No", style: "cancel" },
+      { 
+        text: "Yes, Cancel", 
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await cancelSchedule(id);
+            fetchData();
+            Alert.alert("Success", "Session cancelled.");
+          } catch (e: any) {
+            Alert.alert("Error", e.response?.data?.message || "Failed to cancel session.");
+          }
+        }
+      }
+    ]);
   };
 
   const resetForm = () => {
@@ -143,37 +173,59 @@ export default function ScheduleScreen({ navigation }: Props) {
     setGuests([]);
     setGuestEmail('');
     setMode('meeting');
+    setRecurrence('once');
     setShowRoomSelect(false);
   };
 
   const renderMeetingItem = ({ item }: { item: any }) => {
-    const meetDate = new Date(item.startTime);
+    const rawTime = item.start_time || item.startTime || item.date || new Date().toISOString();
+    const meetDate = new Date(rawTime);
+    
+    // Safely parse time if `time` or `fromtime` is provided natively by the endpoint
+    let timeDisplay = meetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (item.time || item.fromtime) {
+      timeDisplay = item.time || item.fromtime;
+    }
+
+    const roomSlug = item.roomlink ? item.roomlink.split('/').pop() : (item.room?.slug || item.roomId || item.room_id);
+
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.dateBadge}>
-            <Text style={styles.dateDay}>{meetDate.getDate()}</Text>
-            <Text style={styles.dateMonth}>{meetDate.toLocaleString('default', { month: 'short' })}</Text>
+            <Text style={styles.dateDay}>{meetDate.getDate() || '?'}</Text>
+            <Text style={styles.dateMonth}>{meetDate.toLocaleString('default', { month: 'short' }) || ''}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardSubtitle}>Room: {item.room?.name || 'Unknown'}</Text>
+            <Text style={styles.cardTitle}>{item.title || 'Untitled Session'}</Text>
+            <Text style={styles.cardSubtitle}>Room: {item.roomname || item.room?.name || 'Unknown'}</Text>
+            {item.recurrence && item.recurrence !== 'once' && (
+              <Text style={{ fontSize: 10, color: '#207450', marginTop: 2, fontWeight: '600' }}>
+                Repeats: {item.recurrence}
+              </Text>
+            )}
           </View>
         </View>
         <View style={styles.cardFooter}>
           <View style={styles.timeRow}>
             <Clock size={16} color="#64748b" />
-            <Text style={styles.timeText}>
-              {meetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
+            <Text style={styles.timeText}>{timeDisplay}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.joinBtn}
-            onPress={() => navigation.navigate('Meeting', { roomId: item.room?.slug || item.roomId })}
-          >
-            <Video size={16} color="white" />
-            <Text style={styles.joinBtnText}>Join</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity 
+              style={[styles.joinBtn, { backgroundColor: '#ef4444' }]}
+              onPress={() => handleCancelSchedule(item.id)}
+            >
+              <Text style={styles.joinBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.joinBtn}
+              onPress={() => navigation.navigate('Meeting', { roomId: roomSlug })}
+            >
+              <Video size={16} color="white" />
+              <Text style={styles.joinBtnText}>Join</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -227,7 +279,7 @@ export default function ScheduleScreen({ navigation }: Props) {
         }}
       >
         <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.modalContainer}
         >
           <View style={styles.modalHeaderTop}>
@@ -387,6 +439,37 @@ export default function ScheduleScreen({ navigation }: Props) {
                 <Text style={styles.timezoneLabel}>Timezone <Text style={styles.asterisk}>*</Text></Text>
                 <View style={styles.timezoneBox}>
                   <Text style={styles.timezoneText} numberOfLines={1}>{timezone}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.timezoneRow, { marginTop: 12, flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 14 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                  <Calendar size={16} color="#64748b" />
+                  <Text style={styles.timezoneLabel}>Recurrence <Text style={styles.asterisk}>*</Text></Text>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%' }}>
+                  {['once', 'daily', 'weekly', 'monthly'].map(r => (
+                    <TouchableOpacity 
+                      key={r}
+                      onPress={() => setRecurrence(r)}
+                      style={{
+                        paddingHorizontal: 12, paddingVertical: 8, 
+                        backgroundColor: recurrence === r ? '#207450' : '#f1f5f9',
+                        borderRadius: 8,
+                        flexGrow: 1,
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Text style={{ 
+                        fontSize: 13, 
+                        fontWeight: recurrence === r ? 'bold' : '500',
+                        color: recurrence === r ? '#fff' : '#64748b',
+                        textTransform: 'capitalize' 
+                      }}>
+                        {r}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
             </View>

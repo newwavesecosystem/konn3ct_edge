@@ -50,7 +50,7 @@ Notifications.setNotificationHandler({
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  Meeting: { roomId: string };
+  Meeting: { roomId: string; meetingToken?: string };
   MeetingSummary: { roomId: string };
   Streaming: undefined;
   Recordings: undefined;

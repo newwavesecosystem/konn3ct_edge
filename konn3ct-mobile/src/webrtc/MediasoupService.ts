@@ -3,8 +3,10 @@ import { MediaStream } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
 import { useMeetingStore } from '../store/useMeetingStore';
 
-// Connected to Kubernetes Backend Ingress Domain
-const BACKEND_DOMAIN = process.env.EXPO_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
+// Signal server domain — as specified by the team:
+// https://konn3ctedge.konn3ct.net/signal
+export const SIGNAL_SERVER_DOMAIN = process.env.EXPO_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
+const BACKEND_DOMAIN = SIGNAL_SERVER_DOMAIN;
 
 export interface RemoteParticipant {
   id: string;
@@ -171,11 +173,21 @@ export class MediasoupService {
     });
   }
 
-  public async connect() {
-    const token = useAuthStore.getState().token;
-    if (!token) throw new Error('No auth token found');
+  public async connect(meetingToken?: string) {
+    const authToken = useAuthStore.getState().token;
+    if (!authToken && !meetingToken) throw new Error('No auth token found');
 
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}`;
+    // Use meeting JWT if provided (returned by start-a-room / kv4/join-room).
+    // The dev API issues Sanctum tokens (format: "id|hash") which the signal
+    // server doesn't accept. The start-a-room response embeds the correct
+    // meeting JWT in its URL (?t=...) — that is what the WS server validates.
+    const token = meetingToken || authToken!;
+
+    // URL-encode the token to prevent Android WebSocketModule from rejecting
+    // special characters (e.g. the `|` in Laravel Sanctum dev tokens) when
+    // the full URL is used as the default Origin header.
+    const encodedToken = encodeURIComponent(token);
+    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}`;
     console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
     
     this.ws = new WebSocket(wsUrl);
@@ -195,12 +207,14 @@ export class MediasoupService {
 
       this.ws!.onerror = (err) => {
         console.error('WebSocket connection error:', err);
-        reject(err);
+        // Don't reject here — onclose fires right after with the actual reason
       };
       
       this.ws!.onclose = (e) => {
         console.log(`WebSocket closed: ${e.code} ${e.reason}`);
         if (this.pingInterval) clearInterval(this.pingInterval);
+        // Reject with the close reason so callers can detect 404 vs other errors
+        reject(new Error(e.reason || `WebSocket closed with code ${e.code}`));
       };
 
       this.ws!.onmessage = async (event) => {
