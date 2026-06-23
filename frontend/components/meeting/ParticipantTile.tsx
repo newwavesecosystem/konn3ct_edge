@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
+import { useVideoHealth } from "../../hooks/useVideoHealth";
 
 interface ParticipantTileProps {
   participant: Participant;
@@ -49,6 +50,7 @@ export function ParticipantTile({
   const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = React.useState(true);
 
   React.useEffect(() => {
@@ -63,6 +65,21 @@ export function ParticipantTile({
   }, []);
 
   const isSelf = participant.id === currentUser.id;
+
+  const handleRecover = React.useCallback(() => {
+    // If recovery is triggered, we can try to re-attach the track to the srcObject
+    if (videoRef.current && participant.videoTrack) {
+      videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
+      videoRef.current.play().catch(e => console.warn("Play failed on recover:", e));
+    }
+  }, [participant.videoTrack]);
+
+  const { health, remountKey } = useVideoHealth({
+    videoRef,
+    track: participant.videoTrack,
+    isVisible,
+    onRecover: handleRecover
+  });
 
   React.useEffect(() => {
     if (!isSelf && participant.videoTrack) {
@@ -84,6 +101,7 @@ export function ParticipantTile({
   // Camera video ref
   const setVideoRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
       if (el) {
         if (participant.videoTrack) {
           if (el.srcObject) {
@@ -169,6 +187,7 @@ export function ParticipantTile({
           {isCameraEffectivelyOn && (
             <div className="absolute bottom-3 right-3 z-30 w-24 h-16 rounded-xl overflow-hidden border-2 border-white/20 shadow-xl">
               <video
+                key={`pip-video-${remountKey}`}
                 ref={setVideoRef}
                 autoPlay
                 playsInline
@@ -203,6 +222,7 @@ export function ParticipantTile({
           }
         >
           <video
+            key={`main-video-${remountKey}`}
             ref={setVideoRef}
             autoPlay
             playsInline

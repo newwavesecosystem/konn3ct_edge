@@ -426,4 +426,43 @@ test.describe('Media Health — Video & Audio diagnostics', () => {
     await unmuteBtn.click();
     await expect(muteBtn).toBeVisible({ timeout: 3000 });
   });
+
+  test('camera gracefully falls back if exact constraints trigger OverconstrainedError', async ({ page }) => {
+    // Intercept getUserMedia to throw OverconstrainedError on the first camera request
+    await page.addInitScript(() => {
+      const originalGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      let firstAttempt = true;
+      navigator.mediaDevices.getUserMedia = async (constraints) => {
+        if (constraints && constraints.video && firstAttempt) {
+          firstAttempt = false;
+          const err = new Error('Constraints could not be satisfied');
+          err.name = 'OverconstrainedError';
+          throw err;
+        }
+        return originalGUM(constraints);
+      };
+    });
+
+    await joinMeeting(page);
+
+    // Turn on camera
+    const camOnBtn = page.locator('button[title="Camera on"]');
+    const camOffBtn = page.locator('button[title="Camera off"]');
+    
+    if (await camOnBtn.isVisible()) {
+      await camOnBtn.click();
+    }
+    
+    // UI should show the "Camera off" button, indicating it successfully bypassed the error
+    await expect(camOffBtn).toBeVisible({ timeout: 5000 });
+    
+    // Verify local video is playing
+    const liveVideoTracks = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('video'))
+        .filter(v => v.srcObject instanceof MediaStream)
+        .flatMap(v => (v.srcObject as MediaStream).getVideoTracks())
+        .filter(t => t.readyState === 'live' && t.enabled).length
+    );
+    expect(liveVideoTracks).toBeGreaterThanOrEqual(1);
+  });
 });
