@@ -30,6 +30,15 @@ export class WebRTCClient {
   private reconnectTimeoutId?: NodeJS.Timeout;
   private isRepublishing = false;
 
+  // Camera state tracking
+  public lastCameraErrorName: string | null = null;
+  public lastCameraErrorMessage: string | null = null;
+  public lastCameraConstraintAttempt: string | null = null;
+  public cameraSwitchInProgress: boolean = false;
+  public cameraStartInProgress: boolean = false;
+  public cameraStartAttemptCount: number = 0;
+  public cameraFallbackReachedVideoTrue: boolean = false;
+
   public userId: string | undefined;
   public userName: string | undefined;
   public userRole: string | undefined;
@@ -106,10 +115,11 @@ export class WebRTCClient {
       iceConnectionState: this.sendTransport?.iceState || this.recvTransport?.iceState,
       reconnectAttempts: this.reconnectAttempts,
       producers: {
-        audio: !!this.localAudioProducer,
-        video: !!this.localVideoProducer,
+        audio: this.localAudioProducer ? { active: true, paused: this.localAudioProducer.paused, closed: this.localAudioProducer.closed } : null,
+        video: this.localVideoProducer ? { active: true, paused: this.localVideoProducer.paused, closed: this.localVideoProducer.closed } : null,
         screen: !!this.screenShareProducer
       },
+      isAudioOnlyMode: this.isAudioOnlyMode,
       consumersCount: this.consumers.size,
       audioTrack: {
         readyState: this.rawAudioTrack?.readyState,
@@ -122,6 +132,15 @@ export class WebRTCClient {
         degradations: 0,
         lastDegradation: "none",
         fallbackMode: false
+      },
+      camera: {
+        lastErrorName: this.lastCameraErrorName,
+        lastErrorMessage: this.lastCameraErrorMessage,
+        lastConstraintAttempt: this.lastCameraConstraintAttempt,
+        selectedVideoInputId: this.selectedVideoInputId ? `${this.selectedVideoInputId.substring(0, 4)}...${this.selectedVideoInputId.substring(this.selectedVideoInputId.length - 4)}` : "default",
+        cameraSwitchInProgress: this.cameraSwitchInProgress,
+        cameraStartAttemptCount: this.cameraStartAttemptCount,
+        fallbackReachedVideoTrue: this.cameraFallbackReachedVideoTrue
       }
     };
   }
@@ -573,9 +592,9 @@ export class WebRTCClient {
     }
   }
 
-  public sendCameraState(isCameraOn: boolean) {
+  public sendCameraState(isCameraOn: boolean, audioOnlyMode: boolean = false) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn }));
+      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn, audioOnlyMode }));
     }
   }
 
@@ -899,69 +918,103 @@ export class WebRTCClient {
     }
   }
 
-  public async enableCamera(): Promise<MediaStreamTrack> {
-    if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
-    
-    // Cleanup existing camera producer if replacing
-    if (this.localVideoProducer) {
-      this.localVideoProducer.close();
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'stop_producer',
-          producerId: this.localVideoProducer.id,
-          appData: { source: 'camera' }
-        }));
-      }
-    }
+  private async acquireCameraStream(deviceId?: string): Promise<MediaStream> {
+    this.cameraStartAttemptCount++;
+    this.lastCameraErrorName = null;
+    this.lastCameraErrorMessage = null;
+    this.cameraFallbackReachedVideoTrue = false;
 
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // 8. Media Constraints Rescaling (Upstream optimization)
-    let videoConstraints: any = {};
-    if (this.selectedVideoInputId) {
-      videoConstraints = { deviceId: { exact: this.selectedVideoInputId } };
-    } else {
-      videoConstraints = { facingMode: "user" };
-    }
+    // A. Selected device with safe ideal constraints
+    const constraintsA: MediaStreamConstraints = {
+      video: deviceId 
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }
+        : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
+      audio: false
+    };
 
-    if (this.isLowBandwidth) {
-      videoConstraints.width = { ideal: 320, max: 320 };
-      videoConstraints.height = { ideal: 240, max: 240 };
-      videoConstraints.frameRate = { ideal: 15, max: 15 };
-    } else {
-      videoConstraints.width = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 1280 } : { ideal: 640 });
-      videoConstraints.height = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 });
-    }
+    // B. Selected device only
+    const constraintsB: MediaStreamConstraints = {
+      video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" },
+      audio: false
+    };
 
-    // Retry logic for Windows/Chrome hardware release latency (AbortError: Timeout starting video source)
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
-          video: videoConstraints,
-          audio: false 
-        });
-        break;
-      } catch (err: any) {
-        retries--;
-        if (err.name === 'AbortError' && retries > 0) {
-          console.warn(`Camera start timeout, retrying... (${retries} left)`);
-          await new Promise(r => setTimeout(r, 800)); // Wait for hardware to release
-        } else if (err.name === 'OverconstrainedError' && retries > 0) {
-          console.warn(`OverconstrainedError: camera does not support constraints, falling back...`);
-          if (videoConstraints.deviceId && videoConstraints.deviceId.exact) {
-             delete videoConstraints.deviceId;
-             videoConstraints.facingMode = "user";
-          } else {
-             delete videoConstraints.width;
-             delete videoConstraints.height;
-             delete videoConstraints.frameRate;
+    // C. General safe camera
+    const constraintsC: MediaStreamConstraints = {
+      video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 24 } },
+      audio: false
+    };
+
+    // D. Absolute fallback
+    const constraintsD: MediaStreamConstraints = {
+      video: true,
+      audio: false
+    };
+
+    const attempts = [
+      { name: 'A (Ideal)', constraints: constraintsA },
+      { name: 'B (Device Only)', constraints: constraintsB },
+      { name: 'C (Safe)', constraints: constraintsC },
+      { name: 'D (Fallback)', constraints: constraintsD }
+    ];
+
+    for (const attempt of attempts) {
+      this.lastCameraConstraintAttempt = attempt.name;
+      if (attempt.name === 'D (Fallback)') this.cameraFallbackReachedVideoTrue = true;
+
+      let retries = 2;
+      while (retries > 0) {
+        try {
+          return await navigator.mediaDevices.getUserMedia(attempt.constraints);
+        } catch (err: any) {
+          this.lastCameraErrorName = err.name;
+          this.lastCameraErrorMessage = err.message;
+          retries--;
+          
+          if (err.name === 'AbortError' && retries > 0) {
+            console.warn(`Camera start timeout (${attempt.name}), retrying... (${retries} left)`);
+            
+            // Release stuck camera hardware before retry only when necessary
+            if (this.rawCameraStream) {
+              this.rawCameraStream.getTracks().forEach(t => t.stop());
+            }
+            if (this.videoProcessor) {
+              this.videoProcessor.stopProcessing();
+            }
+            await new Promise(r => setTimeout(r, 400));
+          } else if (err.name === 'OverconstrainedError') {
+            console.warn(`OverconstrainedError on attempt ${attempt.name}, falling back to next...`);
+            break; 
+          } else if (retries === 0 || err.name !== 'AbortError') {
+             console.warn(`Camera error on attempt ${attempt.name}: ${err.name} - ${err.message}`);
+             break;
           }
-        } else {
-          throw err;
         }
       }
     }
+    
+    // Improve user-facing recovery
+    throw new Error("Camera could not start. Please close other apps using the camera, check browser permission, and try again.");
+  }
+
+  public async enableCamera(): Promise<MediaStreamTrack> {
+    if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    if (this.cameraStartInProgress) throw new Error("Camera start already in progress");
+    
+    this.cameraStartInProgress = true;
+    try {
+      // Cleanup existing camera producer if replacing
+      if (this.localVideoProducer) {
+        this.localVideoProducer.close();
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'stop_producer',
+            producerId: this.localVideoProducer.id,
+            appData: { source: 'camera' }
+          }));
+        }
+      }
+
+      this.rawCameraStream = await this.acquireCameraStream(this.selectedVideoInputId);
 
     if (!this.rawCameraStream) {
       throw new Error("Failed to initialize camera stream");
@@ -996,6 +1049,7 @@ export class WebRTCClient {
     // 4. Robust Simulcast/SVC Configuration (Spatial & Temporal Scalability)
     const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
     const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     const encodings = this.isLowBandwidth 
       ? [{ maxBitrate: 150000 }] 
@@ -1033,7 +1087,12 @@ export class WebRTCClient {
     }
     
     return videoTrack;
-
+    } catch (e) {
+      this.cameraStartInProgress = false;
+      throw e;
+    } finally {
+      this.cameraStartInProgress = false;
+    }
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
@@ -1219,19 +1278,26 @@ export class WebRTCClient {
   public async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
 
-    const constraints: MediaStreamConstraints = {};
-    if (kind === 'audio') {
-      constraints.audio = { deviceId: { exact: deviceId } };
-    } else {
-      constraints.video = { 
-        deviceId: { exact: deviceId }, 
-        width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
-        height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
-      };
+    if (kind === 'video' && this.cameraSwitchInProgress) {
+      throw new Error("Camera switch already in progress");
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    let newTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+    let stream: MediaStream;
+    let newTrack: MediaStreamTrack;
+
+    if (kind === 'audio') {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
+      newTrack = stream.getAudioTracks()[0];
+    } else {
+      this.cameraSwitchInProgress = true;
+      try {
+        stream = await this.acquireCameraStream(deviceId);
+        newTrack = stream.getVideoTracks()[0];
+      } catch (e) {
+        this.cameraSwitchInProgress = false;
+        throw e;
+      }
+    }
 
     const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
 
@@ -1248,10 +1314,34 @@ export class WebRTCClient {
       }
 
       // Replace the track in the Mediasoup producer
-      await producer.replaceTrack({ track: newTrack });
-      // Stop the old track to release the hardware
-      if (oldTrack) {
-        oldTrack.stop();
+      if (kind === 'video') {
+        try {
+          this.rawCameraStream = stream;
+          if (this.videoProcessor) {
+            if (this.videoProcessor.getMode() !== 'none') {
+              const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+              newTrack = processedStream.getVideoTracks()[0];
+            } else {
+              this.videoProcessor.stopProcessing();
+            }
+          }
+          await producer.replaceTrack({ track: newTrack });
+          // Only stop old track AFTER successful replacement
+          if (oldTrack && oldTrack !== newTrack) {
+            oldTrack.stop();
+          }
+        } catch (e) {
+          // If replacement fails, keep the old track running
+          console.error("Failed to replace video track, restoring old track", e);
+          throw e;
+        } finally {
+          this.cameraSwitchInProgress = false;
+        }
+      } else {
+        await producer.replaceTrack({ track: newTrack });
+        if (oldTrack) {
+          oldTrack.stop();
+        }
       }
     } else {
       if (kind === 'audio') {
@@ -1264,7 +1354,13 @@ export class WebRTCClient {
         }
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
       } else {
+        this.rawCameraStream = stream;
+        if (this.videoProcessor && this.videoProcessor.getMode() !== 'none') {
+           const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+           newTrack = processedStream.getVideoTracks()[0];
+        }
         this.localVideoProducer = await this.sendTransport.produce({ track: newTrack, appData: { source: 'camera' } });
+        this.cameraSwitchInProgress = false;
       }
     }
 

@@ -24,6 +24,7 @@ export interface Participant {
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
   isMobile?: boolean;
+  audioOnlyMode?: boolean;
 }
 
 export interface ChatMessage {
