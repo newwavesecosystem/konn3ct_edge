@@ -192,6 +192,22 @@ export function QADiagnosticsOverlay() {
           <div>Layout: {currentDiagnostics.layout.mode}</div>
         </div>
 
+        <div>
+          <h3 className="text-white font-bold border-b border-white/20 mb-1">Participants</h3>
+          {currentDiagnostics.participants.length === 0 ? <div>No participants</div> : null}
+          {currentDiagnostics.participants.map((p: any) => (
+            <div key={p.id} className="mb-2 pl-2 border-l border-white/10 text-[10px]">
+              <div><span className="text-white font-bold">{p.id}</span></div>
+              <div className={p.qaPlaybackStats?.diagnosisHint !== 'video-healthy' ? 'text-yellow-400' : ''}>
+                Diagnosis: {p.qaPlaybackStats?.diagnosisHint || 'unknown'}
+              </div>
+              <div>Mode: {p.tileRenderMode}</div>
+              <div>Res: {p.qaPlaybackStats?.videoDimensions || 'N/A'}</div>
+              <div>Err: {p.qaPlaybackStats?.lastVideoError || 'none'}</div>
+            </div>
+          ))}
+        </div>
+
         {/* Issue Marker */}
         <div className="mt-4 border border-yellow-500/50 rounded bg-yellow-500/10 p-2">
           <h3 className="text-yellow-400 font-bold flex items-center gap-1 mb-2"><Flag className="w-3 h-3"/> Mark Issue Snapshot</h3>

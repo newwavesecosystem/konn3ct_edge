@@ -22,6 +22,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   // Backoff and loop prevention
   const recoveryCountRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
+  const recoveryStartTimeRef = useRef<number>(0);
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -69,6 +70,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
     logDev(`Initiating recovery due to: ${reason}`);
     recoveryCountRef.current++;
     lastRecoveryTimeRef.current = now;
+    recoveryStartTimeRef.current = now;
     
     setHealth('recovering');
     setRemountKey(prev => prev + 1);
@@ -90,6 +92,16 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
     let checkInterval: NodeJS.Timeout;
 
     const checkHealth = () => {
+      // 1. Timeout for recovering state (5 seconds)
+      if (health === 'recovering' && recoveryStartTimeRef.current > 0) {
+        if (Date.now() - recoveryStartTimeRef.current > 5000) {
+          logDev('Recovery overlay timed out, marking as stalled to prevent stuck UI but keeping diagnostic honest.');
+          setHealth('stalled');
+          recoveryStartTimeRef.current = 0;
+          return; // Skip further checks this tick
+        }
+      }
+
       if (track.readyState === 'ended') {
         setHealth('ended');
         return;
@@ -99,34 +111,47 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
         return;
       }
 
-      if (video.readyState < 2) {
-        stallCountRef.current++;
-        if (stallCountRef.current > 5) {
-          triggerRecovery('readyState stuck below 2');
-        }
-        return;
-      }
-
-      if (!video.paused) {
+      // 2. Strong indicators of healthy playback
+      // If we have dimensions AND readyState >= 2 (HAVE_CURRENT_DATA) or 3 (HAVE_FUTURE_DATA),
+      // we consider it healthy enough to clear the overlay, even if currentTime is stuck at 0 (Safari quirk).
+      if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
         const currentTime = video.currentTime;
-        if (currentTime === lastTimeRef.current) {
+        if (currentTime !== lastTimeRef.current) {
+          // Absolute proof of playing
+          lastTimeRef.current = currentTime;
+          stallCountRef.current = 0;
+          if (health !== 'healthy') {
+             setHealth('healthy');
+             recoveryStartTimeRef.current = 0;
+          }
+        } else if (health === 'recovering') {
+          // It's recovering, but has dimensions and readyState. Safari might be stuck at 0.
+          // Clear it anyway to avoid a stuck overlay on a working video.
+          setHealth('healthy');
+          recoveryStartTimeRef.current = 0;
+        } else if (!video.paused) {
+          // It's "playing" but currentTime is stalled.
           stallCountRef.current++;
           if (stallCountRef.current > 4) {
             triggerRecovery('currentTime stalled');
             return;
           }
-        } else {
-          lastTimeRef.current = currentTime;
-          stallCountRef.current = 0;
-          setHealth('healthy');
         }
-      }
-
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
-        stallCountRef.current++;
-        if (stallCountRef.current > 5) {
-          triggerRecovery('Zero dimensions');
+      } else {
+        // Missing dimensions or readyState
+        if (video.readyState < 2) {
+          stallCountRef.current++;
+          if (stallCountRef.current > 5) {
+            triggerRecovery('readyState stuck below 2');
+          }
           return;
+        }
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          stallCountRef.current++;
+          if (stallCountRef.current > 5) {
+            triggerRecovery('Zero dimensions');
+            return;
+          }
         }
       }
 
@@ -167,7 +192,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
       track.removeEventListener('ended', handleEnded);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [track, videoRef, isVisible, checkBlackFrame, triggerRecovery]);
+  }, [health, track, videoRef, isVisible, checkBlackFrame, triggerRecovery]);
 
   return { health, remountKey, triggerRecovery };
 }
