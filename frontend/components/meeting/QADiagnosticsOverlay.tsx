@@ -72,7 +72,8 @@ export function QADiagnosticsOverlay() {
         videoSuspendedReason: p.videoSuspendedReason,
         networkQuality: p.networkQuality,
         videoTrackExists: !!p.videoTrack,
-        tileRenderMode: getEffectiveVideoState(p)
+        tileRenderMode: getEffectiveVideoState(p),
+        qaPlaybackStats: p.qaPlaybackStats
       })),
       webrtc: {
         wsState: webrtcInfo.wsState,
@@ -82,7 +83,10 @@ export function QADiagnosticsOverlay() {
         producers: webrtcInfo.producers,
         consumers: webrtcInfo.consumersCount,
         lastCameraStateBroadcast: webrtcInfo.lastCameraStateBroadcast,
-        lastCameraStateReceived: webrtcInfo.lastCameraStateReceived
+        lastCameraStateReceived: webrtcInfo.lastCameraStateReceived,
+        videoProducerExists: webrtcInfo.producers?.video?.active || false,
+        videoProducerClosed: webrtcInfo.producers?.video?.closed ?? true,
+        videoProducerPaused: webrtcInfo.producers?.video?.paused ?? false
       },
       cameraFallback: webrtcInfo.camera,
       virtualBackground: {

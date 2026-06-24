@@ -24,8 +24,23 @@ export interface Participant {
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
   isMobile?: boolean;
+  
+  // Network/Media overrides
   audioOnlyMode?: boolean;
   videoSuspendedReason?: 'network';
+
+  // QA Diagnostics
+  qaPlaybackStats?: {
+    consumerCount?: number;
+    videoTrackExists?: boolean;
+    remoteTrackReadyState?: string;
+    remoteTrackMuted?: boolean;
+    remoteTrackEnabled?: boolean;
+    tileRenderMode?: string;
+    videoDimensions?: string;
+    lastVideoError?: string;
+    playbackRecoveryCount?: number;
+  };
 }
 
 export interface ChatMessage {

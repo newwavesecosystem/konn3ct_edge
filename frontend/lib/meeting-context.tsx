@@ -491,9 +491,10 @@ export function MeetingProvider({
                 toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
                 webrtcClient.current.isAudioOnlyMode = true; // Set local WebRTC flag synchronously before React update
                 webrtcClient.current.disableCamera(); // Pause producer cleanly
+                localCameraTrackRef.current = null; // Clear stale track
                 webrtcClient.current.sendCameraState(false, true, 'network');
                 setIsCameraOn(false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network' } : p));
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
               }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
@@ -1056,8 +1057,9 @@ export function MeetingProvider({
                     return { ...p, screenTrack: consumer.track as MediaStreamTrack, isScreenSharing: true };
                   }
                   if (consumer.kind === 'video') {
-                    // Do not override isCameraOn to true if audioOnlyMode is active.
-                    const newCameraOn = p.audioOnlyMode ? false : true;
+                    // Do not override isCameraOn to true if audioOnlyMode is active or explicit camera-off
+                    const canonicalCameraOff = p.audioOnlyMode || p.videoSuspendedReason === 'network' || p.isCameraOn === false;
+                    const newCameraOn = canonicalCameraOff ? false : true;
                     return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: newCameraOn };
                   }
                 }
@@ -1346,26 +1348,27 @@ export function MeetingProvider({
       setIsCameraOn(newState);
       setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
     } else {
-      if (!localCameraTrackRef.current) {
-        // First time turning on camera
-        webrtcClient.current?.enableCamera().then(async track => {
-          let finalTrack = track;
-          // Apply VB
-          if (vbMode !== 'none' && webrtcClient.current) {
-            const vbTrack = await webrtcClient.current.setVirtualBackground(vbMode, vbImageUrl);
-            if (vbTrack) finalTrack = vbTrack;
-          }
-          localCameraTrackRef.current = finalTrack;
-          webrtcClient.current?.sendCameraState(newState);
-          setIsCameraOn(newState);
-          setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: finalTrack } : p));
-        }).catch(err => console.error("Failed to enable camera:", err));
-      } else {
-        webrtcClient.current?.resumeCamera();
+      // Force fresh camera start on any toggle ON. No resumeCamera() usage for this flow.
+      webrtcClient.current?.enableCamera().then(async track => {
+        if (track.readyState !== 'live') {
+          throw new Error("Track is not live");
+        }
+        let finalTrack = track;
+        // Apply VB
+        if (vbMode !== 'none' && webrtcClient.current) {
+          const vbTrack = await webrtcClient.current.setVirtualBackground(vbMode, vbImageUrl);
+          if (vbTrack) finalTrack = vbTrack;
+        }
+        localCameraTrackRef.current = finalTrack;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState } : p));
-      }
+        setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+      }).catch(err => {
+        console.error("Failed to enable camera:", err);
+        toast.error("Camera could not start. Please retry.");
+        // Ensure UI stays off
+        setIsCameraOn(false);
+      });
     }
   }, [isCameraOn, initialCurrentUser.id, vbMode, vbImageUrl]);
 
