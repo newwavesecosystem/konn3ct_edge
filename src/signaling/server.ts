@@ -1322,6 +1322,14 @@ export function initializeSignaling(server: Server) {
 
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name);
 
+        // QA-004 Codec Logging
+        if (data.kind === 'video' && process.env.NODE_ENV !== 'production') {
+          const codec = data.rtpParameters?.codecs?.[0];
+          if (codec) {
+            logger.info(`[QA-004 Codec] Video producer created | User: ${userId.substring(0,6)}... | Codec: ${codec.mimeType} | Params: ${JSON.stringify(codec.parameters || {})} | ProducerID: ${producerId.substring(0,6)}...`);
+          }
+        }
+
         // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
         roomProducers.get(roomId)!.push({ producerId, userId, name: client.name, kind: data.kind, appData });

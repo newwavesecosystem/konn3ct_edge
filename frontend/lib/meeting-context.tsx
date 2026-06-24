@@ -1060,7 +1060,18 @@ export function MeetingProvider({
                     // Do not override isCameraOn to true if audioOnlyMode is active or explicit camera-off
                     const canonicalCameraOff = p.audioOnlyMode || p.videoSuspendedReason === 'network' || p.isCameraOn === false;
                     const newCameraOn = canonicalCameraOff ? false : true;
-                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: newCameraOn };
+                    return { 
+                      ...p, 
+                      videoTrack: consumer.track as MediaStreamTrack, 
+                      isCameraOn: newCameraOn,
+                      qaPlaybackStats: {
+                        ...p.qaPlaybackStats,
+                        consumerExists: true,
+                        consumerCodec: consumer.rtpParameters?.codecs?.[0]?.mimeType,
+                        consumerPayloadType: consumer.rtpParameters?.codecs?.[0]?.payloadType,
+                        consumerCodecParams: consumer.rtpParameters?.codecs?.[0]?.parameters
+                      }
+                    };
                   }
                 }
                 return p;
@@ -1073,13 +1084,20 @@ export function MeetingProvider({
                 isMuted: consumer.kind !== "audio",
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
                 isScreenSharing: consumer.kind === "video" && source === 'screen',
+                audioTrack: consumer.kind === "audio" ? (consumer.track as MediaStreamTrack) : undefined,
+                videoTrack: consumer.kind === "video" && source !== 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
+                screenTrack: consumer.kind === "video" && source === 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
                 isHandRaised: false,
                 isSpeaking: false,
                 joinedAt: new Date().toISOString(),
+                isMobile: false,
+                qaPlaybackStats: consumer.kind === "video" ? {
+                  consumerExists: true,
+                  consumerCodec: consumer.rtpParameters?.codecs?.[0]?.mimeType,
+                  consumerPayloadType: consumer.rtpParameters?.codecs?.[0]?.payloadType,
+                  consumerCodecParams: consumer.rtpParameters?.codecs?.[0]?.parameters
+                } : undefined
               };
-              if (consumer.kind === "video" && source === 'screen') newParticipant.screenTrack = consumer.track as MediaStreamTrack;
-              else if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
-              if (consumer.kind === "audio") newParticipant.audioTrack = consumer.track as MediaStreamTrack;
               
               return [...prev, newParticipant];
             }

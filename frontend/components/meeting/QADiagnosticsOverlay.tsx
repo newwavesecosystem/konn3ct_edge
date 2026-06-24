@@ -176,6 +176,7 @@ export function QADiagnosticsOverlay() {
         <div>
           <h3 className="text-white font-bold border-b border-white/20 mb-1">WebRTC & VB</h3>
           <div>Producers: A:{currentDiagnostics.webrtc.producers?.audio?1:0} V:{currentDiagnostics.webrtc.producers?.video?1:0} S:{currentDiagnostics.webrtc.producers?.screen?1:0}</div>
+          <div className="text-[10px] text-gray-400">Local Video Codec: {currentDiagnostics.webrtc.producers?.video?.codec || 'none'}</div>
           <div>Consumers: {currentDiagnostics.webrtc.consumers}</div>
           <div>VB Mode: {currentDiagnostics.virtualBackground.mode}</div>
           {currentDiagnostics.virtualBackground.degradations > 0 && (
@@ -203,6 +204,7 @@ export function QADiagnosticsOverlay() {
               </div>
               <div>Mode: {p.tileRenderMode}</div>
               <div>Res: {p.qaPlaybackStats?.videoDimensions || 'N/A'}</div>
+              <div>Remote Codec: {p.qaPlaybackStats?.consumerCodec || 'N/A'}</div>
               <div>Err: {p.qaPlaybackStats?.lastVideoError || 'none'}</div>
             </div>
           ))}
