@@ -147,7 +147,7 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack && isVisible;
+  const isCameraEffectivelyOn = participant.isCameraOn && !participant.audioOnlyMode && !!participant.videoTrack && isVisible;
 
   return (
     <div
@@ -263,6 +263,13 @@ export function ParticipantTile({
               <div className="absolute inset-0 rounded-full border-4 border-brand-green/30 animate-pulse-fast scale-110 pointer-events-none" />
             )}
           </div>
+          {participant.audioOnlyMode && (
+            <div className="absolute bottom-6 flex flex-col items-center">
+              <span className="text-white/80 text-xs flex items-center gap-1 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full shadow-lg">
+                <SignalLow className="w-3 h-3 text-red-400" /> Audio Only
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -275,7 +282,7 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Screen sharing badge ── */}
+      {/* ── Overlays (Name, Mic, Controls) ── */}
       {participant.isScreenSharing && (
         <div className="absolute top-3 left-3 z-10">
           <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">

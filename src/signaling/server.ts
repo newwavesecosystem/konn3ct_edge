@@ -1047,7 +1047,8 @@ export function initializeSignaling(server: Server) {
         broadcastToRoom(roomId, {
           type: 'camera_state',
           userId,
-          isCameraOn: data.isCameraOn
+          isCameraOn: data.isCameraOn,
+          audioOnlyMode: data.audioOnlyMode
         });
         break;
 

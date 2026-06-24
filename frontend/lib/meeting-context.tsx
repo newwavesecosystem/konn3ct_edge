@@ -490,9 +490,9 @@ export function MeetingProvider({
               if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
                 toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
                 webrtcClient.current.enableAudioOnlyMode();
-                webrtcClient.current.sendCameraState(false);
+                webrtcClient.current.sendCameraState(false, true);
                 setIsCameraOn(false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false } : p));
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true } : p));
               }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
@@ -502,6 +502,8 @@ export function MeetingProvider({
               if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
                 toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
                 webrtcClient.current.disableAudioOnlyMode();
+                webrtcClient.current.sendCameraState(isCameraOn, false);
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false } : p));
               }
             }
             
@@ -756,7 +758,7 @@ export function MeetingProvider({
         client.onCameraState = (msg) => {
           const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn } : p
+            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode } : p
           ));
         };
 

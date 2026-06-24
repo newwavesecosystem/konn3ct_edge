@@ -59,8 +59,17 @@ export function QADiagnosticsOverlay() {
         screenShareActive: meeting.isScreenSharing,
         selectedAudioInput: meeting.selectedDevices?.audioInput,
         selectedVideoInput: meeting.selectedDevices?.videoInput,
-        audioTrackState: webrtcInfo.audioTrack || "unavailable"
+        audioTrackState: webrtcInfo.audioTrack || "unavailable",
+        audioOnlyMode: webrtcInfo.isAudioOnlyMode || false,
+        videoProducerPaused: webrtcInfo.producers?.video?.paused ?? false,
+        videoProducerClosed: webrtcInfo.producers?.video?.closed ?? true,
       },
+      participants: meeting.participants.map(p => ({
+        id: truncateId(p.id),
+        isCameraOn: p.isCameraOn,
+        audioOnlyMode: p.audioOnlyMode,
+        networkQuality: p.networkQuality
+      })),
       webrtc: {
         wsState: webrtcInfo.wsState,
         sendTransport: webrtcInfo.sendTransportState,
@@ -69,6 +78,7 @@ export function QADiagnosticsOverlay() {
         producers: webrtcInfo.producers,
         consumers: webrtcInfo.consumersCount
       },
+      cameraFallback: webrtcInfo.camera,
       virtualBackground: {
         mode: meeting.vbMode || webrtcInfo.videoProcessor?.mode || "none",
         isActive: webrtcInfo.videoProcessor?.active,
