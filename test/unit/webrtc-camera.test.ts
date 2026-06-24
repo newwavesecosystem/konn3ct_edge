@@ -181,4 +181,22 @@ describe('WebRTCClient Camera Fallback', () => {
       JSON.stringify({ type: 'camera_state', isCameraOn: false, audioOnlyMode: false })
     );
   });
+
+  it('disableCamera clears stale camera refs and raw streams', async () => {
+    webrtc.ws = new (global as any).WebSocket();
+    webrtc.ws!.readyState = 1;
+    webrtc.ws!.send = vi.fn();
+
+    webrtc.rawCameraStream = { getTracks: () => [{ stop: vi.fn() }] } as any;
+    webrtc.localVideoProducer = { id: 'prod1', close: vi.fn(), closed: false } as any;
+    webrtc.videoProcessor = { stopProcessing: vi.fn() } as any;
+
+    webrtc.disableCamera();
+
+    expect(webrtc.rawCameraStream).toBeNull();
+    expect(webrtc.localVideoProducer).toBeNull();
+    expect(webrtc.ws?.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'stop_producer', producerId: 'prod1', appData: { source: 'camera' } })
+    );
+  });
 });

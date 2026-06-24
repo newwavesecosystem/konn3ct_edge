@@ -109,21 +109,42 @@ export function ParticipantTile({
   const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
   const setVideoRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
+      // Clean up previous event listeners if needed
+      if (lastVideoElRef.current) {
+        lastVideoElRef.current.onloadedmetadata = null;
+        lastVideoElRef.current.oncanplay = null;
+      }
+
       videoRef.current = el;
       if (el) {
         lastVideoElRef.current = el;
+
+        const attemptPlay = () => {
+          if (!el) return;
+          el.play().catch((e) => {
+            if (e.name !== 'AbortError') {
+              console.warn("Video play failed:", e);
+              (el as any)._lastError = e.message || e.name;
+            }
+          });
+        };
+
+        el.onloadedmetadata = attemptPlay;
+        el.oncanplay = attemptPlay;
+
         if (participant.videoTrack) {
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
-            if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+            if (stream.getVideoTracks()[0] === participant.videoTrack) {
+              attemptPlay();
+              return;
+            }
             stream.getTracks().forEach(t => stream.removeTrack(t));
             stream.addTrack(participant.videoTrack);
           } else {
             el.srcObject = new MediaStream([participant.videoTrack]);
           }
-          el.play().catch((e) => {
-            if (e.name !== 'AbortError') console.warn("Video play failed:", e);
-          });
+          attemptPlay();
         } else {
           el.srcObject = null;
         }
@@ -134,6 +155,27 @@ export function ParticipantTile({
     },
     [participant.videoTrack]
   );
+
+  // Handle Safari backgrounding/foregrounding
+  React.useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && videoRef.current && participant.videoTrack) {
+        // Re-bind to wake up Safari hardware pipeline
+        videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
+        videoRef.current.play().catch(e => {
+            if (e.name !== 'AbortError') console.warn("Visibility video play failed:", e);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
+  }, [participant.videoTrack]);
 
   // Dedicated screen share ref — completely independent from camera
   const setScreenRef = React.useCallback(
@@ -161,6 +203,20 @@ export function ParticipantTile({
 
   const effectiveVideoState = getEffectiveVideoState(participant);
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
+
+  // Mutate QA stats for diagnostics overlay
+  React.useEffect(() => {
+    participant.qaPlaybackStats = {
+      videoTrackExists: !!participant.videoTrack,
+      remoteTrackReadyState: participant.videoTrack?.readyState,
+      remoteTrackMuted: participant.videoTrack?.muted,
+      remoteTrackEnabled: participant.videoTrack?.enabled,
+      tileRenderMode: effectiveVideoState,
+      videoDimensions: videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : '0x0',
+      lastVideoError: (videoRef.current as any)?._lastError,
+      playbackRecoveryCount: remountKey
+    };
+  });
 
   return (
     <div
@@ -242,13 +298,19 @@ export function ParticipantTile({
             muted
             className={cn(
               "w-full h-full",
-              "object-cover"
+              "object-cover",
+              health === 'recovering' && "opacity-50"
             )}
             style={{
               transform:
                 isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
             }}
           />
+          {health === 'recovering' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-medium text-sm">
+              Video recovering...
+            </div>
+          )}
         </div>
       ) : (
         <div
