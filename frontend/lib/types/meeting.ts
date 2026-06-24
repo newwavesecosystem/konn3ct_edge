@@ -31,15 +31,28 @@ export interface Participant {
 
   // QA Diagnostics
   qaPlaybackStats?: {
-    consumerCount?: number;
-    videoTrackExists?: boolean;
+    consumerExists?: boolean;
+    consumerPaused?: boolean;
+    consumerClosed?: boolean;
     remoteTrackReadyState?: string;
     remoteTrackMuted?: boolean;
     remoteTrackEnabled?: boolean;
+    remoteTrackEnded?: boolean;
+    videoElementAttached?: boolean;
+    videoTrackExists?: boolean;
     tileRenderMode?: string;
     videoDimensions?: string;
+    currentTime?: number;
+    currentTimeProgressing?: boolean;
+    readyState?: number;
+    lastVideoPlayAttemptAt?: string;
+    lastVideoPlayResult?: string;
     lastVideoError?: string;
+    lastHealthyAt?: string;
+    isRecovering?: boolean;
+    recoveryDurationMs?: number;
     playbackRecoveryCount?: number;
+    diagnosisHint?: string;
   };
 }
 

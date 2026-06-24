@@ -121,10 +121,17 @@ export function ParticipantTile({
 
         const attemptPlay = () => {
           if (!el) return;
-          el.play().catch((e) => {
+          participant.qaPlaybackStats = participant.qaPlaybackStats || {};
+          participant.qaPlaybackStats.lastVideoPlayAttemptAt = new Date().toISOString();
+          
+          el.play().then(() => {
+             participant.qaPlaybackStats!.lastVideoPlayResult = 'success';
+          }).catch((e) => {
+            participant.qaPlaybackStats!.lastVideoPlayResult = 'error';
             if (e.name !== 'AbortError') {
               console.warn("Video play failed:", e);
               (el as any)._lastError = e.message || e.name;
+              participant.qaPlaybackStats!.lastVideoError = e.message || e.name;
             }
           });
         };
@@ -204,18 +211,46 @@ export function ParticipantTile({
   const effectiveVideoState = getEffectiveVideoState(participant);
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 
+  // Determine diagnosis hint
+  let diagnosisHint = 'video-healthy';
+  if (participant.audioOnlyMode) diagnosisHint = 'audio-only';
+  else if (participant.isCameraOn === false) diagnosisHint = 'camera-off';
+  else if (!participant.videoTrack && !participant.qaPlaybackStats?.consumerExists) diagnosisHint = 'no-consumer';
+  else if (!participant.videoTrack && participant.qaPlaybackStats?.consumerExists) diagnosisHint = 'consumer-no-track';
+  else if (participant.videoTrack && effectiveVideoState !== 'video-active') diagnosisHint = 'state-blocked-video';
+  else if (participant.videoTrack && effectiveVideoState === 'video-active' && health === 'recovering') diagnosisHint = 'safari-playback-stalled';
+  else if (participant.videoTrack && effectiveVideoState === 'video-active' && health === 'stalled') diagnosisHint = 'recovery-timeout-unconfirmed';
+
   // Mutate QA stats for diagnostics overlay
   React.useEffect(() => {
-    participant.qaPlaybackStats = {
-      videoTrackExists: !!participant.videoTrack,
-      remoteTrackReadyState: participant.videoTrack?.readyState,
-      remoteTrackMuted: participant.videoTrack?.muted,
-      remoteTrackEnabled: participant.videoTrack?.enabled,
-      tileRenderMode: effectiveVideoState,
-      videoDimensions: videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : '0x0',
-      lastVideoError: (videoRef.current as any)?._lastError,
-      playbackRecoveryCount: remountKey
-    };
+    participant.qaPlaybackStats = participant.qaPlaybackStats || {};
+    
+    // Check if time progressed
+    if (videoRef.current) {
+       const currentTime = videoRef.current.currentTime;
+       if (currentTime !== (videoRef.current as any)._lastReportedTime) {
+          participant.qaPlaybackStats.currentTimeProgressing = true;
+          (videoRef.current as any)._lastReportedTime = currentTime;
+       } else {
+          participant.qaPlaybackStats.currentTimeProgressing = false;
+       }
+       if (health === 'healthy') {
+          participant.qaPlaybackStats.lastHealthyAt = new Date().toISOString();
+       }
+    }
+    
+    participant.qaPlaybackStats.videoTrackExists = !!participant.videoTrack;
+    participant.qaPlaybackStats.remoteTrackReadyState = participant.videoTrack?.readyState;
+    participant.qaPlaybackStats.remoteTrackMuted = participant.videoTrack?.muted;
+    participant.qaPlaybackStats.remoteTrackEnabled = participant.videoTrack?.enabled;
+    participant.qaPlaybackStats.tileRenderMode = effectiveVideoState;
+    participant.qaPlaybackStats.videoDimensions = videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : '0x0';
+    participant.qaPlaybackStats.currentTime = videoRef.current?.currentTime || 0;
+    participant.qaPlaybackStats.readyState = videoRef.current?.readyState || 0;
+    participant.qaPlaybackStats.videoElementAttached = !!videoRef.current?.srcObject;
+    participant.qaPlaybackStats.isRecovering = health === 'recovering';
+    participant.qaPlaybackStats.playbackRecoveryCount = remountKey;
+    participant.qaPlaybackStats.diagnosisHint = diagnosisHint;
   });
 
   return (
