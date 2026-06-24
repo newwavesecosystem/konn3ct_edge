@@ -489,10 +489,11 @@ export function MeetingProvider({
 
               if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
                 toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
-                webrtcClient.current.enableAudioOnlyMode();
-                webrtcClient.current.sendCameraState(false, true);
+                webrtcClient.current.isAudioOnlyMode = true; // Set local WebRTC flag synchronously before React update
+                webrtcClient.current.disableCamera(); // Pause producer cleanly
+                webrtcClient.current.sendCameraState(false, true, 'network');
                 setIsCameraOn(false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true } : p));
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network' } : p));
               }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
@@ -502,8 +503,9 @@ export function MeetingProvider({
               if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
                 toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
                 webrtcClient.current.disableAudioOnlyMode();
-                webrtcClient.current.sendCameraState(isCameraOn, false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false } : p));
+                // We only clear audioOnlyMode locally. We do not automatically turn the camera back ON unless the user does it.
+                webrtcClient.current.sendCameraState(false, false);
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
               }
             }
             
@@ -758,7 +760,7 @@ export function MeetingProvider({
         client.onCameraState = (msg) => {
           const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode } : p
+            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason } : p
           ));
         };
 
@@ -956,14 +958,16 @@ export function MeetingProvider({
               if (p.userId === webrtcClient.current?.userId) continue;
               const existingIndex = newParticipants.findIndex(existing => existing.id === p.userId);
               if (existingIndex !== -1) {
-                newParticipants[existingIndex] = { ...newParticipants[existingIndex], name: p.name, role: p.role as any, isMobile: p.isMobile };
+                newParticipants[existingIndex] = { ...newParticipants[existingIndex], name: p.name, role: p.role as any, isMobile: p.isMobile, isCameraOn: p.isCameraOn ?? newParticipants[existingIndex].isCameraOn, audioOnlyMode: p.audioOnlyMode ?? newParticipants[existingIndex].audioOnlyMode, videoSuspendedReason: p.videoSuspendedReason ?? newParticipants[existingIndex].videoSuspendedReason };
               } else {
                 newParticipants.push({
                   id: p.userId,
                   name: p.name,
                   role: p.role as any,
                   isMuted: true,
-                  isCameraOn: false,
+                  isCameraOn: p.isCameraOn || false,
+                  audioOnlyMode: p.audioOnlyMode,
+                  videoSuspendedReason: p.videoSuspendedReason,
                   isScreenSharing: false,
                   isHandRaised: false,
                   isSpeaking: false,
@@ -986,14 +990,16 @@ export function MeetingProvider({
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) {
-              return prev.map(p => p.id === user.userId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile } : p);
+              return prev.map(p => p.id === user.userId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
             }
             return [...prev, {
               id: user.userId,
               name: user.name,
               role: user.role as any,
               isMuted: true,
-              isCameraOn: false,
+              isCameraOn: user.isCameraOn || false,
+              audioOnlyMode: user.audioOnlyMode,
+              videoSuspendedReason: user.videoSuspendedReason,
               isScreenSharing: false,
               isHandRaised: false,
               isSpeaking: false,
@@ -1050,7 +1056,9 @@ export function MeetingProvider({
                     return { ...p, screenTrack: consumer.track as MediaStreamTrack, isScreenSharing: true };
                   }
                   if (consumer.kind === 'video') {
-                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
+                    // Do not override isCameraOn to true if audioOnlyMode is active.
+                    const newCameraOn = p.audioOnlyMode ? false : true;
+                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: newCameraOn };
                   }
                 }
                 return p;
@@ -1061,7 +1069,7 @@ export function MeetingProvider({
                 name: userName || `Participant ${userId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
-                isCameraOn: consumer.kind === "video" && source !== 'screen',
+                isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
                 isScreenSharing: consumer.kind === "video" && source === 'screen',
                 isHandRaised: false,
                 isSpeaking: false,

@@ -41,6 +41,13 @@ const roleIcon: Record<string, React.ReactNode> = {
  * Pass `fixedAspect` to opt into a 16:9 box (used in filmstrips / spotlight
  * thumbnails, where a uniform tile shape matters).
  */
+export function getEffectiveVideoState(participant: Participant) {
+  if (participant.audioOnlyMode) return 'audio-only';
+  if (!participant.isCameraOn) return 'camera-off';
+  if (participant.videoTrack) return 'video-active';
+  return 'stalled';
+}
+
 export function ParticipantTile({
   participant,
   isLarge = false,
@@ -99,10 +106,12 @@ export function ParticipantTile({
     .toUpperCase();
 
   // Camera video ref
+  const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
   const setVideoRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
       videoRef.current = el;
       if (el) {
+        lastVideoElRef.current = el;
         if (participant.videoTrack) {
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
@@ -118,6 +127,9 @@ export function ParticipantTile({
         } else {
           el.srcObject = null;
         }
+      } else {
+        if (lastVideoElRef.current) lastVideoElRef.current.srcObject = null;
+        lastVideoElRef.current = null;
       }
     },
     [participant.videoTrack]
@@ -147,7 +159,8 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const isCameraEffectivelyOn = participant.isCameraOn && !participant.audioOnlyMode && !!participant.videoTrack && isVisible;
+  const effectiveVideoState = getEffectiveVideoState(participant);
+  const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 
   return (
     <div
@@ -184,7 +197,7 @@ export function ParticipantTile({
           </div>
 
           {/* PiP camera bubble — bottom-right corner */}
-          {isCameraEffectivelyOn && (
+          {effectiveVideoState === 'video-active' && (
             <div className="absolute bottom-3 right-3 z-30 w-24 h-16 rounded-xl overflow-hidden border-2 border-white/20 shadow-xl">
               <video
                 key={`pip-video-${remountKey}`}
@@ -263,11 +276,16 @@ export function ParticipantTile({
               <div className="absolute inset-0 rounded-full border-4 border-brand-green/30 animate-pulse-fast scale-110 pointer-events-none" />
             )}
           </div>
-          {participant.audioOnlyMode && (
-            <div className="absolute bottom-6 flex flex-col items-center">
+          {effectiveVideoState === 'audio-only' && (
+            <div className="absolute bottom-6 flex flex-col items-center gap-1">
               <span className="text-white/80 text-xs flex items-center gap-1 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full shadow-lg">
                 <SignalLow className="w-3 h-3 text-red-400" /> Audio Only
               </span>
+              {participant.videoSuspendedReason === 'network' && (
+                <span className="text-yellow-300 text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/40">
+                  Poor Network
+                </span>
+              )}
             </div>
           )}
         </div>

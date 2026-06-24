@@ -117,6 +117,10 @@ interface Client {
   status: 'waiting' | 'active';
   transports: string[];
   isMobile: boolean;
+  networkQuality?: 'good' | 'poor' | 'bad' | 'unknown';
+  audioOnlyMode?: boolean;
+  videoSuspendedReason?: 'network';
+  isCameraOn?: boolean;
   maxActiveCameras?: number;
   maxParticipants?: number;
   roomCreatedDate: Date;
@@ -132,7 +136,7 @@ export const roomTranscripts = new Map<string, Array<{ name: string, text: strin
 const roomAdmissions = new Map<string, Set<string>>();
 
 export function getActiveRoomParticipants(roomId: string) {
-  const activeParticipants: Array<{ userId: string, name: string, role: string, isMobile: boolean }> = [];
+  const activeParticipants: Array<{ userId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
   if (roomClients) {
     for (const client of roomClients.values()) {
@@ -141,7 +145,10 @@ export function getActiveRoomParticipants(roomId: string) {
           userId: client.userId,
           name: client.name,
           role: client.role,
-          isMobile: client.isMobile
+          isMobile: client.isMobile,
+          isCameraOn: client.isCameraOn,
+          audioOnlyMode: client.audioOnlyMode,
+          videoSuspendedReason: client.videoSuspendedReason
         });
       }
     }
@@ -436,7 +443,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
 
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate };
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -1044,11 +1051,18 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'camera_state':
+        // Update client's tracked state for late joiners
+        client.isCameraOn = data.isCameraOn;
+        client.audioOnlyMode = data.audioOnlyMode;
+        if (data.videoSuspendedReason) client.videoSuspendedReason = data.videoSuspendedReason;
+        else delete client.videoSuspendedReason;
+
         broadcastToRoom(roomId, {
           type: 'camera_state',
           userId,
           isCameraOn: data.isCameraOn,
-          audioOnlyMode: data.audioOnlyMode
+          audioOnlyMode: data.audioOnlyMode,
+          videoSuspendedReason: data.videoSuspendedReason
         });
         break;
 

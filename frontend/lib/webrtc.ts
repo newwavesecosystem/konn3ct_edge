@@ -50,9 +50,9 @@ export class WebRTCClient {
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
-  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean }) => void;
+  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
   public onUserLeft?: (userId: string) => void;
-  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean }>) => void;
+  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }>) => void;
   public onRoleChanged?: (userId: string, role: string) => void;
   
   // Collaboration Callbacks
@@ -119,7 +119,9 @@ export class WebRTCClient {
         video: this.localVideoProducer ? { active: true, paused: this.localVideoProducer.paused, closed: this.localVideoProducer.closed } : null,
         screen: !!this.screenShareProducer
       },
-      isAudioOnlyMode: this.isAudioOnlyMode,
+      audioOnlyMode: this.isAudioOnlyMode,
+      lastCameraStateBroadcast: this.lastCameraStateBroadcast,
+      lastCameraStateReceived: this.lastCameraStateReceived,
       consumersCount: this.consumers.size,
       audioTrack: {
         readyState: this.rawAudioTrack?.readyState,
@@ -152,6 +154,9 @@ export class WebRTCClient {
   public setAudioInputDevice(deviceId: string) {
     this.selectedAudioInputId = deviceId;
   }
+
+  public lastCameraStateBroadcast?: string;
+  public lastCameraStateReceived?: string;
 
   constructor(private roomId: string, private token: string) {}
 
@@ -313,8 +318,9 @@ export class WebRTCClient {
           this.onMuteState?.(msg);
           break;
         case 'camera_state':
-          this.onCameraState?.(msg);
-          break;
+        this.lastCameraStateReceived = new Date().toISOString() + ' ' + JSON.stringify(msg);
+        this.onCameraState?.(msg);
+        break;
         case 'connection_poor':
           // Auto-Degrade to Audio-Only
           if (this.isLowBandwidth) {
@@ -592,9 +598,11 @@ export class WebRTCClient {
     }
   }
 
-  public sendCameraState(isCameraOn: boolean, audioOnlyMode: boolean = false) {
+  public sendCameraState(isCameraOn: boolean, audioOnlyMode: boolean = false, videoSuspendedReason?: 'network') {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn, audioOnlyMode }));
+      const payload = { type: 'camera_state', isCameraOn, audioOnlyMode, videoSuspendedReason };
+      this.lastCameraStateBroadcast = new Date().toISOString() + ' ' + JSON.stringify(payload);
+      this.ws.send(JSON.stringify(payload));
     }
   }
 

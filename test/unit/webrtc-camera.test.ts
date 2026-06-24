@@ -157,9 +157,28 @@ describe('WebRTCClient Camera Fallback', () => {
     expect(webrtc.consumers.get('c2')?.pause).not.toHaveBeenCalled(); // Screen share is exempt
     
     // Test sendCameraState
-    webrtc.sendCameraState(false, true);
+    webrtc.sendCameraState(false, true, 'network');
     expect(webrtc.ws?.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'camera_state', isCameraOn: false, audioOnlyMode: true })
+      JSON.stringify({ type: 'camera_state', isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network' })
+    );
+  });
+
+  it('network recovery clears audio-only state but leaves camera off', async () => {
+    webrtc.ws = new (global as any).WebSocket();
+    webrtc.ws!.readyState = 1;
+    webrtc.ws!.send = vi.fn();
+    
+    // Simulate being in audio-only mode
+    webrtc.isAudioOnlyMode = true;
+    
+    webrtc.disableAudioOnlyMode();
+    expect(webrtc.isAudioOnlyMode).toBe(false);
+    
+    webrtc.sendCameraState(false, false);
+    
+    // Should NOT send videoSuspendedReason, thus clearing it implicitly
+    expect(webrtc.ws?.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'camera_state', isCameraOn: false, audioOnlyMode: false })
     );
   });
 });

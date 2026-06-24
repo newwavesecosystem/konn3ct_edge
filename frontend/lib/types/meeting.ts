@@ -25,6 +25,7 @@ export interface Participant {
   networkQuality?: 'good' | 'poor' | 'bad';
   isMobile?: boolean;
   audioOnlyMode?: boolean;
+  videoSuspendedReason?: 'network';
 }
 
 export interface ChatMessage {

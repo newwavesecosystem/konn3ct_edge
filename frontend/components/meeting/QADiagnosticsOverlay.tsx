@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { Copy, Download, X, Bug, RefreshCw, Trash2, ShieldAlert, Flag } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { getEffectiveVideoState } from "./ParticipantTile";
 
 export function QADiagnosticsOverlay() {
   const [isOpen, setIsOpen] = useState(false);
@@ -68,7 +69,10 @@ export function QADiagnosticsOverlay() {
         id: truncateId(p.id),
         isCameraOn: p.isCameraOn,
         audioOnlyMode: p.audioOnlyMode,
-        networkQuality: p.networkQuality
+        videoSuspendedReason: p.videoSuspendedReason,
+        networkQuality: p.networkQuality,
+        videoTrackExists: !!p.videoTrack,
+        tileRenderMode: getEffectiveVideoState(p)
       })),
       webrtc: {
         wsState: webrtcInfo.wsState,
@@ -76,7 +80,9 @@ export function QADiagnosticsOverlay() {
         recvTransport: webrtcInfo.recvTransportState,
         reconnectAttempts: webrtcInfo.reconnectAttempts,
         producers: webrtcInfo.producers,
-        consumers: webrtcInfo.consumersCount
+        consumers: webrtcInfo.consumersCount,
+        lastCameraStateBroadcast: webrtcInfo.lastCameraStateBroadcast,
+        lastCameraStateReceived: webrtcInfo.lastCameraStateReceived
       },
       cameraFallback: webrtcInfo.camera,
       virtualBackground: {
