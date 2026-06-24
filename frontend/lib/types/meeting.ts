@@ -34,6 +34,9 @@ export interface Participant {
     consumerExists?: boolean;
     consumerPaused?: boolean;
     consumerClosed?: boolean;
+    consumerCodec?: string;
+    consumerPayloadType?: number;
+    consumerCodecParams?: any;
     remoteTrackReadyState?: string;
     remoteTrackMuted?: boolean;
     remoteTrackEnabled?: boolean;

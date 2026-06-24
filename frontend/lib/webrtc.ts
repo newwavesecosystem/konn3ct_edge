@@ -115,14 +115,37 @@ export class WebRTCClient {
       iceConnectionState: this.sendTransport?.iceState || this.recvTransport?.iceState,
       reconnectAttempts: this.reconnectAttempts,
       producers: {
-        audio: this.localAudioProducer ? { active: true, paused: this.localAudioProducer.paused, closed: this.localAudioProducer.closed } : null,
-        video: this.localVideoProducer ? { active: true, paused: this.localVideoProducer.paused, closed: this.localVideoProducer.closed } : null,
+        audio: this.localAudioProducer ? { 
+          active: true, 
+          paused: this.localAudioProducer.paused, 
+          closed: this.localAudioProducer.closed,
+          codec: this.localAudioProducer.rtpParameters?.codecs?.[0]?.mimeType
+        } : null,
+        video: this.localVideoProducer ? { 
+          active: true, 
+          paused: this.localVideoProducer.paused, 
+          closed: this.localVideoProducer.closed,
+          codec: this.localVideoProducer.rtpParameters?.codecs?.[0]?.mimeType,
+          payloadType: this.localVideoProducer.rtpParameters?.codecs?.[0]?.payloadType,
+          codecParams: this.localVideoProducer.rtpParameters?.codecs?.[0]?.parameters,
+          encodings: this.localVideoProducer.rtpParameters?.encodings
+        } : null,
         screen: !!this.screenShareProducer
       },
+      consumersCount: this.consumers.size,
+      consumersCodecs: Array.from(this.consumers.values()).map(c => ({
+        id: c.id,
+        producerId: c.producerId,
+        kind: c.kind,
+        codec: c.rtpParameters?.codecs?.[0]?.mimeType,
+        payloadType: c.rtpParameters?.codecs?.[0]?.payloadType,
+        codecParams: c.rtpParameters?.codecs?.[0]?.parameters,
+        paused: c.paused,
+        closed: c.closed
+      })),
       audioOnlyMode: this.isAudioOnlyMode,
       lastCameraStateBroadcast: this.lastCameraStateBroadcast,
       lastCameraStateReceived: this.lastCameraStateReceived,
-      consumersCount: this.consumers.size,
       audioTrack: {
         readyState: this.rawAudioTrack?.readyState,
         enabled: this.rawAudioTrack?.enabled,
