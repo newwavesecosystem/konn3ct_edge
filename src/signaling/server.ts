@@ -638,29 +638,68 @@ export function initializeSignaling(server: Server) {
     });
   });
 
-  // roomId:senderParticipantId:clientEventId -> ack payload
-  const processedClientEvents = new Map<string, { timestamp: number, ack: any }>();
-  
-  function getDuplicateAck(client: Client, clientEventId: string): any | null {
-    const key = `${client.roomId}:${client.userId}:${clientEventId}`;
-    const entry = processedClientEvents.get(key);
-    if (entry) return entry.ack;
-    return null;
+  type ActionAckPayload = {
+    type: 'action:ack';
+    clientEventId: string;
+    serverEventId: string;
+    actionType: string;
+    roomId: string;
+    senderParticipantId: string;
+    status: 'accepted' | 'failed';
+    acceptedAt?: string;
+    failedAt?: string;
+    errorCode?: string;
+    message?: string;
+  };
+
+  const PROCESSED_EVENT_TTL_MS = 5 * 60 * 1000;
+  const MAX_PROCESSED_EVENTS = 50000;
+
+  type ProcessedClientEvent = {
+    ack: ActionAckPayload;
+    createdAt: number;
+  };
+
+  const processedClientEvents = new Map<string, ProcessedClientEvent>();
+
+  function getClientEventKey(roomId: string, senderParticipantId: string, clientEventId: string): string {
+    return `${roomId}:${senderParticipantId}:${clientEventId}`;
   }
 
-  function setProcessedClientEvent(client: Client, clientEventId: string, ack: any) {
-    const key = `${client.roomId}:${client.userId}:${clientEventId}`;
-    const now = Date.now();
-    processedClientEvents.set(key, { timestamp: now, ack });
-    
-    // TTL cleanup: remove items older than 5 minutes if size is large, or just keep size bound
-    if (processedClientEvents.size > 50000) {
-      for (const [k, v] of processedClientEvents.entries()) {
-        if (now - v.timestamp > 300000) { // 5 minutes TTL
-          processedClientEvents.delete(k);
-        }
+  function cleanupProcessedClientEvents(now = Date.now()) {
+    for (const [key, value] of processedClientEvents.entries()) {
+      if (now - value.createdAt > PROCESSED_EVENT_TTL_MS) {
+        processedClientEvents.delete(key);
       }
     }
+
+    while (processedClientEvents.size > MAX_PROCESSED_EVENTS) {
+      const oldestKey = processedClientEvents.keys().next().value;
+      if (!oldestKey) break;
+      processedClientEvents.delete(oldestKey);
+    }
+  }
+
+  function getCachedClientEventAck(
+    roomId: string,
+    senderParticipantId: string,
+    clientEventId: string
+  ): ActionAckPayload | undefined {
+    cleanupProcessedClientEvents();
+    return processedClientEvents.get(getClientEventKey(roomId, senderParticipantId, clientEventId))?.ack;
+  }
+
+  function cacheClientEventAck(
+    roomId: string,
+    senderParticipantId: string,
+    clientEventId: string,
+    ack: ActionAckPayload
+  ) {
+    cleanupProcessedClientEvents();
+    processedClientEvents.set(getClientEventKey(roomId, senderParticipantId, clientEventId), {
+      ack,
+      createdAt: Date.now(),
+    });
   }
 
   function emitActionAck(
@@ -672,7 +711,8 @@ export function initializeSignaling(server: Server) {
     errorCode?: string,
     message?: string
   ) {
-    const ack = {
+    const eventTime = new Date().toISOString();
+    const ack: ActionAckPayload = {
       type: 'action:ack',
       clientEventId,
       serverEventId,
@@ -680,16 +720,16 @@ export function initializeSignaling(server: Server) {
       roomId: client.roomId,
       senderParticipantId: client.userId,
       status,
-      acceptedAt: new Date().toISOString(),
+      ...(status === 'accepted' ? { acceptedAt: eventTime } : { failedAt: eventTime }),
       errorCode,
       message
     };
     if (client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(JSON.stringify(ack));
     }
-    setProcessedClientEvent(client, clientEventId, ack);
+    cacheClientEventAck(client.roomId, client.userId, clientEventId, ack);
     logger.info(JSON.stringify({
-      timestamp: ack.acceptedAt || ack.failedAt,
+      timestamp: ack.acceptedAt ?? ack.failedAt ?? new Date().toISOString(),
       stage: status === 'accepted' ? 'acknowledged' : 'failed',
       actionType,
       clientEventId,
@@ -721,20 +761,26 @@ export function initializeSignaling(server: Server) {
       data.clientEventId = clientEventId;
     }
 
-    if (clientEventId && isDuplicateClientEvent(clientEventId)) {
-      logger.info(JSON.stringify({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        event: 'action_lifecycle',
-        stage: 'duplicate',
-        actionType: data.type,
-        clientEventId,
-        roomId: client.roomId,
-        participantId: client.userId,
-        errorCode: 'DUPLICATE_EVENT'
-      }));
-      // We could optionally re-emit an ack here, but for now just drop duplicate processing
-      return;
+    if (clientEventId) {
+      const cachedAck = getCachedClientEventAck(roomId, userId, clientEventId);
+
+      if (cachedAck) {
+        logger.info(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          event: 'action_lifecycle',
+          stage: 'duplicate',
+          actionType: data.type,
+          clientEventId,
+          roomId: client.roomId,
+          participantId: client.userId,
+          errorCode: 'DUPLICATE_EVENT'
+        }));
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(JSON.stringify(cachedAck));
+        }
+        return;
+      }
     }
 
     switch (data.type) {
