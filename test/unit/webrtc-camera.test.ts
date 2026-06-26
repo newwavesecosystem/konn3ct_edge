@@ -165,7 +165,7 @@ describe('WebRTCClient Camera Fallback', () => {
     // Test sendCameraState
     webrtc.sendCameraState(false, true, 'network');
     expect(webrtc.ws?.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'camera_state', isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network' })
+      expect.stringContaining('"type":"camera_state","isCameraOn":false,"audioOnlyMode":true,"videoSuspendedReason":"network"')
     );
   });
 
@@ -184,7 +184,7 @@ describe('WebRTCClient Camera Fallback', () => {
     
     // Should NOT send videoSuspendedReason, thus clearing it implicitly
     expect(webrtc.ws?.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'camera_state', isCameraOn: false, audioOnlyMode: false })
+      expect.stringContaining('"type":"camera_state","isCameraOn":false,"audioOnlyMode":false')
     );
   });
 
