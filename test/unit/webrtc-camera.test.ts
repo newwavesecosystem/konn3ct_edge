@@ -17,7 +17,13 @@ global.WebSocket = MockWebSocket as any;
 vi.stubGlobal('navigator', {
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
   mediaDevices: {
-    getUserMedia: vi.fn()
+    getUserMedia: vi.fn(),
+    getDisplayMedia: vi.fn().mockResolvedValue({
+      getVideoTracks: () => [{
+        onended: vi.fn(),
+        stop: vi.fn()
+      }]
+    })
   }
 });
 vi.stubGlobal('sessionStorage', {
@@ -197,6 +203,51 @@ describe('WebRTCClient Camera Fallback', () => {
     expect(webrtc.localVideoProducer).toBeNull();
     expect(webrtc.ws?.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'stop_producer', producerId: 'prod1', appData: { source: 'camera' } })
+    );
+  });
+});
+
+describe('WebRTCClient Screen Share Codec Selection', () => {
+  let client: WebRTCClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client = new WebRTCClient('test-room', 'test-user', 'Test User', 'attendee');
+  });
+
+  it('should prefer H.264 packetization-mode=1 if available in device capabilities', async () => {
+    const mockProduce = vi.fn().mockResolvedValue({
+      id: 'screen-prod',
+      track: { stop: vi.fn(), onended: vi.fn() },
+      close: vi.fn(),
+      paused: false,
+      closed: false,
+      rtpParameters: { codecs: [{ mimeType: 'video/H264' }] }
+    });
+
+    const mockH264Codec = {
+      mimeType: 'video/h264',
+      parameters: { 'packetization-mode': 1, 'profile-level-id': '42e01f' }
+    };
+
+    (client as any).sendTransport = { produce: mockProduce };
+    (client as any).device = {
+      rtpCapabilities: {
+        codecs: [
+          { mimeType: 'video/vp8' },
+          { mimeType: 'video/vp9' },
+          mockH264Codec
+        ]
+      }
+    };
+
+    await client.enableScreenShare();
+
+    expect(mockProduce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        codec: mockH264Codec,
+        appData: { source: 'screen' }
+      })
     );
   });
 });

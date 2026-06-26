@@ -130,7 +130,15 @@ export class WebRTCClient {
           codecParams: this.localVideoProducer.rtpParameters?.codecs?.[0]?.parameters,
           encodings: this.localVideoProducer.rtpParameters?.encodings
         } : null,
-        screen: !!this.screenShareProducer
+        screen: this.screenShareProducer ? {
+          active: true,
+          paused: this.screenShareProducer.paused,
+          closed: this.screenShareProducer.closed,
+          codec: this.screenShareProducer.rtpParameters?.codecs?.[0]?.mimeType,
+          payloadType: this.screenShareProducer.rtpParameters?.codecs?.[0]?.payloadType,
+          codecParams: this.screenShareProducer.rtpParameters?.codecs?.[0]?.parameters,
+          encodings: this.screenShareProducer.rtpParameters?.encodings
+        } : null
       },
       consumersCount: this.consumers.size,
       consumersCodecs: Array.from(this.consumers.values()).map(c => ({
@@ -1442,12 +1450,21 @@ export class WebRTCClient {
     });
     const screenTrack = stream.getVideoTracks()[0];
     
+    // Force H264 for screen share to ensure iPhone Safari compatibility
+    let screenCodec;
+    if (this.device.rtpCapabilities.codecs) {
+      screenCodec = this.device.rtpCapabilities.codecs.find(
+        (c) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['packetization-mode'] === 1
+      );
+    }
+    
     // Create a SEPARATE producer — camera producer stays untouched
     this.screenShareProducer = await this.sendTransport.produce({
       track: screenTrack,
+      codec: screenCodec, // Force H264 if available
       appData: { source: 'screen' }, // Tag so remote peers render in screen overlay, not tile
       encodings: [
-        { maxBitrate: 1500000 } // Single high-quality encoding — no simulcast needed for screen
+        { maxBitrate: 1500000, maxFramerate: 15 } // Single high-quality encoding, conservative framerate for MVP
       ],
       codecOptions: { videoGoogleStartBitrate: 1000 }
     });
