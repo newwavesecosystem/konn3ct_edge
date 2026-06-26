@@ -7,6 +7,34 @@ export type RoomType = "meeting" | "webinar";
 export type LayoutMode = "speaker" | "grid" | "spotlight";
 export type GridOverflowMode = "scroll" | "paginate";
 
+export interface QAPlaybackStats {
+  consumerExists?: boolean;
+  consumerPaused?: boolean;
+  consumerClosed?: boolean;
+  consumerCodec?: string;
+  consumerPayloadType?: number;
+  consumerCodecParams?: any;
+  remoteTrackReadyState?: string;
+  remoteTrackMuted?: boolean;
+  remoteTrackEnabled?: boolean;
+  remoteTrackEnded?: boolean;
+  videoElementAttached?: boolean;
+  videoTrackExists?: boolean;
+  tileRenderMode?: string;
+  videoDimensions?: string;
+  currentTime?: number;
+  currentTimeProgressing?: boolean;
+  readyState?: number;
+  lastVideoPlayAttemptAt?: string;
+  lastVideoPlayResult?: string;
+  lastVideoError?: string;
+  lastHealthyAt?: string;
+  isRecovering?: boolean;
+  recoveryDurationMs?: number;
+  playbackRecoveryCount?: number;
+  diagnosisHint?: string;
+}
+
 export interface Participant {
   id: string;
   name: string;
@@ -21,6 +49,15 @@ export interface Participant {
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
+  
+  // Stream identifiers
+  cameraProducerId?: string;
+  cameraConsumerId?: string;
+  cameraTrackId?: string;
+  screenProducerId?: string;
+  screenConsumerId?: string;
+  screenTrackId?: string;
+
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
   isMobile?: boolean;
@@ -30,33 +67,8 @@ export interface Participant {
   videoSuspendedReason?: 'network';
 
   // QA Diagnostics
-  qaPlaybackStats?: {
-    consumerExists?: boolean;
-    consumerPaused?: boolean;
-    consumerClosed?: boolean;
-    consumerCodec?: string;
-    consumerPayloadType?: number;
-    consumerCodecParams?: any;
-    remoteTrackReadyState?: string;
-    remoteTrackMuted?: boolean;
-    remoteTrackEnabled?: boolean;
-    remoteTrackEnded?: boolean;
-    videoElementAttached?: boolean;
-    videoTrackExists?: boolean;
-    tileRenderMode?: string;
-    videoDimensions?: string;
-    currentTime?: number;
-    currentTimeProgressing?: boolean;
-    readyState?: number;
-    lastVideoPlayAttemptAt?: string;
-    lastVideoPlayResult?: string;
-    lastVideoError?: string;
-    lastHealthyAt?: string;
-    isRecovering?: boolean;
-    recoveryDurationMs?: number;
-    playbackRecoveryCount?: number;
-    diagnosisHint?: string;
-  };
+  cameraStats?: QAPlaybackStats;
+  screenStats?: QAPlaybackStats;
 }
 
 export interface ChatMessage {

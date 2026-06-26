@@ -65,6 +65,34 @@ export function QADiagnosticsOverlay() {
         videoProducerPaused: webrtcInfo.producers?.video?.paused ?? false,
         videoProducerClosed: webrtcInfo.producers?.video?.closed ?? true,
       },
+      screenShare: (() => {
+        const sharer = meeting.participants.find(p => p.isScreenSharing);
+        const isLocalSharing = meeting.isScreenSharing;
+        return {
+          screenShareActive: isLocalSharing || !!sharer,
+          screenShareOwner: isLocalSharing ? 'local' : (sharer ? truncateId(sharer.id) : 'none'),
+          localScreenShareProducerCodec: webrtcInfo.producers?.screen?.codec,
+          localScreenShareProducerPayloadType: webrtcInfo.producers?.screen?.payloadType,
+          localScreenShareProducerCodecParams: webrtcInfo.producers?.screen?.codecParams,
+          remoteScreenShareConsumerCodec: sharer?.screenStats?.consumerCodec,
+          remoteScreenShareConsumerPayloadType: sharer?.screenStats?.consumerPayloadType,
+          remoteScreenShareConsumerCodecParams: sharer?.screenStats?.consumerCodecParams,
+          screenShareConsumerExists: !!sharer?.screenStats?.consumerExists,
+          screenShareTrackExists: isLocalSharing ? !!webrtcInfo.producers?.screen : !!sharer?.screenTrack,
+          screenShareTrackReadyState: sharer?.screenTrack?.readyState,
+          screenShareTrackMuted: sharer?.screenTrack?.muted,
+          screenShareTrackEnabled: sharer?.screenTrack?.enabled,
+          screenShareVideoDimensions: sharer?.screenStats?.videoDimensions,
+          screenShareReadyState: sharer?.screenStats?.readyState,
+          screenShareCurrentTimeProgressing: sharer?.screenStats?.currentTimeProgressing,
+          screenShareLastVideoError: sharer?.screenStats?.lastVideoError,
+          screenShareDiagnosisHint: isLocalSharing 
+            ? 'screen-video-healthy' 
+            : (sharer 
+              ? (sharer.screenStats?.diagnosisHint || 'no-screen-consumer') 
+              : 'no-screen-consumer')
+        };
+      })(),
       participants: meeting.participants.map(p => ({
         id: truncateId(p.id),
         isCameraOn: p.isCameraOn,
@@ -72,8 +100,11 @@ export function QADiagnosticsOverlay() {
         videoSuspendedReason: p.videoSuspendedReason,
         networkQuality: p.networkQuality,
         videoTrackExists: !!p.videoTrack,
+        screenTrackExists: !!p.screenTrack,
+        isScreenSharing: !!p.isScreenSharing,
         tileRenderMode: getEffectiveVideoState(p),
-        qaPlaybackStats: p.qaPlaybackStats
+        cameraStats: p.cameraStats,
+        screenStats: p.screenStats
       })),
       webrtc: {
         wsState: webrtcInfo.wsState,
@@ -194,18 +225,41 @@ export function QADiagnosticsOverlay() {
         </div>
 
         <div>
+          <h3 className="text-white font-bold border-b border-white/20 mb-1">Screen Share</h3>
+          <div className={currentDiagnostics.screenShare.screenShareActive ? "text-green-400" : "text-gray-400"}>
+            Active: {currentDiagnostics.screenShare.screenShareActive ? "YES" : "NO"}
+          </div>
+          {currentDiagnostics.screenShare.screenShareActive && (
+            <div className="text-[10px]">
+              <div>Owner: {currentDiagnostics.screenShare.screenShareOwner}</div>
+              <div>Diagnosis: <span className={currentDiagnostics.screenShare.screenShareDiagnosisHint !== 'screen-video-healthy' ? 'text-yellow-400' : ''}>{currentDiagnostics.screenShare.screenShareDiagnosisHint}</span></div>
+              {currentDiagnostics.screenShare.screenShareOwner === 'local' ? (
+                <div>Local Codec: {currentDiagnostics.screenShare.localScreenShareProducerCodec || 'none'}</div>
+              ) : (
+                <>
+                  <div>Remote Codec: {currentDiagnostics.screenShare.remoteScreenShareConsumerCodec || 'none'}</div>
+                  <div>Consumer Exists: {currentDiagnostics.screenShare.screenShareConsumerExists ? "YES" : "NO"}</div>
+                  <div>Res: {currentDiagnostics.screenShare.screenShareVideoDimensions || 'N/A'}</div>
+                  <div>Err: {currentDiagnostics.screenShare.screenShareLastVideoError || 'none'}</div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div>
           <h3 className="text-white font-bold border-b border-white/20 mb-1">Participants</h3>
           {currentDiagnostics.participants.length === 0 ? <div>No participants</div> : null}
           {currentDiagnostics.participants.map((p: any) => (
             <div key={p.id} className="mb-2 pl-2 border-l border-white/10 text-[10px]">
               <div><span className="text-white font-bold">{p.id}</span></div>
-              <div className={p.qaPlaybackStats?.diagnosisHint !== 'video-healthy' ? 'text-yellow-400' : ''}>
-                Diagnosis: {p.qaPlaybackStats?.diagnosisHint || 'unknown'}
+              <div className={p.cameraStats?.diagnosisHint !== 'video-healthy' ? 'text-yellow-400' : ''}>
+                Diagnosis: {p.cameraStats?.diagnosisHint || 'unknown'}
               </div>
               <div>Mode: {p.tileRenderMode}</div>
-              <div>Res: {p.qaPlaybackStats?.videoDimensions || 'N/A'}</div>
-              <div>Remote Codec: {p.qaPlaybackStats?.consumerCodec || 'N/A'}</div>
-              <div>Err: {p.qaPlaybackStats?.lastVideoError || 'none'}</div>
+              <div>Res: {p.cameraStats?.videoDimensions || 'N/A'}</div>
+              <div>Remote Codec: {p.cameraStats?.consumerCodec || 'N/A'}</div>
+              <div>Err: {p.cameraStats?.lastVideoError || 'none'}</div>
             </div>
           ))}
         </div>
