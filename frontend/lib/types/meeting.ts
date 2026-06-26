@@ -71,8 +71,13 @@ export interface Participant {
   screenStats?: QAPlaybackStats;
 }
 
+export type ActionLifecycleState = "queued" | "sent" | "acknowledged" | "broadcasted" | "observed" | "rendered" | "failed" | "timed-out" | "unsupported";
+
 export interface ChatMessage {
-  id: string;
+  id: string; // Typically serverEventId, but fallback to clientEventId for optimistic UI
+  clientEventId?: string;
+  serverEventId?: string;
+  lifecycleState?: ActionLifecycleState;
   senderId: string;
   senderName: string;
   senderRole: ParticipantRole;

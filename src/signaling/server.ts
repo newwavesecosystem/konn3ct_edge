@@ -638,12 +638,102 @@ export function initializeSignaling(server: Server) {
     });
   });
 
+  // roomId:senderParticipantId:clientEventId -> ack payload
+  const processedClientEvents = new Map<string, { timestamp: number, ack: any }>();
+  
+  function getDuplicateAck(client: Client, clientEventId: string): any | null {
+    const key = `${client.roomId}:${client.userId}:${clientEventId}`;
+    const entry = processedClientEvents.get(key);
+    if (entry) return entry.ack;
+    return null;
+  }
+
+  function setProcessedClientEvent(client: Client, clientEventId: string, ack: any) {
+    const key = `${client.roomId}:${client.userId}:${clientEventId}`;
+    const now = Date.now();
+    processedClientEvents.set(key, { timestamp: now, ack });
+    
+    // TTL cleanup: remove items older than 5 minutes if size is large, or just keep size bound
+    if (processedClientEvents.size > 50000) {
+      for (const [k, v] of processedClientEvents.entries()) {
+        if (now - v.timestamp > 300000) { // 5 minutes TTL
+          processedClientEvents.delete(k);
+        }
+      }
+    }
+  }
+
+  function emitActionAck(
+    client: Client,
+    clientEventId: string,
+    actionType: string,
+    serverEventId: string,
+    status: 'accepted' | 'failed' = 'accepted',
+    errorCode?: string,
+    message?: string
+  ) {
+    const ack = {
+      type: 'action:ack',
+      clientEventId,
+      serverEventId,
+      actionType,
+      roomId: client.roomId,
+      senderParticipantId: client.userId,
+      status,
+      acceptedAt: new Date().toISOString(),
+      errorCode,
+      message
+    };
+    if (client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(JSON.stringify(ack));
+    }
+    setProcessedClientEvent(client, clientEventId, ack);
+    logger.info(JSON.stringify({
+      timestamp: ack.acceptedAt || ack.failedAt,
+      stage: status === 'accepted' ? 'acknowledged' : 'failed',
+      actionType,
+      clientEventId,
+      serverEventId,
+      roomId: client.roomId,
+      participantId: client.userId,
+      socketId: client.ws.url ? client.ws.url.substring(0, 8) : 'unknown',
+      status,
+      errorCode
+    }));
+  }
+
   async function handleMessage(client: Client, data: any) {
     const { roomId, userId } = client;
 
     // If client is in waiting room, they can only send basic messages
     if (client.status === 'waiting' && data.type !== 'chat') {
       logger.warn(`User ${userId} attempted ${data.type} while in waiting room`);
+      return;
+    }
+
+    const confirmableActions = new Set(['chat', 'camera_state', 'mute_state', 'hand_raise', 'reaction', 'produce']);
+    const isConfirmable = confirmableActions.has(data.type) || (data.type === 'stop_producer' && data.appData?.source === 'screen');
+    
+    // Ensure clientEventId exists for QA/Bot scripts in these actions
+    let clientEventId = data.clientEventId;
+    if (isConfirmable && !clientEventId) {
+      clientEventId = crypto.randomUUID(); // Fallback for old clients
+      data.clientEventId = clientEventId;
+    }
+
+    if (clientEventId && isDuplicateClientEvent(clientEventId)) {
+      logger.info(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        event: 'action_lifecycle',
+        stage: 'duplicate',
+        actionType: data.type,
+        clientEventId,
+        roomId: client.roomId,
+        participantId: client.userId,
+        errorCode: 'DUPLICATE_EVENT'
+      }));
+      // We could optionally re-emit an ack here, but for now just drop duplicate processing
       return;
     }
 
@@ -835,16 +925,22 @@ export function initializeSignaling(server: Server) {
         try {
           const settings = roomSettingsMap.get(roomId);
           if (settings && settings.chatLocked && client.role === 'attendee') {
-            client.ws.send(JSON.stringify({ type: 'error', message: 'Chat is currently locked by the host.' }));
+            if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'NOT_AUTHORIZED', 'Chat is currently locked by the host.');
+            else client.ws.send(JSON.stringify({ type: 'error', message: 'Chat is currently locked by the host.' }));
             return;
           }
-          if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) return;
+          if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) {
+            if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'INVALID_PAYLOAD', 'Empty message.');
+            return;
+          }
           if (data.message.length > 4000) {
-            client.ws.send(JSON.stringify({ type: 'error', message: 'Message too long (max 4000 characters).' }));
+            if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'INVALID_PAYLOAD', 'Message too long (max 4000 characters).');
+            else client.ws.send(JSON.stringify({ type: 'error', message: 'Message too long (max 4000 characters).' }));
             return;
           }
           if (data.fileUrl && (typeof data.fileUrl !== 'string' || !/^https?:\/\//i.test(data.fileUrl))) {
-            client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid file URL.' }));
+            if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'INVALID_PAYLOAD', 'Invalid file URL.');
+            else client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid file URL.' }));
             return;
           }
 
@@ -860,12 +956,22 @@ export function initializeSignaling(server: Server) {
             }
           });
 
+          if (clientEventId) {
+            emitActionAck(client, clientEventId, 'chat', newMsg.id, 'accepted');
+          }
+
           const msgPayload = {
             type: 'chat',
+            actionType: 'chat',
+            clientEventId,
+            serverEventId: newMsg.id,
+            roomId,
             userId,
+            senderParticipantId: userId,
             name: client.name, // Always include display name — never make client guess from userId
             message: newMsg.content,
             timestamp: newMsg.createdAt.toISOString(),
+            broadcastAt: new Date().toISOString(),
             isPrivate: newMsg.isPrivate,
             fileUrl: newMsg.fileUrl,
             id: newMsg.id
@@ -884,17 +990,39 @@ export function initializeSignaling(server: Server) {
           }
         } catch (e) {
           logger.error("Failed to save chat message", e);
+          if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'SERVER_ERROR', 'Failed to save chat message');
         }
         break;
 
       case 'reaction':
-        // Exclude the sender — they already show the reaction locally via sendReaction()
-        broadcastToRoom(roomId, {
-          type: 'reaction',
-          userId,
-          name: client.name, // Always include name so clients don't need to look it up
-          reaction: data.reaction
-        }, userId); // <-- userId as excludeUserId prevents the double-animation
+        if (clientEventId) {
+          const serverEventId = crypto.randomUUID();
+          emitActionAck(client, clientEventId, 'reaction', serverEventId, 'accepted');
+          // Exclude the sender — they already show the reaction locally via sendReaction()
+          broadcastToRoom(roomId, {
+            type: 'reaction',
+            actionType: 'reaction',
+            clientEventId,
+            serverEventId,
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            name: client.name, // Always include name so clients don't need to look it up
+            reaction: data.reaction,
+            broadcastAt: new Date().toISOString()
+          }, userId); // <-- userId as excludeUserId prevents the double-animation
+        } else {
+          broadcastToRoom(roomId, {
+            type: 'reaction',
+            actionType: 'reaction',
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            name: client.name,
+            reaction: data.reaction,
+            broadcastAt: new Date().toISOString()
+          }, userId);
+        }
         break;
 
       case 'network_quality':
@@ -1042,37 +1170,65 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
-      case 'mute_state':
+      case 'mute_state': {
+        const serverEventId = crypto.randomUUID();
+        if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
         broadcastToRoom(roomId, {
           type: 'mute_state',
+          actionType: 'mute_state',
+          clientEventId,
+          serverEventId,
+          roomId,
           userId,
-          isMuted: data.isMuted
+          senderParticipantId: userId,
+          isMuted: data.isMuted,
+          broadcastAt: new Date().toISOString()
         });
         break;
+      }
 
-      case 'camera_state':
+      case 'camera_state': {
         // Update client's tracked state for late joiners
         client.isCameraOn = data.isCameraOn;
         client.audioOnlyMode = data.audioOnlyMode;
         if (data.videoSuspendedReason) client.videoSuspendedReason = data.videoSuspendedReason;
         else delete client.videoSuspendedReason;
 
+        const serverEventId = crypto.randomUUID();
+        if (clientEventId) emitActionAck(client, clientEventId, 'camera_state', serverEventId, 'accepted');
+        
         broadcastToRoom(roomId, {
           type: 'camera_state',
+          actionType: 'camera_state',
+          clientEventId,
+          serverEventId,
+          roomId,
           userId,
+          senderParticipantId: userId,
           isCameraOn: data.isCameraOn,
           audioOnlyMode: data.audioOnlyMode,
-          videoSuspendedReason: data.videoSuspendedReason
+          videoSuspendedReason: data.videoSuspendedReason,
+          broadcastAt: new Date().toISOString()
         });
         break;
+      }
 
-      case 'hand_raise':
+      case 'hand_raise': {
+        const serverEventId = crypto.randomUUID();
+        if (clientEventId) emitActionAck(client, clientEventId, 'hand_raise', serverEventId, 'accepted');
         broadcastToRoom(roomId, {
           type: 'hand_raise',
+          actionType: 'hand_raise',
+          clientEventId,
+          serverEventId,
+          roomId,
           userId,
-          isHandRaised: data.isHandRaised
+          senderParticipantId: userId,
+          isHandRaised: data.isHandRaised,
+          broadcastAt: new Date().toISOString()
         });
         break;
+      }
 
       case 'sync_panel':
         if (client.role === 'host' || client.role === 'co-host') {
@@ -1335,13 +1491,25 @@ export function initializeSignaling(server: Server) {
         roomProducers.get(roomId)!.push({ producerId, userId, name: client.name, kind: data.kind, appData });
 
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
+        if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
 
         // Broadcast to others — include appData.source so they render screen share correctly
         broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, name: client.name, kind: data.kind, appData }, userId);
 
         // For screen share, send a dedicated state event so peers update isScreenSharing immediately
         if (source === 'screen') {
-          broadcastToRoom(roomId, { type: 'screen_share_started', userId, producerId }, userId);
+          const ssEventId = crypto.randomUUID();
+          broadcastToRoom(roomId, { 
+            type: 'screen_share_started',
+            actionType: 'screen_share_started',
+            clientEventId,
+            serverEventId: ssEventId,
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            producerId,
+            broadcastAt: new Date().toISOString()
+          }, userId);
         }
         break;
       }
@@ -1427,14 +1595,29 @@ export function initializeSignaling(server: Server) {
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.producerId !== pidToStop));
-        }
+          // Close the Mediasoup producer — this triggers producerclose on all consumers
+          closeProducer(pidToStop);
 
-        // Close the Mediasoup producer — this triggers producerclose on all consumers
-        closeProducer(pidToStop);
+          if (clientEventId) emitActionAck(client, clientEventId, 'stop_producer', crypto.randomUUID(), 'accepted');
 
-        // Broadcast a state update to all peers
-        if (source === 'screen') {
-          broadcastToRoom(roomId, { type: 'screen_share_stopped', userId, producerId: pidToStop }, userId);
+          // Broadcast a state update to all peers
+          if (source === 'screen') {
+            const ssEventId = crypto.randomUUID();
+            broadcastToRoom(roomId, { 
+              type: 'screen_share_stopped',
+              actionType: 'screen_share_stopped',
+              clientEventId,
+              serverEventId: ssEventId,
+              roomId,
+              userId,
+              senderParticipantId: userId,
+              producerId: pidToStop,
+              broadcastAt: new Date().toISOString()
+            }, userId);
+          } else {
+            // Send producer_closed event to everyone else
+            broadcastToRoom(roomId, { type: 'producer_closed', producerId: pidToStop }, userId);
+          };
         }
         break;
       }

@@ -671,12 +671,22 @@ export function MeetingProvider({
           }
 
           setChatMessages((prev) => {
+            if (msg.serverEventId && prev.some(m => m.serverEventId === msg.serverEventId)) {
+              // Update state to broadcasted
+              return prev.map(m => m.serverEventId === msg.serverEventId ? { ...m, lifecycleState: 'broadcasted' } : m);
+            }
+            if (msg.clientEventId && prev.some(m => m.clientEventId === msg.clientEventId)) {
+               return prev.map(m => m.clientEventId === msg.clientEventId ? { ...m, serverEventId: msg.serverEventId, lifecycleState: 'broadcasted' } : m);
+            }
             if (msg.id && prev.some(m => m.id === msg.id)) return prev;
 
             return [
               ...prev,
               {
-                id: msg.id || `m-${Date.now()}-${Math.random()}`,
+                id: msg.serverEventId || msg.id || `m-${Date.now()}-${Math.random()}`,
+                clientEventId: msg.clientEventId,
+                serverEventId: msg.serverEventId,
+                lifecycleState: 'observed',
                 senderId: msg.userId,
                 senderName: msg.userId === webrtcClient.current?.userId
                   ? webrtcClient.current?.userName || 'Guest'
@@ -689,6 +699,16 @@ export function MeetingProvider({
               },
             ];
           });
+        };
+
+        client.onActionAck = (ack) => {
+          if (ack.actionType === 'chat') {
+            setChatMessages(prev => prev.map(m => 
+              m.clientEventId === ack.clientEventId 
+                ? { ...m, serverEventId: ack.serverEventId, lifecycleState: ack.status === 'accepted' ? 'acknowledged' : 'failed' } 
+                : m
+            ));
+          }
         };
 
         client.onReaction = (msg) => {
@@ -1479,9 +1499,12 @@ export function MeetingProvider({
 
   const sendMessage = useCallback(
     (content: string, targetUserId?: string, fileUrl?: string) => {
-      webrtcClient.current?.sendChatMessage(content, targetUserId, fileUrl);
+      const clientEventId = crypto.randomUUID();
+      webrtcClient.current?.sendChatMessage(content, targetUserId, fileUrl, clientEventId);
       const msg: ChatMessage = {
-        id: `m-${Date.now()}`,
+        id: clientEventId,
+        clientEventId,
+        lifecycleState: 'sent',
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderRole: (webrtcClient.current?.userRole as ParticipantRole) || currentUser.role,

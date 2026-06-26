@@ -57,6 +57,7 @@ export class WebRTCClient {
   
   // Collaboration Callbacks
   public onChatMessage?: (msg: any) => void;
+  public onActionAck?: (ack: any) => void;
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
   public onPollVote?: (vote: any) => void;
@@ -244,6 +245,9 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'action:ack':
+          this.onActionAck?.(msg);
+          break;
         case 'session_status':
           this.sessionStatus = msg.status;
           if (msg.userId) this.userId = msg.userId;
@@ -527,10 +531,12 @@ export class WebRTCClient {
 
   // --- Collaboration Methods ---
   
-  public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string) {
+  public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl }));
+      this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl, clientEventId: eventId }));
     }
+    return eventId;
   }
 
   public changeUserRole(userId: string, newRole: string) {
@@ -593,10 +599,12 @@ export class WebRTCClient {
     }
   }
 
-  public sendReaction(reaction: string) {
+  public sendReaction(reaction: string, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'reaction', reaction }));
+      this.ws.send(JSON.stringify({ type: 'reaction', reaction, clientEventId: eventId }));
     }
+    return eventId;
   }
 
   public sendNoteUpdate(content: string) {
@@ -623,24 +631,30 @@ export class WebRTCClient {
     }
   }
 
-  public sendMuteState(isMuted: boolean) {
+  public sendMuteState(isMuted: boolean, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted }));
+      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted, clientEventId: eventId }));
     }
+    return eventId;
   }
 
-  public sendCameraState(isCameraOn: boolean, audioOnlyMode: boolean = false, videoSuspendedReason?: 'network') {
+  public sendCameraState(isCameraOn: boolean, audioOnlyMode: boolean = false, videoSuspendedReason?: 'network', clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      const payload = { type: 'camera_state', isCameraOn, audioOnlyMode, videoSuspendedReason };
+      const payload = { type: 'camera_state', isCameraOn, audioOnlyMode, videoSuspendedReason, clientEventId: eventId };
       this.lastCameraStateBroadcast = new Date().toISOString() + ' ' + JSON.stringify(payload);
       this.ws.send(JSON.stringify(payload));
     }
+    return eventId;
   }
 
-  public sendHandRaise(isHandRaised: boolean) {
+  public sendHandRaise(isHandRaised: boolean, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
+      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised, clientEventId: eventId }));
     }
+    return eventId;
   }
 
   public admitUser(userId: string) {
