@@ -33,9 +33,13 @@ export function MeetingShell() {
     setActivePanel,
     isMobilePanelOpen,
     setIsMobilePanelOpen,
+    isMuted,
+    isCameraOn,
+    isScreenSharing,
+    isRecording,
+    recordingStatus,
     meetingInfo,
     participants,
-    isRecording,
     meetingDuration,
     webrtcStatus,
     showDonationModal,
@@ -64,6 +68,19 @@ export function MeetingShell() {
       router.push(`/post-meeting/${meetingInfo.roomSlug}?${params.toString()}`);
     }
   }, [webrtcStatus, router, currentUser?.role, logoutUrl, meetingInfo.roomSlug]);
+
+  React.useEffect(() => {
+    if (isBot && currentUser?.role === 'bot' && webrtcStatus === 'connected' && meetingInfo.roomSlug) {
+      (window as any).__KONN3CT_RECORDER_READY__ = {
+        joined: true,
+        roomId: meetingInfo.roomSlug,
+        participantId: currentUser?.id,
+        signalingConnected: true,
+        mediaReady: true,
+        timestamp: Date.now()
+      };
+    }
+  }, [isBot, webrtcStatus, meetingInfo.roomSlug, currentUser?.id, currentUser?.role]);
 
   const panelContent: Record<string, React.ReactNode> = {
     chat: <ChatPanel />,
@@ -175,11 +192,21 @@ export function MeetingShell() {
             <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
             {formatDuration(meetingDuration)}
           </span>
-          {isRecording && (
+          {recordingStatus !== 'idle' && recordingStatus !== 'failed' && (
             <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded-full shrink-0">
-              <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
-              <span className="hidden sm:inline">Recording</span>
-              <span className="sm:hidden">Rec</span>
+              <Circle className={cn("w-2 h-2 fill-red-400", recordingStatus === 'recording' && "animate-pulse")} />
+              <span className="hidden sm:inline">
+                {recordingStatus === 'starting' ? 'Starting...' :
+                 recordingStatus === 'recording' ? 'Recording' :
+                 recordingStatus === 'processing' ? 'Processing...' :
+                 recordingStatus === 'ready' ? 'Ready' : ''}
+              </span>
+              <span className="sm:hidden">
+                {recordingStatus === 'starting' ? '...' :
+                 recordingStatus === 'recording' ? 'Rec' :
+                 recordingStatus === 'processing' ? '...' :
+                 recordingStatus === 'ready' ? 'Done' : ''}
+              </span>
             </span>
           )}
 

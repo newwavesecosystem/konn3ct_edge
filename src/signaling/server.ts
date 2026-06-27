@@ -10,6 +10,7 @@ import Redis from 'ioredis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
+import { launchRecorderBot } from '../services/recorderLauncher';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
@@ -950,7 +951,8 @@ export function initializeSignaling(server: Server) {
           }
           
           // Stop any active recordings
-          redis.publish(`recorder:stop:${roomId}`, 'stop').catch(e => logger.error("Failed to stop recording on end_meeting", e));
+          const reason = 'meeting_ended';
+          redis.publish(`recorder:stop:${roomId}`, JSON.stringify({ reason })).catch(e => logger.error("Failed to stop recording on end_meeting", e));
           
           // Stop any active streams
           db.liveStream.findMany({ where: { roomId, status: { in: ['live', 'processing'] } } })
@@ -1292,19 +1294,41 @@ export function initializeSignaling(server: Server) {
             if (room) {
               const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
               const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-              const botSecret = process.env.BOT_SECRET || '';
-              const recordingUrl = `${protocol}://${domain}/meeting/${room.slug}?bot=true&botSecret=${botSecret}`;
               
-              const pushed = await redis.lpush('recorder:queue', JSON.stringify({
-                roomId,
+              // 1. Create DB entry for the recording
+              const recording = await db.recording.create({
+                data: {
+                  title: `${room.name} - Recording`,
+                  roomId: room.id,
+                  ownerId: userId,
+                  status: 'starting'
+                }
+              });
+
+              // 2. Generate secure short-lived token for the bot
+              const botToken = jwt.sign(
+                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, recordingId: recording.id },
+                process.env.JWT_SECRET || 'fallback',
+                { expiresIn: '4h' }
+              );
+
+              // 3. Launch via central queue
+              const launchResult = await launchRecorderBot({
+                roomId: room.id,
                 roomSlug: room.slug,
-                url: recordingUrl
-              }));
-              
-              if (pushed > 0) {
+                recordingId: recording.id,
+                botToken,
+                url: `${protocol}://${domain}/meeting/${room.slug}?botToken=${botToken}`
+              });
+
+              if (launchResult.queued) {
                 broadcastToRoom(roomId, { type: 'recording_started' });
               } else {
-                logger.error(`Failed to push recording job to queue for room ${roomId}`);
+                await db.recording.update({
+                  where: { id: recording.id },
+                  data: { status: 'failed' }
+                });
+                logger.error(`Failed to push recording job to queue for room ${roomId}: ${launchResult.error}`);
               }
             }
           } catch (e) {
@@ -1316,7 +1340,8 @@ export function initializeSignaling(server: Server) {
       case 'stop_recording':
         if (client.role === 'host' || client.role === 'co-host') {
           // Publish stop event to the worker
-          redis.publish(`recorder:stop:${roomId}`, 'stop').catch(e => logger.error("Failed to publish stop recording", e));
+          const reason = data.reason || 'manual_stop';
+          redis.publish(`recorder:stop:${roomId}`, JSON.stringify({ reason })).catch(e => logger.error("Failed to publish stop recording", e));
           broadcastToRoom(roomId, { type: 'recording_stopped' });
         }
         break;

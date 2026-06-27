@@ -45,6 +45,7 @@ interface MeetingContextValue {
   isCameraOn: boolean;
   isScreenSharing: boolean;
   isRecording: boolean;
+  recordingStatus: 'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed';
   isHandRaised: boolean;
   showLeaveDialog: boolean;
   showReactionPicker: boolean;
@@ -254,12 +255,14 @@ export function MeetingProvider({
   const [isMuted, setIsMuted] = useState(initialMuted);
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed'>('idle');
   const [isRecording, setIsRecording] = useState(false);
 
   // Sync isRecording with the presence of a bot participant
   useEffect(() => {
     const hasBot = participants.some((p) => p.role === "bot");
     setIsRecording(hasBot);
+    if (hasBot) setRecordingStatus('recording');
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
@@ -472,19 +475,21 @@ export function MeetingProvider({
             if (quality === 'bad') {
               // Play Warning Sound
               try {
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
-                oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
-                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-                oscillator.start(audioCtx.currentTime);
-                oscillator.stop(audioCtx.currentTime + 0.5);
+                if (client?.userRole !== 'bot') {
+                  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const oscillator = audioCtx.createOscillator();
+                  const gainNode = audioCtx.createGain();
+                  oscillator.connect(gainNode);
+                  gainNode.connect(audioCtx.destination);
+                  oscillator.type = 'triangle';
+                  oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                  oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
+                  oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
+                  gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                  gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                  oscillator.start(audioCtx.currentTime);
+                  oscillator.stop(audioCtx.currentTime + 0.3);
+                }
               } catch(e) {}
 
               if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
@@ -645,9 +650,10 @@ export function MeetingProvider({
           if (msg.userId !== webrtcClient.current?.userId) {
             // Play a prominent "Ding-Ding" notification sound for chat
             try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              
-              const playBeep = (timeOffset: number) => {
+              if (client?.userRole !== 'bot') {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                
+                const playBeep = (timeOffset: number) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.connect(gain);
@@ -663,6 +669,7 @@ export function MeetingProvider({
 
               playBeep(0);
               playBeep(0.2);
+            }
             } catch (e) { }
 
             if (activePanelRef.current !== "chat") {
@@ -790,17 +797,19 @@ export function MeetingProvider({
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const osc = audioCtx.createOscillator();
-              const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = 'sine';
-              osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-              osc.start();
-              osc.stop(audioCtx.currentTime + 0.5);
+              if (client?.userRole !== 'bot') {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+              }
             } catch (e) { }
           }
           setParticipants((prev) => prev.map(p =>
@@ -859,21 +868,23 @@ export function MeetingProvider({
 
           // Play Doorbell Sound (Ding-Dong)
           try {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.type = 'sine';
-            // Ding
-            oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-            // Dong
-            oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
-            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
-            // Fade out smoothly to avoid popping
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-            oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + 0.6);
+            if (client?.userRole !== 'bot') {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'sine';
+              // Ding
+              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+              // Dong
+              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+              // Fade out smoothly to avoid popping
+              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+              oscillator.start(audioCtx.currentTime);
+              oscillator.stop(audioCtx.currentTime + 0.8);
+            }
           } catch(e) {
             console.warn("Failed to play doorbell sound", e);
           }
@@ -1326,6 +1337,7 @@ export function MeetingProvider({
 
   // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
   useEffect(() => {
+    if (webrtcClient.current?.userRole === 'bot') return;
     const trackToMonitor = webrtcClient.current?.rawAudioTrack || localAudioTrackRef.current;
     if (!trackToMonitor) return;
 
@@ -1478,18 +1490,17 @@ export function MeetingProvider({
       console.error("Screen share error:", e);
     }
   }, [isScreenSharing, initialCurrentUser.id]);
-
   const toggleRecording = useCallback(async () => {
-    if (isRecording) {
+    if (recordingStatus === 'recording' || recordingStatus === 'starting') {
       webrtcClient.current?.sendStopRecording();
-      setIsRecording(false);
-      toast.success("Recording stopped. It is being processed and will be saved to cloud.");
+      setRecordingStatus('processing');
+      toast.success("Recording stopped. It is being processed and will be saved to cloud.", { id: 'recording_status' });
     } else {
       webrtcClient.current?.sendStartRecording();
-      setIsRecording(true);
-      toast.success("Recording started in the cloud.");
+      setRecordingStatus('starting');
+      toast.success("Starting recording...", { id: 'recording_status' });
     }
-  }, [isRecording]);
+  }, [recordingStatus]);
   const toggleHandRaise = useCallback(() => {
     const newState = !isHandRaised;
     setIsHandRaised(newState);
@@ -1705,6 +1716,7 @@ export function MeetingProvider({
         isCameraOn,
         isScreenSharing,
         isRecording,
+        recordingStatus,
         isHandRaised,
         showLeaveDialog,
         showReactionPicker,
