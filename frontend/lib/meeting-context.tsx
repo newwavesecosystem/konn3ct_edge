@@ -39,6 +39,7 @@ interface MeetingContextValue {
   reactions: Reaction[];
   activePanel: SidePanel;
   hasUnreadChat: boolean;
+  markChatMessageRendered: (messageId: string) => void;
   layoutMode: LayoutMode;
   gridOverflowMode: GridOverflowMode;
   isMuted: boolean;
@@ -235,6 +236,19 @@ export function MeetingProvider({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
+
+  const markChatMessageRendered = useCallback((messageId: string) => {
+    setChatMessages((prev) => 
+      prev.map(m => {
+        // Prevent contradictory states: a row cannot be rendered and timed-out
+        if (m.id === messageId && m.lifecycleState !== 'timed-out' && m.lifecycleState !== 'failed') {
+          return { ...m, lifecycleState: 'rendered' };
+        }
+        return m;
+      })
+    );
+  }, []);
+
   const [sharedNoteContent, setSharedNoteContent] = useState<string>("");
   const formattedTitle = roomSlug
     .replace(/-/g, " ")
@@ -1710,6 +1724,7 @@ export function MeetingProvider({
         reactions,
         activePanel,
         hasUnreadChat,
+        markChatMessageRendered,
         layoutMode,
         gridOverflowMode,
         isMuted,

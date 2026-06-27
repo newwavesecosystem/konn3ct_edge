@@ -78,6 +78,7 @@ export function QADiagnosticsOverlay() {
           remoteScreenShareConsumerPayloadType: sharer?.screenStats?.consumerPayloadType,
           remoteScreenShareConsumerCodecParams: sharer?.screenStats?.consumerCodecParams,
           screenShareConsumerExists: !!sharer?.screenStats?.consumerExists,
+          screenShareFirstFrameRendered: !!sharer?.screenStats?.firstFrameRendered,
           screenShareTrackExists: isLocalSharing ? !!webrtcInfo.producers?.screen : !!sharer?.screenTrack,
           screenShareTrackReadyState: sharer?.screenTrack?.readyState,
           screenShareTrackMuted: sharer?.screenTrack?.muted,
@@ -239,6 +240,7 @@ export function QADiagnosticsOverlay() {
                 <>
                   <div>Remote Codec: {currentDiagnostics.screenShare.remoteScreenShareConsumerCodec || 'none'}</div>
                   <div>Consumer Exists: {currentDiagnostics.screenShare.screenShareConsumerExists ? "YES" : "NO"}</div>
+                  <div>First Frame Rendered: {currentDiagnostics.screenShare.screenShareFirstFrameRendered ? "YES" : "NO"}</div>
                   <div>Res: {currentDiagnostics.screenShare.screenShareVideoDimensions || 'N/A'}</div>
                   <div>Err: {currentDiagnostics.screenShare.screenShareLastVideoError || 'none'}</div>
                 </>

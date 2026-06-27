@@ -1458,7 +1458,13 @@ export class WebRTCClient {
     if (this.screenShareProducer && !this.screenShareProducer.closed) {
       throw new Error("Screen share already active");
     }
-    
+    if (!navigator.mediaDevices?.getDisplayMedia || /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|samsungbrowser/i.test(navigator.userAgent)) {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'action_unsupported', reason: 'SCREEN_SHARE_UNSUPPORTED' }));
+      }
+      throw new Error("SCREEN_SHARE_UNSUPPORTED");
+    }
+
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 15, max: 30 } } // Lower framerate = less CPU, still crisp
     });
