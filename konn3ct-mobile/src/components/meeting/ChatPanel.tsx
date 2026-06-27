@@ -103,8 +103,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
   };
 
   const handleFileUpload = async () => {
-    Alert.alert("Coming Soon", "File sharing is currently disabled while we upgrade our servers.");
-    return;
     try {
       const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
       if (result.canceled || !result.assets || result.assets.length === 0) return;
@@ -117,13 +115,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
 
       setIsUploading(true);
 
-      // Request presigned URL from API
-      const res = await apiClient.post("/upload", { 
-        filename: file.name, 
-        contentType: file.mimeType || 'application/octet-stream', 
-        fileSize: file.size 
+      // Request presigned URL from the Next.js API (edge.konn3ct.net hosts Next.js)
+      const res = await fetch("https://edge.konn3ct.net/api/upload", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name, 
+          contentType: file.mimeType || 'application/octet-stream', 
+          fileSize: file.size 
+        })
       });
-      const data = res.data;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to get upload URL");
 
       // Upload the file to S3 using Expo FileSystem to avoid React Native Blob bugs
       await FileSystem.uploadAsync(data.presignedUrl, file.uri, {
