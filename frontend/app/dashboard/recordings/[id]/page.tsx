@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { ArrowLeft, MessageSquare, FileText, Download, Share2 } from "lucide-react";
+import { ArrowLeft, MessageSquare, FileText, Download, Share2, Lock } from "lucide-react";
 
 export default function RecordingPlaybackPage() {
   const params = useParams();
@@ -19,12 +19,21 @@ export default function RecordingPlaybackPage() {
   } | null>(null);
   const [activeTab, setActiveTab] = useState<"chat" | "summary">("chat");
 
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [fetchingPlaybackUrl, setFetchingPlaybackUrl] = useState(false);
+
   useEffect(() => {
     fetch(`/api/recordings/${recordingId}/details`)
       .then(res => res.json())
       .then(resData => {
         if (!resData.error) {
           setData(resData);
+          if (resData.recording && resData.recording.status === 'completed') {
+            fetchPlaybackUrl();
+          }
+        } else {
+          setPlaybackError(resData.error);
         }
         setLoading(false);
       })
@@ -33,6 +42,24 @@ export default function RecordingPlaybackPage() {
         setLoading(false);
       });
   }, [recordingId]);
+
+  const fetchPlaybackUrl = async () => {
+    setFetchingPlaybackUrl(true);
+    setPlaybackError(null);
+    try {
+      const res = await fetch(`/api/recordings/${recordingId}/play`);
+      const data = await res.json();
+      if (res.ok) {
+        setPlaybackUrl(data.playbackUrl);
+      } else {
+        setPlaybackError(data.error || 'Failed to authorize playback.');
+      }
+    } catch (error) {
+      setPlaybackError('Network error connecting to playback service.');
+    } finally {
+      setFetchingPlaybackUrl(false);
+    }
+  };
 
   if (loading) {
     return <div className="p-8 text-center text-text-muted">Loading recording details...</div>;
@@ -78,17 +105,44 @@ export default function RecordingPlaybackPage() {
       <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
         {/* Main Video Area */}
         <div className="flex-1 flex flex-col min-h-0 bg-surface rounded-2xl border border-border/60 overflow-hidden shadow-sm">
-          <div className="flex-1 bg-black flex items-center justify-center relative">
-            {recording.url ? (
+          <div className="flex-1 bg-black flex flex-col items-center justify-center relative">
+            {playbackError ? (
+              <div className="text-center p-6 text-white max-w-md">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Lock className="w-6 h-6 text-red-400" />
+                </div>
+                <h3 className="text-lg font-bold mb-2">Playback Unavailable</h3>
+                <p className="text-text-muted text-sm mb-6">{playbackError}</p>
+                {playbackError.includes('Payment') && (
+                  <Button className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white shadow-lg">
+                    Purchase Access
+                  </Button>
+                )}
+                {!playbackError.includes('Payment') && (
+                   <Button onClick={fetchPlaybackUrl} className="w-full">
+                     Retry Access
+                   </Button>
+                )}
+              </div>
+            ) : fetchingPlaybackUrl ? (
+               <div className="text-text-muted text-sm flex items-center gap-2">
+                 <div className="w-4 h-4 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
+                 Authorizing Playback...
+               </div>
+            ) : playbackUrl ? (
               <video
                 controls
-                src={recording.url}
+                src={playbackUrl}
                 className="w-full h-full max-h-full object-contain"
                 poster={`https://picsum.photos/seed/${recording.id}/1920/1080`}
+                onError={() => {
+                  setPlaybackError("Session expired or playback failed. Please request access again.");
+                  setPlaybackUrl(null);
+                }}
               />
-            ) : (
+            ) : recording.status !== 'completed' ? (
               <div className="text-text-muted text-sm">Video is still processing...</div>
-            )}
+            ) : null}
           </div>
         </div>
 

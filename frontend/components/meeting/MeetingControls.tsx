@@ -49,6 +49,7 @@ export function MeetingControls() {
     isCameraOn,
     isScreenSharing,
     isRecording,
+    recordingStatus,
     isHandRaised,
     activePanel,
     layoutMode,
@@ -317,19 +318,24 @@ export function MeetingControls() {
                     onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
                   />
                 )}
-                {isHost && (
+                {/* {isHost && (
                   <MoreMenuItem
                     icon={<Radio className="w-4 h-4" />}
                     label="Live Streaming"
                     onClick={() => { setActivePanel("streaming"); setShowMoreMenu(false); }}
                   />
-                )}
+                )} */}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 {isHost && (
                   <MoreMenuItem
-                    icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
-                    label={isRecording ? "Stop Recording" : "Record Meeting"}
-                    danger={isRecording}
+                    icon={<Circle className={cn("w-4 h-4", (recordingStatus === 'recording' || recordingStatus === 'starting' || recordingStatus === 'processing') && "fill-red-400 text-red-400")} />}
+                    label={
+                      recordingStatus === 'starting' ? "Starting recording..." :
+                      recordingStatus === 'recording' ? "Stop Recording" :
+                      recordingStatus === 'processing' ? "Processing recording..." :
+                      "Record Meeting"
+                    }
+                    danger={recordingStatus === 'recording'}
                     onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
                   />
                 )}

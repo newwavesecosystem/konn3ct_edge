@@ -39,12 +39,14 @@ interface MeetingContextValue {
   reactions: Reaction[];
   activePanel: SidePanel;
   hasUnreadChat: boolean;
+  markChatMessageRendered: (messageId: string) => void;
   layoutMode: LayoutMode;
   gridOverflowMode: GridOverflowMode;
   isMuted: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
   isRecording: boolean;
+  recordingStatus: 'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed';
   isHandRaised: boolean;
   showLeaveDialog: boolean;
   showReactionPicker: boolean;
@@ -149,6 +151,9 @@ interface MeetingContextValue {
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
+
+  // QA Diagnostics
+  webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -231,6 +236,19 @@ export function MeetingProvider({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
+
+  const markChatMessageRendered = useCallback((messageId: string) => {
+    setChatMessages((prev) => 
+      prev.map(m => {
+        // Prevent contradictory states: a row cannot be rendered and timed-out
+        if (m.id === messageId && m.lifecycleState !== 'timed-out' && m.lifecycleState !== 'failed') {
+          return { ...m, lifecycleState: 'rendered' };
+        }
+        return m;
+      })
+    );
+  }, []);
+
   const [sharedNoteContent, setSharedNoteContent] = useState<string>("");
   const formattedTitle = roomSlug
     .replace(/-/g, " ")
@@ -251,12 +269,14 @@ export function MeetingProvider({
   const [isMuted, setIsMuted] = useState(initialMuted);
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed'>('idle');
   const [isRecording, setIsRecording] = useState(false);
 
   // Sync isRecording with the presence of a bot participant
   useEffect(() => {
     const hasBot = participants.some((p) => p.role === "bot");
     setIsRecording(hasBot);
+    if (hasBot) setRecordingStatus('recording');
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
@@ -398,12 +418,15 @@ export function MeetingProvider({
         // Call our new Next.js endpoint to get a secure JWT
         const searchParamsData = new URLSearchParams(window.location.search);
         const isBot = searchParamsData.get('bot') === 'true';
-        const botSecret = searchParamsData.get('botSecret') || '';
+        const botToken = searchParamsData.get('botToken');
         const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
 
-        const headers: Record<string, string> = { "Content-Type": "application/json" };
-        if (isBot && botSecret) {
-          headers["x-bot-secret"] = botSecret;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        
+        if (botToken) {
+          headers["Authorization"] = `Bearer ${botToken}`;
         }
 
         const res = await fetch("/api/join", {
@@ -411,9 +434,9 @@ export function MeetingProvider({
           headers,
           body: JSON.stringify({
             roomId: roomSlug,
-            sessionToken,
-            isBot
-          })
+            sessionToken: sessionToken || undefined,
+            isBot: !!botToken,
+          }),
         });
 
         const data = await res.json();
@@ -466,27 +489,31 @@ export function MeetingProvider({
             if (quality === 'bad') {
               // Play Warning Sound
               try {
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
-                oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
-                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-                oscillator.start(audioCtx.currentTime);
-                oscillator.stop(audioCtx.currentTime + 0.5);
+                if (client?.userRole !== 'bot') {
+                  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const oscillator = audioCtx.createOscillator();
+                  const gainNode = audioCtx.createGain();
+                  oscillator.connect(gainNode);
+                  gainNode.connect(audioCtx.destination);
+                  oscillator.type = 'triangle';
+                  oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                  oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
+                  oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
+                  gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                  gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                  oscillator.start(audioCtx.currentTime);
+                  oscillator.stop(audioCtx.currentTime + 0.3);
+                }
               } catch(e) {}
 
               if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
                 toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
-                webrtcClient.current.enableAudioOnlyMode();
-                webrtcClient.current.sendCameraState(false);
+                webrtcClient.current.isAudioOnlyMode = true; // Set local WebRTC flag synchronously before React update
+                webrtcClient.current.disableCamera(); // Pause producer cleanly
+                localCameraTrackRef.current = null; // Clear stale track
+                webrtcClient.current.sendCameraState(false, true, 'network');
                 setIsCameraOn(false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false } : p));
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
               }
               lastNetworkToastTime = now;
             } else if (quality === 'poor') {
@@ -496,6 +523,9 @@ export function MeetingProvider({
               if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
                 toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
                 webrtcClient.current.disableAudioOnlyMode();
+                // We only clear audioOnlyMode locally. We do not automatically turn the camera back ON unless the user does it.
+                webrtcClient.current.sendCameraState(false, false);
+                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
               }
             }
             
@@ -634,9 +664,10 @@ export function MeetingProvider({
           if (msg.userId !== webrtcClient.current?.userId) {
             // Play a prominent "Ding-Ding" notification sound for chat
             try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              
-              const playBeep = (timeOffset: number) => {
+              if (client?.userRole !== 'bot') {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                
+                const playBeep = (timeOffset: number) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.connect(gain);
@@ -652,6 +683,7 @@ export function MeetingProvider({
 
               playBeep(0);
               playBeep(0.2);
+            }
             } catch (e) { }
 
             if (activePanelRef.current !== "chat") {
@@ -660,12 +692,22 @@ export function MeetingProvider({
           }
 
           setChatMessages((prev) => {
+            if (msg.serverEventId && prev.some(m => m.serverEventId === msg.serverEventId)) {
+              // Update state to broadcasted
+              return prev.map(m => m.serverEventId === msg.serverEventId ? { ...m, lifecycleState: 'broadcasted' } : m);
+            }
+            if (msg.clientEventId && prev.some(m => m.clientEventId === msg.clientEventId)) {
+               return prev.map(m => m.clientEventId === msg.clientEventId ? { ...m, serverEventId: msg.serverEventId, lifecycleState: 'broadcasted' } : m);
+            }
             if (msg.id && prev.some(m => m.id === msg.id)) return prev;
 
             return [
               ...prev,
               {
-                id: msg.id || `m-${Date.now()}-${Math.random()}`,
+                id: msg.serverEventId || msg.id || `m-${Date.now()}-${Math.random()}`,
+                clientEventId: msg.clientEventId,
+                serverEventId: msg.serverEventId,
+                lifecycleState: 'observed',
                 senderId: msg.userId,
                 senderName: msg.userId === webrtcClient.current?.userId
                   ? webrtcClient.current?.userName || 'Guest'
@@ -678,6 +720,16 @@ export function MeetingProvider({
               },
             ];
           });
+        };
+
+        client.onActionAck = (ack) => {
+          if (ack.actionType === 'chat') {
+            setChatMessages(prev => prev.map(m => 
+              m.clientEventId === ack.clientEventId 
+                ? { ...m, serverEventId: ack.serverEventId, lifecycleState: ack.status === 'accepted' ? 'acknowledged' : 'failed' } 
+                : m
+            ));
+          }
         };
 
         client.onReaction = (msg) => {
@@ -750,7 +802,7 @@ export function MeetingProvider({
         client.onCameraState = (msg) => {
           const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn } : p
+            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason } : p
           ));
         };
 
@@ -759,17 +811,19 @@ export function MeetingProvider({
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const osc = audioCtx.createOscillator();
-              const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = 'sine';
-              osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-              osc.start();
-              osc.stop(audioCtx.currentTime + 0.5);
+              if (client?.userRole !== 'bot') {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+              }
             } catch (e) { }
           }
           setParticipants((prev) => prev.map(p =>
@@ -795,9 +849,19 @@ export function MeetingProvider({
 
         client.onConsumerClosed = (producerId, appData) => {
           if (appData?.source === 'screen') {
-            setParticipants((prev) => prev.map(p =>
-              p.isScreenSharing ? { ...p, isScreenSharing: false, screenTrack: null } : p
-            ));
+            setParticipants((prev) => prev.map(p => {
+              if (p.screenProducerId === producerId) {
+                return { ...p, isScreenSharing: false, screenTrack: undefined, screenProducerId: undefined, screenConsumerId: undefined, screenTrackId: undefined, screenStats: { ...p.screenStats, consumerClosed: true } };
+              }
+              return p;
+            }));
+          } else {
+            setParticipants((prev) => prev.map(p => {
+              if (p.cameraProducerId === producerId) {
+                return { ...p, videoTrack: undefined, cameraProducerId: undefined, cameraConsumerId: undefined, cameraTrackId: undefined, cameraStats: { ...p.cameraStats, consumerClosed: true } };
+              }
+              return p;
+            }));
           }
         };
 
@@ -818,21 +882,23 @@ export function MeetingProvider({
 
           // Play Doorbell Sound (Ding-Dong)
           try {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.type = 'sine';
-            // Ding
-            oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-            // Dong
-            oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
-            gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
-            // Fade out smoothly to avoid popping
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-            oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + 0.6);
+            if (client?.userRole !== 'bot') {
+              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              const gainNode = audioCtx.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              oscillator.type = 'sine';
+              // Ding
+              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+              // Dong
+              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+              // Fade out smoothly to avoid popping
+              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+              oscillator.start(audioCtx.currentTime);
+              oscillator.stop(audioCtx.currentTime + 0.8);
+            }
           } catch(e) {
             console.warn("Failed to play doorbell sound", e);
           }
@@ -946,13 +1012,18 @@ export function MeetingProvider({
             const newParticipants = [...prev];
             for (const p of backendParticipants) {
               if (p.userId === webrtcClient.current?.userId) continue;
-              if (!newParticipants.some(existing => existing.id === p.userId)) {
+              const existingIndex = newParticipants.findIndex(existing => existing.id === p.userId);
+              if (existingIndex !== -1) {
+                newParticipants[existingIndex] = { ...newParticipants[existingIndex], name: p.name, role: p.role as any, isMobile: p.isMobile, isCameraOn: p.isCameraOn ?? newParticipants[existingIndex].isCameraOn, audioOnlyMode: p.audioOnlyMode ?? newParticipants[existingIndex].audioOnlyMode, videoSuspendedReason: p.videoSuspendedReason ?? newParticipants[existingIndex].videoSuspendedReason };
+              } else {
                 newParticipants.push({
                   id: p.userId,
                   name: p.name,
                   role: p.role as any,
                   isMuted: true,
-                  isCameraOn: false,
+                  isCameraOn: p.isCameraOn || false,
+                  audioOnlyMode: p.audioOnlyMode,
+                  videoSuspendedReason: p.videoSuspendedReason,
                   isScreenSharing: false,
                   isHandRaised: false,
                   isSpeaking: false,
@@ -971,16 +1042,20 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
-          if (user.userId === webrtcClient.current?.userId || user.name === initialCurrentUser.name) return;
+          if (user.userId === webrtcClient.current?.userId) return;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
-            if (prev.some(p => p.id === user.userId)) return prev;
+            if (prev.some(p => p.id === user.userId)) {
+              return prev.map(p => p.id === user.userId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
+            }
             return [...prev, {
               id: user.userId,
               name: user.name,
               role: user.role as any,
               isMuted: true,
-              isCameraOn: false,
+              isCameraOn: user.isCameraOn || false,
+              audioOnlyMode: user.audioOnlyMode,
+              videoSuspendedReason: user.videoSuspendedReason,
               isScreenSharing: false,
               isHandRaised: false,
               isSpeaking: false,
@@ -1022,7 +1097,7 @@ export function MeetingProvider({
           });
         };
 
-        client.onNewConsumer = (consumer, userId) => {
+        client.onNewConsumer = (consumer, userId, userName) => {
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
           setParticipants((prev) => {
@@ -1033,11 +1108,43 @@ export function MeetingProvider({
                   if (consumer.kind === 'audio') {
                     return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
                   }
-                  if (consumer.kind === 'video' && source === 'screen') {
-                    return { ...p, screenTrack: consumer.track as MediaStreamTrack, isScreenSharing: true };
-                  }
                   if (consumer.kind === 'video') {
-                    return { ...p, videoTrack: consumer.track as MediaStreamTrack, isCameraOn: true };
+                    if (source === 'screen') {
+                      return { 
+                        ...p, 
+                        screenTrack: consumer.track as MediaStreamTrack, 
+                        screenProducerId: consumer.producerId,
+                        screenConsumerId: consumer.id,
+                        screenTrackId: consumer.track.id,
+                        isScreenSharing: true,
+                        screenStats: {
+                          ...p.screenStats,
+                          consumerExists: true,
+                          consumerCodec: consumer.rtpParameters?.codecs?.[0]?.mimeType,
+                          consumerPayloadType: consumer.rtpParameters?.codecs?.[0]?.payloadType,
+                          consumerCodecParams: consumer.rtpParameters?.codecs?.[0]?.parameters
+                        }
+                      };
+                    } else {
+                      // Do not override isCameraOn to true if audioOnlyMode is active or explicit camera-off
+                      const canonicalCameraOff = p.audioOnlyMode || p.videoSuspendedReason === 'network' || p.isCameraOn === false;
+                      const newCameraOn = canonicalCameraOff ? false : true;
+                      return { 
+                        ...p, 
+                        videoTrack: consumer.track as MediaStreamTrack, 
+                        cameraProducerId: consumer.producerId,
+                        cameraConsumerId: consumer.id,
+                        cameraTrackId: consumer.track.id,
+                        isCameraOn: newCameraOn,
+                        cameraStats: {
+                          ...p.cameraStats,
+                          consumerExists: true,
+                          consumerCodec: consumer.rtpParameters?.codecs?.[0]?.mimeType,
+                          consumerPayloadType: consumer.rtpParameters?.codecs?.[0]?.payloadType,
+                          consumerCodecParams: consumer.rtpParameters?.codecs?.[0]?.parameters
+                        }
+                      };
+                    }
                   }
                 }
                 return p;
@@ -1045,18 +1152,37 @@ export function MeetingProvider({
             } else {
               const newParticipant: Participant = {
                 id: userId,
-                name: `Participant ${userId.substring(5, 9)}`,
+                name: userName || `Participant ${userId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
-                isCameraOn: consumer.kind === "video" && source !== 'screen',
+                isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
                 isScreenSharing: consumer.kind === "video" && source === 'screen',
+                audioTrack: consumer.kind === "audio" ? (consumer.track as MediaStreamTrack) : undefined,
+                videoTrack: consumer.kind === "video" && source !== 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
+                screenTrack: consumer.kind === "video" && source === 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
+                cameraProducerId: consumer.kind === "video" && source !== 'screen' ? consumer.producerId : undefined,
+                cameraConsumerId: consumer.kind === "video" && source !== 'screen' ? consumer.id : undefined,
+                cameraTrackId: consumer.kind === "video" && source !== 'screen' ? consumer.track.id : undefined,
+                screenProducerId: consumer.kind === "video" && source === 'screen' ? consumer.producerId : undefined,
+                screenConsumerId: consumer.kind === "video" && source === 'screen' ? consumer.id : undefined,
+                screenTrackId: consumer.kind === "video" && source === 'screen' ? consumer.track.id : undefined,
                 isHandRaised: false,
                 isSpeaking: false,
                 joinedAt: new Date().toISOString(),
+                isMobile: false,
+                cameraStats: consumer.kind === "video" && source !== 'screen' ? {
+                  consumerExists: true,
+                  consumerCodec: consumer.rtpParameters?.codecs?.[0]?.mimeType,
+                  consumerPayloadType: consumer.rtpParameters?.codecs?.[0]?.payloadType,
+                  consumerCodecParams: consumer.rtpParameters?.codecs?.[0]?.parameters
+                } : undefined,
+                screenStats: consumer.kind === "video" && source === 'screen' ? {
+                  consumerExists: true,
+                  consumerCodec: consumer.rtpParameters?.codecs?.[0]?.mimeType,
+                  consumerPayloadType: consumer.rtpParameters?.codecs?.[0]?.payloadType,
+                  consumerCodecParams: consumer.rtpParameters?.codecs?.[0]?.parameters
+                } : undefined
               };
-              if (consumer.kind === "video" && source === 'screen') newParticipant.screenTrack = consumer.track as MediaStreamTrack;
-              else if (consumer.kind === "video") newParticipant.videoTrack = consumer.track as MediaStreamTrack;
-              if (consumer.kind === "audio") newParticipant.audioTrack = consumer.track as MediaStreamTrack;
               
               return [...prev, newParticipant];
             }
@@ -1086,6 +1212,10 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
+          if (initialCurrentUser.role === 'bot') {
+            return;
+          }
+
           let videoTrack: MediaStreamTrack | null = null;
           let audioTrack: MediaStreamTrack | null = null;
 
@@ -1128,15 +1258,10 @@ export function MeetingProvider({
   // ── Device Management ────────────────────────────────
   const fetchDevices = async () => {
     try {
-      // Must request permission first, otherwise device labels are empty
-      // Only do this if not a bot to avoid triggering fake device beep
-      if (initialCurrentUser.role !== 'bot') {
-        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true }).catch(() => null);
-        if (tempStream) {
-          tempStream.getTracks().forEach(t => t.stop()); // Immediately release hardware
-        }
-      }
-      
+      // Removed `tempStream` hardware request. 
+      // 1. Permissions are already requested on the Join screen.
+      // 2. Requesting and immediately stopping tracks on iOS Safari locks the hardware,
+      //    causing `enableCamera` (which fires concurrently) to permanently fail.
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       
       const audioInputs = allDevices.filter((d) => d.kind === "audioinput");
@@ -1179,6 +1304,13 @@ export function MeetingProvider({
     };
   }, []);
 
+  useEffect(() => {
+    if (webrtcClient.current) {
+      if (selectedDevices.audioInput) webrtcClient.current.setAudioInputDevice(selectedDevices.audioInput);
+      if (selectedDevices.videoInput) webrtcClient.current.setVideoInputDevice(selectedDevices.videoInput);
+    }
+  }, [selectedDevices.audioInput, selectedDevices.videoInput, webrtcStatus]);
+
   const switchDevice = useCallback(async (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => {
     setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
 
@@ -1219,6 +1351,7 @@ export function MeetingProvider({
 
   // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
   useEffect(() => {
+    if (webrtcClient.current?.userRole === 'bot') return;
     const trackToMonitor = webrtcClient.current?.rawAudioTrack || localAudioTrackRef.current;
     if (!trackToMonitor) return;
 
@@ -1319,26 +1452,27 @@ export function MeetingProvider({
       setIsCameraOn(newState);
       setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
     } else {
-      if (!localCameraTrackRef.current) {
-        // First time turning on camera
-        webrtcClient.current?.enableCamera().then(async track => {
-          let finalTrack = track;
-          // Apply VB
-          if (vbMode !== 'none' && webrtcClient.current) {
-            const vbTrack = await webrtcClient.current.setVirtualBackground(vbMode, vbImageUrl);
-            if (vbTrack) finalTrack = vbTrack;
-          }
-          localCameraTrackRef.current = finalTrack;
-          webrtcClient.current?.sendCameraState(newState);
-          setIsCameraOn(newState);
-          setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: finalTrack } : p));
-        }).catch(err => console.error("Failed to enable camera:", err));
-      } else {
-        webrtcClient.current?.resumeCamera();
+      // Force fresh camera start on any toggle ON. No resumeCamera() usage for this flow.
+      webrtcClient.current?.enableCamera().then(async track => {
+        if (track.readyState !== 'live') {
+          throw new Error("Track is not live");
+        }
+        let finalTrack = track;
+        // Apply VB
+        if (vbMode !== 'none' && webrtcClient.current) {
+          const vbTrack = await webrtcClient.current.setVirtualBackground(vbMode, vbImageUrl);
+          if (vbTrack) finalTrack = vbTrack;
+        }
+        localCameraTrackRef.current = finalTrack;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState } : p));
-      }
+        setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+      }).catch(err => {
+        console.error("Failed to enable camera:", err);
+        toast.error("Camera could not start. Please retry.");
+        // Ensure UI stays off
+        setIsCameraOn(false);
+      });
     }
   }, [isCameraOn, initialCurrentUser.id, vbMode, vbImageUrl]);
 
@@ -1370,18 +1504,17 @@ export function MeetingProvider({
       console.error("Screen share error:", e);
     }
   }, [isScreenSharing, initialCurrentUser.id]);
-
   const toggleRecording = useCallback(async () => {
-    if (isRecording) {
+    if (recordingStatus === 'recording' || recordingStatus === 'starting') {
       webrtcClient.current?.sendStopRecording();
-      setIsRecording(false);
-      toast.success("Recording stopped. It is being processed and will be saved to cloud.");
+      setRecordingStatus('processing');
+      toast.success("Recording stopped. It is being processed and will be saved to cloud.", { id: 'recording_status' });
     } else {
       webrtcClient.current?.sendStartRecording();
-      setIsRecording(true);
-      toast.success("Recording started in the cloud.");
+      setRecordingStatus('starting');
+      toast.success("Starting recording...", { id: 'recording_status' });
     }
-  }, [isRecording]);
+  }, [recordingStatus]);
   const toggleHandRaise = useCallback(() => {
     const newState = !isHandRaised;
     setIsHandRaised(newState);
@@ -1391,9 +1524,12 @@ export function MeetingProvider({
 
   const sendMessage = useCallback(
     (content: string, targetUserId?: string, fileUrl?: string) => {
-      webrtcClient.current?.sendChatMessage(content, targetUserId, fileUrl);
+      const clientEventId = crypto.randomUUID();
+      webrtcClient.current?.sendChatMessage(content, targetUserId, fileUrl, clientEventId);
       const msg: ChatMessage = {
-        id: `m-${Date.now()}`,
+        id: clientEventId,
+        clientEventId,
+        lifecycleState: 'sent',
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderRole: (webrtcClient.current?.userRole as ParticipantRole) || currentUser.role,
@@ -1588,12 +1724,14 @@ export function MeetingProvider({
         reactions,
         activePanel,
         hasUnreadChat,
+        markChatMessageRendered,
         layoutMode,
         gridOverflowMode,
         isMuted,
         isCameraOn,
         isScreenSharing,
         isRecording,
+        recordingStatus,
         isHandRaised,
         showLeaveDialog,
         showReactionPicker,
@@ -1695,11 +1833,30 @@ export function MeetingProvider({
         
         vbMode,
         vbImageUrl,
-        handleVbSelect: async (mode: 'none' | 'blur' | 'image', imageUrl?: string) => {
+        handleVbSelect: async function handleVbSelectFn(mode: 'none' | 'blur' | 'image', imageUrl?: string) {
           setVbMode(mode);
           setVbImageUrl(imageUrl);
           sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: imageUrl }));
           if (isCameraOn && webrtcClient.current) {
+            webrtcClient.current.onVbDegraded = (severity) => {
+              if (severity === 'warning' && mode === 'image') {
+                toast.warning("Virtual background is slowing this device. Degraded to basic blur.");
+                handleVbSelectFn('blur');
+              } else {
+                toast.error("Virtual background may slow this device. We switched to normal video for better meeting quality.");
+                setVbMode('none');
+                setVbImageUrl(undefined);
+                sessionStorage.setItem("mtg_vb", JSON.stringify({ mode: 'none' }));
+                webrtcClient.current?.setVirtualBackground('none').then(track => {
+                  if (track) {
+                    localCameraTrackRef.current = track;
+                    setParticipants(prev => prev.map(p => 
+                      p.id === currentUser.id ? { ...p, videoTrack: track } : p
+                    ));
+                  }
+                });
+              }
+            };
             const track = await webrtcClient.current.setVirtualBackground(mode, imageUrl);
             if (track) {
               localCameraTrackRef.current = track;
@@ -1716,6 +1873,7 @@ export function MeetingProvider({
         resumeRemoteVideo,
         micError,
         setMicError,
+        webrtcClientRef: webrtcClient,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />

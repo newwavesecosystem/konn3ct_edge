@@ -22,7 +22,18 @@ export const config = {
         },
         {
           kind: 'video' as const,
-          mimeType: 'video/AV1',
+          mimeType: 'video/H264',
+          clockRate: 90000,
+          parameters: {
+            'packetization-mode': 1,
+            'profile-level-id': '42e01f',
+            'level-asymmetry-allowed': 1,
+            'x-google-start-bitrate': 1000
+          }
+        },
+        {
+          kind: 'video' as const,
+          mimeType: 'video/VP8',
           clockRate: 90000,
           parameters: {
             'x-google-start-bitrate': 1000
@@ -39,20 +50,9 @@ export const config = {
         },
         {
           kind: 'video' as const,
-          mimeType: 'video/VP8',
+          mimeType: 'video/AV1',
           clockRate: 90000,
           parameters: {
-            'x-google-start-bitrate': 1000
-          }
-        },
-        {
-          kind: 'video' as const,
-          mimeType: 'video/H264',
-          clockRate: 90000,
-          parameters: {
-            'packetization-mode': 1,
-            'profile-level-id': '42e01f',
-            'level-asymmetry-allowed': 1,
             'x-google-start-bitrate': 1000
           }
         }

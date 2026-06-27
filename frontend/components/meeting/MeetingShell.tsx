@@ -19,6 +19,7 @@ import { MicIssueDialog } from "./MicIssueDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
 import { SecurityPanel } from "./SecurityPanel";
+import { QADiagnosticsOverlay } from "./QADiagnosticsOverlay";
 import dynamic from "next/dynamic";
 
 const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
@@ -32,13 +33,19 @@ export function MeetingShell() {
     setActivePanel,
     isMobilePanelOpen,
     setIsMobilePanelOpen,
+    isMuted,
+    isCameraOn,
+    isScreenSharing,
+    isRecording,
+    recordingStatus,
     meetingInfo,
     participants,
-    isRecording,
     meetingDuration,
     webrtcStatus,
     showDonationModal,
     setShowDonationModal,
+    currentUser,
+    logoutUrl
   } = useMeeting();
 
   const formatDuration = (s: number) => {
@@ -51,7 +58,29 @@ export function MeetingShell() {
 
   const searchParams = useSearchParams();
   const router = useRouter();
-  const isBot = searchParams?.get('bot') === 'true';
+  const isBot = !!searchParams?.get('botToken');
+
+  React.useEffect(() => {
+    if (webrtcStatus === 'ended') {
+      const params = new URLSearchParams();
+      if (currentUser?.role) params.set("role", currentUser.role);
+      if (logoutUrl) params.set("logoutUrl", logoutUrl);
+      router.push(`/post-meeting/${meetingInfo.roomSlug}?${params.toString()}`);
+    }
+  }, [webrtcStatus, router, currentUser?.role, logoutUrl, meetingInfo.roomSlug]);
+
+  React.useEffect(() => {
+    if (isBot && currentUser?.role === 'bot' && webrtcStatus === 'connected' && meetingInfo.roomSlug) {
+      (window as any).__KONN3CT_RECORDER_READY__ = {
+        joined: true,
+        roomId: meetingInfo.roomSlug,
+        participantId: currentUser?.id,
+        signalingConnected: true,
+        mediaReady: true,
+        timestamp: Date.now()
+      };
+    }
+  }, [isBot, webrtcStatus, meetingInfo.roomSlug, currentUser?.id, currentUser?.role]);
 
   const panelContent: Record<string, React.ReactNode> = {
     chat: <ChatPanel />,
@@ -68,7 +97,7 @@ export function MeetingShell() {
 
   if (webrtcStatus === 'waiting') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
+      <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
         <div className="p-8 rounded-2xl max-w-md w-full text-center" style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}>
           <div className="w-16 h-16 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center mx-auto mb-6">
             <span className="text-2xl font-bold">K</span>
@@ -89,17 +118,16 @@ export function MeetingShell() {
     );
   }
 
-  if (['denied', 'kicked', 'failed', 'ended', 'invalid-session'].includes(webrtcStatus)) {
+  if (['denied', 'kicked', 'failed', 'invalid-session'].includes(webrtcStatus)) {
     const errorDetails = {
       denied: { title: "Entry Denied", desc: "The host has declined your request to join this meeting." },
       kicked: { title: "Removed from Meeting", desc: "You have been removed from this meeting by the host." },
       failed: { title: "Connection Failed", desc: "We couldn't connect you to the meeting. Please try again." },
-      ended:  { title: "Meeting Ended", desc: "The host has ended this meeting for everyone." },
       'invalid-session': { title: "Invalid Session", desc: "Your join session is invalid or expired. Please start over from the join page." },
-    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'ended' | 'invalid-session'];
+    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session'];
 
     return (
-      <div className="flex flex-col items-center justify-center h-screen" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
+      <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
         <div className="p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col items-center" style={{ backgroundColor: "var(--mt-dialog-bg)", border: "1px solid var(--mt-border-strong)" }}>
           <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mb-5 ring-8 ring-red-500/5">
             <X className="w-8 h-8" />
@@ -128,7 +156,7 @@ export function MeetingShell() {
 
   return (
     <div
-      className="flex flex-col h-screen overflow-hidden"
+      className="flex flex-col h-[100dvh] overflow-hidden"
       style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}
     >
       {/* Top bar — minimal */}
@@ -164,11 +192,21 @@ export function MeetingShell() {
             <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
             {formatDuration(meetingDuration)}
           </span>
-          {isRecording && (
+          {recordingStatus !== 'idle' && recordingStatus !== 'failed' && (
             <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded-full shrink-0">
-              <Circle className="w-2 h-2 fill-red-400 animate-pulse" />
-              <span className="hidden sm:inline">Recording</span>
-              <span className="sm:hidden">Rec</span>
+              <Circle className={cn("w-2 h-2 fill-red-400", recordingStatus === 'recording' && "animate-pulse")} />
+              <span className="hidden sm:inline">
+                {recordingStatus === 'starting' ? 'Starting...' :
+                 recordingStatus === 'recording' ? 'Recording' :
+                 recordingStatus === 'processing' ? 'Processing...' :
+                 recordingStatus === 'ready' ? 'Ready' : ''}
+              </span>
+              <span className="sm:hidden">
+                {recordingStatus === 'starting' ? '...' :
+                 recordingStatus === 'recording' ? 'Rec' :
+                 recordingStatus === 'processing' ? '...' :
+                 recordingStatus === 'ready' ? 'Done' : ''}
+              </span>
             </span>
           )}
 
@@ -310,6 +348,7 @@ export function MeetingShell() {
       {!isBot && <MeetingControls />}
 
       {/* Floating layers */}
+      <QADiagnosticsOverlay />
       <ReactionsLayer />
       <LeaveDialog />
       <MicIssueDialog />

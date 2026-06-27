@@ -181,7 +181,7 @@ router.post('/meetings/join', async (req, res) => {
       logoutUrl: room.logoutUrl,
     };
 
-    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "6h" });
     const joinPath = `/meeting/${room.slug}?t=${sessionToken}`;
 
     res.json({
@@ -282,7 +282,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
       logoutUrl: room.logoutUrl,
     };
 
-    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "6h" });
     const joinPath = `/meeting/${room.slug}?t=${sessionToken}`;
 
     res.json({

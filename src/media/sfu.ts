@@ -191,7 +191,11 @@ export async function setupAudioObserver(roomId: string, onSpeaking: (producerId
   })();
 
   audioObserversPromises.set(roomId, promise);
-  await promise;
+  try {
+    await promise;
+  } finally {
+    audioObserversPromises.delete(roomId);
+  }
 }
 
 /**
