@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Animated, Keyboard } from 'react-native';
 import { useMeetingStore } from '../../store/useMeetingStore';
 import { MediasoupService } from '../../webrtc/MediasoupService';
 import { meetingThemeTokens } from '../../theme/meetingTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 interface PollsPanelProps {
   service: MediasoupService | null;
@@ -25,6 +26,30 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
+  const [keyboardHeightAnim] = useState(new Animated.Value(0));
+
+  React.useEffect(() => {
+    if (Platform.OS === 'android') {
+      const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+        Animated.timing(keyboardHeightAnim, {
+          toValue: e.endCoordinates.height,
+          duration: 250,
+          useNativeDriver: false
+        }).start();
+      });
+      const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+        Animated.timing(keyboardHeightAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false
+        }).start();
+      });
+      return () => {
+        showSub.remove();
+        hideSub.remove();
+      };
+    }
+  }, []);
 
   const handleVote = (pollId: string, optionId: string) => {
     if (service) service.votePoll(pollId, optionId);
@@ -45,7 +70,7 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { paddingBottom: keyboardHeightAnim }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Meeting Polls</Text>
         <TouchableOpacity onPress={() => setActivePane('none')} style={styles.closeBtn}>
@@ -53,7 +78,13 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: safeBottom + 16 }}>
+      <KeyboardAwareScrollView 
+        style={styles.content} 
+        contentContainerStyle={{ paddingBottom: safeBottom + 16 }}
+        enableOnAndroid={true}
+        extraScrollHeight={Platform.OS === 'android' ? 100 : 20}
+        keyboardShouldPersistTaps="handled"
+      >
         {isHost && !isCreating && (
           <TouchableOpacity style={styles.createBtn} onPress={() => setIsCreating(true)}>
             <Text style={styles.createText}>+ Create New Poll</Text>
@@ -134,8 +165,8 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
         {!isCreating && polls.length === 0 && (
           <Text style={styles.emptyText}>No active polls right now.</Text>
         )}
-      </ScrollView>
-    </View>
+      </KeyboardAwareScrollView>
+    </Animated.View>
   );
 };
 
@@ -143,7 +174,7 @@ const getStyles = (t: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
-    height: '70%',
+    height: '85%',
     backgroundColor: t.bgElevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

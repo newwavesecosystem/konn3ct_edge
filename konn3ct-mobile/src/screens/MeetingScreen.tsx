@@ -349,47 +349,164 @@ export default function MeetingScreen({ route, navigation }: Props) {
     return parts[0].substring(0, 2).toUpperCase();
   };
 
+  const renderCards = () => (
+    <>
+      {remoteStreams.map((p) => {
+        const storeParticipant = participants.find(up => up.userId === p.id);
+        const isRaised = storeParticipant?.isHandRaised;
+        const isSpeaking = storeParticipant?.isSpeaking;
+        // Check if stream has an active, enabled, unmuted video track
+        const videoTrack = p.stream?.getVideoTracks()?.[0];
+        const hasVideo = !!videoTrack && videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
+        
+        const isRemoteMicMuted = !p.stream || p.stream.getAudioTracks().length === 0 || !p.stream.getAudioTracks()[0].enabled;
+        
+        return (
+          <View key={p.id} style={[
+            getCardStyle(), 
+            isSpeaking && styles.activeSpeakerBorder
+          ]}>
+            {!hasVideo ? (
+              <View style={styles.cameraOff}>
+                <View style={styles.avatarCircle}>
+                  <Text style={styles.avatarText}>{getInitials(p.name)}</Text>
+                </View>
+              </View>
+            ) : (
+              <RTCView
+                streamURL={p.stream.toURL()}
+                style={styles.rtcView}
+                objectFit="cover"
+              />
+            )}
+            {hasVideo && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
+            <View style={styles.nameBadgeContainer}>
+              <Text style={styles.nameText} numberOfLines={1}>{p.name}</Text>
+              <View style={{ marginLeft: 6 }}>
+                {isRemoteMicMuted ? (
+                  <MicOff size={12} color="#ffb4ab" />
+                ) : (
+                  <Mic size={12} color="#c2e7ff" />
+                )}
+              </View>
+            </View>
+            {isRaised && (
+              <View style={styles.raisedHandBadge}>
+                <Hand size={12} color="#a83b00" fill="#a83b00" />
+                <Text style={styles.raisedHandText}>Raised</Text>
+              </View>
+            )}
+            {isSpeaking && (
+              <View style={styles.activeSpeakerBadge}>
+                <Radio size={12} color="#0b57d0" />
+              </View>
+            )}
+            {isRemoteMicMuted && (
+              <View style={styles.mutedBadge}>
+                <MicOff size={14} color="white" />
+              </View>
+            )}
+          </View>
+        );
+      })}
+      
+      {!isPipMode && (
+        <View style={[
+          getCardStyle(), 
+          participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
+        ]}>
+          {localStream && !isCameraOff ? (
+            // key forces a full unmount+remount on Android every toggle.
+            // Without this, the GL surface freezes green and won't recover.
+            <RTCView
+              key={`local-cam-${cameraKey}`}
+              streamURL={localStream.toURL()}
+              style={styles.rtcView}
+              objectFit="cover"
+              mirror={true}
+              zOrder={0}
+            />
+          ) : (
+            <View style={styles.cameraOff}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{getInitials(localUserName)}</Text>
+              </View>
+            </View>
+          )}
+          {localStream && !isCameraOff && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
+          <View style={styles.nameBadgeContainer}>
+            <Text style={styles.nameText}>{localUserName}</Text>
+            <View style={{ marginLeft: 6 }}>
+              {isMicMuted ? (
+                <MicOff size={12} color="#ffb4ab" />
+              ) : (
+                <Mic size={12} color="#c2e7ff" />
+              )}
+            </View>
+          </View>
+          {isHandRaisedLocally && (
+            <View style={styles.raisedHandBadge}>
+              <Hand size={12} color="#a83b00" fill="#a83b00" />
+              <Text style={styles.raisedHandText}>Raised</Text>
+            </View>
+          )}
+          {isMicMuted && (
+            <View style={styles.mutedBadge}>
+              <MicOff size={14} color="white" />
+            </View>
+          )}
+        </View>
+      )}
+    </>
+  );
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       {!isPipMode && <ReactionsLayer />}
       
-      {/* Top Scrim Gradient */}
+      {/* Header Bar */}
       {!isPipMode && (
-        <LinearGradient
-          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.08)', 'transparent']}
-          style={styles.topScrim}
-          pointerEvents="none"
-        />
-      )}
-
-      {/* Top Overlay */}
-      {!isPipMode && (
-        <View style={[styles.topOverlay, { top: safeTop }]} pointerEvents="box-none">
-          <View style={styles.infoPill}>
-            <View style={styles.lockIconContainer}>
-              <Lock size={12} color={tokens.primary} strokeWidth={2.5} />
+        <View style={[styles.headerBar, { marginTop: safeTop + 6 }]}>
+          <View style={styles.headerRow}>
+            {/* Meeting Info */}
+            <View style={styles.headerInfoGroup}>
+              <View style={styles.securityIcon}>
+                <Lock size={10} color={tokens.primary} strokeWidth={2.5} />
+              </View>
+              <View style={styles.headerTextStack}>
+                <Text style={styles.headerTitle} numberOfLines={1}>{roomId || 'Meeting'}</Text>
+                <View style={styles.headerMeta}>
+                  <View style={[
+                    styles.liveDot,
+                    isConnected ? styles.liveDotActive : styles.liveDotInactive
+                  ]} />
+                  <Text style={[styles.headerMetaText, isConnected && { color: tokens.success }]}>
+                    {isConnected ? 'Live' : 'Waiting'}
+                  </Text>
+                  <View style={styles.metaDivider} />
+                  <Users size={10} color={tokens.textMuted} strokeWidth={2.5} />
+                  <Text style={styles.headerMetaText}> {totalItems}</Text>
+                </View>
+              </View>
             </View>
-            <Text style={styles.infoTitle} numberOfLines={1}>{roomId || 'Product Sync'}</Text>
-            <View style={[
-              styles.infoDot,
-              isConnected ? styles.infoDotActive : styles.infoDotInactive
-            ]} />
-            <Text style={[styles.infoTime, isConnected && { color: tokens.success, fontWeight: '600' }]}>
-              {isConnected ? 'Active' : 'Wait'}
-            </Text>
-          </View>
-          <View style={styles.topRightActions}>
-            <TouchableOpacity
-              style={styles.inviteBtn}
-              activeOpacity={0.7}
-              onPress={copyMeetingLink}
-            >
-              <UserPlus size={14} color="#fff" />
-              <Text style={styles.inviteBtnText}>Invite</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.topActionBtn} activeOpacity={0.7} onPress={() => serviceRef.current?.switchCamera()}>
-              <SwitchCamera size={16} color={tokens.textPrimary} />
-            </TouchableOpacity>
+
+            {/* Actions */}
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.headerInviteBtn}
+                activeOpacity={0.7}
+                onPress={copyMeetingLink}
+              >
+                <UserPlus size={14} color={tokens.primary} strokeWidth={2.5} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                activeOpacity={0.7}
+                onPress={() => serviceRef.current?.switchCamera()}
+              >
+                <SwitchCamera size={14} color={tokens.textPrimary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
@@ -408,116 +525,33 @@ export default function MeetingScreen({ route, navigation }: Props) {
       )}
 
       <View style={[styles.videoGrid, activeScreenShare && styles.videoGridShrunk]}>
-        <ScrollView style={styles.remoteGrid} contentContainerStyle={styles.gridInnerScroll} horizontal={!!activeScreenShare}>
-          <View style={[styles.gridInner, activeScreenShare && styles.gridInnerHorizontal]}>
-            {remoteStreams.map((p) => {
-              const storeParticipant = participants.find(up => up.userId === p.id);
-              const isRaised = storeParticipant?.isHandRaised;
-              const isSpeaking = storeParticipant?.isSpeaking;
-              // Check if stream has an active, enabled, unmuted video track
-              const videoTrack = p.stream?.getVideoTracks()?.[0];
-              const hasVideo = !!videoTrack && videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
-              
-              const isRemoteMicMuted = !p.stream || p.stream.getAudioTracks().length === 0 || !p.stream.getAudioTracks()[0].enabled;
-              
-              return (
-                <View key={p.id} style={[
-                  getCardStyle(), 
-                  isSpeaking && styles.activeSpeakerBorder
-                ]}>
-                  {!hasVideo ? (
-                    <View style={styles.cameraOff}>
-                      <View style={styles.avatarCircle}>
-                        <Text style={styles.avatarText}>{getInitials(p.name)}</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <RTCView
-                      streamURL={p.stream.toURL()}
-                      style={styles.rtcView}
-                      objectFit="cover"
-                    />
-                  )}
-                  {hasVideo && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
-                  <View style={styles.nameBadgeContainer}>
-                    <Text style={styles.nameText} numberOfLines={1}>{p.name}</Text>
-                    <View style={{ marginLeft: 6 }}>
-                      {isRemoteMicMuted ? (
-                        <MicOff size={12} color="#ffb4ab" />
-                      ) : (
-                        <Mic size={12} color="#c2e7ff" />
-                      )}
-                    </View>
-                  </View>
-                  {isRaised && (
-                    <View style={styles.raisedHandBadge}>
-                      <Hand size={12} color="#a83b00" fill="#a83b00" />
-                      <Text style={styles.raisedHandText}>Raised</Text>
-                    </View>
-                  )}
-                  {isSpeaking && (
-                    <View style={styles.activeSpeakerBadge}>
-                      <Radio size={12} color="#0b57d0" />
-                    </View>
-                  )}
-                  {isRemoteMicMuted && (
-                    <View style={styles.mutedBadge}>
-                      <MicOff size={14} color="white" />
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-            
-            {!isPipMode && (
-              <View style={[
-                getCardStyle(), 
-                participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
-              ]}>
-                {localStream && !isCameraOff ? (
-                  // key forces a full unmount+remount on Android every toggle.
-                  // Without this, the GL surface freezes green and won't recover.
-                  <RTCView
-                    key={`local-cam-${cameraKey}`}
-                    streamURL={localStream.toURL()}
-                    style={styles.rtcView}
-                    objectFit="cover"
-                    mirror={true}
-                    zOrder={0}
-                  />
-                ) : (
-                  <View style={styles.cameraOff}>
-                    <View style={styles.avatarCircle}>
-                      <Text style={styles.avatarText}>{getInitials(localUserName)}</Text>
-                    </View>
-                  </View>
-                )}
-                {localStream && !isCameraOff && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
-                <View style={styles.nameBadgeContainer}>
-                  <Text style={styles.nameText}>{localUserName}</Text>
-                  <View style={{ marginLeft: 6 }}>
-                    {isMicMuted ? (
-                      <MicOff size={12} color="#ffb4ab" />
-                    ) : (
-                      <Mic size={12} color="#c2e7ff" />
-                    )}
-                  </View>
-                </View>
-                {isHandRaisedLocally && (
-                  <View style={styles.raisedHandBadge}>
-                    <Hand size={12} color="#a83b00" fill="#a83b00" />
-                    <Text style={styles.raisedHandText}>Raised</Text>
-                  </View>
-                )}
-                {isMicMuted && (
-                  <View style={styles.mutedBadge}>
-                    <MicOff size={14} color="white" />
-                  </View>
-                )}
-              </View>
-            )}
+        {totalItems <= 4 && !activeScreenShare ? (
+          <View style={[
+            styles.gridInner,
+            styles.remoteGrid,
+            { height: '100%' },
+            (!activeScreenShare && !isPipMode) && {
+              paddingBottom: safeBottom + 78,
+            }
+          ]}>
+            {renderCards()}
           </View>
-        </ScrollView>
+        ) : (
+          <ScrollView
+            style={styles.remoteGrid}
+            contentContainerStyle={[
+              styles.gridInnerScroll,
+              (!activeScreenShare && !isPipMode) && {
+                paddingBottom: safeBottom + 120,
+              }
+            ]}
+            horizontal={!!activeScreenShare}
+          >
+            <View style={[styles.gridInner, activeScreenShare && styles.gridInnerHorizontal]}>
+              {renderCards()}
+            </View>
+          </ScrollView>
+        )}
       </View>
 
       {!isPipMode && (
@@ -532,6 +566,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
             <TouchableOpacity style={!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted} onPress={toggleCamera}>
               {isCameraOff ? <VideoOff size={20} color={tokens.danger} /> : <VideoIcon size={20} color={tokens.textPrimary} strokeWidth={2} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={isHandRaisedLocally ? styles.toolBtnActive : styles.toolBtnNeutral} onPress={toggleHandRaise}>
+              <Hand size={20} color={isHandRaisedLocally ? tokens.textInverse : tokens.textPrimary} fill={isHandRaisedLocally ? tokens.textInverse : "none"} strokeWidth={2} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.toolBtnNeutral} onPress={() => setIsMoreMenuVisible(true)}>
@@ -794,62 +832,107 @@ const getStyles = (t: any) => StyleSheet.create({
   leaveWaitingBtn: { backgroundColor: t.primary, width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', shadowColor: t.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 5 },
   leaveText: { color: t.textInverse, fontWeight: '700', fontSize: 15, letterSpacing: 0.2 },
   
-  // Top Overlay
-  topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: Platform.OS === 'android' ? 110 : 130, zIndex: 15 },
-  topOverlay: { position: 'absolute', left: 12, right: 12, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoPill: {
+  // Header Bar — Compact floating pill
+  headerBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 20,
+    backgroundColor: t.toolbarBg,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerInfoGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: t.toolbarBg,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: t.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: t.shadowOpacity * 0.6,
-    shadowRadius: 12,
-    elevation: 3,
+    flex: 1,
+    marginRight: 10,
   },
-  lockIconContainer: { marginRight: 6, justifyContent: 'center', alignItems: 'center' },
-  infoTitle: { fontFamily: 'Inter', fontSize: 13, fontWeight: '600', color: t.textPrimary, maxWidth: 120, letterSpacing: -0.2 },
-  infoDot: { width: 7, height: 7, borderRadius: 3.5, marginHorizontal: 8 },
-  infoDotActive: { backgroundColor: '#0FA97A', shadowColor: '#0FA97A', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 5, elevation: 2 },
-  infoDotInactive: { backgroundColor: t.textMuted },
-  infoTime: { fontFamily: 'Inter', fontSize: 11, fontWeight: '600', color: t.textSecondary, letterSpacing: 0.2 },
-  topRightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  topActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: t.toolbarBg,
+  securityIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: t.bgActiveBadge,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  headerTextStack: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: t.textPrimary,
+    fontFamily: 'Inter',
+    letterSpacing: -0.2,
+    marginBottom: 1,
+  },
+  headerMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginRight: 4,
+  },
+  liveDotActive: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  liveDotInactive: {
+    backgroundColor: t.textMuted,
+  },
+  headerMetaText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: t.textSecondary,
+    fontFamily: 'Inter',
+    letterSpacing: 0.2,
+  },
+  metaDivider: {
+    width: 2.5,
+    height: 2.5,
+    borderRadius: 1.25,
+    backgroundColor: t.textMuted,
+    marginHorizontal: 6,
+    opacity: 0.5,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerInviteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: t.bgTile,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: t.bgElevated,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: t.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: t.shadowOpacity * 0.5,
-    shadowRadius: 6,
-    elevation: 2,
   },
-  inviteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: t.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    height: 40,
-    shadowColor: t.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  inviteBtnText: { color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Inter', letterSpacing: 0.3 },
 
   // Screen Share
   screenShareContainer: { height: 340, backgroundColor: '#000', width: '100%' },
@@ -860,9 +943,9 @@ const getStyles = (t: any) => StyleSheet.create({
   // Grid
   videoGrid: { flex: 1, backgroundColor: t.bg },
   videoGridShrunk: { flex: 1, maxHeight: 180 },
-  remoteGrid: { flex: 1, padding: 6 },
-  gridInnerScroll: { flexGrow: 1, paddingBottom: 120 },
-  gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', height: '100%' },
+  remoteGrid: { flex: 1, padding: 4 },
+  gridInnerScroll: { flexGrow: 1 },
+  gridInner: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignContent: 'flex-start' },
   gridInnerHorizontal: { flexDirection: 'row', flexWrap: 'nowrap' },
   
   // Card Sizes — Modern rounded cards
@@ -968,7 +1051,7 @@ const getStyles = (t: any) => StyleSheet.create({
     backgroundColor: t.toolbarBg,
     paddingHorizontal: 6,
     paddingVertical: 6,
-    borderRadius: 32,
+    borderRadius: 28,
     borderWidth: 1,
     borderColor: t.border,
     shadowColor: '#000',
@@ -978,18 +1061,18 @@ const getStyles = (t: any) => StyleSheet.create({
     elevation: 10,
   },
   toolBtnActive: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: t.bgActive,
     ...Platform.select({ web: { outlineStyle: 'none' as any } }),
   },
   toolBtnMuted: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: t.dangerHover,
@@ -998,9 +1081,9 @@ const getStyles = (t: any) => StyleSheet.create({
     ...Platform.select({ web: { outlineStyle: 'none' as any } }),
   },
   toolBtnNeutral: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: t.bgElevated,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1011,9 +1094,9 @@ const getStyles = (t: any) => StyleSheet.create({
   menuBadge: { position: 'absolute', top: 8, right: 8, width: 9, height: 9, borderRadius: 4.5, backgroundColor: t.danger, borderWidth: 2, borderColor: t.bgElevated },
   toolbarDivider: { width: 1, height: 28, backgroundColor: t.border, marginHorizontal: 6, borderRadius: 1 },
   endCallBtn: {
-    width: 68,
-    height: 50,
-    borderRadius: 25,
+    width: 58,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: t.danger,
     justifyContent: 'center',
     alignItems: 'center',
