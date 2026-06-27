@@ -28,6 +28,7 @@ export interface QAPlaybackStats {
   lastVideoPlayAttemptAt?: string;
   lastVideoPlayResult?: string;
   lastVideoError?: string;
+  firstFrameRendered?: boolean;
   lastHealthyAt?: string;
   isRecovering?: boolean;
   recoveryDurationMs?: number;
@@ -71,7 +72,7 @@ export interface Participant {
   screenStats?: QAPlaybackStats;
 }
 
-export type ActionLifecycleState = "queued" | "sent" | "acknowledged" | "broadcasted" | "observed" | "rendered" | "failed" | "timed-out" | "unsupported";
+export type ActionLifecycleState = "sent" | "acknowledged" | "broadcasted" | "observed" | "rendered" | "failed" | "timed-out" | "unsupported";
 
 export interface ChatMessage {
   id: string; // Typically serverEventId, but fallback to clientEventId for optimistic UI

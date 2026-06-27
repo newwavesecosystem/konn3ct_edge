@@ -136,6 +136,25 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 
+async function asyncWithRetry<T>(
+  operation: () => Promise<T>,
+  onFail: (err: any) => void,
+  maxRetries = 3
+): Promise<T | void> {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      return await operation();
+    } catch (e) {
+      attempt++;
+      if (attempt >= maxRetries) {
+        onFail(e);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
+  }
+}
 export function getActiveRoomParticipants(roomId: string) {
   const activeParticipants: Array<{ userId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
@@ -992,38 +1011,28 @@ export function initializeSignaling(server: Server) {
             return;
           }
 
-          const newMsg = await db.chatMessage.create({
-            data: {
-              roomId,
-              userId,
-              senderName: client.name,
-              content: data.message,
-              fileUrl: data.fileUrl || null,
-              isPrivate: !!data.targetUserId,
-              targetUserId: data.targetUserId || null,
-            }
-          });
-
-          if (clientEventId) {
-            emitActionAck(client, clientEventId, 'chat', newMsg.id, 'accepted');
-          }
-
+          const serverEventId = crypto.randomUUID();
+          const createdAt = new Date();
           const msgPayload = {
             type: 'chat',
             actionType: 'chat',
             clientEventId,
-            serverEventId: newMsg.id,
+            serverEventId,
             roomId,
             userId,
             senderParticipantId: userId,
-            name: client.name, // Always include display name — never make client guess from userId
-            message: newMsg.content,
-            timestamp: newMsg.createdAt.toISOString(),
-            broadcastAt: new Date().toISOString(),
-            isPrivate: newMsg.isPrivate,
-            fileUrl: newMsg.fileUrl,
-            id: newMsg.id
+            name: client.name,
+            message: data.message,
+            timestamp: createdAt.toISOString(),
+            broadcastAt: createdAt.toISOString(),
+            isPrivate: !!data.targetUserId,
+            fileUrl: data.fileUrl || null,
+            id: serverEventId
           };
+
+          if (clientEventId) {
+            emitActionAck(client, clientEventId, 'chat', serverEventId, 'accepted');
+          }
 
           if (data.targetUserId) {
             const roomClients = rooms.get(roomId);
@@ -1036,9 +1045,37 @@ export function initializeSignaling(server: Server) {
           } else {
             broadcastToRoom(roomId, msgPayload, userId);
           }
+
+          asyncWithRetry(
+            async () => {
+              await db.chatMessage.create({
+                data: {
+                  id: serverEventId,
+                  roomId,
+                  userId,
+                  senderName: client.name,
+                  content: data.message,
+                  fileUrl: data.fileUrl || null,
+                  isPrivate: !!data.targetUserId,
+                  targetUserId: data.targetUserId || null,
+                  createdAt
+                }
+              });
+            },
+            (err) => {
+              logger.error("Failed to persist chat message after retries", err);
+              if (client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: 'chat_persistence_failed',
+                  serverEventId,
+                  clientEventId
+                }));
+              }
+            }
+          );
         } catch (e) {
-          logger.error("Failed to save chat message", e);
-          if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'SERVER_ERROR', 'Failed to save chat message');
+          logger.error("Failed to process chat message", e);
+          if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'SERVER_ERROR', 'Failed to process chat message');
         }
         break;
 

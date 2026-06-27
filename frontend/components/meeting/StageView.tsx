@@ -854,6 +854,17 @@ function ScreenShareLayout({
         };
 
         el.onloadedmetadata = attemptPlay;
+        el.onloadeddata = () => {
+          if (screenSharer && screenSharer.screenStats) {
+            screenSharer.screenStats.firstFrameRendered = true;
+          }
+          attemptPlay();
+        };
+        el.onplaying = () => {
+          if (screenSharer && screenSharer.screenStats) {
+            screenSharer.screenStats.firstFrameRendered = true;
+          }
+        };
         el.oncanplay = attemptPlay;
 
         if (screenSharer?.screenTrack) {
