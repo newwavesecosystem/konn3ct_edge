@@ -15,7 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
+import { useVideoHealth } from "@/hooks/useVideoHealth";
 
 import YouTube from "react-youtube";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -816,22 +819,95 @@ function ScreenShareLayout({
   const sharerName = screenSharer?.name ?? "You";
   const isMe = isCurrentUserSharing || screenSharer?.id === currentUserId;
 
-  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
-  React.useEffect(() => {
-    if (videoRef.current && screenSharer?.screenTrack) {
-      if (videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        if (stream.getVideoTracks()[0] === screenSharer.screenTrack) return;
-        stream.getTracks().forEach(t => stream.removeTrack(t));
-        stream.addTrack(screenSharer.screenTrack);
+  const { health, remountKey } = useVideoHealth({
+    videoRef,
+    track: screenSharer?.screenTrack,
+    isVisible: true
+  });
+
+  const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
+
+  const videoCallbackRef = React.useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
+      if (el) {
+        lastVideoElRef.current = el;
+        const attemptPlay = () => {
+          if (!el) return;
+          el.play().then(() => {
+            if (screenSharer && screenSharer.screenStats) {
+              screenSharer.screenStats.lastVideoPlayResult = 'success';
+              screenSharer.screenStats.lastVideoError = undefined;
+            }
+          }).catch((e) => {
+            if (screenSharer && screenSharer.screenStats) {
+              screenSharer.screenStats.lastVideoPlayResult = 'error';
+              if (e.name !== 'AbortError') {
+                console.warn("Screen share play failed:", e);
+                (el as any)._lastError = e.message || e.name;
+                screenSharer.screenStats.lastVideoError = e.message || e.name;
+              }
+            }
+          });
+        };
+
+        el.onloadedmetadata = attemptPlay;
+        el.onloadeddata = () => {
+          if (screenSharer && screenSharer.screenStats) {
+            screenSharer.screenStats.firstFrameRendered = true;
+          }
+          attemptPlay();
+        };
+        el.onplaying = () => {
+          if (screenSharer && screenSharer.screenStats) {
+            screenSharer.screenStats.firstFrameRendered = true;
+          }
+        };
+        el.oncanplay = attemptPlay;
+
+        if (screenSharer?.screenTrack) {
+          if (el.srcObject) {
+            const stream = el.srcObject as MediaStream;
+            if (stream.getVideoTracks()[0] === screenSharer.screenTrack) {
+              attemptPlay();
+              return;
+            }
+            stream.getTracks().forEach(t => stream.removeTrack(t));
+            stream.addTrack(screenSharer.screenTrack);
+          } else {
+            el.srcObject = new MediaStream([screenSharer.screenTrack]);
+          }
+          attemptPlay();
+        } else {
+          el.srcObject = null;
+        }
       } else {
-        videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
+        if (lastVideoElRef.current) lastVideoElRef.current.srcObject = null;
+        lastVideoElRef.current = null;
       }
-      videoRef.current.play().catch((e) => {
-        if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
-      });
-    }
+    },
+    [screenSharer?.screenTrack]
+  );
+
+  // Auto-retry play on visibility changes
+  React.useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && videoRef.current && screenSharer?.screenTrack) {
+        videoRef.current.play().catch(e => {
+          if (e.name !== 'AbortError') console.warn('Safari rebind screen-share play failed', e);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, [screenSharer?.screenTrack]);
 
   return (
@@ -935,13 +1011,47 @@ function ScreenShareLayout({
               </div>
             ) : (
               // Show actual video feed for viewers
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-contain"
-              />
+              <div className="relative w-full h-full">
+                {(!screenSharer?.screenStats?.consumerExists || !screenSharer?.screenTrack) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
+                    <div className="flex flex-col items-center gap-3 text-white">
+                      <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
+                      <span className="text-sm font-medium">Connecting screen share...</span>
+                    </div>
+                  </div>
+                )}
+                {screenSharer?.screenTrack && health === 'recovering' && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                      <span className="text-sm font-medium drop-shadow-md">
+                        {videoRef.current?.videoWidth === 0 ? "Waiting for screen share video..." : "Recovering screen share..."}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <video
+                  key={remountKey}
+                  ref={videoCallbackRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={cn(
+                    "w-full h-full object-contain",
+                    health === 'recovering' && "opacity-50"
+                  )}
+                />
+                
+                {health === 'stalled' && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-900/80 border border-yellow-500/50 backdrop-blur-md rounded-lg text-yellow-100 shadow-lg">
+                      <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                      <span className="text-xs font-medium">Screen share connection is slow</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -974,6 +1084,7 @@ function ScreenShareLayout({
 
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isPlayerReady, setIsPlayerReady] = React.useState(false);
   const { broadcastECinema, currentUser, sendECinemaAction, ecinemaAction } = useMeeting();
   const playerRef = React.useRef<any>(null);
 
@@ -995,7 +1106,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
 
   // Sync player when receiving actions
   React.useEffect(() => {
-    if (ecinemaAction && playerRef.current) {
+    if (isPlayerReady && ecinemaAction && playerRef.current) {
       if (ecinemaAction.action === 'play') {
         playerRef.current.playVideo();
       } else if (ecinemaAction.action === 'pause') {
@@ -1006,7 +1117,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         playerRef.current.seekTo(ecinemaAction.time, true);
       }
     }
-  }, [ecinemaAction]);
+  }, [ecinemaAction, isPlayerReady]);
 
   const handlePlay = (e: any) => {
     if (currentUser.role === 'host' || currentUser.role === 'co-host') {
@@ -1077,11 +1188,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               iframeClassName="w-full h-full border-0 pointer-events-auto"
               onReady={(e) => { 
                 playerRef.current = e.target; 
-                if (ecinemaAction) {
-                  if (ecinemaAction.action === 'play') e.target.playVideo();
-                  else if (ecinemaAction.action === 'pause') e.target.pauseVideo();
-                  if (ecinemaAction.time !== undefined) e.target.seekTo(ecinemaAction.time, true);
-                }
+                setIsPlayerReady(true);
               }}
               onPlay={handlePlay}
               onPause={handlePause}

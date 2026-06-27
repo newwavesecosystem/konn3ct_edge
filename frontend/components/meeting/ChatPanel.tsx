@@ -55,7 +55,18 @@ const LinkifiedText = ({ text }: { text: string }) => {
 };
 
 export function ChatPanel() {
-  const { chatMessages, sendMessage, currentUser, participants, roomSettings } = useMeeting();
+  const { chatMessages, sendMessage, currentUser, participants, roomSettings, markChatMessageRendered } = useMeeting();
+  
+  const ChatMessageRenderTracker = ({ messageId, status }: { messageId: string, status?: string }) => {
+    useEffect(() => {
+      if (status !== 'rendered' && status !== 'timed-out' && status !== 'failed') {
+        // Mark as rendered on the next tick to ensure DOM insertion is complete
+        setTimeout(() => markChatMessageRendered(messageId), 0);
+      }
+    }, [messageId, status]);
+    return null;
+  };
+
   const [input, setInput] = useState("");
   const [targetUserId, setTargetUserId] = useState<string>("everyone");
   const [isUploading, setIsUploading] = useState(false);
@@ -200,6 +211,7 @@ export function ChatPanel() {
           return (
             <React.Fragment key={msg.id}>
               {dateDivider}
+              <ChatMessageRenderTracker messageId={msg.id} status={msg.lifecycleState} />
               <div
                 className={cn("flex flex-col gap-0.5", isMe && "items-end")}
               >

@@ -32,6 +32,75 @@ const s3Client = new S3Client({
 
 const BUCKET_NAME = process.env.DO_SPACES_BUCKET || 'konn3ct-assets';
 
+// 5. Add startup validation
+if (process.env.KUBERNETES_SERVICE_HOST) {
+  const backend = process.env.BACKEND_URL || '';
+  if (!backend || backend.includes('localhost') || backend.includes('127.0.0.1')) {
+    console.error('[FATAL] BACKEND_URL must be set to internal service DNS when running in Kubernetes, e.g. http://conn3ct-backend-service:80');
+    process.exit(1);
+  }
+}
+
+async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, jobId, botToken, stage, payload = null) {
+  let retries = 3;
+  let success = false;
+  const url = `${backendUrl}${endpoint}`;
+  
+  while (retries > 0 && !success) {
+    try {
+      console.log(JSON.stringify({
+        event: "recording_worker_connection_attempt",
+        recordingId,
+        jobId: jobId || "unknown",
+        targetService: "backend-api",
+        targetUrlMasked: url,
+        stage
+      }));
+      
+      const options = {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${botToken}` }
+      };
+      if (payload) {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(payload);
+      }
+      
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      success = true;
+    } catch (err) {
+      let errorCode = "ECONNREFUSED";
+      if (err.cause && err.cause.code) errorCode = err.cause.code;
+      else if (err.code) errorCode = err.code;
+
+      let host = "unknown", port = "unknown";
+      try {
+        const parsed = new URL(url);
+        host = parsed.hostname;
+        port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+      } catch (e) {}
+
+      console.log(JSON.stringify({
+        event: "recording_worker_connection_failed",
+        errorCode,
+        targetService: "backend-api",
+        targetHost: host,
+        targetPort: port,
+        stage,
+        retryable: retries > 1
+      }));
+      
+      retries--;
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        throw new Error(`Recording backend notification failed for stage: ${stage}`);
+      }
+    }
+  }
+}
+
 async function startWorker() {
   console.log('Recorder Worker started, waiting for jobs...');
   
@@ -43,7 +112,13 @@ async function startWorker() {
       
       const [queueName, jobStr] = result;
       const job = JSON.parse(jobStr);
-      console.log(`Processing recording job for room: ${job.roomId}`);
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: "recording_job_received",
+        roomId: job.roomId,
+        recordingId: job.recordingId || 'unknown',
+        stage: "received_job"
+      }));
 
       await processRecordingJob(job);
     } catch (err) {
@@ -55,9 +130,11 @@ async function startWorker() {
 }
 
 async function processRecordingJob(job) {
-  const { roomId, url, recordingId } = job;
+  const { roomId, url, recordingId, botToken } = job;
   let browser = null;
   let stream = null;
+  
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
   
   const outputPathRaw = path.join(__dirname, `${roomId}_raw.webm`);
   const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
@@ -74,7 +151,7 @@ async function processRecordingJob(job) {
     browser = await launch({
       executablePath: chromePath,
       headless: false, // Required by getDisplayMedia
-      defaultViewport: { width: 1920, height: 1080 },
+      defaultViewport: null,
       ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
       args: [
         '--window-size=1920,1080',
@@ -91,6 +168,7 @@ async function processRecordingJob(job) {
         '--auto-select-tab-capture-source-by-title=BotRecord',
         '--enable-usermedia-screen-capturing',
         '--use-fake-ui-for-media-stream',
+        `--use-file-for-fake-audio-capture=${require('path').join(__dirname, 'silent.wav')}`,
         '--disable-web-security',
         '--hide-scrollbars'
       ],
@@ -100,8 +178,15 @@ async function processRecordingJob(job) {
     const page = pages[0];
     await page.bringToFront();
 
-    // Navigate to the meeting URL with bot flag
-    console.log(`Navigating to ${url}`);
+    const maskedUrl = url.replace(/botToken=[^&]*/, 'botToken=***MASKED***').replace(/botSecret=[^&]*/, 'botSecret=***MASKED***');
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recording_navigation_started",
+      roomId: roomId,
+      recordingId: recordingId || 'unknown',
+      stage: "navigating",
+      url: maskedUrl
+    }));
     
     // Auto-grant permissions for capturing (display-capture is handled by CLI flags)
     const context = browser.defaultBrowserContext();
@@ -113,8 +198,41 @@ async function processRecordingJob(job) {
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-    // Wait a bit for React to render and WebRTC to connect
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recording_page_loaded",
+      roomId: roomId,
+      recordingId: recordingId || 'unknown',
+      stage: "waiting_for_readiness"
+    }));
+
+    try {
+      await page.waitForFunction(
+        () => (window).__KONN3CT_RECORDER_READY__?.joined === true,
+        { timeout: 60000 }
+      );
+    } catch (e) {
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: "recording_failed",
+        roomId: roomId,
+        recordingId: recordingId || 'unknown',
+        stage: "readiness_timeout",
+        reason: "RECORDER_JOIN_TIMEOUT"
+      }));
+      if (botToken) {
+        await notifyBackendWithRetry(backendUrl, '/api/internal/recordings/callback/finalized', recordingId, null, botToken, 'failed', { status: 'failed' });
+      }
+      throw new Error("Timeout waiting for readiness marker");
+    }
+
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recording_meeting_ready",
+      roomId: roomId,
+      recordingId: recordingId || 'unknown',
+      stage: "meeting_ready"
+    }));
 
     // Create WriteStream
     const fileStream = fs.createWriteStream(outputPathRaw);
@@ -146,13 +264,18 @@ async function processRecordingJob(job) {
     });
 
     const port = await new Promise((resolve) => {
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(3300, '127.0.0.1', () => {
         resolve(server.address().port);
       });
     });
 
-    console.log(`Ephemeral HTTP server listening on port ${port} for chunks...`);
-    console.log('Starting native MediaRecorder...');
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recording_server_started",
+      roomId: roomId,
+      recordingId: recordingId || 'unknown',
+      stage: "media_recorder_starting"
+    }));
 
     // Inject recording logic directly into the browser context
     await page.evaluate((serverPort) => {
@@ -196,7 +319,29 @@ async function processRecordingJob(job) {
       });
     }, port);
 
-    console.log(`Recording started for ${roomId}`);
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recording_started",
+      roomId: roomId,
+      recordingId: recordingId || 'unknown',
+      stage: "media_recorder_started"
+    }));
+    
+    // Notify Backend that recording has started
+    try {
+      await notifyBackendWithRetry(
+        backendUrl, 
+        `/api/recordings/${recordingId}/callback/started`,
+        recordingId, job.jobId, botToken, "callback_started"
+      );
+    } catch (err) {
+      console.error('Failed to notify backend of start after retries:', err);
+      // Stop recording and throw error to mark job failed
+      fileStream.end();
+      server.close();
+      try { await browser.close(); } catch(e){}
+      throw new Error('Recording start callback failed');
+    }
 
     // Subscribe to stop event
     return new Promise((resolve, reject) => {
@@ -205,7 +350,22 @@ async function processRecordingJob(job) {
       const stopHandler = async (channel, message) => {
         if (channel === `recorder:stop:${roomId}` && !isStopping) {
           isStopping = true;
-          console.log(`Received stop command for ${roomId}`);
+          let reason = 'unknown';
+          try {
+            const parsed = JSON.parse(message);
+            if (parsed.reason) reason = parsed.reason;
+          } catch(e) {
+            if (message === 'stop') reason = 'manual_stop';
+          }
+          
+          console.log(JSON.stringify({
+            timestamp: new Date().toISOString(),
+            event: "recording_stop_received",
+            roomId: roomId,
+            recordingId: recordingId || 'unknown',
+            stage: "stop_command_received",
+            reason: reason
+          }));
           
           pubsub.removeListener('message', stopHandler);
 
@@ -232,11 +392,24 @@ async function processRecordingJob(job) {
             server.close();
             
             fileStream.on('close', async () => {
-              console.log('File stream closed. Checking raw file size...');
+              console.log(JSON.stringify({
+                timestamp: new Date().toISOString(),
+                event: "recording_file_stream_closed",
+                roomId: roomId,
+                recordingId: recordingId || 'unknown',
+                stage: "file_stream_closed"
+              }));
               
               try {
                 const stats = fs.statSync(outputPathRaw);
-                console.log(`Raw WebM size: ${stats.size} bytes`);
+                console.log(JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  event: "recording_raw_file_checked",
+                  roomId: roomId,
+                  recordingId: recordingId || 'unknown',
+                  stage: "raw_file_checked",
+                  size: stats.size
+                }));
                 
                 if (stats.size < 10) {
                   console.error('Recording file is too small (less than 10KB). The recording was likely stopped too quickly or failed to capture frames.');
@@ -250,17 +423,39 @@ async function processRecordingJob(job) {
                 return resolve();
               }
 
-              console.log('Closing browser and converting to MP4...');
+              console.log(JSON.stringify({
+                timestamp: new Date().toISOString(),
+                event: "recording_conversion_started",
+                roomId: roomId,
+                recordingId: recordingId || 'unknown',
+                stage: "conversion_started"
+              }));
               await browser.close();
+              
+              try {
+                await notifyBackendWithRetry(
+                  backendUrl, 
+                  `/api/recordings/${recordingId}/callback/finalized`,
+                  recordingId, job.jobId, botToken, "callback_processing",
+                  { status: 'processing' }
+                );
+              } catch (err) {
+                console.error('Failed to notify backend of processing state:', err);
+              }
               
               // Convert WebM to MP4 using fluent-ffmpeg
               ffmpeg(outputPathRaw)
                 .outputOptions([
+                  '-y', // Force overwrite to prevent hanging on prompt
                   '-preset veryfast',
                   '-c:v libx264',
                   '-c:a aac',
-                  '-max_muxing_queue_size 9999'
+                  '-max_muxing_queue_size 9999',
+                  '-vsync 2'
                 ])
+              .on('progress', (progress) => {
+                console.log(`Processing: ${progress.percent}% done (Time: ${progress.timemark})`);
+              })
               .save(outputPathMp4)
               .on('error', (err, stdout, stderr) => {
                 console.error('FFmpeg stderr:', stderr);
@@ -268,7 +463,13 @@ async function processRecordingJob(job) {
                 reject(err);
               })
               .on('end', async () => {
-                console.log('Conversion finished. Uploading to Spaces...');
+                console.log(JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  event: "recording_conversion_finished",
+                  roomId: roomId,
+                  recordingId: recordingId || 'unknown',
+                  stage: "conversion_finished"
+                }));
                 try {
                   const fileStreamForUpload = fs.createReadStream(outputPathMp4);
                   const uploadParams = {
@@ -277,21 +478,39 @@ async function processRecordingJob(job) {
                       Bucket: BUCKET_NAME,
                       Key: `recordings/${roomId}/${Date.now()}.mp4`,
                       Body: fileStreamForUpload,
-                      ACL: 'public-read',
                       ContentType: 'video/mp4',
                     },
                   };
                   
                   const uploader = new Upload(uploadParams);
                   const data = await uploader.done();
-                  console.log(`Upload successful: ${data.Location}`);
-                  
-                  // Publish completion back to signaling server so it can update DB
-                  await redis.publish('recorder:completed', JSON.stringify({
-                    roomId,
-                    recordingId,
-                    recordingUrl: data.Location
+                  console.log(JSON.stringify({
+                    timestamp: new Date().toISOString(),
+                    event: "recording_upload_completed",
+                    roomId: roomId,
+                    recordingId: recordingId || 'unknown',
+                    stage: "upload_completed",
+                    location: data.Location
                   }));
+                  
+                  // Publish completion back to signaling server via secure callback
+                  try {
+                    await notifyBackendWithRetry(
+                      backendUrl, 
+                      `/api/recordings/${recordingId}/callback/finalized`,
+                      recordingId, job.jobId, botToken, "callback_completed",
+                      {
+                        status: 'completed',
+                        url: data.Location,
+                        storageKey: uploadParams.params.Key,
+                        storageBucket: uploadParams.params.Bucket,
+                        contentType: uploadParams.params.ContentType,
+                        duration: 0
+                      }
+                    );
+                  } catch (err) {
+                    console.error('Failed to notify backend of completion:', err);
+                  }
 
                   // Cleanup
                   fs.unlinkSync(outputPathRaw);
@@ -329,6 +548,24 @@ async function processRecordingJob(job) {
   } catch (err) {
     console.error('Error in processRecordingJob:', err);
     if (browser) await browser.close();
+    
+    // Notify backend of failure
+    if (job.recordingId && job.botToken) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+        await notifyBackendWithRetry(
+          backendUrl, 
+          `/api/recordings/${job.recordingId}/callback/finalized`,
+          job.recordingId, job.jobId, job.botToken, "callback_failed",
+          {
+            status: 'failed',
+            failureReason: err.toString()
+          }
+        );
+      } catch (e) {
+        console.error('Failed to notify backend of failure:', e);
+      }
+    }
   }
 }
 

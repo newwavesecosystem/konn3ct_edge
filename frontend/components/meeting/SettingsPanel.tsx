@@ -160,8 +160,8 @@ export function SettingsPanel() {
                 )}
                 title="Turn off virtual background"
               >
-                <Ban className="w-5 h-5 mb-1 text-white/70" />
-                <span className="text-[10px] text-white">None</span>
+                <Ban className="w-5 h-5 mb-1 text-black/70" />
+                <span className="text-[10px] text-black">None</span>
               </button>
               
               <button
@@ -174,7 +174,7 @@ export function SettingsPanel() {
               >
                 <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
                 <Droplet className="relative z-10 w-5 h-5 mb-1 text-white/70" />
-                <span className="relative z-10 text-[10px] text-white">Blur</span>
+                <img src={`/backgrounds/blur.png`} alt={`blur`} className="w-full h-full object-cover" />
               </button>
               
               {[
@@ -202,8 +202,8 @@ export function SettingsPanel() {
                   "flex flex-col items-center justify-center p-2 rounded-xl transition-all h-14 cursor-pointer",
                   vbMode === 'image' && vbImageUrl && !vbImageUrl.startsWith('/backgrounds') ? "ring-2 ring-brand-green bg-white/10" : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10 border-dashed border-2"
                 )}>
-                <span className="text-lg text-white/50 leading-none mb-0.5">+</span>
-                <span className="text-[9px] text-white/40">Upload</span>
+                <span className="text-lg text-black/50 leading-none mb-0.5">+</span>
+                <span className="text-[9px] text-black/40">Upload</span>
                 <input 
                   type="file" 
                   accept="image/*" 

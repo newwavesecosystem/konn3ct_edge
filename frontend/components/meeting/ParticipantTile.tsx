@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
+import { useVideoHealth } from "../../hooks/useVideoHealth";
 
 interface ParticipantTileProps {
   participant: Participant;
@@ -40,6 +41,13 @@ const roleIcon: Record<string, React.ReactNode> = {
  * Pass `fixedAspect` to opt into a 16:9 box (used in filmstrips / spotlight
  * thumbnails, where a uniform tile shape matters).
  */
+export function getEffectiveVideoState(participant: Participant) {
+  if (participant.audioOnlyMode) return 'audio-only';
+  if (!participant.isCameraOn) return 'camera-off';
+  if (participant.videoTrack) return 'video-active';
+  return 'stalled';
+}
+
 export function ParticipantTile({
   participant,
   isLarge = false,
@@ -49,6 +57,7 @@ export function ParticipantTile({
   const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = React.useState(true);
 
   React.useEffect(() => {
@@ -63,6 +72,21 @@ export function ParticipantTile({
   }, []);
 
   const isSelf = participant.id === currentUser.id;
+
+  const handleRecover = React.useCallback(() => {
+    // If recovery is triggered, we can try to re-attach the track to the srcObject
+    if (videoRef.current && participant.videoTrack) {
+      videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
+      videoRef.current.play().catch(e => console.warn("Play failed on recover:", e));
+    }
+  }, [participant.videoTrack]);
+
+  const { health, remountKey } = useVideoHealth({
+    videoRef,
+    track: participant.videoTrack,
+    isVisible,
+    onRecover: handleRecover
+  });
 
   React.useEffect(() => {
     if (!isSelf && participant.videoTrack) {
@@ -82,28 +106,88 @@ export function ParticipantTile({
     .toUpperCase();
 
   // Camera video ref
+  const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
   const setVideoRef = React.useCallback(
     (el: HTMLVideoElement | null) => {
+      // Clean up previous event listeners if needed
+      if (lastVideoElRef.current) {
+        lastVideoElRef.current.onloadedmetadata = null;
+        lastVideoElRef.current.oncanplay = null;
+      }
+
+      videoRef.current = el;
       if (el) {
+        lastVideoElRef.current = el;
+
+        const attemptPlay = () => {
+          if (!el) return;
+          participant.cameraStats = participant.cameraStats || {};
+          participant.cameraStats.lastVideoPlayAttemptAt = new Date().toISOString();
+          
+          el.play().then(() => {
+             if (participant.cameraStats) {
+               participant.cameraStats.lastVideoPlayResult = 'success';
+               participant.cameraStats.lastVideoError = undefined;
+             }
+          }).catch((e) => {
+            if (participant.cameraStats) {
+              participant.cameraStats.lastVideoPlayResult = 'error';
+              if (e.name !== 'AbortError') {
+                console.warn("Video play failed:", e);
+                (el as any)._lastError = e.message || e.name;
+                participant.cameraStats.lastVideoError = e.message || e.name;
+              }
+            }
+          });
+        };
+
+        el.onloadedmetadata = attemptPlay;
+        el.oncanplay = attemptPlay;
+
         if (participant.videoTrack) {
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
-            if (stream.getVideoTracks()[0] === participant.videoTrack) return;
+            if (stream.getVideoTracks()[0] === participant.videoTrack) {
+              attemptPlay();
+              return;
+            }
             stream.getTracks().forEach(t => stream.removeTrack(t));
             stream.addTrack(participant.videoTrack);
           } else {
             el.srcObject = new MediaStream([participant.videoTrack]);
           }
-          el.play().catch((e) => {
-            if (e.name !== 'AbortError') console.warn("Video play failed:", e);
-          });
+          attemptPlay();
         } else {
           el.srcObject = null;
         }
+      } else {
+        if (lastVideoElRef.current) lastVideoElRef.current.srcObject = null;
+        lastVideoElRef.current = null;
       }
     },
     [participant.videoTrack]
   );
+
+  // Handle Safari backgrounding/foregrounding
+  React.useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && videoRef.current && participant.videoTrack) {
+        // Re-bind to wake up Safari hardware pipeline
+        videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
+        videoRef.current.play().catch(e => {
+            if (e.name !== 'AbortError') console.warn("Visibility video play failed:", e);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
+  }, [participant.videoTrack]);
 
   // Dedicated screen share ref — completely independent from camera
   const setScreenRef = React.useCallback(
@@ -129,7 +213,62 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const isCameraEffectivelyOn = participant.isCameraOn && !!participant.videoTrack && isVisible;
+  const effectiveVideoState = getEffectiveVideoState(participant);
+  const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
+
+  // Determine diagnosis hint
+  let diagnosisHint = 'video-healthy';
+  if (participant.audioOnlyMode) diagnosisHint = 'audio-only';
+  else if (participant.isCameraOn === false) diagnosisHint = 'camera-off';
+  else if (!participant.videoTrack && !participant.cameraStats?.consumerExists) diagnosisHint = 'no-consumer';
+  else if (!participant.videoTrack && participant.cameraStats?.consumerExists) diagnosisHint = 'consumer-no-track';
+  else if (participant.videoTrack && effectiveVideoState !== 'video-active') diagnosisHint = 'state-blocked-video';
+  else if (participant.videoTrack && effectiveVideoState === 'video-active' && health === 'recovering') diagnosisHint = 'safari-playback-stalled';
+  else if (participant.videoTrack && effectiveVideoState === 'video-active' && health === 'stalled') diagnosisHint = 'recovery-timeout-unconfirmed';
+
+  // Mutate QA stats for diagnostics overlay
+  React.useEffect(() => {
+    participant.cameraStats = participant.cameraStats || {};
+    
+    // Check if time progressed
+    if (videoRef.current) {
+       const currentTime = videoRef.current.currentTime;
+       if (currentTime !== (videoRef.current as any)._lastReportedTime) {
+          participant.cameraStats.currentTimeProgressing = true;
+          (videoRef.current as any)._lastReportedTime = currentTime;
+       } else {
+          participant.cameraStats.currentTimeProgressing = false;
+       }
+       if (health === 'healthy') {
+          participant.cameraStats.lastHealthyAt = new Date().toISOString();
+       }
+    }
+    
+    participant.cameraStats.videoTrackExists = !!participant.videoTrack;
+    participant.cameraStats.remoteTrackReadyState = participant.videoTrack?.readyState;
+    participant.cameraStats.remoteTrackMuted = participant.videoTrack?.muted;
+    participant.cameraStats.remoteTrackEnabled = participant.videoTrack?.enabled;
+    participant.cameraStats.tileRenderMode = effectiveVideoState;
+    participant.cameraStats.videoDimensions = videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : '0x0';
+    participant.cameraStats.currentTime = videoRef.current?.currentTime || 0;
+    participant.cameraStats.readyState = videoRef.current?.readyState || 0;
+    participant.cameraStats.videoElementAttached = !!videoRef.current?.srcObject;
+    participant.cameraStats.isRecovering = health === 'recovering';
+    participant.cameraStats.playbackRecoveryCount = remountKey;
+    participant.cameraStats.diagnosisHint = diagnosisHint;
+  });
+
+  React.useEffect(() => {
+    if (!participant.cameraStats) return;
+
+    if (health === 'healthy') {
+      participant.cameraStats.diagnosisHint = 'video-healthy';
+    } else if (health === 'stalled') {
+      participant.cameraStats.diagnosisHint = 'safari-playback-stalled';
+    } else if (health === 'recovering') {
+      participant.cameraStats.diagnosisHint = 'recovering-playback';
+    }
+  }, [health, participant.cameraStats]);
 
   return (
     <div
@@ -166,9 +305,10 @@ export function ParticipantTile({
           </div>
 
           {/* PiP camera bubble — bottom-right corner */}
-          {isCameraEffectivelyOn && (
+          {effectiveVideoState === 'video-active' && (
             <div className="absolute bottom-3 right-3 z-30 w-24 h-16 rounded-xl overflow-hidden border-2 border-white/20 shadow-xl">
               <video
+                key={`pip-video-${remountKey}`}
                 ref={setVideoRef}
                 autoPlay
                 playsInline
@@ -203,19 +343,26 @@ export function ParticipantTile({
           }
         >
           <video
+            key={`main-video-${remountKey}`}
             ref={setVideoRef}
             autoPlay
             playsInline
             muted
             className={cn(
               "w-full h-full",
-              "object-cover"
+              "object-cover",
+              health === 'recovering' && "opacity-50"
             )}
             style={{
               transform:
                 isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
             }}
           />
+          {health === 'recovering' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-medium text-sm">
+              Video recovering...
+            </div>
+          )}
         </div>
       ) : (
         <div
@@ -243,6 +390,18 @@ export function ParticipantTile({
               <div className="absolute inset-0 rounded-full border-4 border-brand-green/30 animate-pulse-fast scale-110 pointer-events-none" />
             )}
           </div>
+          {effectiveVideoState === 'audio-only' && (
+            <div className="absolute bottom-6 flex flex-col items-center gap-1">
+              <span className="text-white/80 text-xs flex items-center gap-1 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full shadow-lg">
+                <SignalLow className="w-3 h-3 text-red-400" /> Audio Only
+              </span>
+              {participant.videoSuspendedReason === 'network' && (
+                <span className="text-yellow-300 text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/40">
+                  Poor Network
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -255,7 +414,7 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Screen sharing badge ── */}
+      {/* ── Overlays (Name, Mic, Controls) ── */}
       {participant.isScreenSharing && (
         <div className="absolute top-3 left-3 z-10">
           <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
