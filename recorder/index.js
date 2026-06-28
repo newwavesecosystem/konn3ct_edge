@@ -71,7 +71,8 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, jobId, 
       success = true;
     } catch (err) {
       let errorCode = "ECONNREFUSED";
-      if (err.cause && err.cause.code) errorCode = err.cause.code;
+      if (err.message && err.message.startsWith("HTTP ")) errorCode = err.message;
+      else if (err.cause && err.cause.code) errorCode = err.cause.code;
       else if (err.code) errorCode = err.code;
 
       let host = "unknown", port = "unknown";
@@ -112,11 +113,22 @@ async function startWorker() {
       
       const [queueName, jobStr] = result;
       const job = JSON.parse(jobStr);
+      
+      if (!job.recordingId || job.recordingId === 'unknown') {
+        console.error(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          event: "invalid_recording_job_payload",
+          roomId: job.roomId,
+          reason: "missing_recordingId"
+        }));
+        continue;
+      }
+
       console.log(JSON.stringify({
         timestamp: new Date().toISOString(),
         event: "recording_job_received",
         roomId: job.roomId,
-        recordingId: job.recordingId || 'unknown',
+        recordingId: job.recordingId,
         stage: "received_job"
       }));
 
@@ -196,6 +208,23 @@ async function processRecordingJob(job) {
     page.on('console', msg => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
 
+    page.on('response', async (response) => {
+      const status = response.status();
+      if (status >= 400) {
+        const request = response.request();
+        console.log(JSON.stringify({
+          event: 'recording_page_http_error',
+          recordingId,
+          roomId,
+          status,
+          method: request.method(),
+          resourceType: request.resourceType(),
+          url: response.url().replace(/botToken=[^&]*/, 'botToken=***MASKED***').replace(/botSecret=[^&]*/, 'botSecret=***MASKED***'),
+          stage: 'navigation_or_join'
+        }));
+      }
+    });
+
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
     console.log(JSON.stringify({
@@ -221,7 +250,7 @@ async function processRecordingJob(job) {
         reason: "RECORDER_JOIN_TIMEOUT"
       }));
       if (botToken) {
-        await notifyBackendWithRetry(backendUrl, '/api/internal/recordings/callback/finalized', recordingId, null, botToken, 'failed', { status: 'failed' });
+        await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/finalized`, recordingId, null, botToken, 'failed', { status: 'failed' });
       }
       throw new Error("Timeout waiting for readiness marker");
     }

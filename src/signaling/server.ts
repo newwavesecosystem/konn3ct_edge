@@ -1344,7 +1344,7 @@ export function initializeSignaling(server: Server) {
 
               // 2. Generate secure short-lived token for the bot
               const botToken = jwt.sign(
-                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, recordingId: recording.id },
+                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id },
                 process.env.JWT_SECRET || 'fallback',
                 { expiresIn: '4h' }
               );
@@ -1360,6 +1360,23 @@ export function initializeSignaling(server: Server) {
 
               if (launchResult.queued) {
                 broadcastToRoom(roomId, { type: 'recording_started' });
+
+                // Watchdog to prevent recording getting stuck in 'starting' forever
+                setTimeout(async () => {
+                  try {
+                    const check = await db.recording.findUnique({ where: { id: recording.id } });
+                    if (check && check.status === 'starting') {
+                      await db.recording.update({
+                        where: { id: recording.id },
+                        data: { status: 'failed' }
+                      });
+                      logger.warn(`Recording watchdog timed out for job ${recording.id}`);
+                      broadcastToRoom(roomId, { type: 'recording_stopped' });
+                    }
+                  } catch (err) {
+                    logger.error(`Watchdog check failed for recording ${recording.id}`, err);
+                  }
+                }, 75000); // 75 seconds (readiness timeout in worker is 60s)
               } else {
                 await db.recording.update({
                   where: { id: recording.id },
@@ -1555,16 +1572,35 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'produce': {
+        if (!client.transports || !client.transports.includes(data.transportId)) {
+          const errPayload = {
+            event: "sfu_produce_failed",
+            errorCode: "SEND_TRANSPORT_NOT_READY",
+            roomId: roomId,
+            participantId: userId,
+            socketId: client.ws.url || 'unknown',
+            transportId: data.transportId
+          };
+          logger.warn(`Produce failed: ${JSON.stringify(errPayload)}`);
+          client.ws.send(JSON.stringify({
+            type: 'produce_failed',
+            errorCode: 'SEND_TRANSPORT_NOT_READY',
+            clientEventId: data.clientEventId,
+            serverEventId: crypto.randomUUID(),
+            message: 'Send transport not ready. Create/connect transport before produce.'
+          }));
+          return;
+        }
+
+        if (!data.kind || !data.rtpParameters) {
+          logger.warn(`Missing required parameters for produce from ${userId}`);
+          return;
+        }
+        
         const settings = roomSettingsMap.get(roomId);
-        if (settings) {
-          if (data.kind === 'audio' && settings.micLocked && client.role === 'attendee') {
-            client.ws.send(JSON.stringify({ type: 'error', message: 'Microphones are locked by the host.' }));
-            return;
-          }
-          if (data.kind === 'video' && data.appData?.source !== 'screen' && settings.videoLocked && client.role === 'attendee') {
-            client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
-            return;
-          }
+        if (data.kind === 'video' && data.appData?.source !== 'screen' && settings?.videoLocked && client.role === 'attendee') {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
+          return;
         }
 
         const appData: Record<string, any> = data.appData || {};
@@ -1625,6 +1661,60 @@ export function initializeSignaling(server: Server) {
       case 'consume': {
         try {
           const router = await getOrCreateRouter(roomId);
+          const allProducers = Array.from(roomProducers.values()).flat();
+          const targetProducer = allProducers.find(p => p.producerId === data.producerId);
+
+          const hasRecvTransport = client.transports && client.transports.includes(data.transportId);
+          const hasRtpCapabilities = !!data.rtpCapabilities;
+          
+          let canConsume = false;
+          try {
+            canConsume = router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
+          } catch (err) {} // catch if router or producer doesn't exist
+
+          // 1. Log structured attempt
+          logger.info(JSON.stringify({
+            event: "sfu_consume_attempt",
+            roomId: roomId,
+            participantId: userId,
+            socketId: client.ws.url || 'unknown',
+            producerId: data.producerId,
+            producerOwnerId: targetProducer?.userId || "unknown",
+            producerKind: targetProducer?.kind || "unknown",
+            producerSource: targetProducer?.appData?.source || "unknown",
+            hasRecvTransport,
+            hasRtpCapabilities,
+            canConsume
+          }));
+
+          let failReason = null;
+          if (!hasRecvTransport) failReason = "RECV_TRANSPORT_NOT_READY";
+          else if (!hasRtpCapabilities) failReason = "MISSING_RTP_CAPABILITIES";
+          else if (!targetProducer) failReason = "PRODUCER_CLOSED";
+          else if (targetProducer.userId === userId) failReason = "SELF_CONSUME_BLOCKED";
+          else if (!canConsume) failReason = "RTP_CAPABILITIES_MISMATCH";
+
+          if (failReason) {
+            const errPayload = {
+              event: "sfu_consume_failed",
+              errorCode: "CLIENT_CANNOT_CONSUME_PRODUCER",
+              reason: failReason,
+              roomId: roomId,
+              participantId: userId,
+              producerId: data.producerId
+            };
+            logger.warn(JSON.stringify(errPayload));
+            client.ws.send(JSON.stringify({
+              type: 'consume_failed',
+              errorCode: 'CLIENT_CANNOT_CONSUME_PRODUCER',
+              producerId: data.producerId,
+              producerKind: targetProducer?.kind || "unknown",
+              producerSource: targetProducer?.appData?.source || "unknown",
+              reason: failReason
+            }));
+            return;
+          }
+
           const consumerParams = await createConsumerWithCallback(
             data.transportId,
             data.producerId,
@@ -1633,14 +1723,15 @@ export function initializeSignaling(server: Server) {
             (closedConsumerId) => {
               // Producer was closed (e.g. remote peer stopped screen share)
               // Find the appData of the producer so we know if it was a screen share
-              const allProducers = Array.from(roomProducers.values()).flat();
-              const closedProducer = allProducers.find(p => p.producerId === data.producerId);
+              // Find the appData of the producer so we know if it was a screen share
+              const currentAllProducers = Array.from(roomProducers.values()).flat();
+              const closedProducerRef = currentAllProducers.find(p => p.producerId === data.producerId);
               if (client.ws.readyState === WebSocket.OPEN) {
                 client.ws.send(JSON.stringify({
                   type: 'producer_closed',
                   producerId: data.producerId,
                   consumerId: closedConsumerId,
-                  appData: closedProducer?.appData || {}
+                  appData: closedProducerRef?.appData || {}
                 }));
               }
               consumerOwners.delete(closedConsumerId);
@@ -1670,6 +1761,16 @@ export function initializeSignaling(server: Server) {
           // Let's just send a dummy response or let it timeout. It's fine to timeout if it fails.
           // Actually, let's send 'consumed_error' and handle it on the client if needed.
         }
+        break;
+      }
+
+      case 'screen_share': {
+        // Unknown legacy message type handling
+        client.ws.send(JSON.stringify({
+          type: 'error',
+          errorCode: 'LEGACY_SCREEN_SHARE_UNSUPPORTED',
+          message: 'Use produce with source=screen instead'
+        }));
         break;
       }
 
