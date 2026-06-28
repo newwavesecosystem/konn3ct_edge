@@ -212,9 +212,16 @@ export function cleanupAudioObserver(roomId: string) {
 import { startTranscription } from './transcriber';
 
 /**
+ * Get a specific Producer by ID
+ */
+export function getProducer(producerId: string): Producer | undefined {
+  return producers.get(producerId);
+}
+
+/**
  * Create a Producer (client sending media)
  */
-export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string, userId?: string, userName?: string) {
+export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
@@ -239,7 +246,7 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
     if (userId && userName) {
       const router = routers.get(roomId);
       if (router) {
-        startTranscription(producer, router, roomId, userId, userName).catch(e => {
+        startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
           logger.error(`Failed to start transcription for ${userId}:`, e);
         });
       }
@@ -294,10 +301,30 @@ export async function createConsumer(transportId: string, producerId: string, rt
 /**
  * Resume a paused consumer
  */
-export async function resumeConsumer(consumerId: string) {
+export async function resumeConsumer(consumerId: string, clientCleanupStarted?: boolean) {
   const consumer = consumers.get(consumerId);
-  if (consumer) {
+  try {
+    if (!consumer || consumer.closed) {
+      logger.info(`[SFU] sfu_consumer_resume_skipped: consumer not found or closed for ${consumerId}`);
+      return;
+    }
+    const producer = producers.get(consumer.producerId);
+    if (!producer || producer.closed) {
+      logger.info(`[SFU] sfu_consumer_resume_skipped: producer closed for ${consumerId}`);
+      return;
+    }
+    if (clientCleanupStarted) {
+      logger.info(`[SFU] sfu_consumer_resume_skipped: client cleanup started for ${consumerId}`);
+      return;
+    }
+
     await consumer.resume();
+  } catch (err: any) {
+    if (err.message && err.message.includes('Channel request handler with ID')) {
+      logger.warn(`[SFU] sfu_consumer_resume_failed_closed: Expected Mediasoup closure for ${consumerId}`);
+      return;
+    }
+    logger.error(`[SFU] Error resuming consumer ${consumerId}:`, err);
   }
 }
 
