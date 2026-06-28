@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver } from '../media/sfu';
+import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -125,6 +125,8 @@ interface Client {
   maxActiveCameras?: number;
   maxParticipants?: number;
   roomCreatedDate: Date;
+  isBot?: boolean;
+  cleanupStarted?: boolean;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -135,6 +137,7 @@ const roomECinema = new Map<string, string | null>();
 const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: number, serverTime: number }>();
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
+const sfuConsumeMismatchLogged = new Set<string>();
 
 async function asyncWithRetry<T>(
   operation: () => Promise<T>,
@@ -462,8 +465,8 @@ export function initializeSignaling(server: Server) {
     
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
-
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true };
+    const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
+    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -604,6 +607,13 @@ export function initializeSignaling(server: Server) {
     });
 
     ws.on('close', () => {
+      if (client.cleanupStarted) {
+        logger.info(`[CLEANUP] client_cleanup_ignored_duplicate for user ${userId}`);
+        return;
+      }
+      client.cleanupStarted = true;
+      logger.info(`[CLEANUP] client_cleanup_started for user ${userId} in room ${roomId}`);
+
       // If the user already explicitly left (via leave_meeting), they are no longer in the room map.
       // Do not trigger the grace period in this case.
       const stillInRoom = rooms.get(roomId)?.has(userId);
@@ -626,8 +636,13 @@ export function initializeSignaling(server: Server) {
       });
       client.transports = [];
 
+      const gracePeriodMs = 30000;
+      const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
+      logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
+
       const timeout = setTimeout(() => {
         logger.info(`User ${userId} grace period expired. Cleaning up session.`);
+        logger.info(`[CLEANUP] client_cleanup_completed for user ${userId} in room ${roomId}`);
         const roomClients = rooms.get(roomId);
         if (roomClients) {
           roomClients.delete(userId);
@@ -652,7 +667,7 @@ export function initializeSignaling(server: Server) {
           }
         }
         disconnectTimeouts.delete(`${userId}:${roomId}`);
-      }, 5000); // 5 seconds
+      }, gracePeriodMs);
 
       disconnectTimeouts.set(`${userId}:${roomId}`, timeout);
     });
@@ -1620,7 +1635,7 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name);
+        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
 
         // QA-004 Codec Logging
         if (data.kind === 'video' && process.env.NODE_ENV !== 'production') {
@@ -1688,16 +1703,73 @@ export function initializeSignaling(server: Server) {
           }));
 
           let failReason = null;
+          let preciseReason = "UNKNOWN_RTP_CAPABILITY_MISMATCH";
+          let sfuProducer = null;
+
           if (!hasRecvTransport) failReason = "RECV_TRANSPORT_NOT_READY";
           else if (!hasRtpCapabilities) failReason = "MISSING_RTP_CAPABILITIES";
           else if (!targetProducer) failReason = "PRODUCER_CLOSED";
           else if (targetProducer.userId === userId) failReason = "SELF_CONSUME_BLOCKED";
-          else if (!canConsume) failReason = "RTP_CAPABILITIES_MISMATCH";
+          else if (!canConsume) {
+            failReason = "RTP_CAPABILITIES_MISMATCH";
+            sfuProducer = getProducer(data.producerId);
+            const consumerCodecs = data.rtpCapabilities?.codecs || [];
+            const hasAudioOpus = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase() === 'audio/opus');
+            const hasVideoCodec = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase().startsWith('video/'));
+            
+            // Assume producer and consumer share the same router unless routerId is explicitly on producer appData
+            const producerRouterId = sfuProducer?.appData?.routerId || router.id;
+            
+            if (producerRouterId !== router.id) {
+              preciseReason = "ROUTER_MISMATCH";
+            } else if (!data.rtpCapabilities?.codecs || data.rtpCapabilities.codecs.length === 0) {
+              preciseReason = "CONSUMER_CAPABILITIES_EMPTY_CODECS";
+            } else if (targetProducer.kind === 'audio' && !hasAudioOpus) {
+              preciseReason = "CONSUMER_CAPABILITIES_MISSING_OPUS";
+            } else if (targetProducer.kind === 'video' && !hasVideoCodec) {
+              preciseReason = "CONSUMER_CAPABILITIES_MISSING_VIDEO_CODEC";
+            } else if (sfuProducer && sfuProducer.rtpParameters?.codecs?.[0]) {
+              const producerMimeType = sfuProducer.rtpParameters.codecs[0].mimeType?.toLowerCase();
+              const isInConsumer = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase() === producerMimeType);
+              if (!isInConsumer) {
+                preciseReason = "PRODUCER_CODEC_NOT_IN_CONSUMER_CAPABILITIES";
+              }
+            }
+
+            // Rate limit or only QA log the large payload
+            if (process.env.NODE_ENV !== 'production' || process.env.QA_DIAGNOSTICS_MODE === 'true') {
+              const logKey = `${userId}:${data.producerId}`;
+              if (!sfuConsumeMismatchLogged.has(logKey)) {
+                sfuConsumeMismatchLogged.add(logKey);
+                // Clear the cache after 60 seconds to avoid memory leak and allow future logging
+                setTimeout(() => sfuConsumeMismatchLogged.delete(logKey), 60000);
+
+                const fingerprintPayload = {
+                  event: "sfu_rtp_capability_compare_failed",
+                  roomId: roomId,
+                  participantId: userId,
+                  producerId: data.producerId,
+                  producerOwnerId: targetProducer.userId,
+                  producerKind: targetProducer.kind,
+                  producerSource: targetProducer.appData?.source || "unknown",
+                  producerCodec: sfuProducer?.rtpParameters?.codecs?.[0]?.mimeType || "unknown",
+                  consumerCodecList: consumerCodecs.map((c: any) => c.mimeType),
+                  routerCodecList: router.rtpCapabilities.codecs?.map(c => c.mimeType),
+                  canConsume: false,
+                  reason: preciseReason,
+                  routerId: router.id,
+                  producerRouterId: producerRouterId,
+                  consumerHeaderExtensions: data.rtpCapabilities?.headerExtensions?.map((h: any) => h.uri) || []
+                };
+                logger.warn(JSON.stringify(fingerprintPayload));
+              }
+            }
+          }
 
           if (failReason) {
             const errPayload = {
               event: "sfu_consume_failed",
-              errorCode: "CLIENT_CANNOT_CONSUME_PRODUCER",
+              errorCode: failReason === "RTP_CAPABILITIES_MISMATCH" ? preciseReason : failReason,
               reason: failReason,
               roomId: roomId,
               participantId: userId,
@@ -1710,7 +1782,7 @@ export function initializeSignaling(server: Server) {
               producerId: data.producerId,
               producerKind: targetProducer?.kind || "unknown",
               producerSource: targetProducer?.appData?.source || "unknown",
-              reason: failReason
+              reason: failReason === "RTP_CAPABILITIES_MISMATCH" ? preciseReason : failReason
             }));
             return;
           }
@@ -1836,7 +1908,7 @@ export function initializeSignaling(server: Server) {
           logger.warn(`User ${userId} tried to resume a consumer they don't own`);
           return;
         }
-        await resumeConsumer(data.consumerId);
+        await resumeConsumer(data.consumerId, client.cleanupStarted);
         client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
         break;
       }

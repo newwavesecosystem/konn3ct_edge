@@ -23,13 +23,24 @@ async function getFreePort(): Promise<number> {
 // Map producerId to cleanup function to avoid memory leaks
 const transcribers = new Map<string, () => void>();
 
-export async function startTranscription(producer: Producer, router: Router, roomId: string, userId: string, userName: string) {
+export async function startTranscription(producer: Producer, router: Router, roomId: string, userId: string, userName: string, clientData?: { isBot?: boolean, role?: string }) {
   logger.info(`[DEEPGRAM] startTranscription called for user ${userId} in room ${roomId}`);
+  
+  const isBot = clientData?.isBot || clientData?.role === 'bot' || clientData?.role === 'recorder';
+  const isLoadTestMode = process.env.LOAD_TEST_MODE === 'true';
+  const disableForBots = process.env.DISABLE_TRANSCRIPTION_FOR_BOTS === 'true';
+
+  if ((isBot || isLoadTestMode) && disableForBots) {
+    logger.info(`[DEEPGRAM] transcription_skipped_for_bot: user ${userId}`);
+    return;
+  }
+
+  logger.info(`[DEEPGRAM] deepgram_connection_attempt: user ${userId}`);
+
   if (!deepgram) {
     logger.warn(`[DEEPGRAM] No API key found, skipping transcription for user ${userId}`);
     return; // Silent return if no API key
   }
-  
   // 1. Get free ports for FFmpeg to listen on
   const rtpPort = await getFreePort();
   const rtcpPort = await getFreePort();
@@ -100,8 +111,23 @@ a=rtpmap:${pt} opus/48000/2
   });
   
   dgSocket.on('open', async () => {
-    logger.info(`[DEEPGRAM] WebSocket connected for user ${userId}`);
-    await consumer.resume();
+    logger.info(`[DEEPGRAM] deepgram_connected: user ${userId}`);
+    try {
+      if (!consumer || consumer.closed) {
+        logger.info(`[DEEPGRAM] sfu_consumer_resume_skipped: consumer closed for user ${userId}`);
+        return;
+      }
+      if (!plainTransport || plainTransport.closed) return;
+      if (!producer || producer.closed) return;
+
+      await consumer.resume();
+    } catch (err: any) {
+      if (err.message && err.message.includes('Channel request handler with ID')) {
+        logger.warn(`[DEEPGRAM] sfu_consumer_resume_failed_closed: Expected mediasoup closure for user ${userId}`);
+        return;
+      }
+      logger.error(`[DEEPGRAM] Error resuming consumer for user ${userId}:`, err);
+    }
   });
 
   // Deepgram will close the connection if no audio is sent for 10-12 seconds (e.g. user is muted).
@@ -135,6 +161,10 @@ a=rtpmap:${pt} opus/48000/2
   });
 
   dgSocket.on('error', (err: any) => {
+    if (err.message && err.message.includes('429')) {
+      logger.warn(`[DEEPGRAM] deepgram_rate_limited for user ${userId}: 429 Too Many Requests`);
+      return;
+    }
     logger.error(`Deepgram error for user ${userId}:`, err);
   });
 
@@ -156,7 +186,13 @@ a=rtpmap:${pt} opus/48000/2
     }
   });
 
+  let cleanupStarted = false;
+
   const cleanup = () => {
+    if (cleanupStarted) return;
+    cleanupStarted = true;
+    logger.info(`[DEEPGRAM] deepgram_cleanup_started for user ${userId}`);
+    
     intentionalClose = true;
     clearInterval(keepAliveInterval);
     if (transcribers.has(producer.id)) {
@@ -165,9 +201,19 @@ a=rtpmap:${pt} opus/48000/2
     if (!consumer.closed) consumer.close();
     if (!plainTransport.closed) plainTransport.close();
     if (!ffmpegProcess.killed) ffmpegProcess.kill('SIGTERM');
+    
     try {
-      dgSocket.close();
+      if (dgSocket.readyState === WebSocket.OPEN) {
+        dgSocket.close();
+      } else if (dgSocket.readyState === WebSocket.CONNECTING) {
+        // Just terminate to avoid 'WebSocket was closed before the connection was established'
+        dgSocket.terminate();
+      } else {
+        logger.info(`[DEEPGRAM] deepgram_cleanup_ignored_already_closed for user ${userId}`);
+      }
     } catch(e){}
+
+    logger.info(`[DEEPGRAM] deepgram_cleanup_completed for user ${userId}`);
   };
   
   transcribers.set(producer.id, cleanup);
