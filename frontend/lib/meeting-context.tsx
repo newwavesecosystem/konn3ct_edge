@@ -407,12 +407,14 @@ export function MeetingProvider({
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
   const localIsSpeakingRef = useRef<boolean>(false);
+  const hasLeftMeetingRef = useRef<boolean>(false);
 
   useEffect(() => {
     let client: WebRTCClient | null = null;
 
     const connectToMeeting = async () => {
       try {
+        hasLeftMeetingRef.current = false;
         setWebrtcStatus("fetching-token");
 
         // Call our new Next.js endpoint to get a secure JWT
@@ -1042,7 +1044,9 @@ export function MeetingProvider({
         };
 
         client.onUserJoined = (user) => {
+          if (hasLeftMeetingRef.current) return;
           if (user.userId === webrtcClient.current?.userId) return;
+          const targetId = resolveUserId(user.userId);
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
             if (prev.some(p => p.id === user.userId)) {
@@ -1067,7 +1071,8 @@ export function MeetingProvider({
           });
           
           setTimeout(() => {
-            setParticipants(curr => curr.map(p => p.id === user.userId ? { ...p, isConnecting: false } : p));
+            if (hasLeftMeetingRef.current) return;
+            setParticipants(curr => curr.map(p => p.id === targetId ? { ...p, isConnecting: false } : p));
           }, 4000);
 
           if (user.role !== 'bot') {
@@ -1086,6 +1091,7 @@ export function MeetingProvider({
         };
 
         client.onUserLeft = (userId) => {
+          if (hasLeftMeetingRef.current) return;
           setParticipants((prev) => {
             const user = prev.find(p => p.id === userId);
             if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
@@ -1219,33 +1225,55 @@ export function MeetingProvider({
           let videoTrack: MediaStreamTrack | null = null;
           let audioTrack: MediaStreamTrack | null = null;
 
-          if (isCameraOn) {
-            videoTrack = await client.enableCamera();
-            
-            // Re-apply Virtual background on initial camera mount
-            if (vbMode !== 'none') {
-              const vbTrack = await client.setVirtualBackground(vbMode, vbImageUrl);
-              if (vbTrack) {
-                videoTrack = vbTrack;
-              }
+          client.emitTelemetry('join_started');
+
+          // Audio pipeline (synchronous within the init flow, decoupled from video)
+          try {
+            audioTrack = await client.enableMic();
+            localAudioTrackRef.current = audioTrack;
+            if (isMuted) {
+              client.pauseMic();
             }
-            localCameraTrackRef.current = videoTrack;
-          }
-          
-          audioTrack = await client.enableMic();
-          localAudioTrackRef.current = audioTrack;
-          if (isMuted) {
-            client.pauseMic();
+          } catch (e) {
+            console.error("Failed to enable mic:", e);
           }
 
           setParticipants((prev) =>
             prev.map((p) => {
               if (p.id === initialCurrentUser.id) {
-                return { ...p, videoTrack: videoTrack || undefined, audioTrack: audioTrack || undefined, isCameraOn, isMuted };
+                return { ...p, audioTrack: audioTrack || undefined, isMuted };
               }
               return p;
             })
           );
+
+          // Video pipeline (asynchronous, doesn't block audio readiness)
+          if (isCameraOn) {
+            client.enableCamera().then(async (vTrack) => {
+              videoTrack = vTrack;
+              if (vbMode !== 'none') {
+                const vbTrack = await client.setVirtualBackground(vbMode, vbImageUrl);
+                if (vbTrack) {
+                  videoTrack = vbTrack;
+                }
+              }
+              localCameraTrackRef.current = videoTrack;
+              
+              setParticipants((prev) =>
+                prev.map((p) => {
+                  if (p.id === initialCurrentUser.id) {
+                    return { ...p, videoTrack: videoTrack || undefined, isCameraOn };
+                  }
+                  return p;
+                })
+              );
+              client.emitTelemetry('join_media_ready');
+            }).catch(e => {
+              console.error("Failed to enable local camera non-blockingly:", e);
+            });
+          } else {
+            client.emitTelemetry('join_media_ready');
+          }
         } catch (e) {
           console.error("Failed to enable local media", e);
         }
@@ -1686,11 +1714,15 @@ export function MeetingProvider({
   }, []);
 
   const endMeetingForAll = useCallback(() => {
+    hasLeftMeetingRef.current = true;
     webrtcClient.current?.sendEndMeeting();
+    webrtcClient.current?.disconnect();
   }, []);
 
   const leaveMeeting = useCallback(() => {
+    hasLeftMeetingRef.current = true;
     webrtcClient.current?.sendLeaveMeeting();
+    webrtcClient.current?.disconnect();
   }, []);
 
   const broadcastECinema = useCallback((link: string | null) => {

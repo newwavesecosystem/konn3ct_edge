@@ -45,6 +45,17 @@ export class WebRTCClient {
   public roomName: string | undefined;
   public maxParticipants: number | undefined;
   public sessionStatus?: string;
+  public joinSessionId: string = Math.random().toString(36).substring(2, 15);
+  public joinStartTime: number = Date.now();
+
+  public emitTelemetry(event: string) {
+    console.log(JSON.stringify({
+      event,
+      joinSessionId: this.joinSessionId,
+      participantId: this.userId || 'unknown',
+      elapsedMs: Date.now() - this.joinStartTime
+    }));
+  }
 
   public onNewConsumer?: (consumer: Consumer, userId: string, userName?: string) => void;
   public onConnectionStateChange?: (state: string) => void;
@@ -1055,6 +1066,7 @@ export class WebRTCClient {
     
     this.cameraStartInProgress = true;
     try {
+      this.emitTelemetry('video_permission_requested');
       // Cleanup existing camera producer if replacing
       if (this.localVideoProducer) {
         this.localVideoProducer.close();
@@ -1072,6 +1084,7 @@ export class WebRTCClient {
     if (!this.rawCameraStream) {
       throw new Error("Failed to initialize camera stream");
     }
+    this.emitTelemetry('video_track_ready');
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
     // Initialize VideoProcessor if not exists
@@ -1131,14 +1144,17 @@ export class WebRTCClient {
 
     if (!this.localVideoProducer || this.localVideoProducer.closed) {
       // First time or after producer was closed — create with full simulcast encodings
+      this.emitTelemetry('video_produce_started');
       this.localVideoProducer = await this.sendTransport.produce({
         track: videoTrack,
         appData: { source: 'camera' },
         encodings,
         codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
       });
+      this.emitTelemetry('video_producer_created');
     }
     
+    this.emitTelemetry('video_ready');
     return videoTrack;
     } catch (e) {
       this.cameraStartInProgress = false;
@@ -1221,6 +1237,7 @@ export class WebRTCClient {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
     try {
+      this.emitTelemetry('audio_permission_requested');
       let audioConstraints: any = { 
         deviceId: this.selectedAudioInputId ? { exact: this.selectedAudioInputId } : undefined,
         noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
@@ -1246,6 +1263,7 @@ export class WebRTCClient {
       
       if (!stream) throw new Error("Failed to initialize mic");
       this.rawAudioTrack = stream.getAudioTracks()[0];
+      this.emitTelemetry('audio_track_ready');
       
       let activeTrack = this.rawAudioTrack;
       
@@ -1257,10 +1275,12 @@ export class WebRTCClient {
       }
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
+        this.emitTelemetry('audio_produce_started');
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: activeTrack,
           appData: { source: 'mic' }
         });
+        this.emitTelemetry('audio_producer_created');
       } else {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       }
@@ -1275,8 +1295,10 @@ export class WebRTCClient {
         }
       };
 
+      this.emitTelemetry('audio_ready');
       return activeTrack;
     } catch (err: any) {
+      this.emitTelemetry('audio_failed');
       this.onMicError?.(err);
       throw err;
     }

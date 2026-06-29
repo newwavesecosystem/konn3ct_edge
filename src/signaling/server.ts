@@ -1636,6 +1636,17 @@ export function initializeSignaling(server: Server) {
         }
 
         const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
+        
+        logger.info(JSON.stringify({
+          event: "producer_created",
+          timestamp: Date.now(),
+          roomId,
+          participantId: userId,
+          kind: data.kind,
+          source,
+          producerId,
+          clientEventId: data.clientEventId || undefined
+        }));
 
         // QA-004 Codec Logging
         if (data.kind === 'video' && process.env.NODE_ENV !== 'production') {
