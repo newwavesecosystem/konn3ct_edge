@@ -37,7 +37,8 @@ export interface QAPlaybackStats {
 }
 
 export interface Participant {
-  id: string;
+  id: string; // This is now participantId (sessionId)
+  userId: string; // The identity user ID
   name: string;
   avatarUrl?: string;
   role: ParticipantRole;
