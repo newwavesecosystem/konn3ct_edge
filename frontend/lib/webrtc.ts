@@ -853,6 +853,7 @@ export class WebRTCClient {
   private async republishMedia() {
     if (!this.device || this.isRepublishing) return;
     this.isRepublishing = true;
+    this.emitTelemetry('media_recovery_started');
     try {
     // Save current tracks
     const videoTrack = this.localVideoProducer?.track;
@@ -953,14 +954,30 @@ export class WebRTCClient {
       if (isVideoPaused) this.localVideoProducer.pause();
     }
     
-    if (audioTrack && audioTrack.readyState === 'live') {
-      this.localAudioProducer = await this.sendTransport.produce({ 
-        track: audioTrack, 
-        appData: { source: 'mic' } 
-      });
-      if (isAudioPaused) this.localAudioProducer.pause();
+    if (audioTrack) {
+      if (audioTrack.readyState === 'live') {
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: audioTrack, 
+          appData: { source: 'mic' } 
+        });
+        if (isAudioPaused) this.localAudioProducer.pause();
+      } else {
+        console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
+        this.emitTelemetry('mic_track_closed_detected');
+        this.emitTelemetry('mic_reacquire_started');
+        try {
+          // This creates a new producer internally
+          await this.enableMic();
+          this.emitTelemetry('mic_reacquire_success');
+          if (isAudioPaused) this.pauseMic();
+        } catch (e) {
+          console.error("Failed to reacquire mic during reconnect:", e);
+          this.emitTelemetry('mic_reacquire_failed');
+        }
+      }
     }
     
+    this.emitTelemetry('media_recovery_completed');
     // Re-fetch consumers
     try {
       const res = await this.request('getProducers', 'producersList');
@@ -1466,6 +1483,12 @@ export class WebRTCClient {
   public pauseCamera() {
     if (this.localVideoProducer && !this.localVideoProducer.paused) {
       this.localVideoProducer.pause();
+    }
+  }
+
+  public requestScreenKeyframe(consumerId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'request_screen_keyframe', consumerId }));
     }
   }
 

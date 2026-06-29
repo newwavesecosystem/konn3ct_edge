@@ -317,6 +317,7 @@ export function MeetingProvider({
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const hasInitializedMediaRef = useRef(false);
 
   // Load preferences from localStorage
   useEffect(() => {
@@ -415,6 +416,7 @@ export function MeetingProvider({
     const connectToMeeting = async () => {
       try {
         hasLeftMeetingRef.current = false;
+        hasInitializedMediaRef.current = false;
         setWebrtcStatus("fetching-token");
 
         // Call our new Next.js endpoint to get a secure JWT
@@ -694,8 +696,32 @@ export function MeetingProvider({
           }
 
           setChatMessages((prev) => {
+            // PRESENCE-002: Split-brain state recovery
+            setParticipants((currentParticipants) => {
+              if (msg.userId && !currentParticipants.some(p => p.id === msg.userId)) {
+                client?.emitTelemetry('chat_alive_media_dead');
+                return [
+                  ...currentParticipants,
+                  {
+                    id: msg.userId,
+                    name: msg.name || `Participant ${msg.userId.substring(5, 9)}`,
+                    role: "attendee",
+                    isMuted: true,
+                    isCameraOn: false,
+                    isScreenSharing: false,
+                    isHandRaised: false,
+                    isSpeaking: false,
+                    networkQuality: 'good',
+                    joinedAt: new Date().toISOString(),
+                    isConnecting: true,
+                    isMobile: false
+                  }
+                ];
+              }
+              return currentParticipants;
+            });
+
             if (msg.serverEventId && prev.some(m => m.serverEventId === msg.serverEventId)) {
-              // Update state to broadcasted
               return prev.map(m => m.serverEventId === msg.serverEventId ? { ...m, lifecycleState: 'broadcasted' } : m);
             }
             if (msg.clientEventId && prev.some(m => m.clientEventId === msg.clientEventId)) {
@@ -1011,14 +1037,37 @@ export function MeetingProvider({
 
         client.onParticipantsList = (backendParticipants) => {
           setParticipants((prev) => {
-            const newParticipants = [...prev];
+            const nextParticipants: Participant[] = [];
+            let duplicatesDetected = false;
+            let staleRemoved = false;
+            
+            // Add local user
+            const localUser = prev.find(p => p.id === webrtcClient.current?.userId);
+            if (localUser) nextParticipants.push(localUser);
+
+            const seenIds = new Set<string>();
+            if (localUser) seenIds.add(localUser.id);
+
             for (const p of backendParticipants) {
-              if (p.userId === webrtcClient.current?.userId) continue;
-              const existingIndex = newParticipants.findIndex(existing => existing.id === p.userId);
-              if (existingIndex !== -1) {
-                newParticipants[existingIndex] = { ...newParticipants[existingIndex], name: p.name, role: p.role as any, isMobile: p.isMobile, isCameraOn: p.isCameraOn ?? newParticipants[existingIndex].isCameraOn, audioOnlyMode: p.audioOnlyMode ?? newParticipants[existingIndex].audioOnlyMode, videoSuspendedReason: p.videoSuspendedReason ?? newParticipants[existingIndex].videoSuspendedReason };
+              if (seenIds.has(p.userId)) {
+                duplicatesDetected = true;
+                continue;
+              }
+              seenIds.add(p.userId);
+
+              const existing = prev.find(existing => existing.id === p.userId);
+              if (existing) {
+                nextParticipants.push({ 
+                  ...existing, 
+                  name: p.name, 
+                  role: p.role as any, 
+                  isMobile: p.isMobile, 
+                  isCameraOn: p.isCameraOn ?? existing.isCameraOn, 
+                  audioOnlyMode: p.audioOnlyMode ?? existing.audioOnlyMode, 
+                  videoSuspendedReason: p.videoSuspendedReason ?? existing.videoSuspendedReason 
+                });
               } else {
-                newParticipants.push({
+                nextParticipants.push({
                   id: p.userId,
                   name: p.name,
                   role: p.role as any,
@@ -1031,15 +1080,22 @@ export function MeetingProvider({
                   isSpeaking: false,
                   networkQuality: 'good',
                   joinedAt: new Date().toISOString(),
-                  isConnecting: true,
+                  isConnecting: false,
                   isMobile: p.isMobile,
                 });
-                setTimeout(() => {
-                  setParticipants(curr => curr.map(u => u.id === p.userId ? { ...u, isConnecting: false } : u));
-                }, 4000);
               }
             }
-            return newParticipants;
+
+            if (prev.length > nextParticipants.length) {
+              staleRemoved = true;
+            }
+
+            if (duplicatesDetected) client?.emitTelemetry('duplicate_participant_detected');
+            if (staleRemoved) client?.emitTelemetry('stale_participant_removed');
+            client?.emitTelemetry('participant_list_reconciled');
+
+
+            return nextParticipants;
           });
         };
 
@@ -1156,6 +1212,7 @@ export function MeetingProvider({
                 return p;
               });
             } else {
+              client?.emitTelemetry('participant_missing_but_media_active');
               const newParticipant: Participant = {
                 id: userId,
                 name: userName || `Participant ${userId.substring(5, 9)}`,
@@ -1213,7 +1270,8 @@ export function MeetingProvider({
 
   // ── Initialize Local Media upon WebRTC connect ────────
   useEffect(() => {
-    if (webrtcStatus === "connected" && webrtcClient.current) {
+    if (webrtcStatus === "connected" && webrtcClient.current && !hasInitializedMediaRef.current) {
+      hasInitializedMediaRef.current = true;
       const client = webrtcClient.current;
 
       const initMedia = async () => {

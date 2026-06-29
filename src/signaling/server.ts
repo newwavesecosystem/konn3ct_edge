@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer } from '../media/sfu';
+import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -1931,6 +1931,14 @@ export function initializeSignaling(server: Server) {
         }
         await pauseConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
+        break;
+      }
+
+      case 'request_screen_keyframe': {
+        if (data.consumerId) {
+          logger.info(`Requesting keyframe for screen share consumer ${data.consumerId} by user ${userId}`);
+          await requestConsumerKeyFrame(data.consumerId);
+        }
         break;
       }
 

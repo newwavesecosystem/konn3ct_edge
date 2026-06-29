@@ -407,7 +407,18 @@ export function closeTransport(transportId: string) {
 
 export async function pauseConsumer(consumerId: string) {
   const consumer = consumers.get(consumerId);
-  if (consumer && !consumer.paused) {
+  if (consumer) {
     await consumer.pause();
+  }
+}
+
+export async function requestConsumerKeyFrame(consumerId: string) {
+  const consumer = consumers.get(consumerId);
+  if (consumer && consumer.kind === 'video') {
+    try {
+      await consumer.requestKeyFrame();
+    } catch (err) {
+      console.warn(`[SFU] Failed to request keyframe for consumer ${consumerId}:`, err);
+    }
   }
 }
