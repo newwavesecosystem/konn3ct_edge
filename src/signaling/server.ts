@@ -127,10 +127,11 @@ interface Client {
   roomCreatedDate: Date;
   isBot?: boolean;
   cleanupStarted?: boolean;
+  participantId: string;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
-const roomProducers = new Map<string, Array<{ producerId: string, userId: string, name: string, kind: string, appData?: Record<string, any> }>>();
+const roomProducers = new Map<string, Array<{ producerId: string, userId: string, participantId: string, name: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
@@ -159,13 +160,14 @@ async function asyncWithRetry<T>(
   }
 }
 export function getActiveRoomParticipants(roomId: string) {
-  const activeParticipants: Array<{ userId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
+  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
   if (roomClients) {
     for (const client of roomClients.values()) {
       if (client.status === 'active') {
         activeParticipants.push({
           userId: client.userId,
+          participantId: client.participantId,
           name: client.name,
           role: client.role,
           isMobile: client.isMobile,
@@ -178,6 +180,9 @@ export function getActiveRoomParticipants(roomId: string) {
   }
   return activeParticipants;
 }
+
+
+
 
 export interface RoomSettings {
   micLocked: boolean;
@@ -398,6 +403,7 @@ export function initializeSignaling(server: Server) {
       const token = url.searchParams.get('token');
       const roomSlug = url.searchParams.get('roomId');
       const isMobile = url.searchParams.get('isMobile') === 'true';
+      const participantIdParam = url.searchParams.get('participantId');
 
       if (!token || !roomSlug) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -443,6 +449,7 @@ export function initializeSignaling(server: Server) {
           roomName: room.name,
           roomSlug,
           role,
+          participantId: participantIdParam || crypto.randomUUID(),
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
           maxActiveCameras: room.maxActiveCameras ?? 15,
@@ -457,7 +464,7 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile } = clientData;
+    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId } = clientData;
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
@@ -466,7 +473,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -478,21 +485,26 @@ export function initializeSignaling(server: Server) {
       setupAudioObserver(roomId, (producerIds) => {
         // Map producer IDs to user IDs
         const activeUsers = new Set<string>();
+        const activeParticipantIds = new Set<string>();
         const allProducers = roomProducers.get(roomId) || [];
         for (const pid of producerIds) {
           const prod = allProducers.find(p => p.producerId === pid);
-          if (prod) activeUsers.add(prod.userId);
+          if (prod) {
+            activeUsers.add(prod.userId);
+            activeParticipantIds.add(prod.participantId);
+          }
         }
         
         broadcastToRoom(roomId, {
           type: 'active_speaker',
-          userIds: Array.from(activeUsers)
+          userIds: Array.from(activeUsers),
+          participantIds: Array.from(activeParticipantIds)
         });
       }).catch(e => logger.error('Failed to setup audio observer', e));
     }
 
     // Check if there's an existing client in the room that was already admitted
-    const existingClient = rooms.get(roomId)!.get(userId);
+    const existingClient = rooms.get(roomId)!.get(participantId);
     if (existingClient && existingClient.status === 'active') {
       client.status = 'active';
     }
@@ -503,12 +515,12 @@ export function initializeSignaling(server: Server) {
       admissions.add(userId);
     }
 
-    rooms.get(roomId)!.set(userId, client);
+    rooms.get(roomId)!.set(participantId, client);
 
-    if (disconnectTimeouts.has(`${userId}:${roomId}`)) {
-      clearTimeout(disconnectTimeouts.get(`${userId}:${roomId}`)!);
-      disconnectTimeouts.delete(`${userId}:${roomId}`);
-      logger.info(`User ${userId} reconnected to room ${roomId} during grace period`);
+    if (disconnectTimeouts.has(`${participantId}:${roomId}`)) {
+      clearTimeout(disconnectTimeouts.get(`${participantId}:${roomId}`)!);
+      disconnectTimeouts.delete(`${participantId}:${roomId}`);
+      logger.info(`Participant ${participantId} (User ${userId}) reconnected to room ${roomId} during grace period`);
       ws.send(JSON.stringify({ 
         type: 'session_status', 
         recovered: true, 
@@ -519,6 +531,7 @@ export function initializeSignaling(server: Server) {
         roomName,
         maxParticipants: client.maxParticipants
       }));
+      broadcastRoomState(roomId);
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
 
@@ -550,6 +563,7 @@ export function initializeSignaling(server: Server) {
           role: client.role,
           isMobile: client.isMobile
         });
+        broadcastRoomState(roomId);
         
         syncRoomStateToRedis(roomId, roomSlug);
 
@@ -616,7 +630,7 @@ export function initializeSignaling(server: Server) {
 
       // If the user already explicitly left (via leave_meeting), they are no longer in the room map.
       // Do not trigger the grace period in this case.
-      const stillInRoom = rooms.get(roomId)?.has(userId);
+      const stillInRoom = rooms.get(roomId)?.has(participantId);
       if (!stillInRoom) {
         logger.info(`User ${userId} disconnected from room ${roomId} after explicit leave.`);
         return;
@@ -641,11 +655,11 @@ export function initializeSignaling(server: Server) {
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
 
       const timeout = setTimeout(() => {
-        logger.info(`User ${userId} grace period expired. Cleaning up session.`);
+        logger.info(`Participant ${participantId} (User ${userId}) grace period expired. Cleaning up session.`);
         logger.info(`[CLEANUP] client_cleanup_completed for user ${userId} in room ${roomId}`);
         const roomClients = rooms.get(roomId);
         if (roomClients) {
-          roomClients.delete(userId);
+          roomClients.delete(participantId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
@@ -661,15 +675,17 @@ export function initializeSignaling(server: Server) {
 
             broadcastToRoom(roomId, {
               type: 'user_left',
-              userId
+              userId,
+              participantId
             });
+            broadcastRoomState(roomId);
             syncRoomStateToRedis(roomId, roomSlug);
           }
         }
-        disconnectTimeouts.delete(`${userId}:${roomId}`);
+        disconnectTimeouts.delete(`${participantId}:${roomId}`);
       }, gracePeriodMs);
 
-      disconnectTimeouts.set(`${userId}:${roomId}`, timeout);
+      disconnectTimeouts.set(`${participantId}:${roomId}`, timeout);
     });
   });
 
@@ -821,65 +837,74 @@ export function initializeSignaling(server: Server) {
     switch (data.type) {
       case 'admit_user':
         if (client.role === 'host') {
-          const targetClient = rooms.get(roomId)?.get(data.userId);
-          if (targetClient && targetClient.status === 'waiting') {
-            targetClient.status = 'active';
-            let admissions = roomAdmissions.get(roomId);
-            if (!admissions) { admissions = new Set(); roomAdmissions.set(roomId, admissions); }
-            admissions.add(data.userId);
-            targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'active' }));
-            broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
-            
-            sendRoomHistoryAndState(targetClient);
-            syncRoomStateToRedis(roomId, client.roomSlug);
+          for (const targetClient of rooms.get(roomId)?.values() || []) {
+            if (targetClient.userId === data.userId && targetClient.status === 'waiting') {
+              targetClient.status = 'active';
+              targetClient.ws.send(JSON.stringify({ type: 'admitted' }));
+              
+              // Re-fetch admissions set since the client object may be recreated
+              let updatedAdmissions = roomAdmissions.get(roomId);
+              if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
+              updatedAdmissions.add(targetClient.userId);
+
+              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
+              broadcastRoomState(roomId);
+              sendRoomHistoryAndState(targetClient);
+              syncRoomStateToRedis(roomId, client.roomSlug);
+            }
           }
         }
         break;
 
       case 'deny_user':
         if (client.role === 'host') {
-          const targetClient = rooms.get(roomId)?.get(data.userId);
-          if (targetClient && targetClient.status === 'waiting') {
-            targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
-            targetClient.ws.close();
-            rooms.get(roomId)?.delete(data.userId);
-            // Notify all other hosts that this user was denied
-            broadcastToHosts(roomId, {
-              type: 'waiting_room_denied',
-              userId: data.userId,
-            });
+          for (const targetClient of rooms.get(roomId)?.values() || []) {
+            if (targetClient.userId === data.userId && targetClient.status === 'waiting') {
+              targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
+              targetClient.ws.close();
+              rooms.get(roomId)?.delete(targetClient.participantId);
+              // Notify all other hosts that this user was denied
+              broadcastToHosts(roomId, {
+                type: 'waiting_room_denied',
+                userId: data.userId,
+              });
+            }
           }
         }
         break;
 
       case 'kick_user':
         if (client.role === 'host') {
-          const targetClient = rooms.get(roomId)?.get(data.userId);
-          // Don't allow kicking other hosts (or maybe we should? for now let's say only attendees)
-          if (targetClient && targetClient.role !== 'host') {
-            // Remove first so the close handler skips grace period
-            rooms.get(roomId)?.delete(data.userId);
-            const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
-            broadcastToRoom(roomId, { type: 'user_left', userId: data.userId });
-            targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
-            targetClient.ws.close();
+          for (const targetClient of rooms.get(roomId)?.values() || []) {
+            // Don't allow kicking other hosts (or maybe we should? for now let's say only attendees)
+            if (targetClient.userId === data.userId && targetClient.role !== 'host') {
+              // Remove first so the close handler skips grace period
+              rooms.get(roomId)?.delete(targetClient.participantId);
+              const producers = roomProducers.get(roomId) || [];
+              roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
+              broadcastToRoom(roomId, { type: 'user_left', userId: data.userId, participantId: targetClient.participantId });
+              targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
+              targetClient.ws.close();
+            }
           }
         }
         break;
 
       case 'change_role':
         if (client.role === 'host') {
-          const targetClient = rooms.get(roomId)?.get(data.userId);
-          if (targetClient && data.newRole && data.userId !== client.userId) {
-            targetClient.role = data.newRole;
-            logger.info(`Host ${userId} changed role of ${data.userId} to ${data.newRole}`);
-            broadcastToRoom(roomId, { 
-              type: 'role_changed', 
-              userId: targetClient.userId, 
-              role: targetClient.role 
-            });
-            syncRoomStateToRedis(roomId, client.roomSlug);
+          for (const targetClient of rooms.get(roomId)?.values() || []) {
+            if (targetClient.userId === data.userId && data.newRole && data.userId !== client.userId) {
+              targetClient.role = data.newRole;
+              logger.info(`Host ${userId} changed role of ${data.userId} to ${data.newRole}`);
+              broadcastToRoom(roomId, { 
+                type: 'role_changed', 
+                userId: targetClient.userId, 
+                participantId: targetClient.participantId,
+                role: targetClient.role 
+              });
+              broadcastRoomState(roomId);
+              syncRoomStateToRedis(roomId, client.roomSlug);
+            }
           }
         }
         break;
@@ -1658,7 +1683,7 @@ export function initializeSignaling(server: Server) {
 
         // Track for late joiners — store appData so late joiners know source type
         if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
-        roomProducers.get(roomId)!.push({ producerId, userId, name: client.name, kind: data.kind, appData });
+        roomProducers.get(roomId)!.push({ producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData });
 
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
@@ -1958,6 +1983,12 @@ export function initializeSignaling(server: Server) {
       default:
         logger.warn(`Unknown message type: ${data.type}`);
     }
+  }
+
+  function broadcastRoomState(roomId: string) {
+    const activeParticipants = getActiveRoomParticipants(roomId);
+    logger.info(`[PRESENCE] Broadcasting authoritative room state for ${roomId}. Participants: ${activeParticipants.length}`);
+    broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
   }
 
   function broadcastToRoom(roomId: string, message: any, excludeUserId?: string) {

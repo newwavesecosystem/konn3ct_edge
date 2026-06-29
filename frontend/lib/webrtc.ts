@@ -10,12 +10,13 @@ export class WebRTCClient {
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   
-  private localVideoProducer: Producer | null = null;
-  private localAudioProducer: Producer | null = null;
-  private consumers: Map<string, Consumer> = new Map();
+  public localVideoProducer: Producer | null = null;
+  public localAudioProducer: Producer | null = null;
+  public screenShareProducer: Producer | null = null;
+  public localScreenTrack: MediaStreamTrack | null = null;
+  public consumers: Map<string, Consumer> = new Map();
   
   private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
-  private screenShareProducer: Producer | null = null;
   
   // Media
   public rawAudioTrack: MediaStreamTrack | null = null;
@@ -40,6 +41,7 @@ export class WebRTCClient {
   public cameraFallbackReachedVideoTrue: boolean = false;
 
   public userId: string | undefined;
+  public participantId: string = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
   public userName: string | undefined;
   public userRole: string | undefined;
   public roomName: string | undefined;
@@ -63,8 +65,9 @@ export class WebRTCClient {
   // Participant Management Callbacks
   public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
   public onUserLeft?: (userId: string) => void;
-  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }>) => void;
-  public onRoleChanged?: (userId: string, role: string) => void;
+  public onParticipantsList?: (participants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }>) => void;
+  public onRoleChanged?: (userId: string, role: string, participantId?: string) => void;
+  public onAudioTrackReplaced?: () => void;
   
   // Collaboration Callbacks
   public onChatMessage?: (msg: any) => void;
@@ -99,7 +102,7 @@ export class WebRTCClient {
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
   // Talking indicator
-  public onActiveSpeaker?: (userIds: string[]) => void;
+  public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
   // Recording
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
@@ -201,7 +204,11 @@ export class WebRTCClient {
   public lastCameraStateBroadcast?: string;
   public lastCameraStateReceived?: string;
 
-  constructor(private roomId: string, private token: string) {}
+  constructor(private roomId: string, private token: string, participantId?: string) {
+    if (participantId) {
+      this.participantId = participantId;
+    }
+  }
 
   public async connect() {
     this.onConnectionStateChange?.('connecting');
@@ -211,7 +218,7 @@ export class WebRTCClient {
     
     // Connect WebSocket — passing token in URL is required by backend upgrade handler
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}`;
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}&participantId=${this.participantId}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
@@ -345,7 +352,7 @@ export class WebRTCClient {
           // Cleanup consumers for this user
           break;
         case 'role_changed':
-          this.onRoleChanged?.(msg.userId, msg.role);
+          this.onRoleChanged?.(msg.userId, msg.role, msg.participantId);
           if (msg.userId === this.userId) this.userRole = msg.role;
           break;
         case 'chat':
@@ -431,7 +438,7 @@ export class WebRTCClient {
           this.onConsumerClosed?.(msg.producerId, msg.appData || {});
           break;
         case 'active_speaker':
-          this.onActiveSpeaker?.(msg.userIds);
+          this.onActiveSpeaker?.(msg.userIds, msg.participantIds || []);
           break;
         case 'server_load_high':
           this.onServerLoadHigh?.();
@@ -860,6 +867,9 @@ export class WebRTCClient {
     const audioTrack = this.localAudioProducer?.track;
     const isVideoPaused = this.localVideoProducer?.paused;
     const isAudioPaused = this.localAudioProducer?.paused;
+    
+    // Check screen share track
+    const screenTrack = this.localScreenTrack;
 
     // Clean up old transports
     if (this.sendTransport) this.sendTransport.close();
@@ -960,6 +970,7 @@ export class WebRTCClient {
           track: audioTrack, 
           appData: { source: 'mic' } 
         });
+        this.onAudioTrackReplaced?.();
         if (isAudioPaused) this.localAudioProducer.pause();
       } else {
         console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
@@ -975,6 +986,52 @@ export class WebRTCClient {
           this.emitTelemetry('mic_reacquire_failed');
         }
       }
+    }
+    
+    // SCREEN-002: Screen-share republish
+    if (screenTrack) {
+      this.emitTelemetry('screen_recovery_started');
+      if (screenTrack.readyState === 'live') {
+        this.emitTelemetry('screen_track_live_detected');
+        
+        let screenCodec;
+        if (this.device.rtpCapabilities.codecs) {
+          screenCodec = this.device.rtpCapabilities.codecs.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['packetization-mode'] === 1
+          );
+        }
+
+        try {
+          if (this.screenShareProducer) {
+            this.emitTelemetry('screen_old_producer_closed');
+            this.screenShareProducer.close();
+          }
+          this.emitTelemetry('screen_republish_started');
+          this.screenShareProducer = await this.sendTransport.produce({
+            track: screenTrack,
+            codec: screenCodec,
+            appData: { source: 'screen' },
+            encodings: [{ maxBitrate: 1500000, maxFramerate: 15 }],
+            codecOptions: { videoGoogleStartBitrate: 1000 }
+          });
+          this.emitTelemetry('screen_republish_success');
+          // No need to manually request keyframe here since the server automatically asks for one on new producer creation,
+          // but we can emit a log anyway
+          this.emitTelemetry('screen_remote_consumers_recreated');
+        } catch (e) {
+          console.error("Failed to republish screen share:", e);
+          this.emitTelemetry('screen_republish_failed');
+          this.localScreenTrack = null;
+        }
+      } else {
+        this.emitTelemetry('screen_track_ended_detected');
+        this.localScreenTrack = null;
+        if (this.screenShareProducer) {
+          this.screenShareProducer.close();
+          this.screenShareProducer = null;
+        }
+      }
+      this.emitTelemetry('screen_recovery_completed');
     }
     
     this.emitTelemetry('media_recovery_completed');
@@ -1362,6 +1419,7 @@ export class WebRTCClient {
       } else {
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
       }
+      this.onAudioTrackReplaced?.();
       return activeTrack;
     }
     return undefined;
@@ -1434,6 +1492,7 @@ export class WebRTCClient {
         if (oldTrack) {
           oldTrack.stop();
         }
+        if (kind === 'audio') this.onAudioTrackReplaced?.();
       }
     } else {
       if (kind === 'audio') {
@@ -1445,6 +1504,7 @@ export class WebRTCClient {
           activeTrack = denoisedStream.getAudioTracks()[0];
         }
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+        this.onAudioTrackReplaced?.();
       } else {
         this.rawCameraStream = stream;
         if (this.videoProcessor && this.videoProcessor.getMode() !== 'none') {
@@ -1514,6 +1574,7 @@ export class WebRTCClient {
       video: { frameRate: { ideal: 15, max: 30 } } // Lower framerate = less CPU, still crisp
     });
     const screenTrack = stream.getVideoTracks()[0];
+    this.localScreenTrack = screenTrack;
     
     // Force H264 for screen share to ensure iPhone Safari compatibility
     let screenCodec;
@@ -1562,6 +1623,7 @@ export class WebRTCClient {
       this.screenShareProducer.track?.stop();
       this.screenShareProducer.close();
       this.screenShareProducer = null;
+      this.localScreenTrack = null;
     }
   }
 

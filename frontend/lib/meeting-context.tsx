@@ -217,7 +217,8 @@ export function MeetingProvider({
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
   const [initialCurrentUser] = useState<Participant>({
-    id: storedJoinInfo?.userId || `u-${Math.random().toString(36).substring(2, 9)}`,
+    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `session-${Math.random().toString(36).substring(2, 9)}`,
+    userId: storedJoinInfo?.userId || `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
     isMuted: initialMuted,
@@ -457,7 +458,7 @@ export function MeetingProvider({
           return;
         }
 
-        client = new WebRTCClient(roomSlug, data.token);
+        client = new WebRTCClient(roomSlug, data.token, initialCurrentUser.id);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
 
@@ -484,6 +485,10 @@ export function MeetingProvider({
             setIsCameraOn(false);
             setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: false } : p));
           }
+        };
+
+        client.onAudioTrackReplaced = () => {
+          setAudioTrackVersion(v => v + 1);
         };
         let lastNetworkToastTime = 0;
         client.onNetworkQualityChange = (quality) => {
@@ -704,6 +709,7 @@ export function MeetingProvider({
                   ...currentParticipants,
                   {
                     id: msg.userId,
+                    userId: msg.userId,
                     name: msg.name || `Participant ${msg.userId.substring(5, 9)}`,
                     role: "attendee",
                     isMuted: true,
@@ -893,12 +899,12 @@ export function MeetingProvider({
           }
         };
 
-        client.onActiveSpeaker = (userIds) => {
+        client.onActiveSpeaker = (userIds, participantIds) => {
           setParticipants((prev) => prev.map(p => {
-            if (p.id === currentUser.id) {
-              return { ...p, isSpeaking: localIsSpeakingRef.current || userIds.includes(p.id) || userIds.includes(webrtcClient.current?.userId || '') };
+            if (p.id === initialCurrentUser.id) {
+              return { ...p, isSpeaking: localIsSpeakingRef.current || userIds.includes(p.userId) || (participantIds && participantIds.includes(p.id)) || userIds.includes(webrtcClient.current?.userId || '') };
             }
-            return { ...p, isSpeaking: userIds.includes(p.id) };
+            return { ...p, isSpeaking: (participantIds && participantIds.includes(p.id)) || userIds.includes(p.userId) };
           }));
         };
 
@@ -1042,23 +1048,24 @@ export function MeetingProvider({
             let staleRemoved = false;
             
             // Add local user
-            const localUser = prev.find(p => p.id === webrtcClient.current?.userId);
+            const localUser = prev.find(p => p.id === initialCurrentUser.id);
             if (localUser) nextParticipants.push(localUser);
 
-            const seenIds = new Set<string>();
-            if (localUser) seenIds.add(localUser.id);
+            const seenParticipantIds = new Set<string>();
+            if (localUser) seenParticipantIds.add(localUser.id);
 
             for (const p of backendParticipants) {
-              if (seenIds.has(p.userId)) {
+              if (seenParticipantIds.has(p.participantId)) {
                 duplicatesDetected = true;
                 continue;
               }
-              seenIds.add(p.userId);
+              seenParticipantIds.add(p.participantId);
 
-              const existing = prev.find(existing => existing.id === p.userId);
+              const existing = prev.find(existing => existing.id === p.participantId);
               if (existing) {
                 nextParticipants.push({ 
                   ...existing, 
+                  userId: p.userId,
                   name: p.name, 
                   role: p.role as any, 
                   isMobile: p.isMobile, 
@@ -1068,7 +1075,8 @@ export function MeetingProvider({
                 });
               } else {
                 nextParticipants.push({
-                  id: p.userId,
+                  id: p.participantId,
+                  userId: p.userId,
                   name: p.name,
                   role: p.role as any,
                   isMuted: true,
@@ -1110,6 +1118,7 @@ export function MeetingProvider({
             }
             return [...prev, {
               id: user.userId,
+              userId: user.userId,
               name: user.name,
               role: user.role as any,
               isMuted: true,
@@ -1215,6 +1224,7 @@ export function MeetingProvider({
               client?.emitTelemetry('participant_missing_but_media_active');
               const newParticipant: Participant = {
                 id: userId,
+                userId: userId,
                 name: userName || `Participant ${userId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
@@ -1436,10 +1446,17 @@ export function MeetingProvider({
   }, []);
 
   // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
+  const [audioTrackVersion, setAudioTrackVersion] = useState(0);
+
   useEffect(() => {
     if (webrtcClient.current?.userRole === 'bot') return;
     const trackToMonitor = webrtcClient.current?.rawAudioTrack || localAudioTrackRef.current;
-    if (!trackToMonitor) return;
+    if (!trackToMonitor || trackToMonitor.readyState === 'ended') {
+      webrtcClient.current?.emitTelemetry('local_vad_track_ended_detected');
+      return;
+    }
+
+    webrtcClient.current?.emitTelemetry('local_vad_bind_started');
 
     let lastAlertTime = 0;
     let silentFrames = 0;
@@ -1504,6 +1521,7 @@ export function MeetingProvider({
       animationFrameId = requestAnimationFrame(checkVolume);
     };
     checkVolume();
+    webrtcClient.current?.emitTelemetry('local_vad_bound_to_track');
 
     const handleHardwareMute = () => {
       if (!isMuted) {
@@ -1513,11 +1531,12 @@ export function MeetingProvider({
     trackToMonitor.addEventListener("mute", handleHardwareMute);
 
     return () => {
+      webrtcClient.current?.emitTelemetry('local_vad_old_track_cleanup');
       cancelAnimationFrame(animationFrameId);
       audioContext.close().catch(() => { });
       trackToMonitor.removeEventListener("mute", handleHardwareMute);
     };
-  }, [isMuted]);
+  }, [isMuted, audioTrackVersion]);
 
   // ── Actions ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
