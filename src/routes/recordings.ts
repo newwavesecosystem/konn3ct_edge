@@ -95,7 +95,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
     let recordingId: string;
     
     // Race-safe transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx: any) => {
       const active = await tx.recording.findFirst({
         where: { roomId: room.id, status: { in: ['starting', 'recording', 'stopping'] } }
       });

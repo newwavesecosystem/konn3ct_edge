@@ -265,9 +265,14 @@ export default function RoomsScreen() {
     try {
       setStartingRoomId(room.id);
       const res = await startRoom(room.id);
-      // The response may contain a roomId/token to pass into Meeting screen
-      const roomId = res.roomId || res.room_id || res.data?.roomId || String(room.id);
-      navigation.navigate('Meeting', { roomId });
+
+      // Use room.url (slug) as roomId — same pattern as DashboardScreen.
+      // Extract meetingToken from sessionToken first, then from the ?t= param in the URL.
+      const roomId: string = room.url || String(room.id);
+      const meetingToken: string | undefined =
+        res?.sessionToken || res?.url?.match(/[?&]t=([^&]+)/)?.[1];
+
+      navigation.navigate('Meeting', { roomId, meetingToken });
     } catch (err: any) {
       Alert.alert(
         'Start Failed',
