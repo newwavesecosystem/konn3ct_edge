@@ -1,6 +1,6 @@
 // ── Meeting Types ──────────────────────────────────────
 
-export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot";
+export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot" | "recorder";
 export type MediaState = "on" | "off" | "disabled";
 export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended" | "fetching-token" | "failed" | "denied" | "kicked" | "invalid-session";
 export type RoomType = "meeting" | "webinar";
@@ -37,7 +37,8 @@ export interface QAPlaybackStats {
 }
 
 export interface Participant {
-  id: string;
+  id: string; // This is now participantId (sessionId)
+  userId: string; // The identity user ID
   name: string;
   avatarUrl?: string;
   role: ParticipantRole;
@@ -62,6 +63,8 @@ export interface Participant {
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
   isMobile?: boolean;
+  isBot?: boolean;
+  isRecorder?: boolean;
   
   // Network/Media overrides
   audioOnlyMode?: boolean;

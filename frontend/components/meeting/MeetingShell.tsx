@@ -70,7 +70,14 @@ export function MeetingShell() {
   }, [webrtcStatus, router, currentUser?.role, logoutUrl, meetingInfo.roomSlug]);
 
   React.useEffect(() => {
-    if (isBot && currentUser?.role === 'bot' && webrtcStatus === 'connected' && meetingInfo.roomSlug) {
+    const isRecorderBot =
+      isBot ||
+      currentUser?.role === 'bot' ||
+      currentUser?.role === 'recorder' ||
+      currentUser?.isBot === true ||
+      currentUser?.isRecorder === true;
+
+    if (isRecorderBot && webrtcStatus === 'connected' && meetingInfo.roomSlug) {
       (window as any).__KONN3CT_RECORDER_READY__ = {
         joined: true,
         roomId: meetingInfo.roomSlug,
@@ -80,7 +87,7 @@ export function MeetingShell() {
         timestamp: Date.now()
       };
     }
-  }, [isBot, webrtcStatus, meetingInfo.roomSlug, currentUser?.id, currentUser?.role]);
+  }, [isBot, webrtcStatus, meetingInfo.roomSlug, currentUser?.id, currentUser?.role, currentUser?.isBot, currentUser?.isRecorder]);
 
   const panelContent: Record<string, React.ReactNode> = {
     chat: <ChatPanel />,

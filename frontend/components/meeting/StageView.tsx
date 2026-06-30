@@ -24,7 +24,7 @@ import YouTube from "react-youtube";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function StageView() {
-  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
+  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef } =
     useMeeting();
 
   const screenSharer = participants.find((p) => p.isScreenSharing);
@@ -815,6 +815,7 @@ function ScreenShareLayout({
   onStopSharing: () => void;
   currentUserId: string;
 }) {
+  const { webrtcClientRef } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const sharerName = screenSharer?.name ?? "You";
   const isMe = isCurrentUserSharing || screenSharer?.id === currentUserId;
@@ -910,6 +911,43 @@ function ScreenShareLayout({
     };
   }, [screenSharer?.screenTrack]);
 
+  // SCREEN-002: Screen share first frame timeout and keyframe request
+  const [screenTimeoutState, setScreenTimeoutState] = useState<'normal' | 'recovering' | 'failed'>('normal');
+  React.useEffect(() => {
+    if (isMe || !screenSharer?.screenConsumerId) {
+      setScreenTimeoutState('normal');
+      return;
+    }
+
+    if (screenSharer?.screenTrack && screenSharer?.screenStats?.firstFrameRendered) {
+      setScreenTimeoutState('normal');
+      return;
+    }
+
+    webrtcClientRef?.current?.emitTelemetry('screen_first_frame_wait_started');
+
+    const timeout1 = setTimeout(() => {
+      // 10 seconds: request keyframe
+      if (!screenSharer?.screenStats?.firstFrameRendered) {
+        setScreenTimeoutState('recovering');
+        webrtcClientRef?.current?.emitTelemetry('screen_keyframe_requested');
+        webrtcClientRef?.current?.requestScreenKeyframe(screenSharer.screenConsumerId!);
+      }
+    }, 10000);
+
+    const timeout2 = setTimeout(() => {
+      // 25 seconds: fail
+      if (!screenSharer?.screenStats?.firstFrameRendered) {
+        setScreenTimeoutState('failed');
+        webrtcClientRef?.current?.emitTelemetry('screen_first_frame_timeout');
+      }
+    }, 25000);
+
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+    };
+  }, [isMe, screenSharer?.screenConsumerId, screenSharer?.screenTrack, screenSharer?.screenStats?.firstFrameRendered]);
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
       <div
@@ -1020,12 +1058,21 @@ function ScreenShareLayout({
                     </div>
                   </div>
                 )}
-                {screenSharer?.screenTrack && health === 'recovering' && (
+                {screenSharer?.screenTrack && (health === 'recovering' || screenTimeoutState === 'recovering') && screenTimeoutState !== 'failed' && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                     <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
                       <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
                       <span className="text-sm font-medium drop-shadow-md">
                         {videoRef.current?.videoWidth === 0 ? "Waiting for screen share video..." : "Recovering screen share..."}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {screenSharer?.screenTrack && screenTimeoutState === 'failed' && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-red-900/80 backdrop-blur-md rounded-lg text-white border border-red-500/50">
+                      <span className="text-sm font-medium drop-shadow-md">
+                        Screen share failed to load. Please ask the presenter to restart it.
                       </span>
                     </div>
                   </div>
