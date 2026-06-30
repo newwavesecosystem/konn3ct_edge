@@ -13,7 +13,8 @@ jobs:
       name: ${{ github.ref == 'refs/heads/main' && 'staging' || 'production' }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      LATEST_TAG: ${{ github.ref == 'refs/heads/main' && 'staging-latest' || 'prod-latest' }}
+      # For staging, replace ':latest' with 'staging-latest'. For production, replace with the exact commit hash.
+      TARGET_TAG: ${{ github.ref == 'refs/heads/main' && 'staging-latest' || github.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,25 +31,31 @@ jobs:
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
           docker build -t $IMAGE_NAME:${{ github.sha }} .
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.LATEST_TAG }}
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:${{ env.LATEST_TAG }}
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
 
       - name: Build and Push Frontend Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
           docker build --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} -t $IMAGE_NAME:${{ github.sha }} ./frontend
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.LATEST_TAG }}
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:${{ env.LATEST_TAG }}
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
 
       - name: Build and Push Recorder Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
           docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:${{ env.LATEST_TAG }}
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:${{ env.LATEST_TAG }}
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
 
       # - name: Build and Push Streaming Worker Docker Image
       #   run: |
@@ -66,7 +73,7 @@ jobs:
       - name: Deploy Manifests to Kubernetes
         run: |
           # Replace :latest with the environment-specific tag in all k8s manifests
-          sed -i "s/:latest/:${{ env.LATEST_TAG }}/g" k8s/*.yaml
+          sed -i "s/:latest/:${{ env.TARGET_TAG }}/g" k8s/*.yaml
           
           # Safely inject GitHub Secrets into a Kubernetes Secret called 'conn3ct-secrets'
           kubectl create secret generic conn3ct-secrets \
@@ -88,11 +95,14 @@ jobs:
           # Apply all our deployment, service, and redis yaml files
           kubectl apply -f k8s/
           
-          # Tell Kubernetes to gracefully restart the pods so they download the new image we just pushed
-          kubectl rollout restart deployment conn3ct-backend
-          kubectl rollout restart deployment conn3ct-frontend
-          kubectl rollout restart deployment conn3ct-recorder
-          # kubectl rollout restart deployment conn3ct-streaming-worker
+          # Only gracefully restart if we are in staging (since we use a floating tag 'staging-latest').
+          # In production, the image tag explicitly changes to the commit hash, so kubectl apply automatically rolls it out!
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            kubectl rollout restart deployment conn3ct-backend
+            kubectl rollout restart deployment conn3ct-frontend
+            kubectl rollout restart deployment conn3ct-recorder
+            # kubectl rollout restart deployment conn3ct-streaming-worker
+          fi
 
       # - name: Debugging - Print Pod Logs
       #   run: |
