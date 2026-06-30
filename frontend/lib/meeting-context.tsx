@@ -216,8 +216,29 @@ export function MeetingProvider({
   const isMobileClient = typeof navigator !== 'undefined' ? 
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
-  const [initialCurrentUser] = useState<Participant>({
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `session-${Math.random().toString(36).substring(2, 9)}`,
+  const [clientParticipantId, setClientParticipantId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `konn3ct:participant:${roomSlug}`;
+    const existing = sessionStorage.getItem(key);
+
+    if (existing) {
+      setClientParticipantId(existing);
+      return;
+    }
+
+    const generated =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    sessionStorage.setItem(key, generated);
+    setClientParticipantId(generated);
+  }, [roomSlug]);
+
+  const [initialCurrentUser, setInitialCurrentUser] = useState<Participant>({
+    id: clientParticipantId || 'pending',
     userId: storedJoinInfo?.userId || `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
@@ -230,9 +251,22 @@ export function MeetingProvider({
     isMobile: isMobileClient,
   });
 
+  useEffect(() => {
+    if (clientParticipantId) {
+      setInitialCurrentUser(prev => ({ ...prev, id: clientParticipantId }));
+    }
+  }, [clientParticipantId]);
+
   // Start with only the current user, so real users are dynamically added
   const [participants, setParticipants] = useState<Participant[]>([initialCurrentUser]);
-  const currentUser = useMemo(() => participants.find(p => p.id === initialCurrentUser.id) || initialCurrentUser, [participants, initialCurrentUser]);
+
+  useEffect(() => {
+    if (clientParticipantId) {
+      setParticipants(prev => prev.map(p => p.id === 'pending' || p.id === 'ssr-placeholder' ? { ...p, id: clientParticipantId } : p));
+    }
+  }, [clientParticipantId]);
+
+  const currentUser = useMemo(() => participants.find(p => p.id === clientParticipantId) || initialCurrentUser, [participants, clientParticipantId, initialCurrentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
@@ -412,6 +446,10 @@ export function MeetingProvider({
   const hasLeftMeetingRef = useRef<boolean>(false);
 
   useEffect(() => {
+    if (!clientParticipantId || clientParticipantId === 'ssr-placeholder' || clientParticipantId === 'pending') {
+      return;
+    }
+
     let client: WebRTCClient | null = null;
 
     const connectToMeeting = async () => {
@@ -1276,7 +1314,7 @@ export function MeetingProvider({
     return () => {
       client?.disconnect();
     };
-  }, [roomSlug, initialCurrentUser.name, initialCurrentUser.id]);
+  }, [roomSlug, initialCurrentUser.name, clientParticipantId]);
 
   // ── Initialize Local Media upon WebRTC connect ────────
   useEffect(() => {
