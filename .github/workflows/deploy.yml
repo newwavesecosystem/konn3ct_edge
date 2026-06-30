@@ -83,6 +83,10 @@ jobs:
             --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
             --from-literal=DEEPGRAM_API_KEY="${{ secrets.DEEPGRAM_API_KEY }}" \
             --from-literal=EXTERNAL_API_KEY="${{ secrets.EXTERNAL_API_KEY }}" \
+            --from-literal=BOT_SECRET="${{ secrets.BOT_SECRET }}" \
+            --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}" \
+            --from-literal=NEXT_PUBLIC_FRONTEND_DOMAIN="${{ secrets.NEXT_PUBLIC_FRONTEND_DOMAIN }}" \
+            --from-literal=NEXT_PUBLIC_FRONTEND_URL="${{ secrets.NEXT_PUBLIC_FRONTEND_URL }}" \
             --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
             --from-literal=NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY="${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" \
             --from-literal=DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \

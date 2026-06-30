@@ -24,7 +24,10 @@ spec:
             - containerPort: 3000
           env:
             - name: NEXT_PUBLIC_BACKEND_DOMAIN
-              value: "konn3ctedge.konn3ct.net"
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_BACKEND_DOMAIN
             - name: BACKEND_URL
               value: "http://conn3ct-backend-service"
             - name: PORT
