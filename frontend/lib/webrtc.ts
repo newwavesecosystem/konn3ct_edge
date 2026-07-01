@@ -204,8 +204,18 @@ export class WebRTCClient {
   public lastCameraStateBroadcast?: string;
   public lastCameraStateReceived?: string;
 
-  constructor(private roomId: string, private token: string, participantId?: string) {
-    if (participantId) {
+  constructor(private roomId: string, private token: string, participantId?: string | null) {
+    if (participantId !== undefined) {
+      if (
+        !participantId || 
+        participantId === "pending" || 
+        participantId === "ssr-placeholder" || 
+        participantId === "null" || 
+        participantId === "undefined"
+      ) {
+        console.error(`Invalid participantId provided to WebRTCClient: ${participantId}`);
+        throw new Error(`Invalid participantId: ${participantId}`);
+      }
       this.participantId = participantId;
     }
   }

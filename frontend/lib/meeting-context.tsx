@@ -223,7 +223,15 @@ export function MeetingProvider({
     const key = `konn3ct:participant:${roomSlug}`;
     const existing = sessionStorage.getItem(key);
 
-    if (existing) {
+    if (
+      existing === "pending" || 
+      existing === "ssr-placeholder" || 
+      existing === "null" || 
+      existing === "undefined" ||
+      !existing
+    ) {
+      sessionStorage.removeItem(key);
+    } else if (existing) {
       setClientParticipantId(existing);
       return;
     }
@@ -446,7 +454,14 @@ export function MeetingProvider({
   const hasLeftMeetingRef = useRef<boolean>(false);
 
   useEffect(() => {
-    if (!clientParticipantId || clientParticipantId === 'ssr-placeholder' || clientParticipantId === 'pending') {
+    if (
+      !clientParticipantId || 
+      clientParticipantId === 'ssr-placeholder' || 
+      clientParticipantId === 'pending' || 
+      clientParticipantId === 'null' || 
+      clientParticipantId === 'undefined'
+    ) {
+      console.warn("Blocked meeting connection: invalid participantId", clientParticipantId);
       return;
     }
 
@@ -496,7 +511,7 @@ export function MeetingProvider({
           return;
         }
 
-        client = new WebRTCClient(roomSlug, data.token, initialCurrentUser.id);
+        client = new WebRTCClient(roomSlug, data.token, clientParticipantId);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
 
