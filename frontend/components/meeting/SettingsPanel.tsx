@@ -47,7 +47,8 @@ export function SettingsPanel() {
     captionSize,
     setCaptionSize,
     outputVolume,
-    setOutputVolume
+    setOutputVolume,
+    roomFeatureFlags
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
 
@@ -146,11 +147,12 @@ export function SettingsPanel() {
             onChange={setIsMirrorVideoEnabled}
           />
 
-          <div className="pt-2 border-t" style={{ borderColor: "var(--mt-border)" }}>
-            <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
-              <ImageIcon className="w-4 h-4" />
-              <span className="text-xs font-medium">Virtual Background</span>
-            </div>
+          {roomFeatureFlags.virtualBackgroundEnabled && (
+            <div className="pt-2 border-t" style={{ borderColor: "var(--mt-border)" }}>
+              <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
+                <ImageIcon className="w-4 h-4" />
+                <span className="text-xs font-medium">Virtual Background</span>
+              </div>
             <div className="grid grid-cols-4 gap-2">
               <button
                 onClick={() => handleVbSelect('none')}
@@ -220,7 +222,8 @@ export function SettingsPanel() {
                 />
               </label>
             </div>
-          </div>
+            </div>
+          )}
         </SettingsGroup>
 
         {/* General */}

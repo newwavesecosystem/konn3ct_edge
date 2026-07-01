@@ -22,6 +22,7 @@ export class WebRTCClient {
   public rawAudioTrack: MediaStreamTrack | null = null;
   private rawCameraStream: MediaStream | null = null;
   private videoProcessor: VideoProcessor | null = null;
+  public isVirtualBackgroundEnabled: boolean = true;
   private purifyInstance: any = null;
   public isAINoiseSuppressionEnabled = false;
   private messageIdCounter = 0;
@@ -1173,26 +1174,34 @@ export class WebRTCClient {
 
     // Initialize VideoProcessor if not exists
     let activeMode: VirtualBackgroundMode = 'none';
-    if (!this.videoProcessor) {
-      this.videoProcessor = new VideoProcessor();
-      const saved = sessionStorage.getItem("mtg_vb");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          activeMode = parsed.mode;
-          this.videoProcessor.setMode(parsed.mode, parsed.image);
-        } catch (e) {}
+    if (this.isVirtualBackgroundEnabled) {
+      if (!this.videoProcessor) {
+        this.videoProcessor = new VideoProcessor();
+        const saved = sessionStorage.getItem("mtg_vb");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            activeMode = parsed.mode;
+            this.videoProcessor.setMode(parsed.mode, parsed.image);
+          } catch (e) {}
+        }
+      } else {
+        activeMode = this.videoProcessor.getMode();
       }
     } else {
-      activeMode = this.videoProcessor.getMode();
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
     }
 
     // Pass the stream through the VideoProcessor to apply Virtual Background only if needed
-    if (activeMode !== 'none') {
-      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+    if (this.isVirtualBackgroundEnabled && activeMode !== 'none') {
+      const processedStream = this.videoProcessor!.startProcessing(this.rawCameraStream);
       videoTrack = processedStream.getVideoTracks()[0];
     } else {
-      this.videoProcessor.stopProcessing();
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
       videoTrack = this.rawCameraStream.getVideoTracks()[0];
     }
     
@@ -1249,7 +1258,11 @@ export class WebRTCClient {
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
-    if (mode === 'none') {
+    if (mode === 'none' || !this.isVirtualBackgroundEnabled) {
+      if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
+        console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
+        console.warn("[webrtc] virtual_background_model_load_skipped");
+      }
       if (this.videoProcessor) {
         this.videoProcessor.stopProcessing();
       }
