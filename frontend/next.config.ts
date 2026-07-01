@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NODE_ENV === 'production' ? 'http://conn3ct-backend-service' : `https://${process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net'}`}/api/:path*`, // Proxy to Backend
+        destination: `${process.env.BACKEND_URL || `https://${process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net'}`}/api/:path*`, // Proxy to Backend
       },
     ];
   },
