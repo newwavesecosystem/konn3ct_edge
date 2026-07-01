@@ -75,6 +75,9 @@ jobs:
           # Replace :latest with the environment-specific tag in all k8s manifests
           sed -i "s/:latest/:${{ env.TARGET_TAG }}/g" k8s/*.yaml
           
+          # Inject dynamic backend domain into ingress manifest
+          sed -i "s/__NEXT_PUBLIC_BACKEND_DOMAIN__/${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}/g" k8s/ingress.yaml
+          
           # Safely inject GitHub Secrets into a Kubernetes Secret called 'conn3ct-secrets'
           kubectl create secret generic conn3ct-secrets \
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
