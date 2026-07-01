@@ -58,6 +58,12 @@ interface MeetingContextValue {
   isCaptionsEnabled: boolean;
   captions: CaptionMessage[];
   captionLanguage: string;
+  roomFeatureFlags: {
+    aiFeaturesEnabled: boolean;
+    captionsEnabled: boolean;
+    donationsEnabled: boolean;
+    virtualBackgroundEnabled: boolean;
+  };
   translationLanguage: string;
   isDonationActive: boolean;
   totalDonations: number;
@@ -341,6 +347,13 @@ export function MeetingProvider({
   const translationLanguageRef = useRef("original");
   const [isAINoiseSuppressionEnabled, setIsAINoiseSuppressionEnabled] = useState(false);
   
+  const [roomFeatureFlags, setRoomFeatureFlags] = useState({
+    aiFeaturesEnabled: storedJoinInfo?.aiFeaturesEnabled ?? true,
+    captionsEnabled: storedJoinInfo?.captionsEnabled ?? true,
+    donationsEnabled: storedJoinInfo?.donationsEnabled ?? true,
+    virtualBackgroundEnabled: storedJoinInfo?.virtualBackgroundEnabled ?? true,
+  });
+  
   useEffect(() => {
     translationLanguageRef.current = translationLanguage;
   }, [translationLanguage]);
@@ -514,6 +527,24 @@ export function MeetingProvider({
         client = new WebRTCClient(roomSlug, data.token, clientParticipantId);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
+        
+        // Extract room limits from the JWT token and initialize flags
+        if (data.token) {
+          try {
+            const decoded = JSON.parse(atob(data.token.split('.')[1]));
+            if (decoded) {
+              setRoomFeatureFlags({
+                aiFeaturesEnabled: decoded.aiFeaturesEnabled ?? true,
+                captionsEnabled: decoded.captionsEnabled ?? true,
+                donationsEnabled: decoded.donationsEnabled ?? true,
+                virtualBackgroundEnabled: decoded.virtualBackgroundEnabled ?? true,
+              });
+              client.isVirtualBackgroundEnabled = decoded.virtualBackgroundEnabled ?? true;
+            }
+          } catch (e) {
+            console.error("Failed to decode token for feature flags", e);
+          }
+        }
 
         // --- Collaboration Event Listeners ---
         client.onMicError = (error: Error) => {
@@ -758,6 +789,10 @@ export function MeetingProvider({
             setParticipants((currentParticipants) => {
               if (msg.userId && !currentParticipants.some(p => p.id === msg.userId)) {
                 client?.emitTelemetry('chat_alive_media_dead');
+                setTimeout(() => {
+                  if (hasLeftMeetingRef.current) return;
+                  setParticipants(curr => curr.map(p => p.id === msg.userId ? { ...p, isConnecting: false } : p));
+                }, 4000);
                 return [
                   ...currentParticipants,
                   {
@@ -1993,6 +2028,8 @@ export function MeetingProvider({
         isAlwaysMuteOnJoin,
         setIsAlwaysMuteOnJoin: updateAlwaysMute,
         
+        roomFeatureFlags,
+
         vbMode,
         vbImageUrl,
         handleVbSelect: async function handleVbSelectFn(mode: 'none' | 'blur' | 'image', imageUrl?: string) {
