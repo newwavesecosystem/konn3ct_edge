@@ -170,9 +170,12 @@ export default function MeetingScreen({ route, navigation }: Props) {
           useMeetingStore.getState().removeParticipant(userId);
           useMeetingStore.getState().removeWaitingRoomUser(userId);
         };
-        service.onPollCreate = (poll) => useMeetingStore.getState().addPoll(poll);
+        service.onPollCreate = (poll) => useMeetingStore.getState().addPoll({ ...poll, isActive: true });
         service.onPollVote = (vote) => useMeetingStore.getState().updatePollVote(vote.pollId, vote.optionId);
-        service.onPollHistory = (polls) => useMeetingStore.getState().setPolls(polls);
+        service.onPollEnd = (data) => useMeetingStore.getState().endPoll(data.pollId);
+        service.onPollHistory = (polls) => useMeetingStore.getState().setPolls(
+          polls.map((p: any) => ({ ...p, isActive: p.isActive !== false }))
+        );
         service.onWaitingRoomRequest = (user) => useMeetingStore.getState().addWaitingRoomUser(user);
         service.onForceMute = () => {
           setIsMicMuted(true);
@@ -528,9 +531,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
               <TouchableOpacity
                 style={styles.headerIconBtn}
                 activeOpacity={0.7}
-                onPress={() => serviceRef.current?.switchCamera()}
+                onPress={() => {
+                  if (!isCameraOff && serviceRef.current) {
+                    serviceRef.current.switchCamera(localStream);
+                  }
+                }}
               >
-                <SwitchCamera size={14} color={tokens.textPrimary} strokeWidth={2} />
+                <SwitchCamera size={14} color={isCameraOff ? tokens.textMuted : tokens.textPrimary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </View>

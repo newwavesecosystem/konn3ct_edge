@@ -51,6 +51,7 @@ import {
   Radio,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -394,12 +395,14 @@ export default function DashboardScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.stickyHeaderRight}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
-            <Bell color={COLORS.textPrimary} size={24} />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>20</Text>
-            </View>
-          </TouchableOpacity>
+          {APP_CONFIG.SHOW_NOTIFICATIONS && (
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
+              <Bell color={COLORS.textPrimary} size={24} />
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>20</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -678,6 +681,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
 
         {/* ===== PREMIUM PLANS PROMO ===== */}
+        {APP_CONFIG.SHOW_PREMIUM_PROMO && (
         <Animated.View
           style={[{
             opacity: sectionFade,
@@ -730,6 +734,7 @@ export default function DashboardScreen({ navigation }: Props) {
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
+        )}
 
         {/* ===== TODAY'S MEETINGS (NEW) ===== */}
         <Animated.View
@@ -903,6 +908,7 @@ export default function DashboardScreen({ navigation }: Props) {
         </Animated.View>
 
         {/* ===== PAST MEETINGS INTELLIGENCE ===== */}
+        {APP_CONFIG.SHOW_AI_INTELLIGENCE && (
         <Animated.View
           style={[{
             opacity: sectionFade,
@@ -959,6 +965,7 @@ export default function DashboardScreen({ navigation }: Props) {
             ))
           )}
         </Animated.View>
+        )}
 
         {/* Bottom spacing */}
         <View style={{ height: 32 }} />

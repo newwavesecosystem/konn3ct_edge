@@ -45,6 +45,7 @@ import {
   type Room,
   type CreateRoomPayload,
 } from '../api/rooms';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -678,6 +679,7 @@ export default function RoomsScreen() {
         </View>
 
         <View style={styles.stickyHeaderRight}>
+          {APP_CONFIG.SHOW_NOTIFICATIONS && (
           <TouchableOpacity
             style={styles.iconBtn}
             activeOpacity={0.7}
@@ -685,6 +687,7 @@ export default function RoomsScreen() {
           >
             <Bell color={COLORS.textPrimary} size={22} />
           </TouchableOpacity>
+          )}
         </View>
       </View>
 

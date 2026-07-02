@@ -4,6 +4,7 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import Svg, { Path } from 'react-native-svg';
 import { Home, Calendar, User, MoreHorizontal, Video, Layers } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -54,6 +55,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
     const color = isFocused ? COLORS.brandGreen : COLORS.inactive;
     switch(routeName) {
       case 'Addons': return <Layers color={color} size={24} />;
+      case 'Events': return <Calendar color={color} size={24} />;
       case 'Rooms': return <Video color={color} size={24} />;
       case 'Profile': return <User color={color} size={24} />;
       case 'More': return <MoreHorizontal color={color} size={24} />;
@@ -64,6 +66,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
   const getLabel = (routeName: string) => {
     switch(routeName) {
       case 'Addons': return 'Add ons';
+      case 'Events': return 'Events';
       case 'Rooms': return 'Rooms';
       case 'Profile': return 'Profile';
       case 'More': return 'More';
@@ -109,7 +112,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
       <View style={[styles.contentContainer, { height: barHeight, paddingBottom: safeBottom + 10 }]}>
         {/* Left Side Tabs */}
         <View style={styles.sideContainer}>
-          {renderTab('Addons')}
+          {renderTab(APP_CONFIG.SHOW_ADDONS_TAB ? 'Addons' : 'Events')}
           {renderTab('Rooms')}
         </View>
 

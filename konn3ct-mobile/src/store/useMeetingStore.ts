@@ -15,6 +15,7 @@ export interface Poll {
   question: string;
   options: { id: string; text: string; votes: number }[];
   votedOptionId?: string;
+  isActive: boolean;
 }
 
 export interface Participant {
@@ -69,6 +70,7 @@ interface MeetingState {
   setPolls: (polls: Poll[]) => void;
   addPoll: (poll: Poll) => void;
   updatePollVote: (pollId: string, optionId: string) => void;
+  endPoll: (pollId: string) => void;
   setParticipants: (participants: Participant[]) => void;
   addParticipant: (participant: Participant) => void;
   removeParticipant: (userId: string) => void;
@@ -141,6 +143,12 @@ export const useMeetingStore = create<MeetingState>((set) => ({
       }
       return p;
     })
+  })),
+
+  endPoll: (pollId) => set((state) => ({
+    polls: state.polls.map(p =>
+      p.id === pollId ? { ...p, isActive: false } : p
+    )
   })),
 
   setParticipants: (participants) => set({ participants }),

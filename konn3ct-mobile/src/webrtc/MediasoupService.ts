@@ -48,6 +48,7 @@ export class MediasoupService {
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
   public onPollVote?: (vote: any) => void;
+  public onPollEnd?: (data: { pollId: string }) => void;
   public onPollHistory?: (polls: any[]) => void;
   public onWaitingRoomRequest?: (user: any) => void;
   public onForceMute?: () => void;
@@ -107,6 +108,12 @@ export class MediasoupService {
   public votePoll(pollId: string, optionId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
+  }
+
+  public endPoll(pollId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'poll_end', pollId }));
     }
   }
 
@@ -359,6 +366,10 @@ export class MediasoupService {
             if (this.onPollVote) this.onPollVote(msg);
             break;
 
+          case 'poll_end':
+            if (this.onPollEnd) this.onPollEnd(msg);
+            break;
+
           case 'waiting_room_request':
             if (this.onWaitingRoomRequest) this.onWaitingRoomRequest(msg);
             break;
@@ -503,12 +514,18 @@ export class MediasoupService {
     }
   }
 
-  public switchCamera() {
-    if (this.localVideoProducer) {
-      const track = this.localVideoProducer.track as any;
-      if (track && typeof track._switchCamera === 'function') {
-        track._switchCamera();
+  public switchCamera(localStream?: any) {
+    try {
+      // Prefer the original stream track over the producer's internal reference.
+      // The producer track can become stale after RTC renegotiation, causing crashes.
+      const track = localStream
+        ? localStream.getVideoTracks()[0]
+        : this.localVideoProducer?.track;
+      if (track && typeof (track as any)._switchCamera === 'function') {
+        (track as any)._switchCamera();
       }
+    } catch (e) {
+      console.warn('switchCamera failed:', e);
     }
   }
 

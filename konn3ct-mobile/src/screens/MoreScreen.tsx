@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/useAuthStore';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 40 - 16) / 2; // 2 columns, 20px padding each side, 16px gap
@@ -53,6 +54,13 @@ const GRID_ITEMS = [
   { id: 'donations', title: 'Donations', subtitle: 'Support & gifts', icon: Heart, colors: ['#f43f5e', '#e11d48'] },
   { id: 'referees', title: 'Referees', subtitle: 'Manage officials', icon: Users, colors: ['#84cc16', '#65a30d'] },
 ];
+
+// Filter grid items based on feature flags
+const FILTERED_GRID_ITEMS = GRID_ITEMS.filter(item => {
+  if (item.id === 'payments' && !APP_CONFIG.SHOW_PAYMENTS) return false;
+  if (item.id === 'events' && !APP_CONFIG.SHOW_ADDONS_TAB) return false;
+  return true;
+});
 
 const LIST_ITEMS = [
   { id: 'history', title: 'History', icon: History, color: '#64748b', bg: '#f8fafc' },
@@ -168,16 +176,20 @@ export default function MoreScreen() {
         </View>
 
         <View style={styles.stickyHeaderRight}>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
-            <Headset color={COLORS.textPrimary} size={24} />
-          </TouchableOpacity>
+          {APP_CONFIG.SHOW_HELP_ICON && (
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+              <Headset color={COLORS.textPrimary} size={24} />
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
-            <Bell color={COLORS.textPrimary} size={24} />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>20</Text>
-            </View>
-          </TouchableOpacity>
+          {APP_CONFIG.SHOW_NOTIFICATIONS && (
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
+              <Bell color={COLORS.textPrimary} size={24} />
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>20</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -199,7 +211,7 @@ export default function MoreScreen() {
             </View>
             <View>
               <Text style={styles.headerTitle}>Explore Hub</Text>
-              <Text style={styles.headerSubtitle}>Discover all Konn3ct features</Text>
+              <Text style={styles.headerSubtitle}>{`Discover all ${APP_CONFIG.APP_NAME} features`}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -208,7 +220,7 @@ export default function MoreScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionHeader}>Tools & Features</Text>
           <View style={styles.gridContainer}>
-            {GRID_ITEMS.map((item) => renderGridItem(item))}
+            {FILTERED_GRID_ITEMS.map((item) => renderGridItem(item))}
           </View>
         </View>
 

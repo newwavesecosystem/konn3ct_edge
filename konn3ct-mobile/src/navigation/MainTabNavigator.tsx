@@ -5,8 +5,10 @@ import ScheduleScreen from '../screens/ScheduleScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import MoreScreen from '../screens/MoreScreen';
 import AddonsScreen from '../screens/AddonsScreen';
+import EventsScreen from '../screens/EventsScreen';
 import RoomsScreen from '../screens/RoomsScreen';
 import CustomTabBar from '../components/CustomTabBar';
+import { APP_CONFIG } from '../config/appConfig';
 
 const Tab = createBottomTabNavigator();
 
@@ -19,13 +21,19 @@ export default function MainTabNavigator() {
         headerShown: false,
       }}
     >
-      <Tab.Screen 
-        name="Addons" 
-        component={AddonsScreen} 
-        options={{ 
-          title: 'Add ons',
-        }}
-      />
+      {APP_CONFIG.SHOW_ADDONS_TAB ? (
+        <Tab.Screen 
+          name="Addons" 
+          component={AddonsScreen} 
+          options={{ title: 'Add ons' }}
+        />
+      ) : (
+        <Tab.Screen 
+          name="Events" 
+          component={EventsScreen} 
+          options={{ title: 'Events' }}
+        />
+      )}
       <Tab.Screen 
         name="Rooms" 
         component={RoomsScreen} 
