@@ -12,7 +12,8 @@ import {
   SignalHigh,
   SignalMedium,
   SignalLow,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -267,7 +268,11 @@ export function ParticipantTile({
   let mediaConnectionState: string | null = null;
   
   if (expectsMedia) {
-    if (health === 'stalled') {
+    if (health === 'black') {
+      mediaConnectionState = isSelf 
+        ? "Your camera hardware failed. Please toggle your video off and on." 
+        : "Participant's camera feed failed.";
+    } else if (health === 'stalled') {
       mediaConnectionState = "Media connection failed. Retrying...";
     } else if (health === 'recovering') {
       mediaConnectionState = "Reconnecting to Media Server";
@@ -481,9 +486,15 @@ export function ParticipantTile({
 
       {/* ── Media Connection State Overlay ── */}
       {mediaConnectionState && (
-        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-black/60 backdrop-blur-sm text-white font-medium text-sm text-center px-4">
+        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-black/70 text-white font-medium text-sm text-center px-4">
           <div className="flex flex-col items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-brand-green" />
+            {health === 'black' ? (
+               <AlertTriangle className="w-5 h-5 text-red-400" />
+            ) : health === 'stalled' ? (
+               <AlertTriangle className="w-5 h-5 text-yellow-400" />
+            ) : (
+               <Loader2 className="w-5 h-5 animate-spin text-brand-green" />
+            )}
             <span>{mediaConnectionState}</span>
           </div>
         </div>

@@ -23,6 +23,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   const recoveryCountRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
+  const healthyStartTimeRef = useRef<number>(Date.now());
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -123,6 +124,12 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           if (health !== 'healthy') {
              setHealth('healthy');
              recoveryStartTimeRef.current = 0;
+             healthyStartTimeRef.current = Date.now();
+          } else {
+             if (recoveryCountRef.current > 0 && Date.now() - healthyStartTimeRef.current > 15000) {
+                logDev('Video has been healthy for >15s. Resetting recovery cap.');
+                recoveryCountRef.current = 0;
+             }
           }
         } else if (health === 'recovering') {
           // It's recovering, but has dimensions and readyState. Safari might be stuck at 0.
