@@ -1253,7 +1253,7 @@ export function MeetingProvider({
           
           setTimeout(() => {
             if (hasLeftMeetingRef.current) return;
-            setParticipants(curr => curr.map(p => p.id === targetId ? { ...p, isConnecting: false } : p));
+            setParticipants(curr => curr.map(p => p.id === uniqueId ? { ...p, isConnecting: false } : p));
           }, 4000);
 
           if (user.role !== 'bot') {
