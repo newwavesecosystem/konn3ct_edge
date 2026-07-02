@@ -325,7 +325,7 @@ export class WebRTCClient {
                 const res = await this.request('getProducers', 'producersList');
                 if (res.producers) {
                   for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.userId, p.name, p.kind, p.appData);
+                    await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -351,7 +351,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          this.consumeRemoteStream(msg.producerId, msg.userId, msg.name, msg.kind, msg.appData).catch(console.error);
+          await this.consumeRemoteStream(msg.producerId, msg.participantId || msg.userId, msg.name, msg.kind, msg.appData);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -1064,7 +1064,7 @@ export class WebRTCClient {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
         try {
-          await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+          await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
         } catch (err) {
           console.error(`Failed to consume producer ${p.producerId}:`, err);
         }

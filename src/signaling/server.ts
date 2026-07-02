@@ -1725,7 +1725,7 @@ export function initializeSignaling(server: Server) {
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
 
         // Broadcast to others — include appData.source so they render screen share correctly
-        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, name: client.name, kind: data.kind, appData }, userId);
+        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData }, userId);
 
         // For screen share, send a dedicated state event so peers update isScreenSharing immediately
         if (source === 'screen') {
