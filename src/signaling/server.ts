@@ -941,8 +941,7 @@ export function initializeSignaling(server: Server) {
           };
 
           if (data.userId) {
-            const targetClient = roomClients.get(data.userId);
-            if (targetClient) targetClient.ws.send(JSON.stringify({ type: 'force_mute', reason: 'host_action' }));
+            broadcastForceMute(c => c.userId === data.userId);
           } else if (data.target === 'all') {
             broadcastForceMute(c => c.userId !== userId);
           } else if (data.target === 'all_except_hosts') {
@@ -964,10 +963,30 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           const roomClients = rooms.get(roomId);
           if (!roomClients) break;
-          for (const [id, c] of roomClients.entries()) {
-            if (c.status === 'active' && c.userId !== userId) {
-              c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+
+          const broadcastForceVideoOff = (predicate: (c: Client) => boolean) => {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'active' && predicate(c)) {
+                c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+              }
             }
+          };
+
+          if (data.userId) {
+            broadcastForceVideoOff(c => c.userId === data.userId);
+          } else if (data.target === 'all') {
+            broadcastForceVideoOff(c => c.userId !== userId);
+          } else if (data.target === 'all_except_hosts') {
+            broadcastForceVideoOff(c => c.role !== 'host' && c.role !== 'co-host');
+          } else if (data.target === 'all_except_presenters') {
+            const presenters = new Set(
+              (roomProducers.get(roomId) || [])
+                .filter(p => p.appData?.source === 'screen')
+                .map(p => p.userId)
+            );
+            broadcastForceVideoOff(c => c.userId !== userId && !presenters.has(c.userId));
+          } else {
+            broadcastForceVideoOff(c => c.role !== 'host');
           }
         }
         break;
