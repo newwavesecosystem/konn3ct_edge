@@ -1300,7 +1300,7 @@ export function initializeSignaling(server: Server) {
           if (poll && Array.isArray(poll.options)) {
             // Check for duplicate vote
             const alreadyVoted = (poll.options as any[]).some(
-              (opt: any) => Array.isArray(opt.votedBy) && opt.votedBy.includes(userId)
+              (opt: any) => Array.isArray(opt.votedBy) && opt.votedBy.some((v: any) => typeof v === 'string' ? v === userId : v.userId === userId)
             );
             if (alreadyVoted) {
               client.ws.send(JSON.stringify({ type: 'error', message: 'You have already voted on this poll.' }));
@@ -1308,7 +1308,7 @@ export function initializeSignaling(server: Server) {
             }
             const updatedOptions = (poll.options as any[]).map((opt: any) => {
               if (opt.id === data.optionId) {
-                return { ...opt, votes: (opt.votes || 0) + 1, votedBy: [...(opt.votedBy || []), userId] };
+                return { ...opt, votes: (opt.votes || 0) + 1, votedBy: [...(opt.votedBy || []), { userId, name: client.name }] };
               }
               return opt;
             });
@@ -1322,7 +1322,8 @@ export function initializeSignaling(server: Server) {
             type: 'poll_vote',
             pollId: data.pollId,
             optionId: data.optionId,
-            userId: userId
+            userId: userId,
+            name: client.name
           });
         } catch (e) {
           logger.error("Failed to vote on poll", e);
