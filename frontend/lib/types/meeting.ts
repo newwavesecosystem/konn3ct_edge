@@ -1,14 +1,44 @@
 // ── Meeting Types ──────────────────────────────────────
 
-export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot";
+export type ParticipantRole = "host" | "co-host" | "presenter" | "attendee" | "guest" | "bot" | "recorder";
 export type MediaState = "on" | "off" | "disabled";
 export type MeetingStatus = "waiting" | "lobby" | "in-progress" | "ended" | "fetching-token" | "failed" | "denied" | "kicked" | "invalid-session";
 export type RoomType = "meeting" | "webinar";
 export type LayoutMode = "speaker" | "grid" | "spotlight";
 export type GridOverflowMode = "scroll" | "paginate";
 
+export interface QAPlaybackStats {
+  consumerExists?: boolean;
+  consumerPaused?: boolean;
+  consumerClosed?: boolean;
+  consumerCodec?: string;
+  consumerPayloadType?: number;
+  consumerCodecParams?: any;
+  remoteTrackReadyState?: string;
+  remoteTrackMuted?: boolean;
+  remoteTrackEnabled?: boolean;
+  remoteTrackEnded?: boolean;
+  videoElementAttached?: boolean;
+  videoTrackExists?: boolean;
+  tileRenderMode?: string;
+  videoDimensions?: string;
+  currentTime?: number;
+  currentTimeProgressing?: boolean;
+  readyState?: number;
+  lastVideoPlayAttemptAt?: string;
+  lastVideoPlayResult?: string;
+  lastVideoError?: string;
+  firstFrameRendered?: boolean;
+  lastHealthyAt?: string;
+  isRecovering?: boolean;
+  recoveryDurationMs?: number;
+  playbackRecoveryCount?: number;
+  diagnosisHint?: string;
+}
+
 export interface Participant {
-  id: string;
+  id: string; // This is now participantId (sessionId)
+  userId: string; // The identity user ID
   name: string;
   avatarUrl?: string;
   role: ParticipantRole;
@@ -21,13 +51,37 @@ export interface Participant {
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
+  
+  // Stream identifiers
+  cameraProducerId?: string;
+  cameraConsumerId?: string;
+  cameraTrackId?: string;
+  screenProducerId?: string;
+  screenConsumerId?: string;
+  screenTrackId?: string;
+
   isConnecting?: boolean;
   networkQuality?: 'good' | 'poor' | 'bad';
   isMobile?: boolean;
+  isBot?: boolean;
+  isRecorder?: boolean;
+  
+  // Network/Media overrides
+  audioOnlyMode?: boolean;
+  videoSuspendedReason?: 'network';
+
+  // QA Diagnostics
+  cameraStats?: QAPlaybackStats;
+  screenStats?: QAPlaybackStats;
 }
 
+export type ActionLifecycleState = "sent" | "acknowledged" | "broadcasted" | "observed" | "rendered" | "failed" | "timed-out" | "unsupported";
+
 export interface ChatMessage {
-  id: string;
+  id: string; // Typically serverEventId, but fallback to clientEventId for optimistic UI
+  clientEventId?: string;
+  serverEventId?: string;
+  lifecycleState?: ActionLifecycleState;
   senderId: string;
   senderName: string;
   senderRole: ParticipantRole;
@@ -51,6 +105,7 @@ export interface PollOption {
   id: string;
   text: string;
   votes: number;
+  votedBy?: any[];
 }
 
 export interface Poll {

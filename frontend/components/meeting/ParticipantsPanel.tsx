@@ -292,7 +292,7 @@ function ParticipantRow({
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
             {canMakeCoHost && participant.role !== 'co-host' && (
               <button 
-                onClick={() => changeUserRole(participant.id, 'co-host')}
+                onClick={() => changeUserRole(participant.userId, 'co-host')}
                 title="Make Co-host"
                 className="p-1 rounded-lg hover:bg-blue-500/20 text-blue-400"
               >
@@ -301,7 +301,7 @@ function ParticipantRow({
             )}
             {canMakeCoHost && participant.role === 'co-host' && (
               <button 
-                onClick={() => changeUserRole(participant.id, 'attendee')}
+                onClick={() => changeUserRole(participant.userId, 'attendee')}
                 title="Remove Co-host"
                 className="p-1 rounded-lg hover:bg-red-500/20 text-red-400"
               >
@@ -310,7 +310,7 @@ function ParticipantRow({
             )}
             {!participant.isMuted && (
               <button 
-                onClick={() => forceMuteUser(participant.id)}
+                onClick={() => forceMuteUser(participant.userId)}
                 title="Mute for everyone"
                 className="p-1 rounded-lg hover:bg-white/10"
                 style={{ color: "var(--mt-text-faint)" }}
@@ -320,7 +320,7 @@ function ParticipantRow({
             )}
             {participant.isCameraOn && (
               <button 
-                onClick={() => forceVideoOffUser(participant.id)}
+                onClick={() => forceVideoOffUser(participant.userId)}
                 title="Turn off video"
                 className="p-1 rounded-lg hover:bg-white/10"
                 style={{ color: "var(--mt-text-faint)" }}
@@ -329,7 +329,7 @@ function ParticipantRow({
               </button>
             )}
             <button 
-              onClick={() => kickUser(participant.id)}
+              onClick={() => kickUser(participant.userId)}
               title="Remove from meeting"
               className="p-1 rounded-lg hover:bg-red-500/20 text-red-400"
             >
@@ -338,13 +338,6 @@ function ParticipantRow({
           </div>
         )}
         
-        {!canManage && (
-          <button className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-            style={{ color: "var(--mt-text-faint)" }}
-          >
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
-        )}
       </div>
     </div>
   );

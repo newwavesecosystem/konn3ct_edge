@@ -22,6 +22,11 @@ aiRouter.get('/transcription/:roomId', async (req: Request, res: Response) => {
     });
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
 
     let hasAccess = room.ownerId === userId;
     if (!hasAccess && room.team) {
@@ -52,7 +57,8 @@ aiRouter.get('/summaries', async (req: Request, res: Response) => {
         OR: [
           { ownerId: userId },
           { team: { members: { some: { userId } } } }
-        ]
+        ],
+        aiFeaturesEnabled: true
       },
       select: { id: true, name: true, slug: true }
     });
@@ -95,6 +101,11 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
     // Verify ownership (only owners/admins should generate expensive AI summaries)
     const room = await db.room.findUnique({ where: { id: roomId } });
     if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
     const roomWithTeam = await db.room.findUnique({
       where: { id: roomId },
       include: { team: { include: { members: true } } }
@@ -175,6 +186,11 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
     }
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomSlugOrId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
 
     const roomId = room.id;
 
@@ -182,7 +198,7 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
     if (!hasAccess && room.team) {
       hasAccess = room.team.members.some((m: any) => m.userId === userId);
     }
-    if (!hasAccess && (req.user as any).roomId === roomId) {
+    if (!hasAccess && ((req.user as any).roomId === roomId || (req.user as any).roomId === room.slug)) {
       hasAccess = true;
     }
     if (!hasAccess) return res.status(403).json({ error: 'Forbidden' });
@@ -243,6 +259,11 @@ aiRouter.get('/summary/:roomId', async (req: Request, res: Response) => {
     });
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
 
     let hasAccess = room.ownerId === userId;
     if (!hasAccess && room.team) {

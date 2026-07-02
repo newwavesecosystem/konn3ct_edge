@@ -83,6 +83,10 @@ model Room {
   maxParticipants  Int     @default(100)
   maxWebinarAudience Int   @default(1000)
   maxActiveCameras Int     @default(15)
+  aiFeaturesEnabled Boolean @default(true)
+  captionsEnabled Boolean @default(true)
+  donationsEnabled Boolean @default(true)
+  virtualBackgroundEnabled Boolean @default(true)
   createdAt DateTime @default(now())
 
   owner User @relation("RoomOwner", fields: [ownerId], references: [id])
@@ -141,13 +145,20 @@ model Recording {
   ownerId    String
   roomId     String?
   title      String
-  url        String
+  url        String?
+  storageKey String?
+  storageBucket String?
+  contentType String?
   isPaid     Boolean  @default(false)
   priceKobo  Int      @default(0)
-  status     String   @default("processing") // processing, completed, failed
+  status     String   @default("processing") // starting, recording, stopping, processing, completed, failed
   startedAt  DateTime @default(now())
   endedAt    DateTime?
   duration   Int?     // Duration in seconds
+  failureReason String?
+  isPublished Boolean @default(false)
+  publishedAt DateTime?
+  accessType  String  @default("private") // public, paid, participants-only, private
   createdAt  DateTime @default(now())
 
   owner User @relation(fields: [ownerId], references: [id])
@@ -185,6 +196,7 @@ model Plan {
   code       String   @unique
   name       String
   priceKobo  Int
+  durationDays Int    @default(30)
   featuresJson String
   createdAt  DateTime @default(now())
 
@@ -210,16 +222,21 @@ model Subscription {
 model PaymentTransaction {
   id          String   @id @default(cuid())
   userId      String
-  kind        String
+  kind        String   // 'subscription', 'recording', 'donation'
   planId      String?
   recordingId String?
   roomId      String?
   reference   String   @unique
+  provider    String   @default("paystack")
   amountKobo  Int
   currency    String   @default("NGN")
-  status      String   @default("initialized")
+  status      String   @default("initialized") // initialized, success, failed, abandoned
+  payerEmail  String?
+  providerReference String?
+  verifiedAt  DateTime?
   metadata    Json?
-  createdAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
 
   user User @relation(fields: [userId], references: [id])
   plan Plan? @relation(fields: [planId], references: [id])

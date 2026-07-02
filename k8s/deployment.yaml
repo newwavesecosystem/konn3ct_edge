@@ -107,7 +107,10 @@ spec:
                   name: conn3ct-secrets
                   key: DO_SPACES_BUCKET
             - name: NEXT_PUBLIC_FRONTEND_URL
-              value: "https://edge.konn3ct.net"
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_FRONTEND_URL
             - name: REDIS_URL
               value: "redis://redis-service:6379"
             - name: POD_ID
@@ -137,8 +140,12 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: BOT_SECRET
+                  optional: true
             - name: NEXT_PUBLIC_FRONTEND_DOMAIN
-              value: "edge.konn3ct.net"
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_FRONTEND_DOMAIN
           resources:
             requests:
               cpu: "1500m"

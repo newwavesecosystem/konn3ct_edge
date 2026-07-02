@@ -21,6 +21,10 @@ const createRoomSchema = z.object({
   maxParticipants: z.number().int().min(1).optional(),
   maxWebinarAudience: z.number().int().min(1).optional(),
   maxActiveCameras: z.number().int().min(1).optional(),
+  aiFeaturesEnabled: z.boolean().optional(),
+  captionsEnabled: z.boolean().optional(),
+  donationsEnabled: z.boolean().optional(),
+  virtualBackgroundEnabled: z.boolean().optional(),
 });
 
 const updateRoomSchema = z.object({
@@ -33,6 +37,10 @@ const updateRoomSchema = z.object({
   maxParticipants: z.number().int().min(1).optional(),
   maxWebinarAudience: z.number().int().min(1).optional(),
   maxActiveCameras: z.number().int().min(1).optional(),
+  aiFeaturesEnabled: z.boolean().optional(),
+  captionsEnabled: z.boolean().optional(),
+  donationsEnabled: z.boolean().optional(),
+  virtualBackgroundEnabled: z.boolean().optional(),
 });
 
 function generateSlug() {
@@ -80,6 +88,10 @@ roomsRouter.post('/', async (req: Request, res: Response) => {
         maxParticipants: data.maxParticipants ?? 100,
         maxWebinarAudience: data.maxWebinarAudience ?? 1000,
         maxActiveCameras: data.maxActiveCameras ?? 15,
+        aiFeaturesEnabled: data.aiFeaturesEnabled ?? true,
+        captionsEnabled: data.captionsEnabled ?? true,
+        donationsEnabled: data.donationsEnabled ?? true,
+        virtualBackgroundEnabled: data.virtualBackgroundEnabled ?? true,
       }
     });
 
@@ -211,6 +223,10 @@ roomsRouter.patch('/:id', async (req: Request, res: Response) => {
         isWaitingRoomEnabled,
       }
     });
+
+    // NOTE: Mid-meeting changes to room feature flags (aiFeaturesEnabled, etc.) 
+    // require users to reload/rejoin to fetch the new token and update the frontend UI.
+    // The backend will enforce the new limits immediately on new requests.
 
     logger.info(`Room updated: ${id} by ${userId}`);
     res.status(200).json(room);

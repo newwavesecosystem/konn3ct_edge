@@ -181,7 +181,7 @@ router.post('/meetings/join', async (req, res) => {
       logoutUrl: room.logoutUrl,
     };
 
-    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "6h" });
     const joinPath = `/meeting/${room.slug}?t=${sessionToken}`;
 
     res.json({
@@ -215,6 +215,9 @@ router.post('/meetings/create-and-join', async (req, res) => {
       maxParticipants,
       maxWebinarAudience,
       maxActiveCameras,
+      aiFeaturesEnabled,
+      captionsEnabled,
+      donationsEnabled,
     } = req.body;
 
     if (!name || name.trim() === "") {
@@ -266,6 +269,9 @@ router.post('/meetings/create-and-join', async (req, res) => {
           maxParticipants: maxParticipants ? parseInt(maxParticipants, 10) : 100,
           maxWebinarAudience: maxWebinarAudience ? parseInt(maxWebinarAudience, 10) : 1000,
           maxActiveCameras: maxActiveCameras ? parseInt(maxActiveCameras, 10) : 15,
+          aiFeaturesEnabled: aiFeaturesEnabled !== undefined ? aiFeaturesEnabled : true,
+          captionsEnabled: captionsEnabled !== undefined ? captionsEnabled : true,
+          donationsEnabled: donationsEnabled !== undefined ? donationsEnabled : true,
         }
       });
     }
@@ -282,7 +288,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
       logoutUrl: room.logoutUrl,
     };
 
-    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "2h" });
+    const sessionToken = jwt.sign(sessionData, JWT_SECRET, { expiresIn: "6h" });
     const joinPath = `/meeting/${room.slug}?t=${sessionToken}`;
 
     res.json({

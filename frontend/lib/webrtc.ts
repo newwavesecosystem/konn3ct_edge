@@ -10,17 +10,19 @@ export class WebRTCClient {
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   
-  private localVideoProducer: Producer | null = null;
-  private localAudioProducer: Producer | null = null;
-  private consumers: Map<string, Consumer> = new Map();
+  public localVideoProducer: Producer | null = null;
+  public localAudioProducer: Producer | null = null;
+  public screenShareProducer: Producer | null = null;
+  public localScreenTrack: MediaStreamTrack | null = null;
+  public consumers: Map<string, Consumer> = new Map();
   
   private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
-  private screenShareProducer: Producer | null = null;
   
   // Media
   public rawAudioTrack: MediaStreamTrack | null = null;
   private rawCameraStream: MediaStream | null = null;
   private videoProcessor: VideoProcessor | null = null;
+  public isVirtualBackgroundEnabled: boolean = true;
   private purifyInstance: any = null;
   public isAINoiseSuppressionEnabled = false;
   private messageIdCounter = 0;
@@ -30,33 +32,57 @@ export class WebRTCClient {
   private reconnectTimeoutId?: NodeJS.Timeout;
   private isRepublishing = false;
 
+  // Camera state tracking
+  public lastCameraErrorName: string | null = null;
+  public lastCameraErrorMessage: string | null = null;
+  public lastCameraConstraintAttempt: string | null = null;
+  public cameraSwitchInProgress: boolean = false;
+  public cameraStartInProgress: boolean = false;
+  public cameraStartAttemptCount: number = 0;
+  public cameraFallbackReachedVideoTrue: boolean = false;
+
   public userId: string | undefined;
+  public participantId: string = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
   public userName: string | undefined;
   public userRole: string | undefined;
   public roomName: string | undefined;
   public maxParticipants: number | undefined;
   public sessionStatus?: string;
+  public joinSessionId: string = Math.random().toString(36).substring(2, 15);
+  public joinStartTime: number = Date.now();
 
-  public onNewConsumer?: (consumer: Consumer, userId: string) => void;
+  public emitTelemetry(event: string) {
+    console.log(JSON.stringify({
+      event,
+      joinSessionId: this.joinSessionId,
+      participantId: this.userId || 'unknown',
+      elapsedMs: Date.now() - this.joinStartTime
+    }));
+  }
+
+  public onNewConsumer?: (consumer: Consumer, userId: string, userName?: string) => void;
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
-  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean }) => void;
+  public onUserJoined?: (user: { userId: string, participantId?: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
   public onUserLeft?: (userId: string) => void;
-  public onParticipantsList?: (participants: Array<{ userId: string, name: string, role: string, isMobile?: boolean }>) => void;
-  public onRoleChanged?: (userId: string, role: string) => void;
+  public onParticipantsList?: (participants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }>) => void;
+  public onRoleChanged?: (userId: string, role: string, participantId?: string) => void;
+  public onAudioTrackReplaced?: () => void;
   
   // Collaboration Callbacks
   public onChatMessage?: (msg: any) => void;
+  public onActionAck?: (ack: any) => void;
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
-  public onPollVote?: (vote: any) => void;
+  public onPollVote?: (msg: any) => void;
+  public onPollEnded?: (msg: any) => void;
+  public onPollHistory?: (polls: any[]) => void;
   public onMuteState?: (msg: any) => void;
   public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
-  public onPollHistory?: (polls: any[]) => void;
   public onNoteHistory?: (content: string) => void;
   public onMicError?: (error: Error) => void;
   public onNoteUpdate?: (msg: any) => void;
@@ -78,11 +104,12 @@ export class WebRTCClient {
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
   // Talking indicator
-  public onActiveSpeaker?: (userIds: string[]) => void;
+  public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
   // Recording
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
   public onSyncPanel?: (panel: string | null) => void;
+  public onVbDegraded?: (severity: 'warning' | 'emergency') => void;
 
   // Network monitoring
   public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
@@ -94,7 +121,106 @@ export class WebRTCClient {
   public isLowBandwidth: boolean = false;
   private needsRepublish: boolean = false;
 
-  constructor(private roomId: string, private token: string) {}
+  public selectedVideoInputId?: string;
+  public selectedAudioInputId?: string;
+
+  public getDiagnostics() {
+    return {
+      wsState: this.ws?.readyState,
+      sendTransportState: this.sendTransport?.connectionState,
+      recvTransportState: this.recvTransport?.connectionState,
+      iceConnectionState: this.sendTransport?.iceState || this.recvTransport?.iceState,
+      reconnectAttempts: this.reconnectAttempts,
+      producers: {
+        audio: this.localAudioProducer ? { 
+          active: true, 
+          paused: this.localAudioProducer.paused, 
+          closed: this.localAudioProducer.closed,
+          codec: this.localAudioProducer.rtpParameters?.codecs?.[0]?.mimeType
+        } : null,
+        video: this.localVideoProducer ? { 
+          active: true, 
+          paused: this.localVideoProducer.paused, 
+          closed: this.localVideoProducer.closed,
+          codec: this.localVideoProducer.rtpParameters?.codecs?.[0]?.mimeType,
+          payloadType: this.localVideoProducer.rtpParameters?.codecs?.[0]?.payloadType,
+          codecParams: this.localVideoProducer.rtpParameters?.codecs?.[0]?.parameters,
+          encodings: this.localVideoProducer.rtpParameters?.encodings
+        } : null,
+        screen: this.screenShareProducer ? {
+          active: true,
+          paused: this.screenShareProducer.paused,
+          closed: this.screenShareProducer.closed,
+          codec: this.screenShareProducer.rtpParameters?.codecs?.[0]?.mimeType,
+          payloadType: this.screenShareProducer.rtpParameters?.codecs?.[0]?.payloadType,
+          codecParams: this.screenShareProducer.rtpParameters?.codecs?.[0]?.parameters,
+          encodings: this.screenShareProducer.rtpParameters?.encodings
+        } : null
+      },
+      consumersCount: this.consumers.size,
+      consumersCodecs: Array.from(this.consumers.values()).map(c => ({
+        id: c.id,
+        producerId: c.producerId,
+        kind: c.kind,
+        codec: c.rtpParameters?.codecs?.[0]?.mimeType,
+        payloadType: c.rtpParameters?.codecs?.[0]?.payloadType,
+        codecParams: c.rtpParameters?.codecs?.[0]?.parameters,
+        paused: c.paused,
+        closed: c.closed
+      })),
+      audioOnlyMode: this.isAudioOnlyMode,
+      lastCameraStateBroadcast: this.lastCameraStateBroadcast,
+      lastCameraStateReceived: this.lastCameraStateReceived,
+      audioTrack: {
+        readyState: this.rawAudioTrack?.readyState,
+        enabled: this.rawAudioTrack?.enabled,
+        muted: this.rawAudioTrack?.muted
+      },
+      videoProcessor: {
+        active: !!this.videoProcessor,
+        mode: (this.videoProcessor as any)?.mode,
+        degradations: 0,
+        lastDegradation: "none",
+        fallbackMode: false
+      },
+      camera: {
+        lastErrorName: this.lastCameraErrorName,
+        lastErrorMessage: this.lastCameraErrorMessage,
+        lastConstraintAttempt: this.lastCameraConstraintAttempt,
+        selectedVideoInputId: this.selectedVideoInputId ? `${this.selectedVideoInputId.substring(0, 4)}...${this.selectedVideoInputId.substring(this.selectedVideoInputId.length - 4)}` : "default",
+        cameraSwitchInProgress: this.cameraSwitchInProgress,
+        cameraStartAttemptCount: this.cameraStartAttemptCount,
+        fallbackReachedVideoTrue: this.cameraFallbackReachedVideoTrue
+      }
+    };
+  }
+
+  public setVideoInputDevice(deviceId: string) {
+    this.selectedVideoInputId = deviceId;
+  }
+  
+  public setAudioInputDevice(deviceId: string) {
+    this.selectedAudioInputId = deviceId;
+  }
+
+  public lastCameraStateBroadcast?: string;
+  public lastCameraStateReceived?: string;
+
+  constructor(private roomId: string, private token: string, participantId?: string | null) {
+    if (participantId !== undefined) {
+      if (
+        !participantId || 
+        participantId === "pending" || 
+        participantId === "ssr-placeholder" || 
+        participantId === "null" || 
+        participantId === "undefined"
+      ) {
+        console.error(`Invalid participantId provided to WebRTCClient: ${participantId}`);
+        throw new Error(`Invalid participantId: ${participantId}`);
+      }
+      this.participantId = participantId;
+    }
+  }
 
   public async connect() {
     this.onConnectionStateChange?.('connecting');
@@ -104,7 +230,7 @@ export class WebRTCClient {
     
     // Connect WebSocket — passing token in URL is required by backend upgrade handler
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}`;
+    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}&participantId=${this.participantId}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
@@ -149,6 +275,9 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'action:ack':
+          this.onActionAck?.(msg);
+          break;
         case 'session_status':
           this.sessionStatus = msg.status;
           if (msg.userId) this.userId = msg.userId;
@@ -194,11 +323,9 @@ export class WebRTCClient {
             this.initializeMediasoup().then(async () => {
               try {
                 const res = await this.request('getProducers', 'producersList');
-                for (const p of res.producers || []) {
-                  try {
-                    await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
-                  } catch (err) {
-                    console.error(`Failed to consume producer ${p.producerId}:`, err);
+                if (res.producers) {
+                  for (const p of res.producers) {
+                    await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -224,7 +351,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          this.consumeRemoteStream(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
+          await this.consumeRemoteStream(msg.producerId, msg.participantId || msg.userId, msg.name, msg.kind, msg.appData);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -233,11 +360,11 @@ export class WebRTCClient {
           this.onParticipantsList?.(msg.participants);
           break;
         case 'user_left':
-          this.onUserLeft?.(msg.userId);
+          this.onUserLeft?.(msg.participantId || msg.userId);
           // Cleanup consumers for this user
           break;
         case 'role_changed':
-          this.onRoleChanged?.(msg.userId, msg.role);
+          this.onRoleChanged?.(msg.userId, msg.role, msg.participantId);
           if (msg.userId === this.userId) this.userRole = msg.role;
           break;
         case 'chat':
@@ -252,12 +379,19 @@ export class WebRTCClient {
         case 'poll_vote':
           this.onPollVote?.(msg);
           break;
+        case 'poll_ended':
+          this.onPollEnded?.(msg);
+          break;
+        case 'poll_history':
+          this.onPollHistory?.(msg.polls);
+          break;
         case 'mute_state':
           this.onMuteState?.(msg);
           break;
         case 'camera_state':
-          this.onCameraState?.(msg);
-          break;
+        this.lastCameraStateReceived = new Date().toISOString() + ' ' + JSON.stringify(msg);
+        this.onCameraState?.(msg);
+        break;
         case 'connection_poor':
           // Auto-Degrade to Audio-Only
           if (this.isLowBandwidth) {
@@ -322,7 +456,7 @@ export class WebRTCClient {
           this.onConsumerClosed?.(msg.producerId, msg.appData || {});
           break;
         case 'active_speaker':
-          this.onActiveSpeaker?.(msg.userIds);
+          this.onActiveSpeaker?.(msg.userIds, msg.participantIds || []);
           break;
         case 'server_load_high':
           this.onServerLoadHigh?.();
@@ -433,10 +567,12 @@ export class WebRTCClient {
 
   // --- Collaboration Methods ---
   
-  public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string) {
+  public sendChatMessage(message: string, targetUserId?: string, fileUrl?: string, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl }));
+      this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl, clientEventId: eventId }));
     }
+    return eventId;
   }
 
   public changeUserRole(userId: string, newRole: string) {
@@ -499,10 +635,12 @@ export class WebRTCClient {
     }
   }
 
-  public sendReaction(reaction: string) {
+  public sendReaction(reaction: string, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'reaction', reaction }));
+      this.ws.send(JSON.stringify({ type: 'reaction', reaction, clientEventId: eventId }));
     }
+    return eventId;
   }
 
   public sendNoteUpdate(content: string) {
@@ -529,22 +667,36 @@ export class WebRTCClient {
     }
   }
 
-  public sendMuteState(isMuted: boolean) {
+  public endPoll(pollId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted }));
+      this.ws.send(JSON.stringify({ type: 'end_poll', pollId }));
     }
   }
 
-  public sendCameraState(isCameraOn: boolean) {
+  public sendMuteState(isMuted: boolean, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn }));
+      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted, clientEventId: eventId }));
     }
+    return eventId;
   }
 
-  public sendHandRaise(isHandRaised: boolean) {
+  public sendCameraState(isCameraOn: boolean, audioOnlyMode: boolean = false, videoSuspendedReason?: 'network', clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised }));
+      const payload = { type: 'camera_state', isCameraOn, audioOnlyMode, videoSuspendedReason, clientEventId: eventId };
+      this.lastCameraStateBroadcast = new Date().toISOString() + ' ' + JSON.stringify(payload);
+      this.ws.send(JSON.stringify(payload));
     }
+    return eventId;
+  }
+
+  public sendHandRaise(isHandRaised: boolean, clientEventId?: string): string {
+    const eventId = clientEventId || crypto.randomUUID();
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'hand_raise', isHandRaised, clientEventId: eventId }));
+    }
+    return eventId;
   }
 
   public admitUser(userId: string) {
@@ -732,12 +884,16 @@ export class WebRTCClient {
   private async republishMedia() {
     if (!this.device || this.isRepublishing) return;
     this.isRepublishing = true;
+    this.emitTelemetry('media_recovery_started');
     try {
     // Save current tracks
     const videoTrack = this.localVideoProducer?.track;
     const audioTrack = this.localAudioProducer?.track;
     const isVideoPaused = this.localVideoProducer?.paused;
     const isAudioPaused = this.localAudioProducer?.paused;
+    
+    // Check screen share track
+    const screenTrack = this.localScreenTrack;
 
     // Clean up old transports
     if (this.sendTransport) this.sendTransport.close();
@@ -832,20 +988,83 @@ export class WebRTCClient {
       if (isVideoPaused) this.localVideoProducer.pause();
     }
     
-    if (audioTrack && audioTrack.readyState === 'live') {
-      this.localAudioProducer = await this.sendTransport.produce({ 
-        track: audioTrack, 
-        appData: { source: 'mic' } 
-      });
-      if (isAudioPaused) this.localAudioProducer.pause();
+    if (audioTrack) {
+      if (audioTrack.readyState === 'live') {
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: audioTrack, 
+          appData: { source: 'mic' } 
+        });
+        this.onAudioTrackReplaced?.();
+        if (isAudioPaused) this.localAudioProducer.pause();
+      } else {
+        console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
+        this.emitTelemetry('mic_track_closed_detected');
+        this.emitTelemetry('mic_reacquire_started');
+        try {
+          // This creates a new producer internally
+          await this.enableMic();
+          this.emitTelemetry('mic_reacquire_success');
+          if (isAudioPaused) this.pauseMic();
+        } catch (e) {
+          console.error("Failed to reacquire mic during reconnect:", e);
+          this.emitTelemetry('mic_reacquire_failed');
+        }
+      }
     }
     
+    // SCREEN-002: Screen-share republish
+    if (screenTrack) {
+      this.emitTelemetry('screen_recovery_started');
+      if (screenTrack.readyState === 'live') {
+        this.emitTelemetry('screen_track_live_detected');
+        
+        let screenCodec;
+        if (this.device.rtpCapabilities.codecs) {
+          screenCodec = this.device.rtpCapabilities.codecs.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['packetization-mode'] === 1
+          );
+        }
+
+        try {
+          if (this.screenShareProducer) {
+            this.emitTelemetry('screen_old_producer_closed');
+            this.screenShareProducer.close();
+          }
+          this.emitTelemetry('screen_republish_started');
+          this.screenShareProducer = await this.sendTransport.produce({
+            track: screenTrack,
+            codec: screenCodec,
+            appData: { source: 'screen' },
+            encodings: [{ maxBitrate: 1500000, maxFramerate: 15 }],
+            codecOptions: { videoGoogleStartBitrate: 1000 }
+          });
+          this.emitTelemetry('screen_republish_success');
+          // No need to manually request keyframe here since the server automatically asks for one on new producer creation,
+          // but we can emit a log anyway
+          this.emitTelemetry('screen_remote_consumers_recreated');
+        } catch (e) {
+          console.error("Failed to republish screen share:", e);
+          this.emitTelemetry('screen_republish_failed');
+          this.localScreenTrack = null;
+        }
+      } else {
+        this.emitTelemetry('screen_track_ended_detected');
+        this.localScreenTrack = null;
+        if (this.screenShareProducer) {
+          this.screenShareProducer.close();
+          this.screenShareProducer = null;
+        }
+      }
+      this.emitTelemetry('screen_recovery_completed');
+    }
+    
+    this.emitTelemetry('media_recovery_completed');
     // Re-fetch consumers
     try {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
         try {
-          await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+          await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
         } catch (err) {
           console.error(`Failed to consume producer ${p.producerId}:`, err);
         }
@@ -861,110 +1080,218 @@ export class WebRTCClient {
     }
   }
 
-  public async enableCamera(): Promise<MediaStreamTrack> {
-    if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
-    
-    // Cleanup existing camera producer if replacing
-    if (this.localVideoProducer) {
-      this.localVideoProducer.close();
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'stop_producer',
-          producerId: this.localVideoProducer.id,
-          appData: { source: 'camera' }
-        }));
-      }
-    }
+  private async acquireCameraStream(deviceId?: string): Promise<MediaStream> {
+    this.cameraStartAttemptCount++;
+    this.lastCameraErrorName = null;
+    this.lastCameraErrorMessage = null;
+    this.cameraFallbackReachedVideoTrue = false;
 
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // 8. Media Constraints Rescaling (Upstream optimization)
-    let videoConstraints: any = { facingMode: "user" };
-    if (this.isLowBandwidth) {
-      videoConstraints.width = { ideal: 320, max: 320 };
-      videoConstraints.height = { ideal: 240, max: 240 };
-      videoConstraints.frameRate = { ideal: 15, max: 15 };
-    } else {
-      videoConstraints.width = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 1280 } : { ideal: 640 });
-      videoConstraints.height = isMobileDevice ? undefined : (this.isHDVideo ? { ideal: 720 } : { ideal: 480 });
-    }
+    // A. Selected device with safe ideal constraints
+    const constraintsA: MediaStreamConstraints = {
+      video: deviceId 
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }
+        : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
+      audio: false
+    };
 
-    // Retry logic for Windows/Chrome hardware release latency (AbortError: Timeout starting video source)
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        this.rawCameraStream = await navigator.mediaDevices.getUserMedia({ 
-          video: videoConstraints,
-          audio: false 
-        });
-        break;
-      } catch (err: any) {
-        retries--;
-        if (err.name === 'AbortError' && retries > 0) {
-          console.warn(`Camera start timeout, retrying... (${retries} left)`);
-          await new Promise(r => setTimeout(r, 800)); // Wait for hardware to release
-        } else {
-          throw err;
+    // B. Selected device only
+    const constraintsB: MediaStreamConstraints = {
+      video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" },
+      audio: false
+    };
+
+    // C. General safe camera
+    const constraintsC: MediaStreamConstraints = {
+      video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 24 } },
+      audio: false
+    };
+
+    // D. Absolute fallback
+    const constraintsD: MediaStreamConstraints = {
+      video: true,
+      audio: false
+    };
+
+    const attempts = [
+      { name: 'A (Ideal)', constraints: constraintsA },
+      { name: 'B (Device Only)', constraints: constraintsB },
+      { name: 'C (Safe)', constraints: constraintsC },
+      { name: 'D (Fallback)', constraints: constraintsD }
+    ];
+
+    for (const attempt of attempts) {
+      this.lastCameraConstraintAttempt = attempt.name;
+      if (attempt.name === 'D (Fallback)') this.cameraFallbackReachedVideoTrue = true;
+
+      let retries = 2;
+      while (retries > 0) {
+        try {
+          return await navigator.mediaDevices.getUserMedia(attempt.constraints);
+        } catch (err: any) {
+          this.lastCameraErrorName = err.name;
+          this.lastCameraErrorMessage = err.message;
+          retries--;
+          
+          if (err.name === 'AbortError' && retries > 0) {
+            console.warn(`Camera start timeout (${attempt.name}), retrying... (${retries} left)`);
+            
+            // Release stuck camera hardware before retry only when necessary
+            if (this.rawCameraStream) {
+              this.rawCameraStream.getTracks().forEach(t => t.stop());
+            }
+            if (this.videoProcessor) {
+              this.videoProcessor.stopProcessing();
+            }
+            await new Promise(r => setTimeout(r, 400));
+          } else if (err.name === 'OverconstrainedError') {
+            console.warn(`OverconstrainedError on attempt ${attempt.name}, falling back to next...`);
+            break; 
+          } else if (retries === 0 || err.name !== 'AbortError') {
+             console.warn(`Camera error on attempt ${attempt.name}: ${err.name} - ${err.message}`);
+             break;
+          }
         }
       }
     }
+    
+    // Improve user-facing recovery
+    throw new Error("Camera could not start. Please close other apps using the camera, check browser permission, and try again.");
+  }
+
+  public async enableCamera(): Promise<MediaStreamTrack> {
+    if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    if (this.cameraStartInProgress) throw new Error("Camera start already in progress");
+    
+    this.cameraStartInProgress = true;
+    try {
+      this.emitTelemetry('video_permission_requested');
+      // Cleanup existing camera producer if replacing
+      if (this.localVideoProducer) {
+        this.localVideoProducer.close();
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'stop_producer',
+            producerId: this.localVideoProducer.id,
+            appData: { source: 'camera' }
+          }));
+        }
+      }
+
+      this.rawCameraStream = await this.acquireCameraStream(this.selectedVideoInputId);
 
     if (!this.rawCameraStream) {
       throw new Error("Failed to initialize camera stream");
     }
+    this.emitTelemetry('video_track_ready');
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
     // Initialize VideoProcessor if not exists
-    if (!this.videoProcessor) {
-      this.videoProcessor = new VideoProcessor();
-      const saved = sessionStorage.getItem("mtg_vb");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          this.videoProcessor.setMode(parsed.mode, parsed.image);
-        } catch (e) {}
+    let activeMode: VirtualBackgroundMode = 'none';
+    if (this.isVirtualBackgroundEnabled) {
+      if (!this.videoProcessor) {
+        this.videoProcessor = new VideoProcessor();
+        const saved = sessionStorage.getItem("mtg_vb");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            activeMode = parsed.mode;
+            this.videoProcessor.setMode(parsed.mode, parsed.image);
+          } catch (e) {}
+        }
+      } else {
+        activeMode = this.videoProcessor.getMode();
+      }
+    } else {
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
       }
     }
 
-    // Pass the stream through the VideoProcessor to apply Virtual Background
-    const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
-    videoTrack = processedStream.getVideoTracks()[0];
+    // Pass the stream through the VideoProcessor to apply Virtual Background only if needed
+    if (this.isVirtualBackgroundEnabled && activeMode !== 'none') {
+      const processedStream = this.videoProcessor!.startProcessing(this.rawCameraStream);
+      videoTrack = processedStream.getVideoTracks()[0];
+    } else {
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
+      videoTrack = this.rawCameraStream.getVideoTracks()[0];
+    }
     
     // 4. Robust Simulcast/SVC Configuration (Spatial & Temporal Scalability)
     const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
     const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     const encodings = this.isLowBandwidth 
       ? [{ maxBitrate: 150000 }] 
-      : isSVC 
-        ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }] // SVC for AV1/VP9
-        : [ // Simulcast for VP8/H264
-            { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
-            { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
-            { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
-          ];
+      : isMobileDevice
+        ? [{ maxBitrate: 600000, maxFramerate: 30 }] // Single layer for mobile (Safari/iOS compatibility)
+        : isSVC 
+          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }] // SVC for AV1/VP9
+          : [ // Simulcast for VP8/H264
+              { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
+              { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
+              { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
+            ];
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
-      await this.localVideoProducer.replaceTrack({ track: videoTrack });
-      this.localVideoProducer.resume();
-    } else {
+      try {
+        await this.localVideoProducer.replaceTrack({ track: videoTrack });
+        this.localVideoProducer.resume();
+      } catch (err) {
+        console.error("Track replacement failed, will recreate producer:", err);
+        this.localVideoProducer.close();
+        this.localVideoProducer = null;
+        // Fall back to creating a new producer below
+      }
+    }
+
+    if (!this.localVideoProducer || this.localVideoProducer.closed) {
       // First time or after producer was closed — create with full simulcast encodings
+      this.emitTelemetry('video_produce_started');
       this.localVideoProducer = await this.sendTransport.produce({
         track: videoTrack,
         appData: { source: 'camera' },
         encodings,
         codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
       });
+      this.emitTelemetry('video_producer_created');
     }
     
+    this.emitTelemetry('video_ready');
     return videoTrack;
-
+    } catch (e) {
+      this.cameraStartInProgress = false;
+      throw e;
+    } finally {
+      this.cameraStartInProgress = false;
+    }
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
+    if (mode === 'none' || !this.isVirtualBackgroundEnabled) {
+      if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
+        console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
+        console.warn("[webrtc] virtual_background_model_load_skipped");
+      }
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
+      if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
+        const nativeTrack = this.rawCameraStream.getVideoTracks()[0];
+        await this.localVideoProducer.replaceTrack({ track: nativeTrack });
+        return nativeTrack;
+      }
+      return null;
+    }
+
     if (!this.videoProcessor) {
       this.videoProcessor = new VideoProcessor();
+      this.videoProcessor.onDegraded = (severity) => {
+        if (this.onVbDegraded) this.onVbDegraded(severity);
+      };
     }
     this.videoProcessor.setMode(mode, imageUrl);
     
@@ -1020,13 +1347,33 @@ export class WebRTCClient {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
-          echoCancellation: true 
-        } 
-      });
+      this.emitTelemetry('audio_permission_requested');
+      let audioConstraints: any = { 
+        deviceId: this.selectedAudioInputId ? { exact: this.selectedAudioInputId } : undefined,
+        noiseSuppression: !this.isAINoiseSuppressionEnabled, // Turn off native if AI is active
+        echoCancellation: true 
+      };
+
+      let stream: MediaStream | null = null;
+      let retries = 2;
+      while (retries > 0) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+          break;
+        } catch (err: any) {
+          retries--;
+          if (err.name === 'OverconstrainedError' && retries > 0) {
+            console.warn("OverconstrainedError on mic, falling back to default device...");
+            delete audioConstraints.deviceId;
+          } else {
+            throw err;
+          }
+        }
+      }
+      
+      if (!stream) throw new Error("Failed to initialize mic");
       this.rawAudioTrack = stream.getAudioTracks()[0];
+      this.emitTelemetry('audio_track_ready');
       
       let activeTrack = this.rawAudioTrack;
       
@@ -1038,10 +1385,12 @@ export class WebRTCClient {
       }
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
+        this.emitTelemetry('audio_produce_started');
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: activeTrack,
           appData: { source: 'mic' }
         });
+        this.emitTelemetry('audio_producer_created');
       } else {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       }
@@ -1050,14 +1399,20 @@ export class WebRTCClient {
       activeTrack.onended = async () => {
         console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
         try {
+          const wasPaused = this.localAudioProducer?.paused;
           await this.enableMic();
+          if (wasPaused) {
+            this.pauseMic();
+          }
         } catch (err) {
           console.error("Failed to re-initialize mic:", err);
         }
       };
 
+      this.emitTelemetry('audio_ready');
       return activeTrack;
     } catch (err: any) {
+      this.emitTelemetry('audio_failed');
       this.onMicError?.(err);
       throw err;
     }
@@ -1104,6 +1459,7 @@ export class WebRTCClient {
       } else {
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
       }
+      this.onAudioTrackReplaced?.();
       return activeTrack;
     }
     return undefined;
@@ -1112,19 +1468,26 @@ export class WebRTCClient {
   public async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
 
-    const constraints: MediaStreamConstraints = {};
-    if (kind === 'audio') {
-      constraints.audio = { deviceId: { exact: deviceId } };
-    } else {
-      constraints.video = { 
-        deviceId: { exact: deviceId }, 
-        width: this.isHDVideo ? { ideal: 1280 } : { ideal: 640 }, 
-        height: this.isHDVideo ? { ideal: 720 } : { ideal: 480 } 
-      };
+    if (kind === 'video' && this.cameraSwitchInProgress) {
+      throw new Error("Camera switch already in progress");
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    let newTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+    let stream: MediaStream;
+    let newTrack: MediaStreamTrack;
+
+    if (kind === 'audio') {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
+      newTrack = stream.getAudioTracks()[0];
+    } else {
+      this.cameraSwitchInProgress = true;
+      try {
+        stream = await this.acquireCameraStream(deviceId);
+        newTrack = stream.getVideoTracks()[0];
+      } catch (e) {
+        this.cameraSwitchInProgress = false;
+        throw e;
+      }
+    }
 
     const producer = kind === 'audio' ? this.localAudioProducer : this.localVideoProducer;
 
@@ -1141,10 +1504,35 @@ export class WebRTCClient {
       }
 
       // Replace the track in the Mediasoup producer
-      await producer.replaceTrack({ track: newTrack });
-      // Stop the old track to release the hardware
-      if (oldTrack) {
-        oldTrack.stop();
+      if (kind === 'video') {
+        try {
+          this.rawCameraStream = stream;
+          if (this.videoProcessor) {
+            if (this.videoProcessor.getMode() !== 'none') {
+              const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+              newTrack = processedStream.getVideoTracks()[0];
+            } else {
+              this.videoProcessor.stopProcessing();
+            }
+          }
+          await producer.replaceTrack({ track: newTrack });
+          // Only stop old track AFTER successful replacement
+          if (oldTrack && oldTrack !== newTrack) {
+            oldTrack.stop();
+          }
+        } catch (e) {
+          // If replacement fails, keep the old track running
+          console.error("Failed to replace video track, restoring old track", e);
+          throw e;
+        } finally {
+          this.cameraSwitchInProgress = false;
+        }
+      } else {
+        await producer.replaceTrack({ track: newTrack });
+        if (oldTrack) {
+          oldTrack.stop();
+        }
+        if (kind === 'audio') this.onAudioTrackReplaced?.();
       }
     } else {
       if (kind === 'audio') {
@@ -1156,8 +1544,15 @@ export class WebRTCClient {
           activeTrack = denoisedStream.getAudioTracks()[0];
         }
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+        this.onAudioTrackReplaced?.();
       } else {
+        this.rawCameraStream = stream;
+        if (this.videoProcessor && this.videoProcessor.getMode() !== 'none') {
+           const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+           newTrack = processedStream.getVideoTracks()[0];
+        }
         this.localVideoProducer = await this.sendTransport.produce({ track: newTrack, appData: { source: 'camera' } });
+        this.cameraSwitchInProgress = false;
       }
     }
 
@@ -1191,6 +1586,12 @@ export class WebRTCClient {
     }
   }
 
+  public requestScreenKeyframe(consumerId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'request_screen_keyframe', consumerId }));
+    }
+  }
+
   public resumeCamera() {
     if (this.localVideoProducer && this.localVideoProducer.paused) {
       this.localVideoProducer.resume();
@@ -1202,18 +1603,34 @@ export class WebRTCClient {
     if (this.screenShareProducer && !this.screenShareProducer.closed) {
       throw new Error("Screen share already active");
     }
-    
+    if (!navigator.mediaDevices?.getDisplayMedia || /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|samsungbrowser/i.test(navigator.userAgent)) {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'action_unsupported', reason: 'SCREEN_SHARE_UNSUPPORTED' }));
+      }
+      throw new Error("SCREEN_SHARE_UNSUPPORTED");
+    }
+
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: 15, max: 30 } } // Lower framerate = less CPU, still crisp
     });
     const screenTrack = stream.getVideoTracks()[0];
+    this.localScreenTrack = screenTrack;
+    
+    // Force H264 for screen share to ensure iPhone Safari compatibility
+    let screenCodec;
+    if (this.device.rtpCapabilities.codecs) {
+      screenCodec = this.device.rtpCapabilities.codecs.find(
+        (c) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['packetization-mode'] === 1
+      );
+    }
     
     // Create a SEPARATE producer — camera producer stays untouched
     this.screenShareProducer = await this.sendTransport.produce({
       track: screenTrack,
+      codec: screenCodec, // Force H264 if available
       appData: { source: 'screen' }, // Tag so remote peers render in screen overlay, not tile
       encodings: [
-        { maxBitrate: 1500000 } // Single high-quality encoding — no simulcast needed for screen
+        { maxBitrate: 1500000, maxFramerate: 15 } // Single high-quality encoding, conservative framerate for MVP
       ],
       codecOptions: { videoGoogleStartBitrate: 1000 }
     });
@@ -1246,10 +1663,11 @@ export class WebRTCClient {
       this.screenShareProducer.track?.stop();
       this.screenShareProducer.close();
       this.screenShareProducer = null;
+      this.localScreenTrack = null;
     }
   }
 
-  private async consumeRemoteStream(producerId: string, userId: string, kind: string, appData?: Record<string, any>) {
+  private async consumeRemoteStream(producerId: string, userId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
     if (!this.device || !this.recvTransport) return;
 
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
@@ -1290,7 +1708,7 @@ export class WebRTCClient {
         }
       });
 
-      this.onNewConsumer?.(consumer, userId);
+      this.onNewConsumer?.(consumer, userId, userName);
       
       // Tell the backend to resume sending media (unpause the consumer)
       if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {

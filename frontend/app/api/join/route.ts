@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import { timingSafeEqual } from "crypto";
 import Redis from "ioredis";
@@ -14,7 +14,7 @@ const redis = new Redis(redisUrl, {
 });
 redis.on("error", () => {});
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   if (!process.env.JWT_SECRET) {
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
@@ -39,32 +39,79 @@ export async function POST(request: Request) {
     let finalIsMobile = false;
 
     if (isBot) {
-      const botSecret = process.env.BOT_SECRET;
-      const providedBotSecret = request.headers.get('x-bot-secret');
-      if (!botSecret || providedBotSecret !== botSecret) {
-        return NextResponse.json({ error: 'Unauthorized bot request' }, { status: 401 });
+      const botToken = request.nextUrl.searchParams.get('botToken') || request.headers.get('Authorization')?.split(' ')[1];
+      if (!botToken) {
+        return NextResponse.json({ error: 'Unauthorized: missing bot token' }, { status: 401 });
+      }
+      try {
+        const decoded = jwt.verify(botToken, process.env.JWT_SECRET!) as any;
+        if (decoded.purpose !== 'recording_bot') {
+          console.error(JSON.stringify({ event: 'bot_join_rejected', reason: 'BOT_TOKEN_AUDIENCE_INVALID', roomSlug: roomId, status: 403 }));
+          return NextResponse.json({ error: 'Invalid bot token purpose' }, { status: 403 });
+        }
+        if (decoded.role !== 'recorder' && decoded.role !== 'bot') {
+          console.error(JSON.stringify({ event: 'bot_join_rejected', reason: 'BOT_TOKEN_ROLE_REJECTED', claimRole: decoded.role, roomSlug: roomId, status: 403 }));
+          return NextResponse.json({ error: 'Invalid bot token role' }, { status: 403 });
+        }
+        if (decoded.roomId !== roomId && decoded.roomSlug !== roomId) {
+          console.error(JSON.stringify({ event: 'bot_join_rejected', reason: 'BOT_TOKEN_ROOM_MISMATCH', claimRoomId: decoded.roomId, claimRoomSlug: decoded.roomSlug, expectedRoom: roomId, roomSlug: roomId, status: 403 }));
+          return NextResponse.json({ error: 'Invalid bot token room mismatch' }, { status: 403 });
+        }
+      } catch (err) {
+        console.error(JSON.stringify({ event: 'bot_join_rejected', reason: 'BOT_TOKEN_INVALID_SIGNATURE', roomSlug: roomId, status: 401 }));
+        return NextResponse.json({ error: 'Expired or malformed bot token' }, { status: 401 });
       }
       finalUserId = 'bot_recorder';
+      finalRole = 'bot';
     } else {
-      if (!sessionToken) {
+      let isDashboardUser = false;
+      const authCookie = request.headers.get("cookie");
+      if (authCookie) {
+        try {
+          const backendUrl = process.env.BACKEND_URL || "http://localhost:3000";
+          const meRes = await fetch(`${backendUrl}/api/auth/me`, {
+            headers: { Cookie: authCookie }
+          });
+          if (meRes.ok) {
+            const user = await meRes.json();
+            if (user && user.id) {
+              isDashboardUser = true;
+              finalName = user.name;
+              finalEmail = user.email;
+              finalUserId = user.id;
+              finalRole = "attendee"; // Will be upgraded by signaling server if they own the room
+            }
+          }
+        } catch (e) {
+          console.error("Backend auth check failed", e);
+        }
+      }
+
+      if (!isDashboardUser && !sessionToken) {
         return NextResponse.json({ error: "Missing session token" }, { status: 403 });
       }
 
-      try {
-        const sessionData = jwt.verify(sessionToken, process.env.JWT_SECRET!) as any;
+      if (sessionToken) {
+        try {
+          const sessionData = jwt.verify(sessionToken, process.env.JWT_SECRET!) as any;
 
-        if (sessionData.roomId !== roomId) {
-          return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
+          if (sessionData.roomId !== roomId) {
+            return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
+          }
+
+          // If dashboard user, we keep their authenticated userId and email, but allow them to override name/role from prejoin
+          finalName = sessionData.name || finalName;
+          finalRole = sessionData.role || finalRole;
+          finalIsMobile = sessionData.isMobile;
+          
+          if (!isDashboardUser) {
+            finalEmail = sessionData.email;
+            if (sessionData.userId) finalUserId = sessionData.userId;
+          }
+        } catch (err) {
+          console.error("JWT Verification failed", err);
+          return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
         }
-
-        finalName = sessionData.name;
-        finalEmail = sessionData.email;
-        finalRole = sessionData.role;
-        finalIsMobile = sessionData.isMobile;
-        if (sessionData.userId) finalUserId = sessionData.userId;
-      } catch (err) {
-        console.error("JWT Verification failed", err);
-        return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
       }
     }
 
@@ -95,12 +142,20 @@ export async function POST(request: Request) {
           maxParticipants?: number;
           maxWebinarAudience?: number;
           maxActiveCameras?: number;
+          aiFeaturesEnabled?: boolean;
+          captionsEnabled?: boolean;
+          donationsEnabled?: boolean;
+          virtualBackgroundEnabled?: boolean;
         };
 
         fetchedRoomLimits = {
           maxParticipants: room.maxParticipants ?? 100,
           maxWebinarAudience: room.maxWebinarAudience ?? 1000,
           maxActiveCameras: room.maxActiveCameras ?? 15,
+          aiFeaturesEnabled: room.aiFeaturesEnabled ?? true,
+          captionsEnabled: room.captionsEnabled ?? true,
+          donationsEnabled: room.donationsEnabled ?? true,
+          virtualBackgroundEnabled: room.virtualBackgroundEnabled ?? true,
         };
 
         // 1. Enforce access PIN (timing-safe comparison)
