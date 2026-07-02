@@ -152,11 +152,8 @@ export function ParticipantTile({
               attemptPlay();
               return;
             }
-            stream.getTracks().forEach(t => stream.removeTrack(t));
-            stream.addTrack(participant.videoTrack);
-          } else {
-            el.srcObject = new MediaStream([participant.videoTrack]);
           }
+          el.srcObject = new MediaStream([participant.videoTrack]);
           attemptPlay();
         } else {
           el.srcObject = null;
@@ -182,11 +179,9 @@ export function ParticipantTile({
     };
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('pageshow', handleVisibility);
-    window.addEventListener('focus', handleVisibility);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pageshow', handleVisibility);
-      window.removeEventListener('focus', handleVisibility);
     };
   }, [participant.videoTrack]);
 
@@ -198,11 +193,8 @@ export function ParticipantTile({
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
             if (stream.getVideoTracks()[0] === participant.screenTrack) return;
-            stream.getTracks().forEach(t => stream.removeTrack(t));
-            stream.addTrack(participant.screenTrack);
-          } else {
-            el.srcObject = new MediaStream([participant.screenTrack]);
           }
+          el.srcObject = new MediaStream([participant.screenTrack]);
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
           });
