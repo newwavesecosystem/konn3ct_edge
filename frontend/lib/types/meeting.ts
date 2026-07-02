@@ -105,6 +105,7 @@ export interface PollOption {
   id: string;
   text: string;
   votes: number;
+  votedBy?: any[];
 }
 
 export interface Poll {

@@ -730,7 +730,7 @@ export function MeetingProvider({
             if (Array.isArray(poll.options)) {
               for (const opt of poll.options) {
                 totalVotes += opt.votes || 0;
-                if (Array.isArray(opt.votedBy) && opt.votedBy.includes(webrtcClient.current?.userId)) {
+                if (Array.isArray(opt.votedBy) && opt.votedBy.some((v: any) => typeof v === 'string' ? v === webrtcClient.current?.userId : v.userId === webrtcClient.current?.userId)) {
                   myVote = opt.id;
                 }
               }
@@ -916,7 +916,7 @@ export function MeetingProvider({
                 ...p,
                 totalVotes: p.totalVotes + 1,
                 options: p.options.map((o) =>
-                  o.id === msg.optionId ? { ...o, votes: o.votes + 1 } : o
+                  o.id === msg.optionId ? { ...o, votes: o.votes + 1, votedBy: [...(o.votedBy || []), { userId: msg.userId, name: msg.name }] } : o
                 ),
               };
             })
@@ -1821,7 +1821,7 @@ export function MeetingProvider({
           myVote: optionId,
           totalVotes: p.totalVotes + 1,
           options: p.options.map((o) =>
-            o.id === optionId ? { ...o, votes: o.votes + 1 } : o
+            o.id === optionId ? { ...o, votes: o.votes + 1, votedBy: [...(o.votedBy || []), { userId: currentUser.id, name: currentUser.name }] } : o
           ),
         };
       })
