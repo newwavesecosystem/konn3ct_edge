@@ -888,6 +888,9 @@ export function MeetingProvider({
         };
 
         client.onPollVote = (msg) => {
+          // Ignore our own vote broadcast since we already updated it optimistically
+          if (msg.userId === webrtcClient.current?.userId) return;
+
           setPolls((prev) =>
             prev.map((p) => {
               if (p.id !== msg.pollId) return p;
