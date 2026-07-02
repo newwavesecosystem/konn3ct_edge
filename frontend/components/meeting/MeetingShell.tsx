@@ -45,7 +45,10 @@ export function MeetingShell() {
     showDonationModal,
     setShowDonationModal,
     currentUser,
-    logoutUrl
+    logoutUrl,
+    micError,
+    audioPlaybackError,
+    resumeAudioPlayback
   } = useMeeting();
 
   const formatDuration = (s: number) => {
@@ -169,6 +172,22 @@ export function MeetingShell() {
       className="flex flex-col h-[100dvh] overflow-hidden"
       style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}
     >
+      {audioPlaybackError && (
+        <div className="bg-red-500 text-white text-sm font-medium py-2.5 px-4 flex items-center justify-between shrink-0 z-50">
+          <span>Your browser blocked incoming audio.</span>
+          <button 
+            onClick={resumeAudioPlayback}
+            className="bg-white/20 hover:bg-white/30 px-4 py-1.5 rounded-md transition-colors"
+          >
+            Click to Enable Audio
+          </button>
+        </div>
+      )}
+      {micError && (
+        <div className="bg-orange-500 text-white text-sm font-medium py-2 px-4 flex items-center justify-between shrink-0 z-50">
+          <span><strong>{micError.name}:</strong> {micError.message}</span>
+        </div>
+      )}
       {/* Top bar — minimal */}
       {!isBot && (
       <div

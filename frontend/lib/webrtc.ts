@@ -1399,7 +1399,11 @@ export class WebRTCClient {
       activeTrack.onended = async () => {
         console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
         try {
+          const wasPaused = this.localAudioProducer?.paused;
           await this.enableMic();
+          if (wasPaused) {
+            this.pauseMic();
+          }
         } catch (err) {
           console.error("Failed to re-initialize mic:", err);
         }

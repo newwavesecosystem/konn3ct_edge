@@ -158,6 +158,9 @@ interface MeetingContextValue {
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
+  audioPlaybackError: boolean;
+  setAudioPlaybackError: (error: boolean) => void;
+  resumeAudioPlayback: () => void;
 
   // QA Diagnostics
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
@@ -286,6 +289,17 @@ export function MeetingProvider({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
+  const [audioPlaybackError, setAudioPlaybackError] = useState(false);
+  
+  const resumeAudioPlayback = useCallback(() => {
+    setAudioPlaybackError(false);
+    // Trigger re-render of AudioRenderers to retry .play()
+    setOutputVolume(v => {
+      const current = v;
+      setTimeout(() => setOutputVolume(current), 50);
+      return Math.max(1, v - 1); // slight tweak to trigger effect, then restore
+    });
+  }, []);
 
   const markChatMessageRendered = useCallback((messageId: string) => {
     setChatMessages((prev) => 
@@ -1951,6 +1965,9 @@ export function MeetingProvider({
         currentUser,
         chatMessages,
         polls,
+        audioPlaybackError,
+        setAudioPlaybackError,
+        resumeAudioPlayback,
         sharedNoteContent,
         meetingInfo,
         reactions,
@@ -2111,13 +2128,13 @@ export function MeetingProvider({
         webrtcClientRef: webrtcClient,
       }}
     >
-      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />
+      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
       {children}
     </MeetingContext.Provider>
   );
 }
 
-function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { participants: Participant[]; currentUserId: string; outputVolume: number }) {
+function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAudioPlaybackError }: { participants: Participant[]; currentUserId: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
   const { selectedDevices, meetingInfo } = useMeeting();
   
   const audioParticipants = useMemo(() => {
@@ -2130,13 +2147,13 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { pa
   return (
     <>
       {audioParticipants.map((p) => (
-        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} />
+        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
       ))}
     </>
   );
 }
 
-function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number }) {
+function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlaybackError }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
@@ -2181,7 +2198,12 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
       audioRef.current.volume = outputVolume / 100;
       applyAudioSink(audioRef.current, audioOutput);
       audioRef.current.play().catch((e) => {
-        if (e.name !== 'AbortError') console.warn("Global audio play failed:", e);
+        if (e.name === 'NotAllowedError') {
+          console.warn("Autoplay blocked for global audio:", e);
+          setAudioPlaybackError(true);
+        } else if (e.name !== 'AbortError') {
+          console.warn("Global audio play failed:", e);
+        }
       });
     } else if (audioRef.current && (!track || isLocal)) {
       audioRef.current.srcObject = null;
