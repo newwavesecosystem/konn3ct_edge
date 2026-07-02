@@ -11,7 +11,8 @@ import {
   Shield,
   SignalHigh,
   SignalMedium,
-  SignalLow
+  SignalLow,
+  Loader2
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -261,6 +262,31 @@ export function ParticipantTile({
   React.useEffect(() => {
     if (!participant.cameraStats) return;
 
+    if (effectiveVideoState === 'video-active') {
+      participant.cameraStats.tileRenderMode = 'video';
+    } else if (effectiveVideoState === 'audio-only') {
+      participant.cameraStats.tileRenderMode = 'audio-only';
+    } else {
+      participant.cameraStats.tileRenderMode = 'avatar';
+    }
+  }, [participant, effectiveVideoState, health]);
+
+  const expectsMedia = isSelf || participant.isCameraOn || !participant.isMuted;
+  let mediaConnectionState: string | null = null;
+  
+  if (expectsMedia) {
+    if (health === 'stalled') {
+      mediaConnectionState = "Media connection failed. Retrying...";
+    } else if (health === 'recovering') {
+      mediaConnectionState = "Reconnecting to Media Server";
+    } else if (participant.isConnecting) {
+      mediaConnectionState = "Connecting to Media Server";
+    }
+  }
+
+  React.useEffect(() => {
+    if (!participant.cameraStats) return;
+
     if (health === 'healthy') {
       participant.cameraStats.diagnosisHint = 'video-healthy';
     } else if (health === 'stalled') {
@@ -358,11 +384,6 @@ export function ParticipantTile({
                 isSelf && isMirrorVideoEnabled ? "scaleX(-1)" : "none",
             }}
           />
-          {health === 'recovering' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white font-medium text-sm">
-              Video recovering...
-            </div>
-          )}
         </div>
       ) : (
         <div
@@ -465,6 +486,16 @@ export function ParticipantTile({
           )}
         </div>
       </div>
+
+      {/* ── Media Connection State Overlay ── */}
+      {mediaConnectionState && (
+        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-black/60 backdrop-blur-sm text-white font-medium text-sm text-center px-4">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-brand-green" />
+            <span>{mediaConnectionState}</span>
+          </div>
+        </div>
+      )}
 
     </div>
   );

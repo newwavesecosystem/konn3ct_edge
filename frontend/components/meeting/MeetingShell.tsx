@@ -102,12 +102,15 @@ export function MeetingShell() {
     security: <SecurityPanel />,
   };
 
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || "Konn3ct";
+  const appInitial = appName.charAt(0).toUpperCase();
+
   if (webrtcStatus === 'waiting') {
     return (
       <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
         <div className="p-8 rounded-2xl max-w-md w-full text-center" style={{ backgroundColor: "var(--mt-bg-elevated)", border: "1px solid var(--mt-border)" }}>
           <div className="w-16 h-16 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center mx-auto mb-6">
-            <span className="text-2xl font-bold">K</span>
+            <span className="text-2xl font-bold">{appInitial}</span>
           </div>
           <h2 className="text-xl font-semibold mb-2">Waiting for the host to let you in</h2>
           <p style={{ color: "var(--mt-text-faint)" }} className="mb-6">
@@ -178,7 +181,7 @@ export function MeetingShell() {
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-brand-green/20 flex items-center justify-center">
-              <span className="text-brand-green font-bold text-xs">K</span>
+              <span className="text-brand-green font-bold text-xs">{appInitial}</span>
             </div>
             <span
               className="text-sm font-semibold truncate max-w-[120px] sm:max-w-[200px] lg:max-w-none"

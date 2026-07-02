@@ -138,12 +138,20 @@ export async function POST(request: NextRequest) {
           maxParticipants?: number;
           maxWebinarAudience?: number;
           maxActiveCameras?: number;
+          aiFeaturesEnabled?: boolean;
+          captionsEnabled?: boolean;
+          donationsEnabled?: boolean;
+          virtualBackgroundEnabled?: boolean;
         };
 
         fetchedRoomLimits = {
           maxParticipants: room.maxParticipants ?? 100,
           maxWebinarAudience: room.maxWebinarAudience ?? 1000,
           maxActiveCameras: room.maxActiveCameras ?? 15,
+          aiFeaturesEnabled: room.aiFeaturesEnabled ?? true,
+          captionsEnabled: room.captionsEnabled ?? true,
+          donationsEnabled: room.donationsEnabled ?? true,
+          virtualBackgroundEnabled: room.virtualBackgroundEnabled ?? true,
         };
 
         // 1. Enforce access PIN (timing-safe comparison)

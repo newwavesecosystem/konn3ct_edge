@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import dgram from 'dgram';
 import { DeepgramClient } from '@deepgram/sdk';
 import { logger } from '../logger';
+import { db } from '../db';
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 
@@ -32,6 +33,15 @@ export async function startTranscription(producer: Producer, router: Router, roo
 
   if ((isBot || isLoadTestMode) && disableForBots) {
     logger.info(`[DEEPGRAM] transcription_skipped_for_bot: user ${userId}`);
+    return;
+  }
+
+  const room = await db.room.findFirst({
+    where: { OR: [{ id: roomId }, { slug: roomId }] }
+  });
+
+  if (room && room.captionsEnabled === false) {
+    logger.info(`[DEEPGRAM] caption_disabled_no_deepgram_connection: room ${roomId}`);
     return;
   }
 
