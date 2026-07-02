@@ -26,11 +26,15 @@ import { apiClient } from '../api/client';
 import { fetchDashboardStats, fetchTodayMeetings, DashboardStats, TodayMeeting } from '../api/dashboard';
 import { fetchSchedules } from '../api/schedule';
 import { createRoom, fetchMyRooms, startRoom, joinRoomKv4, validateMeetingKv4 } from '../api/rooms';
+import { getAttendeeToken } from '../api/edgeApi';
 import { SIGNAL_SERVER_DOMAIN as SIGNAL_DOMAIN } from '../webrtc/MediasoupService';
 import { useAuthStore } from '../store/useAuthStore';
 import * as Clipboard from 'expo-clipboard';
 import {
   Video,
+  VideoOff,
+  Mic,
+  MicOff,
   Plus,
   ArrowRight,
   Calendar,
@@ -69,6 +73,7 @@ const COLORS = {
   amber: '#E59F0B',
   white: '#ffffff',
   skeleton: '#E8ECF2',
+  inputBorder: '#E8ECF2',
 };
 
 type Props = {
@@ -112,6 +117,8 @@ export default function DashboardScreen({ navigation }: Props) {
   const [joinStatus, setJoinStatus] = useState('Join Room');
   const [showJoinInput, setShowJoinInput] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState('');
+  const [joinMicOn, setJoinMicOn] = useState(true);
+  const [joinCameraOn, setJoinCameraOn] = useState(true);
   const [pastRooms, setPastRooms] = useState<any[]>([]);
   const [upcoming, setUpcoming] = useState<any[]>([]);
   const [personalRoomUrl, setPersonalRoomUrl] = useState<string | null>(null);
@@ -248,102 +255,23 @@ export default function DashboardScreen({ navigation }: Props) {
           return;
         }
 
-        // Step 2: Get a session JWT for the joiner
+        // Step 2: Get an ATTENDEE token via the Edge frontend API
+        // This calls /api/prejoin → /api/join which force-locks role to "attendee",
+        // ensuring the signal server puts the user in the waiting room.
         setJoinStatus('Connecting...');
-        const myRooms = await fetchMyRooms();
-        if (!myRooms || myRooms.length === 0) {
-          Alert.alert('Setup Required', 'Your account has no rooms. Please contact support.');
-          setIsJoining(false);
-          setJoinStatus('Join Room');
-          return;
-        }
+        const meetingToken = await getAttendeeToken(
+          roomId,
+          user?.name || 'Guest',
+          user?.email || 'guest@conn3ct.com'
+        );
 
-        const myRoom = myRooms[0];
-        const startRes = await startRoom(myRoom.id);
-        const meetingToken = startRes?.sessionToken
-          || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
-
-        if (!meetingToken) {
-          Alert.alert('Error', 'Could not obtain a session token. Please try again.');
-          setIsJoining(false);
-          setJoinStatus('Join Room');
-          return;
-        }
-
-        // Step 3: Pre-flight check — verify the room is live on the signal server
-        // before navigating. The signal server is CASE-SENSITIVE on roomId.
-        setJoinStatus('Verifying room...');
-        const preflightOk = await new Promise<boolean>((resolve) => {
-          const encodedToken = encodeURIComponent(meetingToken);
-          const wsUrl = `wss://${SIGNAL_DOMAIN}/signal?roomId=${roomId}&isMobile=true&token=${encodedToken}`;
-          const testWs = new WebSocket(wsUrl);
-          let settled = false;
-
-          const timeout = setTimeout(() => {
-            if (!settled) {
-              settled = true;
-              try { testWs.close(); } catch (_) {}
-              resolve(false);
-            }
-          }, 10000);
-
-          testWs.onmessage = (event: any) => {
-            try {
-              const msg = JSON.parse(event.data);
-              if (msg.type === 'session_status') {
-                // Room is live — close the test socket and proceed
-                if (!settled) {
-                  settled = true;
-                  clearTimeout(timeout);
-                  testWs.close();
-                  resolve(true);
-                }
-              }
-            } catch (_) {}
-          };
-
-          // Don't settle in onerror — onclose fires right after with the
-          // actual reason string (e.g. "Expected HTTP 101 … '404 Not Found'").
-          testWs.onerror = () => {
-            // intentionally empty — let onclose handle it
-          };
-
-          testWs.onclose = (e: any) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timeout);
-              const reason = String(e?.reason || '');
-              const code = e?.code;
-              // Detect 404 from close reason or from abnormal closure (1006)
-              const is404 = reason.includes('404');
-              if (is404) {
-                Alert.alert(
-                  'Room Not Found',
-                  `Could not find room "${roomId}" on the server.\n\nRoom IDs are case-sensitive — make sure the capitalisation matches exactly (e.g. "Joso24j20" not "joso24j20").`
-                );
-              } else {
-                Alert.alert(
-                  'Host Not Ready',
-                  "The host hasn't started this meeting yet.\n\nMake sure the host has tapped the Host button and is inside the meeting, then try again."
-                );
-              }
-              resolve(false);
-            }
-          };
-        });
-
-        if (!preflightOk) {
-          setIsJoining(false);
-          setJoinStatus('Join Room');
-          return;
-        }
-
-        // Step 4: Room confirmed live — navigate to meeting
+        // Step 3: Navigate to lobby — LobbyScreen handles the WebSocket
+        // connection and waiting room UI, including error states (404, host not ready).
         setShowJoinInput(false);
         setJoinRoomId('');
         setJoinStatus('Join Room');
         setIsJoining(false);
-        navigation.navigate('Meeting', { roomId, meetingToken });
+        navigation.navigate('Lobby', { roomId, meetingToken, micOn: joinMicOn, cameraOn: joinCameraOn });
         return;
       } catch (e: any) {
         console.error('Join failed:', e.response?.data || e.message);
@@ -359,7 +287,7 @@ export default function DashboardScreen({ navigation }: Props) {
     setJoinStatus('Join Room');
     setShowJoinInput(false);
     setJoinRoomId('');
-    navigation.navigate('Meeting', { roomId });
+    navigation.navigate('Lobby', { roomId, micOn: joinMicOn, cameraOn: joinCameraOn });
   };
 
   const handleAvatarPress = () => {
@@ -368,7 +296,7 @@ export default function DashboardScreen({ navigation }: Props) {
       "What would you like to do?",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "View Profile", onPress: () => navigation.navigate('Profile') },
+        { text: "View Profile", onPress: () => (navigation.navigate as any)('Profile') },
         { text: "Log Out", onPress: logout, style: "destructive" }
       ]
     );
@@ -602,7 +530,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
               <TouchableOpacity
                 style={styles.scheduleButton}
-                onPress={() => navigation.navigate('Schedule')}
+                onPress={() => (navigation.navigate as any)('Schedule')}
                 activeOpacity={0.85}
               >
                 <Calendar color={COLORS.white} size={18} />
@@ -699,6 +627,30 @@ export default function DashboardScreen({ navigation }: Props) {
                   onSubmitEditing={handleJoin}
                   returnKeyType="go"
                 />
+
+                <View style={styles.togglesContainer}>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, joinMicOn ? styles.toggleButtonActive : styles.toggleButtonInactive]}
+                    onPress={() => setJoinMicOn(!joinMicOn)}
+                    activeOpacity={0.7}
+                  >
+                    {joinMicOn ? <Mic color={COLORS.white} size={20} /> : <MicOff color={COLORS.textMuted} size={20} />}
+                    <Text style={[styles.toggleButtonText, joinMicOn ? styles.toggleButtonTextActive : styles.toggleButtonTextInactive]}>
+                      {joinMicOn ? 'Mic On' : 'Mic Off'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.toggleButton, joinCameraOn ? styles.toggleButtonActive : styles.toggleButtonInactive]}
+                    onPress={() => setJoinCameraOn(!joinCameraOn)}
+                    activeOpacity={0.7}
+                  >
+                    {joinCameraOn ? <Video color={COLORS.white} size={20} /> : <VideoOff color={COLORS.textMuted} size={20} />}
+                    <Text style={[styles.toggleButtonText, joinCameraOn ? styles.toggleButtonTextActive : styles.toggleButtonTextInactive]}>
+                      {joinCameraOn ? 'Camera On' : 'Camera Off'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 <TouchableOpacity
                   style={styles.modalJoinBtn}
@@ -1318,6 +1270,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 36,
+    minHeight: 450, // Added to increase the card's height
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
@@ -1369,6 +1322,41 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     lineHeight: 18,
+  },
+  // Modal Toggles
+  togglesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    gap: 12,
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+  },
+  toggleButtonActive: {
+    backgroundColor: COLORS.brandGreen,
+    borderColor: COLORS.brandGreen,
+  },
+  toggleButtonInactive: {
+    backgroundColor: 'transparent',
+    borderColor: COLORS.inputBorder,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  toggleButtonTextActive: {
+    color: COLORS.white,
+  },
+  toggleButtonTextInactive: {
+    color: COLORS.textMuted,
   },
   // Section Headers
   sectionHeader: {

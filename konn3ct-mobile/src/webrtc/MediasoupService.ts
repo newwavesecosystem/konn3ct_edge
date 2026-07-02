@@ -30,6 +30,12 @@ export class MediasoupService {
   private pendingRequests = new Map<string, {resolve: Function, reject: Function, timeoutId: any}[]>();
   private pingInterval: NodeJS.Timeout | null = null;
 
+  // Buffered one-shot events — cached during lobby handoff so MeetingScreen
+  // can replay them after setting up its callbacks.
+  private _cachedParticipantsList: any[] | null = null;
+  private _cachedChatHistory: any[] | null = null;
+  private _cachedPollHistory: any[] | null = null;
+
   // Connection State
   
   // Callbacks
@@ -124,6 +130,30 @@ export class MediasoupService {
 
   public onStreamUpdate(callback: (streams: RemoteParticipant[]) => void) {
     this.onStreamUpdateCallback = callback;
+    // If streams were already consumed (e.g. during lobby handoff), fire immediately
+    if (this.remoteStreams.size > 0 || this.remoteScreenStreams.size > 0) {
+      this.notifyStreamUpdate();
+    }
+  }
+
+  /**
+   * Replay one-shot events that were cached during the lobby handoff.
+   * Call this after setting up all callbacks (onParticipantsList, onChatHistory, etc.)
+   * so the MeetingScreen receives events that fired before its callbacks were registered.
+   */
+  public replayCachedEvents() {
+    if (this._cachedParticipantsList && this.onParticipantsList) {
+      this.onParticipantsList(this._cachedParticipantsList);
+      this._cachedParticipantsList = null;
+    }
+    if (this._cachedChatHistory && this.onChatHistory) {
+      this.onChatHistory(this._cachedChatHistory);
+      this._cachedChatHistory = null;
+    }
+    if (this._cachedPollHistory && this.onPollHistory) {
+      this.onPollHistory(this._cachedPollHistory);
+      this._cachedPollHistory = null;
+    }
   }
 
   private notifyStreamUpdate() {
@@ -260,11 +290,28 @@ export class MediasoupService {
               console.log('Waiting for host to admit...');
               if (this.onSessionStatusChange) this.onSessionStatusChange('waiting');
               resolve('waiting');
+            } else if (msg.status === 'ended') {
+              console.log('Meeting ended by host');
+              if (this.onSessionStatusChange) this.onSessionStatusChange('ended');
+              this.disconnect();
+            } else if (msg.status === 'kicked') {
+              console.log('Kicked from meeting by host');
+              if (this.onSessionStatusChange) this.onSessionStatusChange('kicked');
+              this.disconnect();
+            } else if (msg.status === 'denied') {
+              console.log('Entry denied by host');
+              if (this.onSessionStatusChange) this.onSessionStatusChange('denied');
+              this.disconnect();
             }
             break;
 
           case 'participants_list':
-            if (this.onParticipantsList) this.onParticipantsList(msg.participants || []);
+            if (this.onParticipantsList) {
+              this.onParticipantsList(msg.participants || []);
+            } else {
+              // Cache for replay when callback is set (lobby handoff)
+              this._cachedParticipantsList = msg.participants || [];
+            }
             break;
 
           case 'user_joined':
@@ -281,7 +328,11 @@ export class MediasoupService {
             break;
 
           case 'chat_history':
-            if (this.onChatHistory) this.onChatHistory(msg.messages || []);
+            if (this.onChatHistory) {
+              this.onChatHistory(msg.messages || []);
+            } else {
+              this._cachedChatHistory = msg.messages || [];
+            }
             break;
 
           case 'chat':
@@ -293,7 +344,11 @@ export class MediasoupService {
             break;
 
           case 'poll_history':
-            if (this.onPollHistory) this.onPollHistory(msg.polls || []);
+            if (this.onPollHistory) {
+              this.onPollHistory(msg.polls || []);
+            } else {
+              this._cachedPollHistory = msg.polls || [];
+            }
             break;
 
           case 'poll_create':
