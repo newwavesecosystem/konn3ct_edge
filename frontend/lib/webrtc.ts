@@ -75,13 +75,14 @@ export class WebRTCClient {
   public onActionAck?: (ack: any) => void;
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
-  public onPollVote?: (vote: any) => void;
+  public onPollVote?: (msg: any) => void;
+  public onPollEnded?: (msg: any) => void;
+  public onPollHistory?: (polls: any[]) => void;
   public onMuteState?: (msg: any) => void;
   public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
-  public onPollHistory?: (polls: any[]) => void;
   public onNoteHistory?: (content: string) => void;
   public onMicError?: (error: Error) => void;
   public onNoteUpdate?: (msg: any) => void;
@@ -324,7 +325,7 @@ export class WebRTCClient {
                 const res = await this.request('getProducers', 'producersList');
                 if (res.producers) {
                   for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.userId, p.name, p.kind, p.appData);
+                    await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -350,7 +351,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          this.consumeRemoteStream(msg.producerId, msg.userId, msg.name, msg.kind, msg.appData).catch(console.error);
+          await this.consumeRemoteStream(msg.producerId, msg.participantId || msg.userId, msg.name, msg.kind, msg.appData);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -377,6 +378,12 @@ export class WebRTCClient {
           break;
         case 'poll_vote':
           this.onPollVote?.(msg);
+          break;
+        case 'poll_ended':
+          this.onPollEnded?.(msg);
+          break;
+        case 'poll_history':
+          this.onPollHistory?.(msg.polls);
           break;
         case 'mute_state':
           this.onMuteState?.(msg);
@@ -657,6 +664,12 @@ export class WebRTCClient {
   public votePoll(pollId: string, optionId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
+  }
+
+  public endPoll(pollId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'end_poll', pollId }));
     }
   }
 
@@ -1051,7 +1064,7 @@ export class WebRTCClient {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
         try {
-          await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+          await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
         } catch (err) {
           console.error(`Failed to consume producer ${p.producerId}:`, err);
         }
@@ -1386,7 +1399,11 @@ export class WebRTCClient {
       activeTrack.onended = async () => {
         console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
         try {
+          const wasPaused = this.localAudioProducer?.paused;
           await this.enableMic();
+          if (wasPaused) {
+            this.pauseMic();
+          }
         } catch (err) {
           console.error("Failed to re-initialize mic:", err);
         }

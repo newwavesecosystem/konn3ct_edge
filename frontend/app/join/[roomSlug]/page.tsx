@@ -296,7 +296,7 @@ export default function JoinPage({
           <div className="w-8 h-8 rounded-lg bg-brand-green/20 flex items-center justify-center">
             <span className="text-brand-green font-bold text-sm">{appInitial}</span>
           </div>
-          <span className="text-sm font-semibold text-white">{appName.toLowerCase()}</span>
+          <span className="text-sm font-semibold text-white">{appName}</span>
         </div>
         <button
           onClick={() => router.push("/login")}
@@ -598,7 +598,7 @@ export default function JoinPage({
                 </button>
 
                 <p className="text-center text-[11px] text-white/20">
-                  By joining, you agree to {appName.toLowerCase()}&apos;s{" "}
+                  By joining, you agree to {appName}&apos;s{" "}
                   <span className="text-white/40 hover:text-white/60 cursor-pointer">Terms of Service</span>
                 </p>
               </div>

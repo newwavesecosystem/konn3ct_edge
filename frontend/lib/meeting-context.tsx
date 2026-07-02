@@ -88,6 +88,7 @@ interface MeetingContextValue {
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
+  endPoll: (pollId: string) => void;
   createPoll: (question: string, options: string[]) => void;
   updateSharedNote: (content: string) => void;
   setShowLeaveDialog: (show: boolean) => void;
@@ -157,6 +158,9 @@ interface MeetingContextValue {
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
+  audioPlaybackError: boolean;
+  setAudioPlaybackError: (error: boolean) => void;
+  resumeAudioPlayback: () => void;
 
   // QA Diagnostics
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
@@ -285,6 +289,17 @@ export function MeetingProvider({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
+  const [audioPlaybackError, setAudioPlaybackError] = useState(false);
+  
+  const resumeAudioPlayback = useCallback(() => {
+    setAudioPlaybackError(false);
+    // Trigger re-render of AudioRenderers to retry .play()
+    setOutputVolume(v => {
+      const current = v;
+      setTimeout(() => setOutputVolume(current), 50);
+      return Math.max(1, v - 1); // slight tweak to trigger effect, then restore
+    });
+  }, []);
 
   const markChatMessageRendered = useCallback((messageId: string) => {
     setChatMessages((prev) => 
@@ -723,7 +738,24 @@ export function MeetingProvider({
         };
 
         client.onPollHistory = (historyPolls) => {
-          setPolls(historyPolls);
+          const pollsWithDetails = historyPolls.map((poll: any) => {
+            let totalVotes = 0;
+            let myVote = undefined;
+            if (Array.isArray(poll.options)) {
+              for (const opt of poll.options) {
+                totalVotes += opt.votes || 0;
+                if (Array.isArray(opt.votedBy) && opt.votedBy.some((v: any) => typeof v === 'string' ? v === webrtcClient.current?.userId : v.userId === webrtcClient.current?.userId)) {
+                  myVote = opt.id;
+                }
+              }
+            }
+            return {
+              ...poll,
+              totalVotes,
+              myVote
+            };
+          });
+          setPolls(pollsWithDetails);
         };
 
         client.onNoteHistory = (content) => {
@@ -898,10 +930,16 @@ export function MeetingProvider({
                 ...p,
                 totalVotes: p.totalVotes + 1,
                 options: p.options.map((o) =>
-                  o.id === msg.optionId ? { ...o, votes: o.votes + 1 } : o
+                  o.id === msg.optionId ? { ...o, votes: o.votes + 1, votedBy: [...(o.votedBy || []), { userId: msg.userId, name: msg.name }] } : o
                 ),
               };
             })
+          );
+        };
+
+        client.onPollEnded = (msg) => {
+          setPolls((prev) =>
+            prev.map((p) => (p.id === msg.pollId ? { ...p, isActive: false } : p))
           );
         };
 
@@ -910,12 +948,12 @@ export function MeetingProvider({
         client.onMuteState = (msg) => {
           const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => {
-            const user = prev.find(p => p.id === targetId);
+            const user = prev.find(p => p.id === targetId || p.userId === msg.userId);
             if (user && user.isMuted !== msg.isMuted) {
               toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
             }
             return prev.map(p =>
-              p.id === targetId ? { ...p, isMuted: msg.isMuted } : p
+              (p.id === targetId || p.userId === msg.userId) ? { ...p, isMuted: msg.isMuted } : p
             );
           });
         };
@@ -927,7 +965,7 @@ export function MeetingProvider({
         client.onCameraState = (msg) => {
           const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason } : p
+            (p.id === targetId || p.userId === msg.userId) ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason } : p
           ));
         };
 
@@ -952,22 +990,22 @@ export function MeetingProvider({
             } catch (e) { }
           }
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isHandRaised: msg.isHandRaised } : p
+            (p.id === targetId || p.userId === msg.userId) ? { ...p, isHandRaised: msg.isHandRaised } : p
           ));
         };
 
         client.onScreenShareStarted = (userId, producerId) => {
           const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isScreenSharing: true } : p
+            (p.id === targetId || p.userId === userId) ? { ...p, isScreenSharing: true } : p
           ));
-          toast.info(`${participants.find(p => p.id === targetId)?.name || 'A participant'} started screen sharing`);
+          toast.info(`${participants.find(p => p.id === targetId || p.userId === userId)?.name || 'A participant'} started screen sharing`);
         };
 
         client.onScreenShareStopped = (userId, producerId) => {
           const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, isScreenSharing: false, screenTrack: null } : p
+            (p.id === targetId || p.userId === userId) ? { ...p, isScreenSharing: false, screenTrack: null } : p
           ));
           toast.info(`Screen sharing ended`);
         };
@@ -1229,7 +1267,7 @@ export function MeetingProvider({
           
           setTimeout(() => {
             if (hasLeftMeetingRef.current) return;
-            setParticipants(curr => curr.map(p => p.id === targetId ? { ...p, isConnecting: false } : p));
+            setParticipants(curr => curr.map(p => p.id === uniqueId ? { ...p, isConnecting: false } : p));
           }, 4000);
 
           if (user.role !== 'bot') {
@@ -1240,7 +1278,7 @@ export function MeetingProvider({
         client.onRoleChanged = (userId, newRole) => {
           const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p => 
-            p.id === targetId ? { ...p, role: newRole as any } : p
+            (p.id === targetId || p.userId === userId) ? { ...p, role: newRole as any } : p
           ));
           if (targetId === initialCurrentUser.id) {
             toast.info(`Your role has been updated to ${newRole}`);
@@ -1264,10 +1302,10 @@ export function MeetingProvider({
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
           setParticipants((prev) => {
-            const exists = prev.find((p) => p.id === userId);
+            const exists = prev.find((p) => p.id === userId || p.userId === userId);
             if (exists) {
               return prev.map((p) => {
-                if (p.id === userId) {
+                if (p.id === userId || p.userId === userId) {
                   if (consumer.kind === 'audio') {
                     return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
                   }
@@ -1797,10 +1835,17 @@ export function MeetingProvider({
           myVote: optionId,
           totalVotes: p.totalVotes + 1,
           options: p.options.map((o) =>
-            o.id === optionId ? { ...o, votes: o.votes + 1 } : o
+            o.id === optionId ? { ...o, votes: o.votes + 1, votedBy: [...(o.votedBy || []), { userId: currentUser.id, name: currentUser.name }] } : o
           ),
         };
       })
+    );
+  }, []);
+
+  const endPoll = useCallback((pollId: string) => {
+    webrtcClient.current?.endPoll(pollId);
+    setPolls((prev) =>
+      prev.map((p) => (p.id === pollId ? { ...p, isActive: false } : p))
     );
   }, []);
 
@@ -1920,6 +1965,9 @@ export function MeetingProvider({
         currentUser,
         chatMessages,
         polls,
+        audioPlaybackError,
+        setAudioPlaybackError,
+        resumeAudioPlayback,
         sharedNoteContent,
         meetingInfo,
         reactions,
@@ -1965,6 +2013,7 @@ export function MeetingProvider({
         sendMessage,
         sendReaction,
         votePoll,
+        endPoll,
         createPoll,
         updateSharedNote,
         setShowLeaveDialog,
@@ -2079,13 +2128,13 @@ export function MeetingProvider({
         webrtcClientRef: webrtcClient,
       }}
     >
-      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} />
+      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
       {children}
     </MeetingContext.Provider>
   );
 }
 
-function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { participants: Participant[]; currentUserId: string; outputVolume: number }) {
+function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAudioPlaybackError }: { participants: Participant[]; currentUserId: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
   const { selectedDevices, meetingInfo } = useMeeting();
   
   const audioParticipants = useMemo(() => {
@@ -2098,13 +2147,13 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume }: { pa
   return (
     <>
       {audioParticipants.map((p) => (
-        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} />
+        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
       ))}
     </>
   );
 }
 
-function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number }) {
+function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlaybackError }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
@@ -2149,7 +2198,12 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume }: { track?: 
       audioRef.current.volume = outputVolume / 100;
       applyAudioSink(audioRef.current, audioOutput);
       audioRef.current.play().catch((e) => {
-        if (e.name !== 'AbortError') console.warn("Global audio play failed:", e);
+        if (e.name === 'NotAllowedError') {
+          console.warn("Autoplay blocked for global audio:", e);
+          setAudioPlaybackError(true);
+        } else if (e.name !== 'AbortError') {
+          console.warn("Global audio play failed:", e);
+        }
       });
     } else if (audioRef.current && (!track || isLocal)) {
       audioRef.current.srcObject = null;
