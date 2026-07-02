@@ -576,6 +576,7 @@ export function initializeSignaling(server: Server) {
         broadcastToRoom(roomId, {
           type: 'user_joined',
           userId,
+          participantId,
           name: client.name,
           role: client.role,
           isMobile: client.isMobile
@@ -1468,6 +1469,7 @@ export function initializeSignaling(server: Server) {
                 broadcastToRoom(roomId, {
                   type: 'user_joined',
                   userId: c.userId,
+                  participantId: c.participantId,
                   name: c.name,
                   role: c.role,
                   isMobile: c.isMobile
