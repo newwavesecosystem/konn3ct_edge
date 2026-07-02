@@ -285,15 +285,18 @@ export default function JoinPage({
     }
   };
 
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || "Konn3ct";
+  const appInitial = appName.charAt(0).toUpperCase();
+
   return (
     <div className="min-h-screen bg-[#0d0d1a] flex flex-col">
       {/* Top bar */}
       <header className="shrink-0 flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/5">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-brand-green/20 flex items-center justify-center">
-            <span className="text-brand-green font-bold text-sm">K</span>
+            <span className="text-brand-green font-bold text-sm">{appInitial}</span>
           </div>
-          <span className="text-sm font-semibold text-white">konn3ct</span>
+          <span className="text-sm font-semibold text-white">{appName.toLowerCase()}</span>
         </div>
         <button
           onClick={() => router.push("/login")}
@@ -595,7 +598,7 @@ export default function JoinPage({
                 </button>
 
                 <p className="text-center text-[11px] text-white/20">
-                  By joining, you agree to konn3ct&apos;s{" "}
+                  By joining, you agree to {appName.toLowerCase()}&apos;s{" "}
                   <span className="text-white/40 hover:text-white/60 cursor-pointer">Terms of Service</span>
                 </p>
               </div>
