@@ -45,6 +45,7 @@ jobs:
           docker build \
             --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} \
             --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
+            --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -101,6 +102,7 @@ jobs:
             --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}" \
             --from-literal=NEXT_PUBLIC_FRONTEND_DOMAIN="${{ secrets.NEXT_PUBLIC_FRONTEND_DOMAIN }}" \
             --from-literal=NEXT_PUBLIC_FRONTEND_URL="${{ secrets.NEXT_PUBLIC_FRONTEND_URL }}" \
+            --from-literal=NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
             --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
             --from-literal=NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY="${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" \
             --from-literal=DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
