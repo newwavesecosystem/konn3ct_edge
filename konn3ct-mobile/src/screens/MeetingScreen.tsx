@@ -5,6 +5,7 @@ import { RootStackParamList } from '../../App';
 import { mediaDevices, RTCView, MediaStream } from 'react-native-webrtc';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService';
+import { consumeActiveMeetingService } from '../webrtc/activeMeetingService';
 import InCallManager from 'react-native-incall-manager';
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
@@ -28,15 +29,17 @@ import { CaptionsOverlay } from '../components/meeting/CaptionsOverlay';
 type Props = NativeStackScreenProps<RootStackParamList, 'Meeting'>;
 
 export default function MeetingScreen({ route, navigation }: Props) {
-  const { roomId, meetingToken } = route.params;
+  const { roomId, meetingToken, micOn, cameraOn } = route.params;
+  const initialMicOn = micOn ?? true;
+  const initialCameraOn = cameraOn ?? true;
+
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteParticipant[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [isMicMuted, setIsMicMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(!initialMicOn);
+  const [isCameraOff, setIsCameraOff] = useState(!initialCameraOn);
   const [cameraKey, setCameraKey] = useState(0); // bumped on every toggle to force RTCView remount
   const [isRecording, setIsRecording] = useState(false);
-  const [isWaiting, setIsWaiting] = useState(false);
   const [isPipMode, setIsPipMode] = useState(false);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   
@@ -79,9 +82,24 @@ export default function MeetingScreen({ route, navigation }: Props) {
           video: { width: 1280, height: 720, frameRate: 30, facingMode: 'user' }
         });
         
+        if (!initialMicOn) {
+          const audioTrack = stream.getAudioTracks()[0];
+          if (audioTrack) audioTrack.enabled = false;
+        }
+
+        if (!initialCameraOn) {
+          const videoTrack = stream.getVideoTracks()[0];
+          if (videoTrack) videoTrack.enabled = false;
+        }
+        
         if (isMounted) setLocalStream(stream);
 
-        const service = new MediasoupService(roomId);
+        // ── Reuse pre-connected service from LobbyScreen if available ────────
+        // When a user is admitted from the lobby, LobbyScreen stores the live
+        // service via setActiveMeetingService() before navigating here.
+        // Consuming it skips the WebSocket reconnect entirely.
+        const handedOffService = consumeActiveMeetingService();
+        const service = handedOffService ?? new MediasoupService(roomId);
         serviceRef.current = service;
         
         // Setup Media Callbacks
@@ -91,13 +109,27 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
         service.onSessionStatusChange = async (status) => {
           if (!isMounted) return;
-          if (status === 'waiting') {
-            setIsWaiting(true);
-            setIsConnected(false);
-          } else if (status === 'active') {
-            setIsWaiting(false);
+          if (status === 'active') {
             setIsConnected(true);
             if (stream) await service.broadcast(stream);
+          } else if (status === 'ended') {
+            Alert.alert(
+              'Meeting Ended',
+              'The host has ended this meeting for everyone.',
+              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+            );
+          } else if (status === 'kicked') {
+            Alert.alert(
+              'Removed from Meeting',
+              'You have been removed from the meeting by the host.',
+              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+            );
+          } else if (status === 'denied') {
+            Alert.alert(
+              'Entry Denied',
+              'Your request to join was denied by the host.',
+              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+            );
           }
         };
 
@@ -167,14 +199,24 @@ export default function MeetingScreen({ route, navigation }: Props) {
           Alert.alert("Recording Stopped", "Cloud recording has been stopped.");
         };
 
-        const initialStatus = await service.connect(meetingToken);
-        if (!isMounted) return;
-        
-        if (initialStatus === 'active') {
-          await service.broadcast(stream);
-          setIsConnected(true);
-        } else if (initialStatus === 'waiting') {
-          setIsWaiting(true);
+        if (handedOffService) {
+          // Already connected and admitted via LobbyScreen — start broadcasting immediately
+          // Replay events (participants_list, chat_history, etc.) that fired
+          // during the admit flow before these callbacks were registered.
+          service.replayCachedEvents();
+          if (isMounted) {
+            await service.broadcast(stream);
+            setIsConnected(true);
+          }
+        } else {
+          // Normal path: connect fresh (e.g. host starting a meeting directly)
+          const initialStatus = await service.connect(meetingToken);
+          if (!isMounted) return;
+          
+          if (initialStatus === 'active') {
+            await service.broadcast(stream);
+            setIsConnected(true);
+          }
         }
 
       } catch (err: any) {
@@ -193,6 +235,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
         }
       }
     }
+
 
     init();
 
@@ -302,23 +345,6 @@ export default function MeetingScreen({ route, navigation }: Props) {
     }
   };
 
-  if (isWaiting) {
-    return (
-      <SafeAreaView style={styles.waitingContainer}>
-        <View style={styles.waitingCard}>
-          <View style={styles.waitingIconWrapper}>
-            <Text style={styles.waitingIcon}>K</Text>
-          </View>
-          <Text style={styles.waitingTitle}>Waiting for Host</Text>
-          <Text style={styles.waitingSubtext}>You will join the meeting automatically once the host admits you.</Text>
-          <ActivityIndicator size="large" color="#10b981" style={{ marginVertical: 32 }} />
-          <TouchableOpacity style={styles.leaveWaitingBtn} onPress={handleLeave}>
-            <Text style={styles.leaveText}>Return to Dashboard</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   const totalItems = remoteStreams.length + (isPipMode ? 0 : 1);
   const isHorizontalLayout = !!activeScreenShare;
@@ -822,16 +848,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
 const getStyles = (t: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: t.bg },
   
-  // Waiting Room
-  waitingContainer: { flex: 1, backgroundColor: t.bg, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  waitingCard: { backgroundColor: t.bgElevated, padding: 36, borderRadius: 28, width: '100%', maxWidth: 360, alignItems: 'center', borderWidth: 1, borderColor: t.border, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: t.shadowOpacity, shadowRadius: 24, elevation: 6 },
-  waitingIconWrapper: { width: 72, height: 72, borderRadius: 36, backgroundColor: t.bgActiveBadge, justifyContent: 'center', alignItems: 'center', marginBottom: 28 },
-  waitingIcon: { color: t.primary, fontSize: 30, fontWeight: 'bold' },
-  waitingTitle: { color: t.textPrimary, fontSize: 22, fontWeight: '700', marginBottom: 10, letterSpacing: -0.3 },
-  waitingSubtext: { color: t.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 21 },
-  leaveWaitingBtn: { backgroundColor: t.primary, width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', shadowColor: t.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 5 },
-  leaveText: { color: t.textInverse, fontWeight: '700', fontSize: 15, letterSpacing: 0.2 },
   
+  // ── Meeting UI styles below ──────────────────────────────────────────────
   // Header Bar — Compact floating pill
   headerBar: {
     position: 'absolute',

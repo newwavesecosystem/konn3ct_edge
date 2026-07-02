@@ -26,6 +26,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import AuthStackNavigator from './src/navigation/AuthStackNavigator';
 import MeetingScreen from './src/screens/MeetingScreen';
+import LobbyScreen from './src/screens/LobbyScreen';
 import { MeetingSummaryScreen } from './src/screens/MeetingSummaryScreen';
 import StreamingScreen from './src/screens/StreamingScreen';
 import RecordingsScreen from './src/screens/RecordingsScreen';
@@ -50,7 +51,8 @@ Notifications.setNotificationHandler({
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  Meeting: { roomId: string; meetingToken?: string };
+  Lobby: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
+  Meeting: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
   MeetingSummary: { roomId: string };
   Streaming: undefined;
   Recordings: undefined;
@@ -107,6 +109,11 @@ export default function App() {
                 name="MainTabs" 
                 component={MainTabNavigator} 
                 options={{ headerShown: false }} 
+              />
+              <Stack.Screen
+                name="Lobby"
+                component={LobbyScreen}
+                options={{ headerShown: false }}
               />
               <Stack.Screen 
                 name="Meeting" 
