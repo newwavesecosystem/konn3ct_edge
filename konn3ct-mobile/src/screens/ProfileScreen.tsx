@@ -32,6 +32,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { fetchProfile, updateProfile, updatePassword, ProfileData } from '../api/profile';
 import { useAuthStore } from '../store/useAuthStore';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -161,16 +162,20 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.stickyHeaderRight}>
+          {APP_CONFIG.SHOW_HELP_ICON && (
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
             <Headset color={COLORS.textPrimary} size={24} />
           </TouchableOpacity>
+          )}
 
+          {APP_CONFIG.SHOW_NOTIFICATIONS && (
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
             <Bell color={COLORS.textPrimary} size={24} />
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>20</Text>
             </View>
           </TouchableOpacity>
+          )}
         </View>
       </View>
 

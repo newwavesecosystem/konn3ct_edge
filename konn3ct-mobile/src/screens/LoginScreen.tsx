@@ -24,6 +24,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Fingerprint, Eye, EyeOff, Mail, Lock, Square, CheckSquare } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
+import { APP_CONFIG, APP_LOGO } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -181,7 +182,7 @@ export default function LoginScreen() {
   const handleBiometricLogin = async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Login to Konn3ct',
+        promptMessage: `Login to ${APP_CONFIG.APP_NAME}`,
         fallbackLabel: 'Use Password',
       });
 
@@ -206,10 +207,10 @@ export default function LoginScreen() {
     <View style={styles.pageContainer}>
       {/* Top Wavy Header SVG */}
       <View style={styles.svgContainer}>
-        <Svg width={width} height={380} viewBox={`0 0 ${width} 380`}>
+        <Svg width={width} height={280} viewBox={`0 0 ${width} 280`}>
           <Path
             fill={COLORS.brandGreen}
-            d={`M0,0 L${width},0 L${width},250 C${width * 0.75},380 ${width * 0.25},160 0,300 Z`}
+            d={`M0,0 L${width},0 L${width},180 C${width * 0.75},280 ${width * 0.25},120 0,220 Z`}
           />
         </Svg>
       </View>
@@ -218,7 +219,7 @@ export default function LoginScreen() {
       <View style={styles.fixedHeader}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/konn3ct_logo.png')}
+            source={APP_LOGO}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -231,20 +232,18 @@ export default function LoginScreen() {
       </View>
 
       <KeyboardAwareScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom + 20, 40) }
-        ]}
+        style={[styles.scrollView, { marginBottom: insets.bottom }]}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="none"
         showsVerticalScrollIndicator={false}
         enableOnAndroid={true}
-        extraScrollHeight={Platform.OS === 'ios' ? 20 : 40}
+        scrollEnabled={true}
+        extraScrollHeight={Platform.OS === 'ios' ? 60 : 80}
       >
         <Animated.View
           style={[
-            styles.contentContainer,
+            styles.formCard,
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
@@ -399,36 +398,51 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     width: '100%',
-    height: 380,
+    height: 280,
+  },
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 120,
+    justifyContent: 'center',
+    paddingTop: 200,
     paddingBottom: 40,
+    paddingHorizontal: 20,
   },
   fixedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 30,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
     zIndex: 10,
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 10,
+    marginBottom: 12,
   },
   logo: {
-    height: 45,
+    height: 50,
     width: 180,
-    // Add white tint/glow if needed so it shows on dark blue
-    tintColor: COLORS.white, 
   },
-  contentContainer: {
-    paddingHorizontal: 30,
-    flexGrow: 1,
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
   },
   titleSection: {
-    marginBottom: 25,
-    alignItems: 'flex-start',
+    marginBottom: 16,
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,

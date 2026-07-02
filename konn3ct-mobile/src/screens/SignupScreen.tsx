@@ -19,6 +19,8 @@ import { Mail, Lock, User, Phone, CheckCircle, Eye, EyeOff } from 'lucide-react-
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { APP_LOGO } from '../config/appConfig';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -152,10 +154,10 @@ function RegisterStep({
   return (
     <View style={styles.pageContainer}>
       <View style={styles.svgContainer}>
-        <Svg width={width} height={340} viewBox={`0 0 ${width} 340`}>
+        <Svg width={width} height={280} viewBox={`0 0 ${width} 280`}>
           <Path
             fill={COLORS.brandGreen}
-            d={`M0,0 L${width},0 L${width},220 C${width * 0.75},340 ${width * 0.25},140 0,270 Z`}
+            d={`M0,0 L${width},0 L${width},180 C${width * 0.75},280 ${width * 0.25},120 0,220 Z`}
           />
         </Svg>
       </View>
@@ -164,7 +166,7 @@ function RegisterStep({
       <View style={styles.fixedHeader}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/konn3ct_logo.png')}
+            source={APP_LOGO}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -172,24 +174,21 @@ function RegisterStep({
         <Animated.View style={[styles.titleSection, { opacity: fadeAnim }]}>
           <Text style={[styles.title, { color: COLORS.white }]}>Sign up</Text>
           <View style={[styles.titleUnderline, { backgroundColor: COLORS.white }]} />
-          <Text style={[styles.subtitle, { color: COLORS.white }]}>Fill in the details below to get started</Text>
         </Animated.View>
       </View>
 
       <KeyboardAwareScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom + 20, 40) },
-        ]}
+        style={[styles.scrollView, { marginBottom: insets.bottom }]}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         enableOnAndroid={true}
-        extraScrollHeight={Platform.OS === 'ios' ? 20 : 40}
+        scrollEnabled={true}
+        extraScrollHeight={Platform.OS === 'ios' ? 60 : 80}
       >
           <Animated.View
             style={[
-              styles.contentContainer,
+              styles.formCard,
               { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
             ]}
           >
@@ -406,32 +405,35 @@ function VerifyStep({
   return (
     <View style={styles.pageContainer}>
       <View style={styles.svgContainer}>
-        <Svg width={width} height={340} viewBox={`0 0 ${width} 340`}>
+        <Svg width={width} height={280} viewBox={`0 0 ${width} 280`}>
           <Path
             fill={COLORS.brandGreen}
-            d={`M0,0 L${width},0 L${width},220 C${width * 0.75},340 ${width * 0.25},140 0,270 Z`}
+            d={`M0,0 L${width},0 L${width},180 C${width * 0.75},280 ${width * 0.25},120 0,220 Z`}
           />
         </Svg>
       </View>
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          styles.verifyScrollContent,
-          { paddingBottom: Math.max(insets.bottom + 20, 40) },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.fixedHeader}>
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/konn3ct_logo.png')}
+            source={APP_LOGO}
             style={styles.logo}
             resizeMode="contain"
           />
         </View>
+        <Animated.View style={[styles.titleSection, { opacity: fadeAnim }]}>
+          <Text style={[styles.title, { color: COLORS.white }]}>Verify Email</Text>
+          <View style={[styles.titleUnderline, { backgroundColor: COLORS.white }]} />
+        </Animated.View>
+      </View>
 
-        <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
+      <ScrollView
+        style={[styles.scrollView, { marginBottom: insets.bottom }]}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={[styles.formCard, { opacity: fadeAnim }]}>
           {/* Icon */}
           <View style={styles.verifyIconWrapper}>
             <CheckCircle color={COLORS.brandGreen} size={64} strokeWidth={1.5} />
@@ -503,6 +505,11 @@ export default function SignupScreen() {
       navigation.navigate('Login', { successMessage: 'Registration successful! (Email verification skipped for dev)' });
       return;
     }
+    if (APP_CONFIG.SKIP_EMAIL_VERIFY) {
+      // Skip verification and go straight to login
+      navigation.navigate('Login', { successMessage: 'Registration successful! Please log in.' });
+      return;
+    }
     setRegisteredEmail(email);
     setStep('verify');
   };
@@ -528,36 +535,51 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     width: '100%',
-    height: 340,
+    height: 280,
   },
   fixedHeader: {
-    paddingHorizontal: 28,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 30,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
     zIndex: 10,
+  },
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 120, // Pushed down so the form sits on the white background
-  },
-  verifyScrollContent: {
     justifyContent: 'center',
+    paddingTop: 200,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 10,
+    marginBottom: 12,
   },
   logo: {
-    height: 45,
+    height: 50,
     width: 180,
-    tintColor: COLORS.white,
   },
-  contentContainer: {
-    paddingHorizontal: 28,
-    flexGrow: 1,
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
   },
   titleSection: {
-    marginBottom: 28,
-    alignItems: 'flex-start',
+    marginBottom: 16,
+    alignItems: 'center',
   },
   title: {
     fontSize: 26,

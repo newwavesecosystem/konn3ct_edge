@@ -17,6 +17,7 @@ import {
   Clock,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { APP_CONFIG } from '../config/appConfig';
 
 const COLORS = {
   pageBg: '#f4f6f9',
@@ -43,7 +44,7 @@ const INITIAL_MOCK_NOTIFICATIONS = [
   {
     id: 2,
     title: 'System Update Complete',
-    description: 'Konn3ct dashboard has been updated to version 2.4.0 successfully.',
+    description: `${APP_CONFIG.APP_NAME} dashboard has been updated to version 2.4.0 successfully.`,
     time: '2 hours ago',
     type: 'success',
     isUnread: true,
