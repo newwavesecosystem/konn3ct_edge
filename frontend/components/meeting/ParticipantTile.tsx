@@ -207,7 +207,11 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const effectiveVideoState = getEffectiveVideoState(participant);
+  const effectiveVideoState = 
+    (currentUser.audioOnlyMode && !isSelf) 
+      ? 'audio-only' 
+      : getEffectiveVideoState(participant);
+
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 
   // Determine diagnosis hint
@@ -267,12 +271,12 @@ export function ParticipantTile({
   const expectsMedia = isSelf || participant.isCameraOn || !participant.isMuted;
   let mediaConnectionState: string | null = null;
   
-  if (expectsMedia) {
+  if (expectsMedia && !currentUser.audioOnlyMode) {
     if (health === 'black') {
       mediaConnectionState = isSelf 
         ? "Your camera hardware failed. Please toggle your video off and on." 
         : "Participant's camera feed failed.";
-    } else if (health === 'stalled') {
+    } else if (health === 'stalled' || effectiveVideoState === 'stalled') {
       mediaConnectionState = "Media connection failed. Retrying...";
     } else if (health === 'recovering') {
       mediaConnectionState = "Reconnecting to Media Server";
