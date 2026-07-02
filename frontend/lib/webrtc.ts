@@ -64,7 +64,7 @@ export class WebRTCClient {
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
-  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
+  public onUserJoined?: (user: { userId: string, participantId?: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
   public onUserLeft?: (userId: string) => void;
   public onParticipantsList?: (participants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }>) => void;
   public onRoleChanged?: (userId: string, role: string, participantId?: string) => void;

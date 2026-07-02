@@ -888,6 +888,9 @@ export function MeetingProvider({
         };
 
         client.onPollVote = (msg) => {
+          // Ignore our own vote broadcast since we already updated it optimistically
+          if (msg.userId === webrtcClient.current?.userId) return;
+
           setPolls((prev) =>
             prev.map((p) => {
               if (p.id !== msg.pollId) return p;
@@ -1199,13 +1202,14 @@ export function MeetingProvider({
           if (hasLeftMeetingRef.current) return;
           if (user.userId === webrtcClient.current?.userId) return;
           const targetId = resolveUserId(user.userId);
+          const uniqueId = user.participantId || user.userId;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
-            if (prev.some(p => p.id === user.userId)) {
-              return prev.map(p => p.id === user.userId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
+            if (prev.some(p => p.id === uniqueId)) {
+              return prev.map(p => p.id === uniqueId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
             }
             return [...prev, {
-              id: user.userId,
+              id: uniqueId,
               userId: user.userId,
               name: user.name,
               role: user.role as any,
