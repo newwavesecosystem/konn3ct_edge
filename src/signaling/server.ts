@@ -1002,7 +1002,7 @@ export function initializeSignaling(server: Server) {
           } else {
             const producers = roomProducers.get(roomId) || [];
             roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
-            broadcastToRoom(roomId, { type: 'user_left', userId });
+            broadcastToRoom(roomId, { type: 'user_left', userId, participantId: client.participantId });
             syncRoomStateToRedis(roomId, client.roomSlug);
           }
         }

@@ -360,7 +360,7 @@ export class WebRTCClient {
           this.onParticipantsList?.(msg.participants);
           break;
         case 'user_left':
-          this.onUserLeft?.(msg.userId);
+          this.onUserLeft?.(msg.participantId || msg.userId);
           // Cleanup consumers for this user
           break;
         case 'role_changed':
