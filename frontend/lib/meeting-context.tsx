@@ -58,6 +58,12 @@ interface MeetingContextValue {
   isCaptionsEnabled: boolean;
   captions: CaptionMessage[];
   captionLanguage: string;
+  roomFeatureFlags: {
+    aiFeaturesEnabled: boolean;
+    captionsEnabled: boolean;
+    donationsEnabled: boolean;
+    virtualBackgroundEnabled: boolean;
+  };
   translationLanguage: string;
   isDonationActive: boolean;
   totalDonations: number;
@@ -216,8 +222,37 @@ export function MeetingProvider({
   const isMobileClient = typeof navigator !== 'undefined' ? 
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
-  const [initialCurrentUser] = useState<Participant>({
-    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `session-${Math.random().toString(36).substring(2, 9)}`,
+  const [clientParticipantId, setClientParticipantId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `konn3ct:participant:${roomSlug}`;
+    const existing = sessionStorage.getItem(key);
+
+    if (
+      existing === "pending" || 
+      existing === "ssr-placeholder" || 
+      existing === "null" || 
+      existing === "undefined" ||
+      !existing
+    ) {
+      sessionStorage.removeItem(key);
+    } else if (existing) {
+      setClientParticipantId(existing);
+      return;
+    }
+
+    const generated =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    sessionStorage.setItem(key, generated);
+    setClientParticipantId(generated);
+  }, [roomSlug]);
+
+  const [initialCurrentUser, setInitialCurrentUser] = useState<Participant>({
+    id: clientParticipantId || 'pending',
     userId: storedJoinInfo?.userId || `u-${Math.random().toString(36).substring(2, 9)}`,
     name: queryName,
     role: queryRole,
@@ -230,9 +265,22 @@ export function MeetingProvider({
     isMobile: isMobileClient,
   });
 
+  useEffect(() => {
+    if (clientParticipantId) {
+      setInitialCurrentUser(prev => ({ ...prev, id: clientParticipantId }));
+    }
+  }, [clientParticipantId]);
+
   // Start with only the current user, so real users are dynamically added
   const [participants, setParticipants] = useState<Participant[]>([initialCurrentUser]);
-  const currentUser = useMemo(() => participants.find(p => p.id === initialCurrentUser.id) || initialCurrentUser, [participants, initialCurrentUser]);
+
+  useEffect(() => {
+    if (clientParticipantId) {
+      setParticipants(prev => prev.map(p => p.id === 'pending' || p.id === 'ssr-placeholder' ? { ...p, id: clientParticipantId } : p));
+    }
+  }, [clientParticipantId]);
+
+  const currentUser = useMemo(() => participants.find(p => p.id === clientParticipantId) || initialCurrentUser, [participants, clientParticipantId, initialCurrentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
@@ -298,6 +346,13 @@ export function MeetingProvider({
   const [captionSize, setCaptionSize] = useState(1.0);
   const translationLanguageRef = useRef("original");
   const [isAINoiseSuppressionEnabled, setIsAINoiseSuppressionEnabled] = useState(false);
+  
+  const [roomFeatureFlags, setRoomFeatureFlags] = useState({
+    aiFeaturesEnabled: storedJoinInfo?.aiFeaturesEnabled ?? true,
+    captionsEnabled: storedJoinInfo?.captionsEnabled ?? true,
+    donationsEnabled: storedJoinInfo?.donationsEnabled ?? true,
+    virtualBackgroundEnabled: storedJoinInfo?.virtualBackgroundEnabled ?? true,
+  });
   
   useEffect(() => {
     translationLanguageRef.current = translationLanguage;
@@ -412,6 +467,17 @@ export function MeetingProvider({
   const hasLeftMeetingRef = useRef<boolean>(false);
 
   useEffect(() => {
+    if (
+      !clientParticipantId || 
+      clientParticipantId === 'ssr-placeholder' || 
+      clientParticipantId === 'pending' || 
+      clientParticipantId === 'null' || 
+      clientParticipantId === 'undefined'
+    ) {
+      console.warn("Blocked meeting connection: invalid participantId", clientParticipantId);
+      return;
+    }
+
     let client: WebRTCClient | null = null;
 
     const connectToMeeting = async () => {
@@ -458,9 +524,27 @@ export function MeetingProvider({
           return;
         }
 
-        client = new WebRTCClient(roomSlug, data.token, initialCurrentUser.id);
+        client = new WebRTCClient(roomSlug, data.token, clientParticipantId);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
+        
+        // Extract room limits from the JWT token and initialize flags
+        if (data.token) {
+          try {
+            const decoded = JSON.parse(atob(data.token.split('.')[1]));
+            if (decoded) {
+              setRoomFeatureFlags({
+                aiFeaturesEnabled: decoded.aiFeaturesEnabled ?? true,
+                captionsEnabled: decoded.captionsEnabled ?? true,
+                donationsEnabled: decoded.donationsEnabled ?? true,
+                virtualBackgroundEnabled: decoded.virtualBackgroundEnabled ?? true,
+              });
+              client.isVirtualBackgroundEnabled = decoded.virtualBackgroundEnabled ?? true;
+            }
+          } catch (e) {
+            console.error("Failed to decode token for feature flags", e);
+          }
+        }
 
         // --- Collaboration Event Listeners ---
         client.onMicError = (error: Error) => {
@@ -705,6 +789,10 @@ export function MeetingProvider({
             setParticipants((currentParticipants) => {
               if (msg.userId && !currentParticipants.some(p => p.id === msg.userId)) {
                 client?.emitTelemetry('chat_alive_media_dead');
+                setTimeout(() => {
+                  if (hasLeftMeetingRef.current) return;
+                  setParticipants(curr => curr.map(p => p.id === msg.userId ? { ...p, isConnecting: false } : p));
+                }, 4000);
                 return [
                   ...currentParticipants,
                   {
@@ -800,6 +888,9 @@ export function MeetingProvider({
         };
 
         client.onPollVote = (msg) => {
+          // Ignore our own vote broadcast since we already updated it optimistically
+          if (msg.userId === webrtcClient.current?.userId) return;
+
           setPolls((prev) =>
             prev.map((p) => {
               if (p.id !== msg.pollId) return p;
@@ -1111,13 +1202,14 @@ export function MeetingProvider({
           if (hasLeftMeetingRef.current) return;
           if (user.userId === webrtcClient.current?.userId) return;
           const targetId = resolveUserId(user.userId);
+          const uniqueId = user.participantId || user.userId;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
-            if (prev.some(p => p.id === user.userId)) {
-              return prev.map(p => p.id === user.userId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
+            if (prev.some(p => p.id === uniqueId)) {
+              return prev.map(p => p.id === uniqueId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
             }
             return [...prev, {
-              id: user.userId,
+              id: uniqueId,
               userId: user.userId,
               name: user.name,
               role: user.role as any,
@@ -1276,7 +1368,7 @@ export function MeetingProvider({
     return () => {
       client?.disconnect();
     };
-  }, [roomSlug, initialCurrentUser.name, initialCurrentUser.id]);
+  }, [roomSlug, initialCurrentUser.name, clientParticipantId]);
 
   // ── Initialize Local Media upon WebRTC connect ────────
   useEffect(() => {
@@ -1940,6 +2032,8 @@ export function MeetingProvider({
         isAlwaysMuteOnJoin,
         setIsAlwaysMuteOnJoin: updateAlwaysMute,
         
+        roomFeatureFlags,
+
         vbMode,
         vbImageUrl,
         handleVbSelect: async function handleVbSelectFn(mode: 'none' | 'blur' | 'image', imageUrl?: string) {

@@ -82,6 +82,11 @@ paymentsRouter.post('/donate/verify', async (req: Request, res: Response) => {
 
     const room = await db.room.findUnique({ where: { slug: roomId } });
 
+    if (room && room.donationsEnabled === false) {
+      logger.info(`donations_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: "Donations are disabled for this room." });
+    }
+
     if (room) {
       const userId = room.ownerId; 
       await db.paymentTransaction.create({
@@ -291,6 +296,18 @@ async function handleSuccessfulPayment(reference: string, verifiedAmountKobo: nu
       data: { status: 'failed', metadata: { error: 'Webhook amount mismatch' } }
     });
     return;
+  }
+
+  if (tx.kind === 'donation' && tx.roomId) {
+    const room = await db.room.findUnique({ where: { id: tx.roomId } });
+    if (room && room.donationsEnabled === false) {
+      logger.info(`donation_rejected_feature_disabled: room ${tx.roomId}`);
+      await db.paymentTransaction.update({
+        where: { reference },
+        data: { status: 'failed', metadata: { error: 'donation_rejected_feature_disabled' } }
+      });
+      return;
+    }
   }
 
   // Mark tx as success

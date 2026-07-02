@@ -83,6 +83,10 @@ model Room {
   maxParticipants  Int     @default(100)
   maxWebinarAudience Int   @default(1000)
   maxActiveCameras Int     @default(15)
+  aiFeaturesEnabled Boolean @default(true)
+  captionsEnabled Boolean @default(true)
+  donationsEnabled Boolean @default(true)
+  virtualBackgroundEnabled Boolean @default(true)
   createdAt DateTime @default(now())
 
   owner User @relation("RoomOwner", fields: [ownerId], references: [id])

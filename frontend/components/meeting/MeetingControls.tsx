@@ -81,6 +81,7 @@ export function MeetingControls() {
     eCinemaLink,
     hasUnreadChat,
     roomSettings,
+    roomFeatureFlags,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -153,14 +154,16 @@ export function MeetingControls() {
             {meetingInfo.roomName}
           </span>
 
-          <ControlBtn
-            icon={<Subtitles className="w-5 h-5" />}
-            active={isCaptionsEnabled}
-            onClick={toggleCaptions}
-            tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-          />
+          {roomFeatureFlags.captionsEnabled && (
+            <ControlBtn
+              icon={<Subtitles className="w-5 h-5" />}
+              active={isCaptionsEnabled}
+              onClick={toggleCaptions}
+              tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+            />
+          )}
 
-          {isDonationActive && (
+          {roomFeatureFlags.donationsEnabled && isDonationActive && (
             <ControlBtn
               icon={<Gift className="w-5 h-5" />}
               highlight
@@ -276,19 +279,21 @@ export function MeetingControls() {
                     label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
                     onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
                   />
-                  <MoreMenuItem
-                    icon={<Subtitles className="w-4 h-4" />}
-                    label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-                    onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
-                  />
-                  {isHost && (
+                  {roomFeatureFlags.captionsEnabled && (
+                    <MoreMenuItem
+                      icon={<Subtitles className="w-4 h-4" />}
+                      label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+                      onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  {roomFeatureFlags.donationsEnabled && isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
                       label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
                   )}
-                  {isDonationActive && (
+                  {roomFeatureFlags.donationsEnabled && isDonationActive && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
                       label="Donate"
@@ -341,12 +346,14 @@ export function MeetingControls() {
                 )}
                 {/* Desktop-only: captions & donation already shown above on mobile */}
                 <div className="hidden sm:block">
-                  <MoreMenuItem
-                    icon={<Subtitles className="w-4 h-4" />}
-                    label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-                    onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
-                  />
-                  {isHost && (
+                  {roomFeatureFlags.captionsEnabled && (
+                    <MoreMenuItem
+                      icon={<Subtitles className="w-4 h-4" />}
+                      label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+                      onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  {roomFeatureFlags.donationsEnabled && isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
                       label={isDonationActive ? "Stop Donation" : "Start Donation"}
@@ -408,12 +415,14 @@ export function MeetingControls() {
           </div>
 
           {/* Konn3ct AI panel toggle */}
-          <PanelBtn
-            icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
-            active={activePanel === "ai"}
-            onClick={() => setActivePanel("ai")}
-            tooltip="Konn3ct AI"
-          />
+          {roomFeatureFlags.aiFeaturesEnabled && (
+            <PanelBtn
+              icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
+              active={activePanel === "ai"}
+              onClick={() => setActivePanel("ai")}
+              tooltip="Konn3ct AI"
+            />
+          )}
           <PanelBtn
             icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}

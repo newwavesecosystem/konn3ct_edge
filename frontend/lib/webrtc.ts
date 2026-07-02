@@ -22,6 +22,7 @@ export class WebRTCClient {
   public rawAudioTrack: MediaStreamTrack | null = null;
   private rawCameraStream: MediaStream | null = null;
   private videoProcessor: VideoProcessor | null = null;
+  public isVirtualBackgroundEnabled: boolean = true;
   private purifyInstance: any = null;
   public isAINoiseSuppressionEnabled = false;
   private messageIdCounter = 0;
@@ -63,7 +64,7 @@ export class WebRTCClient {
   public onConnectionStateChange?: (state: string) => void;
   
   // Participant Management Callbacks
-  public onUserJoined?: (user: { userId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
+  public onUserJoined?: (user: { userId: string, participantId?: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
   public onUserLeft?: (userId: string) => void;
   public onParticipantsList?: (participants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }>) => void;
   public onRoleChanged?: (userId: string, role: string, participantId?: string) => void;
@@ -204,8 +205,18 @@ export class WebRTCClient {
   public lastCameraStateBroadcast?: string;
   public lastCameraStateReceived?: string;
 
-  constructor(private roomId: string, private token: string, participantId?: string) {
-    if (participantId) {
+  constructor(private roomId: string, private token: string, participantId?: string | null) {
+    if (participantId !== undefined) {
+      if (
+        !participantId || 
+        participantId === "pending" || 
+        participantId === "ssr-placeholder" || 
+        participantId === "null" || 
+        participantId === "undefined"
+      ) {
+        console.error(`Invalid participantId provided to WebRTCClient: ${participantId}`);
+        throw new Error(`Invalid participantId: ${participantId}`);
+      }
       this.participantId = participantId;
     }
   }
@@ -1163,26 +1174,34 @@ export class WebRTCClient {
 
     // Initialize VideoProcessor if not exists
     let activeMode: VirtualBackgroundMode = 'none';
-    if (!this.videoProcessor) {
-      this.videoProcessor = new VideoProcessor();
-      const saved = sessionStorage.getItem("mtg_vb");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          activeMode = parsed.mode;
-          this.videoProcessor.setMode(parsed.mode, parsed.image);
-        } catch (e) {}
+    if (this.isVirtualBackgroundEnabled) {
+      if (!this.videoProcessor) {
+        this.videoProcessor = new VideoProcessor();
+        const saved = sessionStorage.getItem("mtg_vb");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            activeMode = parsed.mode;
+            this.videoProcessor.setMode(parsed.mode, parsed.image);
+          } catch (e) {}
+        }
+      } else {
+        activeMode = this.videoProcessor.getMode();
       }
     } else {
-      activeMode = this.videoProcessor.getMode();
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
     }
 
     // Pass the stream through the VideoProcessor to apply Virtual Background only if needed
-    if (activeMode !== 'none') {
-      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+    if (this.isVirtualBackgroundEnabled && activeMode !== 'none') {
+      const processedStream = this.videoProcessor!.startProcessing(this.rawCameraStream);
       videoTrack = processedStream.getVideoTracks()[0];
     } else {
-      this.videoProcessor.stopProcessing();
+      if (this.videoProcessor) {
+        this.videoProcessor.stopProcessing();
+      }
       videoTrack = this.rawCameraStream.getVideoTracks()[0];
     }
     
@@ -1239,7 +1258,11 @@ export class WebRTCClient {
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
-    if (mode === 'none') {
+    if (mode === 'none' || !this.isVirtualBackgroundEnabled) {
+      if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
+        console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
+        console.warn("[webrtc] virtual_background_model_load_skipped");
+      }
       if (this.videoProcessor) {
         this.videoProcessor.stopProcessing();
       }

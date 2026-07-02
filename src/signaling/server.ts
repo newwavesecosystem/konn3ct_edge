@@ -440,6 +440,23 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
+      // Guardrails: Validate participantId
+      if (!participantIdParam || participantIdParam === 'ssr-placeholder' || participantIdParam === 'pending' || participantIdParam.trim() === '') {
+        logger.warn(`Rejecting connection due to invalid participantId: ${participantIdParam}`);
+        socket.write('HTTP/1.1 400 Bad Request\r\nX-Conn3ct-Error: Invalid participantId\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      // Guardrails: Check for duplicate active connections using the same participantId (not a reconnect)
+      const existingClient = rooms.get(room.id)?.get(participantIdParam);
+      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN && !disconnectTimeouts.has(`${participantIdParam}:${room.id}`)) {
+        logger.warn(`Rejecting connection due to duplicate active participantId: ${participantIdParam}`);
+        socket.write('HTTP/1.1 409 Conflict\r\nX-Conn3ct-Error: Duplicate session\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request, {
           userId: decoded.userId,
@@ -449,7 +466,7 @@ export function initializeSignaling(server: Server) {
           roomName: room.name,
           roomSlug,
           role,
-          participantId: participantIdParam || crypto.randomUUID(),
+          participantId: participantIdParam,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
           maxActiveCameras: room.maxActiveCameras ?? 15,
@@ -559,6 +576,7 @@ export function initializeSignaling(server: Server) {
         broadcastToRoom(roomId, {
           type: 'user_joined',
           userId,
+          participantId,
           name: client.name,
           role: client.role,
           isMobile: client.isMobile
@@ -1451,6 +1469,7 @@ export function initializeSignaling(server: Server) {
                 broadcastToRoom(roomId, {
                   type: 'user_joined',
                   userId: c.userId,
+                  participantId: c.participantId,
                   name: c.name,
                   role: c.role,
                   isMobile: c.isMobile
