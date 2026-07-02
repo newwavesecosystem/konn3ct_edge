@@ -1298,14 +1298,14 @@ export function MeetingProvider({
           });
         };
 
-        client.onNewConsumer = (consumer, userId, userName) => {
+        client.onNewConsumer = (consumer, participantId, userName) => {
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
           setParticipants((prev) => {
-            const exists = prev.find((p) => p.id === userId || p.userId === userId);
+            const exists = prev.find((p) => p.id === participantId);
             if (exists) {
               return prev.map((p) => {
-                if (p.id === userId || p.userId === userId) {
+                if (p.id === participantId) {
                   if (consumer.kind === 'audio') {
                     return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
                   }
@@ -1353,9 +1353,9 @@ export function MeetingProvider({
             } else {
               client?.emitTelemetry('participant_missing_but_media_active');
               const newParticipant: Participant = {
-                id: userId,
-                userId: userId,
-                name: userName || `Participant ${userId.substring(5, 9)}`,
+                id: participantId,
+                userId: participantId, // Fallback, though ideally we'd have the real userId
+                name: userName || `Participant ${participantId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
