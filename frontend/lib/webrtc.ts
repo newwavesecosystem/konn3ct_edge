@@ -275,6 +275,22 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'consume_failed':
+          // If we receive consume_failed, we need to reject the pending 'consumed' request for this producer
+          if (this.pendingRequests.has('consumed')) {
+            const queue = this.pendingRequests.get('consumed')!;
+            // Find the pending request for this producerId. 
+            // We unfortunately don't have producerId in the queue item, so we just reject the first one
+            // because they are queued in order, or we can just reject all of them if it's a fatal error.
+            if (queue.length > 0) {
+              const resolver = queue.shift()!;
+              resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
+              if (queue.length === 0) {
+                this.pendingRequests.delete('consumed');
+              }
+            }
+          }
+          break;
         case 'action:ack':
           this.onActionAck?.(msg);
           break;
@@ -842,6 +858,8 @@ export class WebRTCClient {
   private startNetworkMonitor() {
     if (this.networkInterval) clearInterval(this.networkInterval);
     
+    let consecutiveBadChecks = 0;
+
     this.networkInterval = setInterval(async () => {
       if (!this.sendTransport) return;
       try {
@@ -862,18 +880,30 @@ export class WebRTCClient {
           }
         });
 
-        let quality: 'good' | 'poor' | 'bad' = 'good';
+        let currentQuality: 'good' | 'poor' | 'bad' = 'good';
         // Zoom and modern platforms are highly tolerant due to FEC.
         // We relax the thresholds so users don't get unnecessary warnings.
         if (maxRtt > 1500 || maxPacketLoss > 25) {
-          quality = 'bad';
+          currentQuality = 'bad';
         } else if (maxRtt > 800 || maxPacketLoss > 15) {
-          quality = 'poor';
+          currentQuality = 'poor';
         }
 
-        this.onNetworkQualityChange?.(quality);
+        let emittedQuality = currentQuality;
+
+        // Require 3 consecutive bad checks (15 seconds) before confirming 'bad'
+        if (currentQuality === 'bad') {
+          consecutiveBadChecks++;
+          if (consecutiveBadChecks < 3) {
+            emittedQuality = 'poor'; // Emit 'poor' while we wait for confirmation
+          }
+        } else {
+          consecutiveBadChecks = 0;
+        }
+
+        this.onNetworkQualityChange?.(emittedQuality);
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'network_quality', quality }));
+          this.ws.send(JSON.stringify({ type: 'network_quality', quality: emittedQuality }));
         }
       } catch (e) {
         // Ignore stats errors
