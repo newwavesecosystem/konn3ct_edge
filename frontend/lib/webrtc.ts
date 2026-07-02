@@ -75,13 +75,14 @@ export class WebRTCClient {
   public onActionAck?: (ack: any) => void;
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
-  public onPollVote?: (vote: any) => void;
+  public onPollVote?: (msg: any) => void;
+  public onPollEnded?: (msg: any) => void;
+  public onPollHistory?: (polls: any[]) => void;
   public onMuteState?: (msg: any) => void;
   public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
-  public onPollHistory?: (polls: any[]) => void;
   public onNoteHistory?: (content: string) => void;
   public onMicError?: (error: Error) => void;
   public onNoteUpdate?: (msg: any) => void;
@@ -378,6 +379,12 @@ export class WebRTCClient {
         case 'poll_vote':
           this.onPollVote?.(msg);
           break;
+        case 'poll_ended':
+          this.onPollEnded?.(msg);
+          break;
+        case 'poll_history':
+          this.onPollHistory?.(msg.polls);
+          break;
         case 'mute_state':
           this.onMuteState?.(msg);
           break;
@@ -657,6 +664,12 @@ export class WebRTCClient {
   public votePoll(pollId: string, optionId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
+  }
+
+  public endPoll(pollId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'end_poll', pollId }));
     }
   }
 

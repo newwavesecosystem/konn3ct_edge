@@ -1276,6 +1276,22 @@ export function initializeSignaling(server: Server) {
           }
         }
         break;
+      case 'end_poll':
+        try {
+          if (client.role === 'host' || client.role === 'co-host') {
+            await db.meetingPoll.update({
+              where: { id: data.pollId },
+              data: { isActive: false }
+            });
+            broadcastToRoom(roomId, {
+              type: 'poll_ended',
+              pollId: data.pollId
+            });
+          }
+        } catch (e) {
+          logger.error("Failed to end poll", e);
+        }
+        break;
 
       case 'poll_vote':
         try {

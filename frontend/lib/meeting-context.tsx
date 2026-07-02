@@ -88,6 +88,7 @@ interface MeetingContextValue {
   sendMessage: (content: string, targetUserId?: string, fileUrl?: string) => void;
   sendReaction: (emoji: string) => void;
   votePoll: (pollId: string, optionId: string) => void;
+  endPoll: (pollId: string) => void;
   createPoll: (question: string, options: string[]) => void;
   updateSharedNote: (content: string) => void;
   setShowLeaveDialog: (show: boolean) => void;
@@ -723,7 +724,24 @@ export function MeetingProvider({
         };
 
         client.onPollHistory = (historyPolls) => {
-          setPolls(historyPolls);
+          const pollsWithDetails = historyPolls.map((poll: any) => {
+            let totalVotes = 0;
+            let myVote = undefined;
+            if (Array.isArray(poll.options)) {
+              for (const opt of poll.options) {
+                totalVotes += opt.votes || 0;
+                if (Array.isArray(opt.votedBy) && opt.votedBy.includes(webrtcClient.current?.userId)) {
+                  myVote = opt.id;
+                }
+              }
+            }
+            return {
+              ...poll,
+              totalVotes,
+              myVote
+            };
+          });
+          setPolls(pollsWithDetails);
         };
 
         client.onNoteHistory = (content) => {
@@ -902,6 +920,12 @@ export function MeetingProvider({
                 ),
               };
             })
+          );
+        };
+
+        client.onPollEnded = (msg) => {
+          setPolls((prev) =>
+            prev.map((p) => (p.id === msg.pollId ? { ...p, isActive: false } : p))
           );
         };
 
@@ -1804,6 +1828,13 @@ export function MeetingProvider({
     );
   }, []);
 
+  const endPoll = useCallback((pollId: string) => {
+    webrtcClient.current?.endPoll(pollId);
+    setPolls((prev) =>
+      prev.map((p) => (p.id === pollId ? { ...p, isActive: false } : p))
+    );
+  }, []);
+
   const createPoll = useCallback((question: string, optionsText: string[]) => {
     const pollId = `p-${Date.now()}`;
     const options = optionsText.map((t, i) => ({ id: `o${i + 1}`, text: t, votes: 0 }));
@@ -1965,6 +1996,7 @@ export function MeetingProvider({
         sendMessage,
         sendReaction,
         votePoll,
+        endPoll,
         createPoll,
         updateSharedNote,
         setShowLeaveDialog,
