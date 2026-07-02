@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { CheckCircle2, BarChart3 } from "lucide-react";
 
 export function PollsPanel() {
-  const { polls, votePoll, createPoll, participants, currentUser } = useMeeting();
+  const { polls, votePoll, createPoll, endPoll, participants, currentUser } = useMeeting();
   const [isCreating, setIsCreating] = React.useState(false);
   const [question, setQuestion] = React.useState("");
   const [options, setOptions] = React.useState(["", ""]);
@@ -198,10 +198,21 @@ export function PollsPanel() {
                 })}
               </div>
 
-              <p className="text-[10px] mt-2" style={{ color: "var(--mt-text-ghost)" }}>
-                {poll.totalVotes} vote{poll.totalVotes !== 1 && "s"} · by{" "}
-                {participants.find(p => p.id === poll.createdBy)?.name || "Host"}
-              </p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[10px]" style={{ color: "var(--mt-text-ghost)" }}>
+                  {poll.totalVotes} vote{poll.totalVotes !== 1 && "s"} · by{" "}
+                  {participants.find(p => p.id === poll.createdBy)?.name || "Host"}
+                </p>
+                {poll.isActive && (currentUser.role === 'host' || currentUser.role === 'co-host') && (
+                  <button 
+                    onClick={() => endPoll(poll.id)}
+                    className="text-[10px] font-medium text-red-500 hover:text-red-400 transition-colors px-2 py-1 rounded"
+                    style={{ backgroundColor: "var(--mt-bg-active)" }}
+                  >
+                    End Poll
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}
