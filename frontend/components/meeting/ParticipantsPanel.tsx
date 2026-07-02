@@ -311,7 +311,7 @@ function ParticipantRow({
             {!participant.isMuted && (
               <button 
                 onClick={() => forceMuteUser(participant.userId)}
-                title="Mute for everyone"
+                title="Mute User"
                 className="p-1 rounded-lg hover:bg-white/10"
                 style={{ color: "var(--mt-text-faint)" }}
               >
