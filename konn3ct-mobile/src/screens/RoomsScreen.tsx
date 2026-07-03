@@ -46,6 +46,7 @@ import {
   type CreateRoomPayload,
 } from '../api/rooms';
 import { APP_CONFIG } from '../config/appConfig';
+import { getMeetingToken } from '../api/edgeApi';
 
 const { width } = Dimensions.get('window');
 
@@ -265,13 +266,15 @@ export default function RoomsScreen() {
   const handleStartRoom = async (room: Room) => {
     try {
       setStartingRoomId(room.id);
-      const res = await startRoom(room.id);
+      // Step 1: Start the room on the backend
+      await startRoom(room.id);
 
-      // Use room.url (slug) as roomId — same pattern as DashboardScreen.
-      // Extract meetingToken from sessionToken first, then from the ?t= param in the URL.
+      // Step 2: Get a proper WebSocket JWT from the edge frontend.
+      // The signal server requires a JWT signed with JWT_SECRET — not the
+      // Sanctum token that startRoom() returns.  The signal server will
+      // automatically upgrade the user to "host" if they own the room.
       const roomId: string = room.url || String(room.id);
-      const meetingToken: string | undefined =
-        res?.sessionToken || res?.url?.match(/[?&]t=([^&]+)/)?.[1];
+      const meetingToken = await getMeetingToken(roomId);
 
       navigation.navigate('Meeting', { roomId, meetingToken });
     } catch (err: any) {
