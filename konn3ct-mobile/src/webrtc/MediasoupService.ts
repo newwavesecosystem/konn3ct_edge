@@ -16,6 +16,7 @@ export interface RemoteParticipant {
 }
 
 export class MediasoupService {
+  public participantId: string = Math.random().toString(36).substring(2, 15);
   private ws: WebSocket | null = null;
   private device: Device | null = null;
   
@@ -129,6 +130,12 @@ export class MediasoupService {
     }
   }
 
+  public endMeetingForAll() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'end_meeting' }));
+    }
+  }
+
   public forceMute(userId?: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'force_mute', userId }));
@@ -215,21 +222,19 @@ export class MediasoupService {
   }
 
   public async connect(meetingToken?: string) {
-    const authToken = useAuthStore.getState().token;
-    if (!authToken && !meetingToken) throw new Error('No auth token found');
-
-    // Use meeting JWT if provided (returned by start-a-room / kv4/join-room).
-    // The dev API issues Sanctum tokens (format: "id|hash") which the signal
-    // server doesn't accept. The start-a-room response embeds the correct
-    // meeting JWT in its URL (?t=...) — that is what the WS server validates.
-    const token = meetingToken || authToken!;
+    if (!meetingToken) {
+      throw new Error(
+        'No meeting JWT provided – the signal server requires a JWT, not a Sanctum token. '
+        + 'Obtain one via getAttendeeToken() or startRoom() before calling connect().'
+      );
+    }
+    const token = meetingToken;
 
     // URL-encode the token to prevent Android WebSocketModule from rejecting
-    // special characters (e.g. the `|` in Laravel Sanctum dev tokens) when
-    // the full URL is used as the default Origin header.
+    // special characters when the full URL is used as the default Origin header.
     const encodedToken = encodeURIComponent(token);
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}&name=${encodedName}`;
+    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}&name=${encodedName}&participantId=${this.participantId}`;
     console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
     
     this.ws = new WebSocket(wsUrl);

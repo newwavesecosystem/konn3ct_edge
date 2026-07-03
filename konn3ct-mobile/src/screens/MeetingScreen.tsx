@@ -267,7 +267,42 @@ export default function MeetingScreen({ route, navigation }: Props) {
   }, []);
 
   const handleLeave = () => {
-    navigation.replace('MainTabs');
+    if (isHost) {
+      Alert.alert(
+        'End or Leave Meeting?',
+        'As the host, you can end the meeting for everyone or just leave the meeting.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Leave Meeting', 
+            onPress: () => navigation.replace('MainTabs'),
+          },
+          {
+            text: 'End Meeting for All',
+            style: 'destructive',
+            onPress: () => {
+              if (serviceRef.current) {
+                serviceRef.current.endMeetingForAll();
+              }
+              navigation.replace('MainTabs');
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Leave meeting?',
+        'Are you sure you want to leave this meeting?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Leave Meeting', 
+            style: 'destructive',
+            onPress: () => navigation.replace('MainTabs'),
+          },
+        ]
+      );
+    }
   };
 
   const copyMeetingLink = async () => {

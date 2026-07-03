@@ -2,7 +2,7 @@
 
 # dependencies
 node_modules/
-
+env_used_in_main_branch/
 # Expo
 .expo/
 dist/
