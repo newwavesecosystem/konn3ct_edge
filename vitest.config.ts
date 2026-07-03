@@ -29,7 +29,12 @@ export default defineConfig({
         'src/signaling/server.ts',
         'frontend/lib/meeting-context.tsx',
         'frontend/components/meeting/ParticipantTile.tsx',
-        'frontend/lib/webrtc.ts'
+        'frontend/lib/webrtc.ts',
+        'frontend/lib/video-processor.ts',
+        'frontend/lib/api-client.ts',
+        'src/media/sfu.ts',
+        'src/routes/auth.ts',
+        'src/routes/scheduling.ts'
       ]
     },
   },
