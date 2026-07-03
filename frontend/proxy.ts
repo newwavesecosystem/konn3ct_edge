@@ -19,7 +19,7 @@ export function proxy(request: NextRequest) {
 
     // Allow explicitly permitted routes
     if (
-      pathname === '/post-meeting/' ||
+      pathname.startsWith('/post-meeting/') ||
       pathname.startsWith('/join/') ||
       pathname.startsWith('/meeting/')
     ) {
