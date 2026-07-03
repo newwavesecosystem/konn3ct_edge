@@ -26,7 +26,7 @@ import { apiClient } from '../api/client';
 import { fetchDashboardStats, fetchTodayMeetings, DashboardStats, TodayMeeting } from '../api/dashboard';
 import { fetchSchedules } from '../api/schedule';
 import { createRoom, fetchMyRooms, startRoom, joinRoomKv4, validateMeetingKv4 } from '../api/rooms';
-import { getAttendeeToken, getMeetingToken } from '../api/edgeApi';
+import { getAttendeeToken } from '../api/edgeApi';
 import { SIGNAL_SERVER_DOMAIN as SIGNAL_DOMAIN } from '../webrtc/MediasoupService';
 import { useAuthStore } from '../store/useAuthStore';
 import * as Clipboard from 'expo-clipboard';
@@ -303,11 +303,14 @@ export default function DashboardScreen({ navigation }: Props) {
       if (rooms && rooms.length > 0) {
         // Use the first available room
         const room = rooms[0];
-        // Start the room on backend first (wakes up the room on the signal server)
-        await startRoom(room.id);
-        // Then get a JWT signed by edge-test.konn3ct.net — same JWT_SECRET as signal server
+        // Start the room on backend first
+        const startRes = await startRoom(room.id);
+        console.log('--- DASHBOARD: START ROOM 1 RESPONSE ---');
+        console.log(JSON.stringify(startRes, null, 2));
+        const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+        console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
+        
         const roomId = room.url || room.slug || String(room.id);
-        const meetingToken = await getMeetingToken(roomId);
         navigation.navigate('Meeting', { roomId, meetingToken });
       } else {
         // Fallback if user has absolutely no rooms — create one and start it
@@ -323,8 +326,11 @@ export default function DashboardScreen({ navigation }: Props) {
           const newRooms = await fetchMyRooms();
           const newRoom = newRooms.find((r: any) => r.url === randomSlug);
           if (newRoom) {
-            await startRoom(newRoom.id);
-            const meetingToken = await getMeetingToken(randomSlug);
+            const startRes = await startRoom(newRoom.id);
+            console.log('--- DASHBOARD: START ROOM 2 RESPONSE ---');
+            console.log(JSON.stringify(startRes, null, 2));
+            const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+            console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES' : 'NO');
             navigation.navigate('Meeting', { roomId: randomSlug, meetingToken });
           } else {
             Alert.alert('Error', 'Room was created but could not be found. Please try again.');
@@ -343,8 +349,11 @@ export default function DashboardScreen({ navigation }: Props) {
           const res = await apiClient.post('/rooms', payload);
           const newRoom = res.data;
           const roomId = newRoom.slug || newRoom.url || String(newRoom.id);
-          await startRoom(newRoom.id);
-          const meetingToken = await getMeetingToken(roomId);
+          const startRes = await startRoom(newRoom.id);
+          console.log('--- DASHBOARD: START ROOM 3 RESPONSE ---');
+          console.log(JSON.stringify(startRes, null, 2));
+          const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+          console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES' : 'NO');
           navigation.navigate('Meeting', { roomId, meetingToken });
         }
       }
