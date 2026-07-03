@@ -82,6 +82,8 @@ export function MeetingControls() {
     hasUnreadChat,
     roomSettings,
     roomFeatureFlags,
+    isAlwaysMuteOnJoin,
+    micExempted,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -185,9 +187,9 @@ export function MeetingControls() {
           <ControlBtn
             icon={isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             danger={isMuted}
-            disabled={roomSettings.micLocked && !isHost}
+            disabled={roomSettings.micLocked && !isHost && !micExempted}
             onClick={() => {
-              if (roomSettings.micLocked && !isHost) {
+              if (roomSettings.micLocked && !isHost && !micExempted) {
                 toast.error("Microphones are locked by the host.");
                 return;
               }
@@ -214,19 +216,17 @@ export function MeetingControls() {
           <PillDivider className="hidden sm:block" />
 
           {/* Screen share */}
-          <ControlBtn
-            icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
-            active={isScreenSharing}
-            onClick={() => {
-              if (currentUser.isMobile) {
-                toast.error("Screen sharing is not supported on mobile. Please join with a PC to share your screen.");
-                return;
-              }
-              toggleScreenShare();
-            }}
-            tooltip="Share screen"
-            className="hidden sm:flex"
-          />
+          {!currentUser.isMobile && (
+            <ControlBtn
+              icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
+              active={isScreenSharing}
+              onClick={() => {
+                toggleScreenShare();
+              }}
+              tooltip="Share screen"
+              className="hidden sm:flex"
+            />
+          )}
           {/* React */}
           <ControlBtn
             icon={<SmilePlus className="w-5 h-5" />}
@@ -274,11 +274,13 @@ export function MeetingControls() {
                     label={isHandRaised ? "Lower Hand" : "Raise Hand"}
                     onClick={() => { toggleHandRaise(); setShowMoreMenu(false); }}
                   />
-                  <MoreMenuItem
-                    icon={isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <MonitorUp className="w-4 h-4" />}
-                    label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                    onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
-                  />
+                  {!currentUser.isMobile && (
+                    <MoreMenuItem
+                      icon={isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <MonitorUp className="w-4 h-4" />}
+                      label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                      onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                    />
+                  )}
                   {roomFeatureFlags.captionsEnabled && (
                     <MoreMenuItem
                       icon={<Subtitles className="w-4 h-4" />}

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { CheckCircle2, BarChart3 } from "lucide-react";
 
 export function PollsPanel() {
-  const { polls, votePoll, createPoll, participants, currentUser } = useMeeting();
+  const { polls, votePoll, createPoll, endPoll, participants, currentUser } = useMeeting();
   const [isCreating, setIsCreating] = React.useState(false);
   const [question, setQuestion] = React.useState("");
   const [options, setOptions] = React.useState(["", ""]);
@@ -190,18 +190,48 @@ export function PollsPanel() {
                           className="text-[11px] font-mono shrink-0 ml-2"
                           style={{ color: "var(--mt-text-faint)" }}
                         >
-                          {pct}%
+                          {pct}% ({option.votes || 0})
                         </span>
                       </div>
+                      {/* Host view of names */}
+                      {(currentUser.role === 'host' || currentUser.role === 'co-host') && (option.votedBy?.length || 0) > 0 && (
+                        <div className="relative flex flex-wrap gap-1 px-3 pb-2 pt-0.5 z-10">
+                          {(option.votedBy || []).slice(0, 5).map((v: any, i: number) => {
+                            const name = typeof v === 'string' ? "Someone" : v.name;
+                            const id = typeof v === 'string' ? `${v}-${i}` : v.userId;
+                            return (
+                              <span key={id} className="text-[9px] px-1.5 py-0.5 rounded-sm shadow-sm" style={{ backgroundColor: "var(--mt-bg-active)", color: "var(--mt-text-secondary)" }}>
+                                {name}
+                              </span>
+                            );
+                          })}
+                          {(option.votedBy?.length || 0) > 5 && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-sm shadow-sm font-medium" style={{ backgroundColor: "var(--mt-bg-active)", color: "var(--mt-text-secondary)" }}>
+                              +{(option.votedBy?.length || 0) - 5} more
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </button>
                   );
                 })}
               </div>
 
-              <p className="text-[10px] mt-2" style={{ color: "var(--mt-text-ghost)" }}>
-                {poll.totalVotes} vote{poll.totalVotes !== 1 && "s"} · by{" "}
-                {participants.find(p => p.id === poll.createdBy)?.name || "Host"}
-              </p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[10px]" style={{ color: "var(--mt-text-ghost)" }}>
+                  {poll.totalVotes} vote{poll.totalVotes !== 1 && "s"} · Hosted by{" "}
+                  {participants.find(p => p.id === poll.createdBy)?.name || "Host"}
+                </p>
+                {poll.isActive && (currentUser.role === 'host' || currentUser.role === 'co-host') && (
+                  <button 
+                    onClick={() => endPoll(poll.id)}
+                    className="text-[10px] font-medium text-red-500 hover:text-red-400 transition-colors px-2 py-1 rounded"
+                    style={{ backgroundColor: "var(--mt-bg-active)" }}
+                  >
+                    End Poll
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}
