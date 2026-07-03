@@ -75,13 +75,14 @@ export class WebRTCClient {
   public onActionAck?: (ack: any) => void;
   public onReaction?: (reaction: any) => void;
   public onPollCreate?: (poll: any) => void;
-  public onPollVote?: (vote: any) => void;
+  public onPollVote?: (msg: any) => void;
+  public onPollEnded?: (msg: any) => void;
+  public onPollHistory?: (polls: any[]) => void;
   public onMuteState?: (msg: any) => void;
   public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
-  public onPollHistory?: (polls: any[]) => void;
   public onNoteHistory?: (content: string) => void;
   public onMicError?: (error: Error) => void;
   public onNoteUpdate?: (msg: any) => void;
@@ -98,6 +99,7 @@ export class WebRTCClient {
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
   public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
+  public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -274,6 +276,22 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'consume_failed':
+          // If we receive consume_failed, we need to reject the pending 'consumed' request for this producer
+          if (this.pendingRequests.has('consumed')) {
+            const queue = this.pendingRequests.get('consumed')!;
+            // Find the pending request for this producerId. 
+            // We unfortunately don't have producerId in the queue item, so we just reject the first one
+            // because they are queued in order, or we can just reject all of them if it's a fatal error.
+            if (queue.length > 0) {
+              const resolver = queue.shift()!;
+              resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
+              if (queue.length === 0) {
+                this.pendingRequests.delete('consumed');
+              }
+            }
+          }
+          break;
         case 'action:ack':
           this.onActionAck?.(msg);
           break;
@@ -324,7 +342,7 @@ export class WebRTCClient {
                 const res = await this.request('getProducers', 'producersList');
                 if (res.producers) {
                   for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.userId, p.name, p.kind, p.appData);
+                    await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -350,7 +368,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          this.consumeRemoteStream(msg.producerId, msg.userId, msg.name, msg.kind, msg.appData).catch(console.error);
+          await this.consumeRemoteStream(msg.producerId, msg.participantId || msg.userId, msg.name, msg.kind, msg.appData);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -359,7 +377,7 @@ export class WebRTCClient {
           this.onParticipantsList?.(msg.participants);
           break;
         case 'user_left':
-          this.onUserLeft?.(msg.userId);
+          this.onUserLeft?.(msg.participantId || msg.userId);
           // Cleanup consumers for this user
           break;
         case 'role_changed':
@@ -377,6 +395,12 @@ export class WebRTCClient {
           break;
         case 'poll_vote':
           this.onPollVote?.(msg);
+          break;
+        case 'poll_ended':
+          this.onPollEnded?.(msg);
+          break;
+        case 'poll_history':
+          this.onPollHistory?.(msg.polls);
           break;
         case 'mute_state':
           this.onMuteState?.(msg);
@@ -458,6 +482,9 @@ export class WebRTCClient {
           if (msg.message && msg.message.includes("Maximum number of active cameras")) {
             this.onServerReject?.(msg.message);
           }
+          break;
+        case 'ask_to_unmute':
+          this.onAskToUnmute?.(msg.hostName);
           break;
         case 'force_mute':
           this.onForceMute?.(msg.reason);
@@ -594,7 +621,14 @@ export class WebRTCClient {
 
   public forceMuteUser(userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target }));
+      const finalTarget = target || (userId ? 'specific' : 'all');
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target: finalTarget }));
+    }
+  }
+
+  public askToUnmute(userId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ask_to_unmute', userId }));
     }
   }
 
@@ -657,6 +691,12 @@ export class WebRTCClient {
   public votePoll(pollId: string, optionId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'poll_vote', pollId, optionId }));
+    }
+  }
+
+  public endPoll(pollId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'end_poll', pollId }));
     }
   }
 
@@ -829,6 +869,8 @@ export class WebRTCClient {
   private startNetworkMonitor() {
     if (this.networkInterval) clearInterval(this.networkInterval);
     
+    let consecutiveBadChecks = 0;
+
     this.networkInterval = setInterval(async () => {
       if (!this.sendTransport) return;
       try {
@@ -849,18 +891,30 @@ export class WebRTCClient {
           }
         });
 
-        let quality: 'good' | 'poor' | 'bad' = 'good';
+        let currentQuality: 'good' | 'poor' | 'bad' = 'good';
         // Zoom and modern platforms are highly tolerant due to FEC.
         // We relax the thresholds so users don't get unnecessary warnings.
         if (maxRtt > 1500 || maxPacketLoss > 25) {
-          quality = 'bad';
+          currentQuality = 'bad';
         } else if (maxRtt > 800 || maxPacketLoss > 15) {
-          quality = 'poor';
+          currentQuality = 'poor';
         }
 
-        this.onNetworkQualityChange?.(quality);
+        let emittedQuality = currentQuality;
+
+        // Require 3 consecutive bad checks (15 seconds) before confirming 'bad'
+        if (currentQuality === 'bad') {
+          consecutiveBadChecks++;
+          if (consecutiveBadChecks < 3) {
+            emittedQuality = 'poor'; // Emit 'poor' while we wait for confirmation
+          }
+        } else {
+          consecutiveBadChecks = 0;
+        }
+
+        this.onNetworkQualityChange?.(emittedQuality);
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'network_quality', quality }));
+          this.ws.send(JSON.stringify({ type: 'network_quality', quality: emittedQuality }));
         }
       } catch (e) {
         // Ignore stats errors
@@ -1051,7 +1105,7 @@ export class WebRTCClient {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
         try {
-          await this.consumeRemoteStream(p.producerId, p.userId, p.kind, p.appData);
+          await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
         } catch (err) {
           console.error(`Failed to consume producer ${p.producerId}:`, err);
         }
@@ -1386,7 +1440,11 @@ export class WebRTCClient {
       activeTrack.onended = async () => {
         console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
         try {
+          const wasPaused = this.localAudioProducer?.paused;
           await this.enableMic();
+          if (wasPaused) {
+            this.pauseMic();
+          }
         } catch (err) {
           console.error("Failed to re-initialize mic:", err);
         }

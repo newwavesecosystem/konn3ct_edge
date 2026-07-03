@@ -1092,9 +1092,20 @@ function ScreenShareLayout({
                 
                 {health === 'stalled' && (
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-900/80 border border-yellow-500/50 backdrop-blur-md rounded-lg text-yellow-100 shadow-lg">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-900/80 border border-yellow-500/50 rounded-lg text-yellow-100 shadow-lg">
                       <AlertTriangle className="w-4 h-4 text-yellow-400" />
                       <span className="text-xs font-medium">Screen share connection is slow</span>
+                    </div>
+                  </div>
+                )}
+                
+                {health === 'black' && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/80">
+                    <div className="flex flex-col items-center gap-2 px-6 py-4 bg-red-900/40 rounded-lg text-white border border-red-500/50">
+                      <AlertTriangle className="w-6 h-6 text-red-500" />
+                      <span className="text-sm font-medium drop-shadow-md">
+                        Screen share feed failed (Black Screen).
+                      </span>
                     </div>
                   </div>
                 )}
