@@ -84,12 +84,14 @@ export class WebRTCClient {
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
   public onNoteHistory?: (content: string) => void;
+  public onChatCleared?: () => void;
+  
+  public onForceMute?: (reason?: string) => void;
+  public onForceVideoOff?: (reason?: string) => void;
   public onMicError?: (error: Error) => void;
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
-  public onForceMute?: (reason?: string) => void;
-  public onForceVideoOff?: (reason?: string) => void;
   public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean, bypassWaitingRoom: boolean }, updatedBy?: string) => void;
   public onQAHistory?: (messages: any[]) => void;
   public onQAUpdated?: (msg: any) => void;
@@ -387,6 +389,9 @@ export class WebRTCClient {
         case 'chat':
           this.onChatMessage?.(msg);
           break;
+        case 'chat_cleared':
+          this.onChatCleared?.();
+          break;
         case 'reaction':
           this.onReaction?.(msg);
           break;
@@ -438,8 +443,14 @@ export class WebRTCClient {
         case 'chat_history':
           this.onChatHistory?.(msg.messages);
           break;
+        case 'chat_cleared':
+          this.onChatCleared?.();
+          break;
         case 'poll_history':
           this.onPollHistory?.(msg.polls);
+          break;
+        case 'note_history':
+          this.onNoteHistory?.(msg.content);
           break;
         case 'qa_history':
           this.onQAHistory?.(msg.messages);
@@ -593,6 +604,12 @@ export class WebRTCClient {
       this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl, clientEventId: eventId }));
     }
     return eventId;
+  }
+
+  public sendClearChat() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'clear_chat' }));
+    }
   }
 
   public changeUserRole(userId: string, newRole: string) {

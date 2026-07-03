@@ -11,6 +11,7 @@ vi.mock('ioredis', () => {
     expire = vi.fn().mockResolvedValue(1);
     subscribe = vi.fn().mockResolvedValue(1);
     publish = vi.fn().mockResolvedValue(1);
+    del = vi.fn().mockResolvedValue(1);
   }
   return { default: MockRedis };
 });
@@ -90,8 +91,41 @@ describe('Signaling Server Integration', () => {
       const ws = new WebSocket(url);
       
       ws.on('open', () => {
-        ws.close();
-        resolve();
+        // Send a ping message
+        ws.send(JSON.stringify({ type: 'ping' }));
+        
+        // Send a chat message
+        ws.send(JSON.stringify({ type: 'chat', message: 'Hello server' }));
+        
+        // Send mute state
+        ws.send(JSON.stringify({ type: 'mute_state', isMicOn: false }));
+        
+        // Send camera state
+        ws.send(JSON.stringify({ type: 'camera_state', isCameraOn: false }));
+
+        // Send hand raise
+        ws.send(JSON.stringify({ type: 'hand_raise', hasRaisedHand: true }));
+        
+        // Start recording
+        ws.send(JSON.stringify({ type: 'start_recording' }));
+
+        // Stop recording
+        ws.send(JSON.stringify({ type: 'stop_recording' }));
+        
+        // Other actions
+        ws.send(JSON.stringify({ type: 'reaction', reaction: '👍' }));
+        ws.send(JSON.stringify({ type: 'poll_create', poll: { question: '?', options: [] } }));
+        ws.send(JSON.stringify({ type: 'sync_panel', activePanel: 'chat' }));
+        ws.send(JSON.stringify({ type: 'admit_user', userId: 'user-2' }));
+        
+        // Leave meeting
+        ws.send(JSON.stringify({ type: 'leave_meeting' }));
+
+        // Give server a moment to process before closing
+        setTimeout(() => {
+          ws.close();
+          resolve();
+        }, 50);
       });
 
       ws.on('unexpected-response', (req, res) => {

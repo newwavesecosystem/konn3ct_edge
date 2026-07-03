@@ -103,6 +103,7 @@ interface MeetingContextValue {
   kickUser: (userId: string) => void;
   changeUserRole: (userId: string, newRole: string) => void;
   askToUnmute: (userId: string) => void;
+  clearChat: () => void;
   forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
@@ -725,6 +726,11 @@ export function MeetingProvider({
             })
             .catch(err => console.error('Translation failed', err));
           }
+        };
+
+        client.onChatCleared = () => {
+          setChatMessages([]);
+          toast.info("The chat has been cleared by a host.");
         };
 
         client.onChatHistory = (messages) => {
@@ -1968,6 +1974,10 @@ export function MeetingProvider({
     webrtcClient.current?.askToUnmute(userId);
   }, []);
 
+  const clearChat = useCallback(() => {
+    webrtcClient.current?.sendClearChat();
+  }, []);
+
   const forceVideoOffUser = useCallback((userId?: string) => {
     webrtcClient.current?.sendForceVideoOff(userId);
   }, []);
@@ -2029,6 +2039,7 @@ export function MeetingProvider({
         gridOverflowMode,
         micExempted,
         askToUnmute,
+        clearChat,
         isMuted,
         isCameraOn,
         isScreenSharing,
