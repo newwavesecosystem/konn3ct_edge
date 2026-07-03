@@ -1,4 +1,4 @@
-const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Konn3ct';
+const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Gov Conference';
 
 module.exports = {
   expo: {
