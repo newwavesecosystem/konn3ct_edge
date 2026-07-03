@@ -123,6 +123,7 @@ interface Client {
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
   maxActiveCameras?: number;
+  preempted?: boolean;
   maxParticipants?: number;
   roomCreatedDate: Date;
   isBot?: boolean;
@@ -449,13 +450,22 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Guardrails: Check for duplicate active connections using the same participantId (not a reconnect)
+      // Guardrails: Check for duplicate active connections using the same participantId
       const existingClient = rooms.get(room.id)?.get(participantIdParam);
-      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN && !disconnectTimeouts.has(`${participantIdParam}:${room.id}`)) {
-        logger.warn(`Rejecting connection due to duplicate active participantId: ${participantIdParam}`);
-        socket.write('HTTP/1.1 409 Conflict\r\nX-Conn3ct-Error: Duplicate session\r\n\r\n');
-        socket.destroy();
-        return;
+      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
+        logger.info(`Preempting old connection for participantId: ${participantIdParam}`);
+        existingClient.preempted = true;
+        
+        // If a disconnect timeout was already running for this user, clear it
+        const timeoutKey = `${participantIdParam}:${room.id}`;
+        if (disconnectTimeouts.has(timeoutKey)) {
+          clearTimeout(disconnectTimeouts.get(timeoutKey));
+          disconnectTimeouts.delete(timeoutKey);
+        }
+
+        try {
+          existingClient.ws.terminate();
+        } catch(e) {}
       }
 
       wss.handleUpgrade(request, socket, head, (ws) => {
@@ -640,6 +650,10 @@ export function initializeSignaling(server: Server) {
     });
 
     ws.on('close', () => {
+      if (client.preempted) {
+        logger.info(`[CLEANUP] client_cleanup_ignored_preempted for user ${userId}`);
+        return;
+      }
       if (client.cleanupStarted) {
         logger.info(`[CLEANUP] client_cleanup_ignored_duplicate for user ${userId}`);
         return;
