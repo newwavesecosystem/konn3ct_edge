@@ -128,6 +128,7 @@ interface Client {
   isBot?: boolean;
   cleanupStarted?: boolean;
   participantId: string;
+  micExemption?: boolean;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -689,7 +690,7 @@ export function initializeSignaling(server: Server) {
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
+            roomProducers.set(roomId, producers.filter(p => p.participantId !== participantId));
 
             broadcastToRoom(roomId, {
               type: 'user_left',
@@ -959,6 +960,19 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'ask_to_unmute':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (!roomClients) break;
+          for (const [id, c] of roomClients.entries()) {
+            if (c.status === 'active' && c.userId === data.userId) {
+              c.micExemption = true;
+              c.ws.send(JSON.stringify({ type: 'ask_to_unmute', hostName: client.name }));
+            }
+          }
+        }
+        break;
+
       case 'force_video_off':
         if (client.role === 'host' || client.role === 'co-host') {
           const roomClients = rooms.get(roomId);
@@ -1002,6 +1016,27 @@ export function initializeSignaling(server: Server) {
             settings: newSettings,
             updatedBy: client.name
           });
+
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            // If mic just got locked, force mute all attendees
+            if (!currentSettings.micLocked && newSettings.micLocked) {
+              for (const [id, c] of roomClients.entries()) {
+                if (c.status === 'active' && c.role !== 'host' && c.role !== 'co-host') {
+                  c.micExemption = false;
+                  c.ws.send(JSON.stringify({ type: 'force_mute', reason: 'host_action' }));
+                }
+              }
+            }
+            // If video just got locked, force video off for all attendees
+            if (!currentSettings.videoLocked && newSettings.videoLocked) {
+              for (const [id, c] of roomClients.entries()) {
+                if (c.status === 'active' && c.role !== 'host' && c.role !== 'co-host') {
+                  c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+                }
+              }
+            }
+          }
         }
         break;
 
@@ -1009,7 +1044,7 @@ export function initializeSignaling(server: Server) {
         logger.info(`User ${userId} explicitly left room ${roomId}. Skipping grace period.`);
         const rc = rooms.get(roomId);
         if (rc) {
-          rc.delete(userId);
+          rc.delete(client.participantId);
           if (rc.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId);
@@ -1020,7 +1055,7 @@ export function initializeSignaling(server: Server) {
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
+            roomProducers.set(roomId, producers.filter(p => p.participantId !== client.participantId));
             broadcastToRoom(roomId, { type: 'user_left', userId, participantId: client.participantId });
             syncRoomStateToRedis(roomId, client.roomSlug);
           }
@@ -1697,6 +1732,10 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
           return;
         }
+        if (data.kind === 'audio' && settings?.micLocked && client.role === 'attendee' && !client.micExemption) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Microphones are locked by the host.' }));
+          return;
+        }
 
         const appData: Record<string, any> = data.appData || {};
         const source = appData.source || 'camera'; // 'camera' | 'screen'
@@ -1946,7 +1985,7 @@ export function initializeSignaling(server: Server) {
         
         const rp = roomProducers.get(roomId);
         if (rp) {
-          roomProducers.set(roomId, rp.filter(p => p.userId !== userId));
+          roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
         }
         break;
       }
