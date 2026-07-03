@@ -266,15 +266,10 @@ export default function RoomsScreen() {
   const handleStartRoom = async (room: Room) => {
     try {
       setStartingRoomId(room.id);
-      // Step 1: Start the room on the backend
-      await startRoom(room.id);
+      const startRes = await startRoom(room.id);
 
-      // Step 2: Get a proper WebSocket JWT from the edge frontend.
-      // The signal server requires a JWT signed with JWT_SECRET — not the
-      // Sanctum token that startRoom() returns.  The signal server will
-      // automatically upgrade the user to "host" if they own the room.
       const roomId: string = room.url || String(room.id);
-      const meetingToken = await getMeetingToken(roomId);
+      const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
 
       navigation.navigate('Meeting', { roomId, meetingToken });
     } catch (err: any) {

@@ -303,9 +303,9 @@ export default function DashboardScreen({ navigation }: Props) {
       if (rooms && rooms.length > 0) {
         // Use the first available room
         const room = rooms[0];
-        await startRoom(room.id);
+        const startRes = await startRoom(room.id);
+        const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
         const roomId = room.url || room.slug || String(room.id);
-        const meetingToken = await getMeetingToken(roomId);
         navigation.navigate('Meeting', { roomId, meetingToken });
       } else {
         // Fallback if user has absolutely no rooms — create one and start it
@@ -321,8 +321,8 @@ export default function DashboardScreen({ navigation }: Props) {
           const newRooms = await fetchMyRooms();
           const newRoom = newRooms.find((r: any) => r.url === randomSlug);
           if (newRoom) {
-            await startRoom(newRoom.id);
-            const meetingToken = await getMeetingToken(randomSlug);
+            const startRes = await startRoom(newRoom.id);
+            const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
             navigation.navigate('Meeting', { roomId: randomSlug, meetingToken });
           } else {
             Alert.alert('Error', 'Room was created but could not be found. Please try again.');
@@ -341,9 +341,8 @@ export default function DashboardScreen({ navigation }: Props) {
           const res = await apiClient.post('/rooms', payload);
           const newRoom = res.data;
           const roomId = newRoom.slug || newRoom.url || String(newRoom.id);
-          // Start the room then get a proper JWT from the edge frontend
-          await startRoom(newRoom.id);
-          const meetingToken = await getMeetingToken(roomId);
+          const startRes = await startRoom(newRoom.id);
+          const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
           navigation.navigate('Meeting', { roomId, meetingToken });
         }
       }
