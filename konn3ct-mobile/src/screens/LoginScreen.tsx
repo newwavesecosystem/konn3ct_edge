@@ -115,13 +115,12 @@ export default function LoginScreen() {
   // ── Finalise login after receiving token ─────────────────────────────────────
   const finaliseLogin = async (token: string, userData: any) => {
     const userObj = {
-      id: userData?.id || 'unknown-id',
+      id: String(userData?.id || 'unknown-id'),
       email: userData?.email || email,
       name: userData?.firstname
         ? `${userData.firstname} ${userData.lastname || ''}`.trim()
-        : email.split('@')[0],
+        : (userData?.name || email.split('@')[0]),
       role: userData?.roles?.[0]?.name || userData?.role || undefined,
-      ...userData,
     };
 
     if (rememberMe) {
@@ -236,13 +235,21 @@ export default function LoginScreen() {
         const savedToken = await SecureStore.getItemAsync('konn3ct_token');
         const savedUserStr = await SecureStore.getItemAsync('konn3ct_user');
         if (savedToken && savedUserStr) {
-          login(JSON.parse(savedUserStr), savedToken);
+          const parsed = JSON.parse(savedUserStr);
+          // Coerce id to string — old saves may have stored a numeric id
+          const safeUser = {
+            id: String(parsed?.id || 'unknown-id'),
+            email: parsed?.email || '',
+            name: parsed?.name || parsed?.email || 'User',
+          };
+          login(safeUser, savedToken);
         } else {
           Alert.alert('Error', 'No saved credentials found. Please login with password first.');
         }
       }
-    } catch (error) {
-      Alert.alert('Error', 'Biometric authentication failed.');
+    } catch (err) {
+      console.error('Biometric error:', err);
+      Alert.alert('Error', 'Biometric authentication failed. Please try again.');
     }
   };
 
