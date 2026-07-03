@@ -161,7 +161,7 @@ export const mockMeetingInfo: MeetingInfo = {
   roomSlug: "q3-product-review",
   roomName: "Q3 Product Review",
   roomType: "meeting",
-  hostName: "Adaeze Okafor",
+  hostName: "Host",
   startedAt: new Date(BASE_TIME - 1000 * 60 * 45).toISOString(),
   meetingLink: "https://konn3ct.app/join/q3-product-review",
   isRecording: false,

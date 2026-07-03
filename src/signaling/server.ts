@@ -1205,6 +1205,20 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'clear_chat': {
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            await db.chatMessage.deleteMany({
+              where: { roomId }
+            });
+            broadcastToRoom(roomId, { type: 'chat_cleared' });
+          } catch (e) {
+            logger.error("Failed to clear chat", e);
+          }
+        }
+        break;
+      }
+
       case 'reaction':
         if (clientEventId) {
           const serverEventId = crypto.randomUUID();

@@ -20,7 +20,7 @@ export default defineConfig({
       '**/frontend/e2e/**', 
       '**/*.spec.ts' // Playwright tests use spec.ts, Vitest will use test.ts
     ],
-    include: ['test/**/*.test.ts', 'src/__tests__/**/*.test.ts'],
+    include: ['test/**/*.test.{ts,tsx}', 'src/__tests__/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
