@@ -46,7 +46,6 @@ import {
   type CreateRoomPayload,
 } from '../api/rooms';
 import { APP_CONFIG } from '../config/appConfig';
-import { getMeetingToken } from '../api/edgeApi';
 
 const { width } = Dimensions.get('window');
 
@@ -266,11 +265,14 @@ export default function RoomsScreen() {
   const handleStartRoom = async (room: Room) => {
     try {
       setStartingRoomId(room.id);
-      // Start the room on backend first (wakes up the room on the signal server)
-      await startRoom(room.id);
-      // Then get a JWT from edge-test.konn3ct.net — same JWT_SECRET as signal server
+      const startRes = await startRoom(room.id);
+      
+      console.log('--- ROOMS SCREEN: START ROOM RESPONSE ---');
+      console.log(JSON.stringify(startRes, null, 2));
+
       const roomId: string = room.url || String(room.id);
-      const meetingToken = await getMeetingToken(roomId);
+      const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+      console.log('ROOMS SCREEN EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
 
       navigation.navigate('Meeting', { roomId, meetingToken });
     } catch (err: any) {

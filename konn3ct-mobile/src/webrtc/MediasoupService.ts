@@ -235,7 +235,13 @@ export class MediasoupService {
     // and encoding the pipe character (| → %7C) causes a 401 Unauthorized.
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
     const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
-    console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
+    
+    console.log('--- WEBSOCKET CONNECTION INFO ---');
+    console.log('Connecting to Domain:', BACKEND_DOMAIN);
+    console.log('Room ID:', this.roomId);
+    console.log('Token Length:', token ? token.length : 'NO TOKEN');
+    console.log('Full WS URL (first 100 chars):', wsUrl.substring(0, 100) + '...');
+    console.log('---------------------------------');
     
     this.ws = new WebSocket(wsUrl);
 
