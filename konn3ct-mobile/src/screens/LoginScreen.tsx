@@ -191,8 +191,14 @@ export default function LoginScreen() {
         const savedUserStr = await SecureStore.getItemAsync('konn3ct_user');
         
         if (savedToken && savedUserStr) {
-          const userObj = JSON.parse(savedUserStr);
-          login(userObj, savedToken);
+          const parsed = JSON.parse(savedUserStr);
+          // Coerce id to string — old saves may have stored a numeric id from the API
+          const safeUser = {
+            id: String(parsed?.id || 'unknown-id'),
+            email: parsed?.email || '',
+            name: parsed?.name || parsed?.email || 'User',
+          };
+          login(safeUser, savedToken);
         } else {
           Alert.alert('Error', 'No saved credentials found. Please login with password first.');
         }
