@@ -266,10 +266,11 @@ export default function RoomsScreen() {
   const handleStartRoom = async (room: Room) => {
     try {
       setStartingRoomId(room.id);
-      const startRes = await startRoom(room.id);
-
+      // Start the room on backend first (wakes up the room on the signal server)
+      await startRoom(room.id);
+      // Then get a JWT from edge-test.konn3ct.net — same JWT_SECRET as signal server
       const roomId: string = room.url || String(room.id);
-      const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+      const meetingToken = await getMeetingToken(roomId);
 
       navigation.navigate('Meeting', { roomId, meetingToken });
     } catch (err: any) {

@@ -303,9 +303,11 @@ export default function DashboardScreen({ navigation }: Props) {
       if (rooms && rooms.length > 0) {
         // Use the first available room
         const room = rooms[0];
-        const startRes = await startRoom(room.id);
-        const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+        // Start the room on backend first (wakes up the room on the signal server)
+        await startRoom(room.id);
+        // Then get a JWT signed by edge-test.konn3ct.net — same JWT_SECRET as signal server
         const roomId = room.url || room.slug || String(room.id);
+        const meetingToken = await getMeetingToken(roomId);
         navigation.navigate('Meeting', { roomId, meetingToken });
       } else {
         // Fallback if user has absolutely no rooms — create one and start it
@@ -321,8 +323,8 @@ export default function DashboardScreen({ navigation }: Props) {
           const newRooms = await fetchMyRooms();
           const newRoom = newRooms.find((r: any) => r.url === randomSlug);
           if (newRoom) {
-            const startRes = await startRoom(newRoom.id);
-            const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+            await startRoom(newRoom.id);
+            const meetingToken = await getMeetingToken(randomSlug);
             navigation.navigate('Meeting', { roomId: randomSlug, meetingToken });
           } else {
             Alert.alert('Error', 'Room was created but could not be found. Please try again.');
@@ -341,8 +343,8 @@ export default function DashboardScreen({ navigation }: Props) {
           const res = await apiClient.post('/rooms', payload);
           const newRoom = res.data;
           const roomId = newRoom.slug || newRoom.url || String(newRoom.id);
-          const startRes = await startRoom(newRoom.id);
-          const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+          await startRoom(newRoom.id);
+          const meetingToken = await getMeetingToken(roomId);
           navigation.navigate('Meeting', { roomId, meetingToken });
         }
       }
