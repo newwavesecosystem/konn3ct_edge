@@ -230,11 +230,11 @@ export class MediasoupService {
     }
     const token = meetingToken;
 
-    // URL-encode the token to prevent Android WebSocketModule from rejecting
-    // special characters when the full URL is used as the default Origin header.
-    const encodedToken = encodeURIComponent(token);
+    // Only URL-encode the name (may contain spaces). The token must be passed
+    // raw — the signal server validates it as-is before the WebSocket upgrade,
+    // and encoding the pipe character (| → %7C) causes a 401 Unauthorized.
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}&name=${encodedName}&participantId=${this.participantId}`;
+    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
     console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
     
     this.ws = new WebSocket(wsUrl);
