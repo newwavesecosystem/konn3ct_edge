@@ -501,7 +501,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
