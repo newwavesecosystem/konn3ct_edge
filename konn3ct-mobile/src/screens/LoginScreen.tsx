@@ -51,6 +51,7 @@ export default function LoginScreen() {
   // Standard fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mda, setMda] = useState(''); // MDA = tenantId (gov1 only)
 
   // 2FA state (gov1 only)
   const [twoFAPending, setTwoFAPending] = useState(false);
@@ -70,6 +71,7 @@ export default function LoginScreen() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [otpFocused, setOtpFocused] = useState(false);
+  const [mdaFocused, setMdaFocused] = useState(false);
 
   const { login } = useAuthStore();
 
@@ -161,11 +163,11 @@ export default function LoginScreen() {
 
   // ── 1Gov login (step 1) ──────────────────────────────────────────────────────
   const handleGovLogin = async () => {
-    if (!email || !password) { setError('Please fill in all fields'); return; }
+    if (!mda || !email || !password) { setError('Please fill in all fields'); return; }
     setLoading(true); setError(''); setSuccess('');
     try {
       const response = await apiClient.post('/1gov/login', {
-        tenantId: APP_CONFIG.GOV_TENANT_ID,
+        tenantId: mda.trim(),
         username: email,
         password,
       });
@@ -203,7 +205,7 @@ export default function LoginScreen() {
     setTwoFALoading(true); setError(''); setSuccess('');
     try {
       const response = await apiClient.post('/1gov/login/2fa', {
-        tenantId: APP_CONFIG.GOV_TENANT_ID,
+        tenantId: mda.trim(),
         username: email,
         otpCode,
         authType: twoFAMedium,
@@ -341,6 +343,30 @@ export default function LoginScreen() {
             </>
           ) : (
             <>
+              {/* ── MDA Field (gov1 only) ── */}
+              {APP_CONFIG.GOV_LOGIN && (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>MDA</Text>
+                  <View style={[styles.inputWrapper, mdaFocused && styles.inputWrapperFocused]}>
+                    <Building2
+                      color={mdaFocused ? COLORS.inputFocus : COLORS.textMuted}
+                      size={18}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter your MDA"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={mda}
+                      onChangeText={setMda}
+                      autoCapitalize="none"
+                      onFocus={() => setMdaFocused(true)}
+                      onBlur={() => setMdaFocused(false)}
+                    />
+                  </View>
+                </View>
+              )}
+
               {/* ── Email / Username Field ── */}
               <View style={styles.fieldContainer}>
                 <Text style={styles.label}>{APP_CONFIG.GOV_LOGIN ? 'Username / Email' : 'Email'}</Text>

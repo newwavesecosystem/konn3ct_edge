@@ -39,9 +39,6 @@ export const APP_CONFIG = {
 
   /** When true, use the 1Gov login endpoint (/1gov/login) with tenantId + username + password. */
   GOV_LOGIN: process.env.EXPO_PUBLIC_GOV_LOGIN === 'true',
-
-  /** Tenant ID for 1Gov login — set per deployment in .env. */
-  GOV_TENANT_ID: process.env.EXPO_PUBLIC_GOV_TENANT_ID || '',
 };
 
 /** Logo image sources — React Native requires static require() calls */
