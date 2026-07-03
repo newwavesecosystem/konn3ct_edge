@@ -244,52 +244,44 @@ export default function DashboardScreen({ navigation }: Props) {
     Keyboard.dismiss();
     setIsJoining(true);
 
-    if (IS_DEV) {
-      try {
-        // Step 1: Validate the room exists (case-insensitive on REST API)
-        setJoinStatus('Validating room...');
-        const validation = await validateMeetingKv4(roomId);
-        if (!validation.success) {
-          Alert.alert('Room Not Found', 'No room found with that ID. Please check and try again.');
-          setIsJoining(false);
-          setJoinStatus('Join Room');
-          return;
-        }
-
-        // Step 2: Get an ATTENDEE token via the Edge frontend API
-        // This calls /api/prejoin → /api/join which force-locks role to "attendee",
-        // ensuring the signal server puts the user in the waiting room.
-        setJoinStatus('Connecting...');
-        const meetingToken = await getAttendeeToken(
-          roomId,
-          user?.name || 'Guest',
-          user?.email || 'guest@conn3ct.com'
-        );
-
-        // Step 3: Navigate to lobby — LobbyScreen handles the WebSocket
-        // connection and waiting room UI, including error states (404, host not ready).
-        setShowJoinInput(false);
-        setJoinRoomId('');
-        setJoinStatus('Join Room');
+    try {
+      // Step 1: Validate the room exists (case-insensitive on REST API)
+      setJoinStatus('Validating room...');
+      const validation = await validateMeetingKv4(roomId);
+      if (!validation.success) {
+        Alert.alert('Room Not Found', 'No room found with that ID. Please check and try again.');
         setIsJoining(false);
-        navigation.navigate('Lobby', { roomId, meetingToken, micOn: joinMicOn, cameraOn: joinCameraOn });
+        setJoinStatus('Join Room');
         return;
-      } catch (e: any) {
-        console.error('Join failed:', e.response?.data || e.message);
-        Alert.alert('Join Failed', e.response?.data?.message || 'Could not connect. Check the Room ID and try again.');
       }
 
-      setIsJoining(false);
+      // Step 2: Get an ATTENDEE token via the Edge frontend API
+      // This calls /api/prejoin → /api/join which force-locks role to "attendee",
+      // ensuring the signal server puts the user in the waiting room.
+      setJoinStatus('Connecting...');
+      const meetingToken = await getAttendeeToken(
+        roomId,
+        user?.name || 'Guest',
+        user?.email || 'guest@conn3ct.com'
+      );
+
+      // Step 3: Navigate to lobby — LobbyScreen handles the WebSocket
+      // connection and waiting room UI, including error states (404, host not ready).
+      setShowJoinInput(false);
+      setJoinRoomId('');
       setJoinStatus('Join Room');
+      setIsJoining(false);
+      navigation.navigate('Lobby', { roomId, meetingToken, micOn: joinMicOn, cameraOn: joinCameraOn });
       return;
+    } catch (e: any) {
+      console.error('Join failed:', e.response?.data || e.message);
+      Alert.alert('Join Failed', e.response?.data?.message || 'Could not connect. Check the Room ID and try again.');
     }
 
     setIsJoining(false);
     setJoinStatus('Join Room');
-    setShowJoinInput(false);
-    setJoinRoomId('');
-    navigation.navigate('Lobby', { roomId, micOn: joinMicOn, cameraOn: joinCameraOn });
   };
+
 
   const handleAvatarPress = () => {
     Alert.alert(
@@ -311,17 +303,13 @@ export default function DashboardScreen({ navigation }: Props) {
       if (rooms && rooms.length > 0) {
         // Use the first available room
         const room = rooms[0];
-        if (IS_DEV) {
-          const startRes = await startRoom(room.id);
-          // Use sessionToken directly (more reliable than parsing from URL)
-          const meetingToken = startRes?.sessionToken
-            || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
-          navigation.navigate('Meeting', { roomId: room.url || String(room.id), meetingToken });
-        } else {
-          navigation.navigate('Meeting', { roomId: room.slug || room.url || String(room.id) });
-        }
+        const startRes = await startRoom(room.id);
+        // Use sessionToken directly (more reliable than parsing from URL)
+        const meetingToken = startRes?.sessionToken
+          || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+        navigation.navigate('Meeting', { roomId: room.url || room.slug || String(room.id), meetingToken });
       } else {
-        // Fallback if user has absolutely no rooms
+        // Fallback if user has absolutely no rooms — create one and start it
         if (IS_DEV) {
           const randomSlug = 'mob' + Math.floor(Math.random() * 100000);
           await createRoom({
@@ -335,14 +323,11 @@ export default function DashboardScreen({ navigation }: Props) {
           const newRoom = newRooms.find((r: any) => r.url === randomSlug);
           if (newRoom) {
             const startRes = await startRoom(newRoom.id);
-            let meetingToken: string | undefined;
-            if (startRes?.url) {
-              const tokenMatch = startRes.url.match(/[?&]t=([^&]+)/);
-              if (tokenMatch) meetingToken = tokenMatch[1];
-            }
+            const meetingToken = startRes?.sessionToken
+              || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
             navigation.navigate('Meeting', { roomId: randomSlug, meetingToken });
           } else {
-            navigation.navigate('Meeting', { roomId: randomSlug });
+            Alert.alert('Error', 'Room was created but could not be found. Please try again.');
           }
         } else {
           const payload = {
@@ -357,7 +342,12 @@ export default function DashboardScreen({ navigation }: Props) {
           
           const res = await apiClient.post('/rooms', payload);
           const newRoom = res.data;
-          navigation.navigate('Meeting', { roomId: newRoom.slug || newRoom.id });
+          const roomId = newRoom.slug || newRoom.url || String(newRoom.id);
+          // Start the room to get a proper JWT meeting token
+          const startRes = await startRoom(newRoom.id);
+          const meetingToken = startRes?.sessionToken
+            || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+          navigation.navigate('Meeting', { roomId, meetingToken });
         }
       }
     } catch (e: any) {
@@ -367,6 +357,7 @@ export default function DashboardScreen({ navigation }: Props) {
       setIsCreating(false);
     }
   };
+
 
   const firstName = user?.name?.split(' ')[0] || 'User';
 
@@ -784,7 +775,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   key={meeting.id || i}
                   style={styles.meetingCard}
                   onPress={() =>
-                    navigation.navigate('Meeting', {
+                    navigation.navigate('Lobby', {
                       roomId: String(meeting.room_id || meeting.roomId || meeting.id),
                     })
                   }
@@ -868,7 +859,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   key={i}
                   style={styles.meetingCard}
                   onPress={() =>
-                    navigation.navigate('Meeting', {
+                    navigation.navigate('Lobby', {
                       roomId: roomSlug,
                     })
                   }

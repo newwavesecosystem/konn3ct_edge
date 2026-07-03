@@ -29,6 +29,7 @@ import {
 import { MediasoupService } from '../webrtc/MediasoupService';
 import { setActiveMeetingService } from '../webrtc/activeMeetingService';
 import { useAuthStore } from '../store/useAuthStore';
+import { getAttendeeToken } from '../api/edgeApi';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Props = NativeStackScreenProps<RootStackParamList, 'Lobby'>;
@@ -166,7 +167,19 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
     (async () => {
       try {
-        const initialStatus = await service.connect(meetingToken);
+        // If no meetingToken was passed, obtain one via the Edge frontend API.
+        // This covers navigations (e.g. meeting cards, schedules) that don't
+        // pre-fetch a token.
+        let tokenToUse = meetingToken;
+        if (!tokenToUse) {
+          const authUser = useAuthStore.getState().user;
+          tokenToUse = await getAttendeeToken(
+            roomId,
+            authUser?.name || 'Guest',
+            authUser?.email || 'guest@conn3ct.com'
+          );
+        }
+        const initialStatus = await service.connect(tokenToUse);
         if (!isMountedRef.current) return;
 
         // Try to get room name from the service after connect
