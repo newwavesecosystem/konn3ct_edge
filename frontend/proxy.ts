@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Check if meeting only mode is enabled
   const meetingOnlyMode = process.env.NEXT_PUBLIC_MEETING_ONLY_MODE === 'true';
 
