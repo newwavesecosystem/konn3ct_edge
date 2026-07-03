@@ -99,6 +99,7 @@ export class WebRTCClient {
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
   public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
+  public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -482,6 +483,9 @@ export class WebRTCClient {
             this.onServerReject?.(msg.message);
           }
           break;
+        case 'ask_to_unmute':
+          this.onAskToUnmute?.(msg.hostName);
+          break;
         case 'force_mute':
           this.onForceMute?.(msg.reason);
           break;
@@ -617,7 +621,14 @@ export class WebRTCClient {
 
   public forceMuteUser(userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target }));
+      const finalTarget = target || (userId ? 'specific' : 'all');
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target: finalTarget }));
+    }
+  }
+
+  public askToUnmute(userId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ask_to_unmute', userId }));
     }
   }
 

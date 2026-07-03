@@ -110,4 +110,42 @@ test.describe('E2E WebRTC Signaling & Media', () => {
     await contextA.close();
     await contextB.close();
   });
+
+  test('Test 4: Ask to Unmute', async ({ browser }) => {
+    const contextA = await browser.newContext();
+    const pageA = await contextA.newPage();
+    await joinMeeting(pageA, 'Host A');
+
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+    await joinMeeting(pageB, 'Attendee B');
+
+    // Host A locks the mic
+    await pageA.locator('button[title="Security"]').click();
+    await pageA.locator('label', { hasText: 'Lock Microphones' }).click();
+
+    // Attendee B's mic is locked
+    await expect(pageB.locator('button[title="Unmute"]')).toBeDisabled({ timeout: 5000 });
+
+    // Host A asks Attendee B to unmute
+    await pageA.locator('button[title="Participants"]').click();
+    
+    // Hover over Attendee B to show the "Ask to Unmute" button
+    const participantRowB = pageA.locator('.flex-1.min-w-0', { hasText: 'Attendee B' }).locator('..');
+    await participantRowB.hover();
+    await participantRowB.locator('button[title="Ask to Unmute"]').click();
+
+    // Attendee B should get a toast
+    const toastBtn = pageB.locator('button', { hasText: 'Unmute Now' });
+    await expect(toastBtn).toBeVisible({ timeout: 10000 });
+    await toastBtn.click();
+
+    // Attendee B's mic should be enabled and unmuted
+    const muteBtnB = pageB.locator('button[title="Mute"]');
+    await expect(muteBtnB).toBeEnabled({ timeout: 5000 });
+    await expect(muteBtnB).toBeVisible();
+
+    await contextA.close();
+    await contextB.close();
+  });
 });
