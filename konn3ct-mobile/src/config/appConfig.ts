@@ -30,6 +30,18 @@ export const APP_CONFIG = {
 
   /** When true, skip email verification after signup and go straight to login. */
   SKIP_EMAIL_VERIFY: process.env.EXPO_PUBLIC_SKIP_EMAIL_VERIFY === 'true',
+
+  /** When true, show the signup link on the login screen. */
+  SHOW_SIGNUP_LINK: process.env.EXPO_PUBLIC_SHOW_SIGNUP !== 'false',
+
+  /** When true, show the forgot password link on the login screen. */
+  SHOW_FORGOT_PASSWORD: process.env.EXPO_PUBLIC_SHOW_FORGOT_PASSWORD !== 'false',
+
+  /** When true, use the 1Gov login endpoint (/1gov/login) with tenantId + username + password. */
+  GOV_LOGIN: process.env.EXPO_PUBLIC_GOV_LOGIN === 'true',
+
+  /** Tenant ID for 1Gov login — set per deployment in .env. */
+  GOV_TENANT_ID: process.env.EXPO_PUBLIC_GOV_TENANT_ID || '',
 };
 
 /** Logo image sources — React Native requires static require() calls */
