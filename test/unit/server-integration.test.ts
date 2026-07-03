@@ -21,9 +21,19 @@ vi.mock('../../src/db', () => ({
     room: {
       findUnique: vi.fn().mockResolvedValue({ id: 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {} }),
     },
-    message: {
+    chatMessage: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    meetingPoll: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    sharedNote: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
+    meetingQA: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    $transaction: vi.fn((cb) => cb()),
   },
 }));
 
@@ -33,6 +43,7 @@ vi.mock('../../src/media/sfu', () => ({
   getProducer: vi.fn(),
   closeProducer: vi.fn(),
   closeTransport: vi.fn(),
+  getOrCreateRouter: vi.fn().mockResolvedValue({}),
 }));
 
 import jwt from 'jsonwebtoken';
