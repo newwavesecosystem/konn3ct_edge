@@ -1,6 +1,14 @@
 import { defineConfig } from 'vitest/config';
+import path from 'path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './frontend'),
+      'react': path.resolve(__dirname, './frontend/node_modules/react'),
+      'react-dom': path.resolve(__dirname, './frontend/node_modules/react-dom')
+    }
+  },
   test: {
     globals: true,
     environment: 'node',
@@ -16,6 +24,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      all: true,
+      include: [
+        'src/signaling/server.ts',
+        'frontend/lib/meeting-context.tsx',
+        'frontend/components/meeting/ParticipantTile.tsx',
+        'frontend/lib/webrtc.ts'
+      ]
     },
   },
 });
