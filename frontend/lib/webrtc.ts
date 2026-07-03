@@ -327,8 +327,11 @@ export class WebRTCClient {
             this.onConnectionStateChange?.('waiting');
             return; // Don't republish yet
           }
-          if (!msg.recovered && this.device?.loaded) {
-            console.log("Session lost by server. Executing Client-Side Auto-Republish...");
+          if (this.device?.loaded) {
+            console.log(`WebSocket reconnected (recovered=${msg.recovered}). Executing Client-Side Auto-Republish because server transports were destroyed...`);
+            if (msg.recovered && this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+            }
             this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
