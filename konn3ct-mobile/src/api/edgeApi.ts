@@ -11,10 +11,10 @@
 
 import { SIGNAL_SERVER_DOMAIN } from '../webrtc/MediasoupService';
 
-// The Edge frontend hosts the /api/prejoin and /api/join Next.js API routes.
-// Default to edge.konn3ct.net — override via env var if needed.
+// Default to edge-test.konn3ct.net (matches konn3ctedge-test signal server's JWT_SECRET).
+// Override via env var for other environments.
 const EDGE_FRONTEND_URL =
-  process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL || 'https://edge.konn3ct.net';
+  process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL || 'https://edge-test.konn3ct.net';
 
 /**
  * Get an attendee-role WebRTC connection token for joining someone else's room.

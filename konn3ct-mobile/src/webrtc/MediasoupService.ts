@@ -16,6 +16,7 @@ export interface RemoteParticipant {
 }
 
 export class MediasoupService {
+  public participantId: string = Math.random().toString(36).substring(2, 15);
   private ws: WebSocket | null = null;
   private device: Device | null = null;
   
@@ -129,6 +130,12 @@ export class MediasoupService {
     }
   }
 
+  public endMeetingForAll() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'end_meeting' }));
+    }
+  }
+
   public forceMute(userId?: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'force_mute', userId }));
@@ -215,20 +222,19 @@ export class MediasoupService {
   }
 
   public async connect(meetingToken?: string) {
-    const authToken = useAuthStore.getState().token;
-    if (!authToken && !meetingToken) throw new Error('No auth token found');
-
-    // Use meeting JWT if provided (returned by start-a-room / kv4/join-room).
-    // The dev API issues Sanctum tokens (format: "id|hash") which the signal
-    // server doesn't accept. The start-a-room response embeds the correct
-    // meeting JWT in its URL (?t=...) — that is what the WS server validates.
-    const token = meetingToken || authToken!;
+    if (!meetingToken) {
+      throw new Error(
+        'No meeting JWT provided – the signal server requires a JWT, not a Sanctum token. '
+        + 'Obtain one via getAttendeeToken() or startRoom() before calling connect().'
+      );
+    }
+    const token = meetingToken;
 
     // URL-encode the token to prevent Android WebSocketModule from rejecting
-    // special characters (e.g. the `|` in Laravel Sanctum dev tokens) when
-    // the full URL is used as the default Origin header.
+    // special characters when the full URL is used as the default Origin header.
     const encodedToken = encodeURIComponent(token);
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}`;
+    const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
+    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}&name=${encodedName}&participantId=${this.participantId}`;
     console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
     
     this.ws = new WebSocket(wsUrl);
@@ -236,7 +242,8 @@ export class MediasoupService {
     return new Promise<string>((resolve, reject) => {
       this.ws!.onopen = () => {
         console.log('Native WebSocket connected successfully!');
-        this.ws!.send(JSON.stringify({ type: 'auth', token }));
+        const userName = useAuthStore.getState().user?.name || 'Mobile User';
+        this.ws!.send(JSON.stringify({ type: 'auth', token, name: userName }));
 
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
@@ -315,6 +322,7 @@ export class MediasoupService {
           case 'participants_list':
             if (this.onParticipantsList) {
               this.onParticipantsList(msg.participants || []);
+              setTimeout(() => this.notifyStreamUpdate(), 100);
             } else {
               // Cache for replay when callback is set (lobby handoff)
               this._cachedParticipantsList = msg.participants || [];
@@ -322,7 +330,10 @@ export class MediasoupService {
             break;
 
           case 'user_joined':
-            if (this.onUserJoined) this.onUserJoined(msg);
+            if (this.onUserJoined) {
+              this.onUserJoined(msg);
+              setTimeout(() => this.notifyStreamUpdate(), 100);
+            }
             break;
 
           case 'user_left':
