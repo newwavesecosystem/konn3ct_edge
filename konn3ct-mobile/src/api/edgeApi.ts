@@ -1,10 +1,12 @@
 /**
  * edgeApi.ts
  *
- * Calls the Edge frontend's /api/prejoin + /api/join endpoints to obtain
- * a WebRTC connection JWT suitable for the signal server.
+ * Obtains a WebRTC connection JWT suitable for the signal server.
  *
- * This is the same flow the web frontend uses at edge.konn3ct.net/join/[slug].
+ * Strategy (tried in order):
+ *   1. POST /api/join directly  — works if the server has this Next.js route
+ *   2. POST /api/prejoin → POST /api/join  — two-step guest flow
+ *
  * The JWT is created with role: "attendee" — the signal server automatically
  * upgrades the user to "host" if they own the room.
  */
@@ -12,7 +14,6 @@
 import { SIGNAL_SERVER_DOMAIN } from '../webrtc/MediasoupService';
 import { useAuthStore } from '../store/useAuthStore';
 
-// Default to edge-test.konn3ct.net (matches konn3ctedge-test signal server's JWT_SECRET).
 // Override via env var for other environments.
 const EDGE_FRONTEND_URL =
   process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL || 'https://edge-test.konn3ct.net';
@@ -20,24 +21,51 @@ const EDGE_FRONTEND_URL =
 /**
  * Get a WebRTC connection JWT for the signal server.
  *
- * Two-step flow (mirrors the web):
- *   1. POST /api/prejoin → { sessionToken } (role set to "attendee")
- *   2. POST /api/join   → { token }          (final WebRTC JWT)
- *
  * Works for both hosts and attendees — the signal server checks room ownership
  * and upgrades the role to "host" if the user is the room owner.
- *
- * @param roomId  The room slug to join (e.g. "Kay01ak16")
- * @param name    Display name for the user
- * @param email   Email address of the user
- * @returns       A JWT suitable for the WebSocket signal connection
  */
 export async function getAttendeeToken(
   roomId: string,
   name: string,
   email: string
 ): Promise<string> {
-  // Step 1: Pre-join — get a session token
+  // Get the Sanctum token for Authorization header
+  const sanctumToken = useAuthStore.getState().token;
+
+  // ── Attempt 1: Direct /api/join ──────────────────────────────────────────
+  // The web meeting page calls POST /api/join with { roomId } + auth cookie.
+  // On mobile we pass the Sanctum token as Authorization header instead.
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (sanctumToken) {
+      headers['Authorization'] = `Bearer ${sanctumToken}`;
+    }
+
+    const joinRes = await fetch(`${EDGE_FRONTEND_URL}/api/join`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ roomId }),
+    });
+
+    if (joinRes.ok) {
+      const data = await joinRes.json();
+      if (data?.token) {
+        console.log('[edgeApi] Got meeting token via direct /api/join');
+        return data.token;
+      }
+    }
+
+    // If /api/join returned a non-OK response, log it and try the 2-step flow
+    const errBody = await joinRes.json().catch(() => ({}));
+    console.warn(`[edgeApi] Direct /api/join failed (${joinRes.status}):`, errBody?.error || 'unknown');
+  } catch (e: any) {
+    console.warn('[edgeApi] Direct /api/join threw:', e.message);
+  }
+
+  // ── Attempt 2: Two-step /api/prejoin → /api/join ─────────────────────────
+  // Guest flow: get a session token first, then exchange for a WebSocket JWT.
   const prejoinRes = await fetch(`${EDGE_FRONTEND_URL}/api/prejoin`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -61,19 +89,18 @@ export async function getAttendeeToken(
     throw new Error('Pre-join did not return a session token');
   }
 
-  // Step 2: Join — exchange the session token for a WebRTC connection JWT
-  const joinRes = await fetch(`${EDGE_FRONTEND_URL}/api/join`, {
+  const joinRes2 = await fetch(`${EDGE_FRONTEND_URL}/api/join`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ roomId, sessionToken }),
   });
 
-  if (!joinRes.ok) {
-    const errBody = await joinRes.json().catch(() => ({}));
-    throw new Error(errBody?.error || `Join failed (${joinRes.status})`);
+  if (!joinRes2.ok) {
+    const errBody = await joinRes2.json().catch(() => ({}));
+    throw new Error(errBody?.error || `Join failed (${joinRes2.status})`);
   }
 
-  const { token } = await joinRes.json();
+  const { token } = await joinRes2.json();
   if (!token) {
     throw new Error('Join did not return a connection token');
   }
