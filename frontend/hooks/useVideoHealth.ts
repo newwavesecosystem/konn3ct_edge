@@ -23,6 +23,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   const recoveryCountRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
+  const healthyStartTimeRef = useRef<number>(Date.now());
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -91,11 +92,15 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
 
     let checkInterval: NodeJS.Timeout;
 
+    let tickCounter = 0;
+
     const checkHealth = () => {
+      tickCounter++;
+      
       // 1. Timeout for recovering state (5 seconds)
       if (health === 'recovering' && recoveryStartTimeRef.current > 0) {
         if (Date.now() - recoveryStartTimeRef.current > 5000) {
-          logDev('Recovery overlay timed out, marking as stalled to prevent stuck UI but keeping diagnostic honest.');
+          logDev('Recovery overlay timed out, marking as stalled to prevent stuck UI.');
           setHealth('stalled');
           recoveryStartTimeRef.current = 0;
           return; // Skip further checks this tick
@@ -112,29 +117,45 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
       }
 
       // 2. Strong indicators of healthy playback
-      // If we have dimensions AND readyState >= 2 (HAVE_CURRENT_DATA) or 3 (HAVE_FUTURE_DATA),
-      // we consider it healthy enough to clear the overlay, even if currentTime is stuck at 0 (Safari quirk).
       if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
         const currentTime = video.currentTime;
-        if (currentTime !== lastTimeRef.current) {
+        
+        // If currentTime goes backwards, it means the video remounted.
+        if (currentTime < lastTimeRef.current || (currentTime === 0 && lastTimeRef.current > 0)) {
+           lastTimeRef.current = currentTime; // Just sync the ref, do not treat as healthy play yet
+        } else if (currentTime !== lastTimeRef.current) {
           // Absolute proof of playing
           lastTimeRef.current = currentTime;
           stallCountRef.current = 0;
-          if (health !== 'healthy') {
+          if (health !== 'healthy' && health !== 'black') {
              setHealth('healthy');
              recoveryStartTimeRef.current = 0;
+             healthyStartTimeRef.current = Date.now();
+          } else if (health === 'healthy') {
+             if (recoveryCountRef.current > 0 && Date.now() - healthyStartTimeRef.current > 15000) {
+                logDev('Video has been healthy for >15s. Resetting recovery cap.');
+                recoveryCountRef.current = 0;
+             }
           }
-        } else if (health === 'recovering') {
-          // It's recovering, but has dimensions and readyState. Safari might be stuck at 0.
-          // Clear it anyway to avoid a stuck overlay on a working video.
-          setHealth('healthy');
-          recoveryStartTimeRef.current = 0;
-        } else if (!video.paused) {
-          // It's "playing" but currentTime is stalled.
-          stallCountRef.current++;
-          if (stallCountRef.current > 4) {
-            triggerRecovery('currentTime stalled');
-            return;
+        } else {
+          // currentTime is stalled
+          const isSafariQuirk = currentTime === 0 && !checkBlackFrame(video);
+          
+          if (isSafariQuirk) {
+             stallCountRef.current = 0;
+             if (health !== 'healthy') {
+                setHealth('healthy');
+                recoveryStartTimeRef.current = 0;
+                healthyStartTimeRef.current = Date.now();
+             }
+          } else {
+             if (health !== 'recovering' && !video.paused) {
+                stallCountRef.current++;
+                if (stallCountRef.current > 4) {
+                  triggerRecovery('currentTime stalled');
+                  return;
+                }
+             }
           }
         }
       } else {
@@ -155,12 +176,20 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
         }
       }
 
-      // Deterministic throttled canvas sampling only when lightweight signals hint at a problem
-      // (e.g. stalled count is rising but we haven't hit the recovery threshold yet)
-      if (stallCountRef.current >= 2 && stallCountRef.current <= 4) {
+      // 3. Black frame detection
+      // Check if stalled, OR check every 5 seconds even if playing smoothly (to catch smooth black videos)
+      const shouldCheckBlack = (stallCountRef.current >= 2 && stallCountRef.current <= 4) || (tickCounter % 5 === 0);
+      
+      if (shouldCheckBlack && video.readyState >= 2) {
          if (checkBlackFrame(video)) {
-            setHealth('black');
+            if (health !== 'black') {
+               setHealth('black');
+            }
             triggerRecovery('black frame detected');
+         } else if (health === 'black') {
+            // It recovered from black!
+            setHealth('healthy');
+            healthyStartTimeRef.current = Date.now();
          }
       }
     };

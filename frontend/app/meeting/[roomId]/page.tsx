@@ -30,6 +30,39 @@ export default function MeetingPage({
     }
   }, [resolvedParams.roomId, router]);
 
+  // Protect against accidental navigation (back button, refresh, close tab)
+  useEffect(() => {
+    if (!isReady) return;
+
+    // 1. Prevent tab close / refresh
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ''; // Shows standard browser dialog
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // 2. Prevent back button
+    // Push a dummy state so the first 'back' action just pops this state, keeping us on the same URL.
+    window.history.pushState(null, '', window.location.href);
+    
+    const handlePopState = () => {
+      const confirmLeave = window.confirm("Are you sure you want to leave the meeting?");
+      if (!confirmLeave) {
+        // User wants to stay. Push the state again to trap the next 'back' action.
+        window.history.pushState(null, '', window.location.href);
+      } else {
+        // User wants to leave. Call history.back() again to actually go back.
+        window.history.back();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isReady]);
+
   if (!isReady) return <div className="min-h-screen bg-[#0d0d1a]" />;
 
   return (

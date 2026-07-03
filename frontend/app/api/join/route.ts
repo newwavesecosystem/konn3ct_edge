@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
               finalName = user.name;
               finalEmail = user.email;
               finalUserId = user.id;
-              finalRole = "host";
+              finalRole = "attendee"; // Will be upgraded by signaling server if they own the room
             }
           }
         } catch (e) {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Missing session token" }, { status: 403 });
       }
 
-      if (!isDashboardUser) {
+      if (sessionToken) {
         try {
           const sessionData = jwt.verify(sessionToken, process.env.JWT_SECRET!) as any;
 
@@ -99,11 +99,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Invalid session for this room" }, { status: 403 });
           }
 
-          finalName = sessionData.name;
-          finalEmail = sessionData.email;
-          finalRole = sessionData.role;
+          // If dashboard user, we keep their authenticated userId and email, but allow them to override name/role from prejoin
+          finalName = sessionData.name || finalName;
+          finalRole = sessionData.role || finalRole;
           finalIsMobile = sessionData.isMobile;
-          if (sessionData.userId) finalUserId = sessionData.userId;
+          
+          if (!isDashboardUser) {
+            finalEmail = sessionData.email;
+            if (sessionData.userId) finalUserId = sessionData.userId;
+          }
         } catch (err) {
           console.error("JWT Verification failed", err);
           return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
