@@ -47,7 +47,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const serviceRef = useRef<MediasoupService | null>(null);
   
   // Zustand Store
-  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
+  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, waitingRoom, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
   const user = useAuthStore((s) => s.user);
   const localUserName = user?.name || 'Me';
   const isHost = currentUserRole === 'host';
@@ -58,6 +58,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const safeTop = insets.top > 0 ? insets.top + 8 : 16;
 
   const activeScreenShare = remoteStreams.find(p => p.screenStream != null);
+
+  const handleAdmitUser = (userId: string) => {
+    if (serviceRef.current) serviceRef.current.admitUser(userId);
+  };
+
+  const handleDenyUser = (userId: string) => {
+    if (serviceRef.current) serviceRef.current.denyUser(userId);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -170,11 +178,11 @@ export default function MeetingScreen({ route, navigation }: Props) {
           useMeetingStore.getState().removeParticipant(userId);
           useMeetingStore.getState().removeWaitingRoomUser(userId);
         };
-        service.onPollCreate = (poll) => useMeetingStore.getState().addPoll({ ...poll, isActive: true });
+        service.onPollCreate = (poll) => useMeetingStore.getState().addPoll({ ...poll, id: poll.pollId || poll.id, isActive: true });
         service.onPollVote = (vote) => useMeetingStore.getState().updatePollVote(vote.pollId, vote.optionId);
         service.onPollEnd = (data) => useMeetingStore.getState().endPoll(data.pollId);
         service.onPollHistory = (polls) => useMeetingStore.getState().setPolls(
-          polls.map((p: any) => ({ ...p, isActive: p.isActive !== false }))
+          polls.map((p: any) => ({ ...p, id: p.pollId || p.id, isActive: p.isActive !== false }))
         );
         service.onWaitingRoomRequest = (user) => useMeetingStore.getState().addWaitingRoomUser(user);
         service.onForceMute = () => {
@@ -540,6 +548,27 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 <SwitchCamera size={14} color={isCameraOff ? tokens.textMuted : tokens.textPrimary} strokeWidth={2} />
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      )}
+      
+      {/* Waiting Room Prompt overlay */}
+      {!isPipMode && isHost && waitingRoom && waitingRoom.length > 0 && (
+        <View style={styles.waitingRoomPrompt}>
+          <View style={styles.waitingRoomPromptContent}>
+            <Text style={styles.waitingRoomPromptTitle}>Waiting Room</Text>
+            <Text style={styles.waitingRoomPromptText} numberOfLines={1}>
+              <Text style={{fontWeight: 'bold'}}>{waitingRoom[0].name}</Text> is waiting to join.
+              {waitingRoom.length > 1 && ` (+${waitingRoom.length - 1} more)`}
+            </Text>
+          </View>
+          <View style={styles.waitingRoomPromptActions}>
+            <TouchableOpacity style={styles.waitingRoomPromptBtnDeny} onPress={() => handleDenyUser(waitingRoom[0].userId)}>
+              <Text style={styles.waitingRoomPromptBtnTextDeny}>Deny</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.waitingRoomPromptBtnAdmit} onPress={() => handleAdmitUser(waitingRoom[0].userId)}>
+              <Text style={styles.waitingRoomPromptBtnTextAdmit}>Admit</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -1133,6 +1162,16 @@ const getStyles = (t: any) => StyleSheet.create({
     ...Platform.select({ web: { outlineStyle: 'none' as any } }),
   },
   endCallText: { color: t.textInverse, fontSize: 16, fontWeight: '600', fontFamily: 'Inter' },
+  captionSubtext: { color: t.textPrimary, fontSize: 13, lineHeight: 18, fontFamily: 'Inter', opacity: 0.8 },
+  waitingRoomPrompt: { position: 'absolute', top: 90, left: 16, right: 16, backgroundColor: t.bgElevated, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 100, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 8, borderWidth: 1, borderColor: t.border },
+  waitingRoomPromptContent: { flex: 1, marginRight: 12 },
+  waitingRoomPromptTitle: { color: t.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+  waitingRoomPromptText: { color: t.textPrimary, fontSize: 14 },
+  waitingRoomPromptActions: { flexDirection: 'row', gap: 8 },
+  waitingRoomPromptBtnDeny: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: t.dangerHover },
+  waitingRoomPromptBtnTextDeny: { color: t.danger, fontSize: 13, fontWeight: 'bold' },
+  waitingRoomPromptBtnAdmit: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: t.primary },
+  waitingRoomPromptBtnTextAdmit: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
   
   // Modal Sheet — Modern bottom sheet
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.45)', justifyContent: 'flex-end' },

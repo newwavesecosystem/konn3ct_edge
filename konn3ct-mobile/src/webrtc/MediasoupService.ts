@@ -228,7 +228,8 @@ export class MediasoupService {
     // special characters (e.g. the `|` in Laravel Sanctum dev tokens) when
     // the full URL is used as the default Origin header.
     const encodedToken = encodeURIComponent(token);
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}`;
+    const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
+    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${encodedToken}&name=${encodedName}`;
     console.log(`Connecting native WebSocket to: ${wsUrl.replace(token, '[REDACTED]')}`);
     
     this.ws = new WebSocket(wsUrl);
@@ -236,7 +237,8 @@ export class MediasoupService {
     return new Promise<string>((resolve, reject) => {
       this.ws!.onopen = () => {
         console.log('Native WebSocket connected successfully!');
-        this.ws!.send(JSON.stringify({ type: 'auth', token }));
+        const userName = useAuthStore.getState().user?.name || 'Mobile User';
+        this.ws!.send(JSON.stringify({ type: 'auth', token, name: userName }));
 
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
@@ -315,6 +317,7 @@ export class MediasoupService {
           case 'participants_list':
             if (this.onParticipantsList) {
               this.onParticipantsList(msg.participants || []);
+              setTimeout(() => this.notifyStreamUpdate(), 100);
             } else {
               // Cache for replay when callback is set (lobby handoff)
               this._cachedParticipantsList = msg.participants || [];
@@ -322,7 +325,10 @@ export class MediasoupService {
             break;
 
           case 'user_joined':
-            if (this.onUserJoined) this.onUserJoined(msg);
+            if (this.onUserJoined) {
+              this.onUserJoined(msg);
+              setTimeout(() => this.notifyStreamUpdate(), 100);
+            }
             break;
 
           case 'user_left':
