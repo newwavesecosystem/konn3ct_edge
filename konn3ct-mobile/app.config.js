@@ -4,7 +4,7 @@ const APP_NAME = 'Gov Conference';
 module.exports = {
   expo: {
     name: APP_NAME,
-    slug: 'gov-conference',
+    slug: 'konn3ct',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
@@ -16,7 +16,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.konn3ct.govconference',
+      bundleIdentifier: 'com.konn3ct.mobile',
       buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: `Allow ${APP_NAME} to access your camera for video meetings.`,
@@ -25,7 +25,7 @@ module.exports = {
       },
     },
     android: {
-      package: 'com.konn3ct.govconference',
+      package: 'com.konn3ct.mobile',
       versionCode: 1,
       adaptiveIcon: {
         backgroundColor: '#0a5c36',
