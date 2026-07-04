@@ -272,14 +272,18 @@ export function ParticipantTile({
   let mediaConnectionState: string | null = null;
   
   if (expectsMedia && !currentUser.audioOnlyMode) {
-    if (participant.isConnecting) {
+    if (participant.networkQuality === 'connecting_to_media_server') {
+      mediaConnectionState = "Connecting to Media Server";
+    } else if (participant.networkQuality === 'reconnecting') {
+      mediaConnectionState = "Reconnecting to Media Server";
+    } else if (participant.isConnecting) {
       mediaConnectionState = "Connecting...";
     } else if (health === 'black') {
       mediaConnectionState = isSelf 
         ? "Your camera hardware failed. Please toggle your video off and on." 
         : "Participant's camera feed failed.";
     } else if (health === 'stalled' || effectiveVideoState === 'stalled') {
-      mediaConnectionState = "Connection failed. Retrying...";
+      mediaConnectionState = "Media connection failed. Retrying...";
     } else if (health === 'recovering') {
       mediaConnectionState = "Reconnecting to Video";
     }
@@ -476,11 +480,17 @@ export function ParticipantTile({
           {!isCameraEffectivelyOn && (
             <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
           )}
-          {participant.networkQuality === 'poor' && (
-            <span title="Poor Connection"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
+          {participant.networkQuality === 'unstable_network' && (
+            <span title="Unstable Network"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
           )}
-          {participant.networkQuality === 'bad' && (
-            <span title="Bad Connection"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
+          {participant.networkQuality === 'poor_network' && (
+            <span title="Poor Network"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'device_performance_issue' && (
+            <span title="Device Performance Issue"><AlertTriangle className="w-3.5 h-3.5 text-purple-400 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'screen_share_performance_issue' && (
+            <span title="Screen Share Lag"><MonitorUp className="w-3.5 h-3.5 text-orange-400 drop-shadow-md" /></span>
           )}
           {participant.networkQuality === 'good' && (
             <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green drop-shadow-md" /></span>

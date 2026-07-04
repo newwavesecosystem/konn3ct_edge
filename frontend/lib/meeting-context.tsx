@@ -598,7 +598,7 @@ export function MeetingProvider({
           const now = Date.now();
           if (now - lastNetworkToastTime > 30000) {
 
-            if (quality === 'bad') {
+            if (quality === 'poor_network') {
               // Play Warning Sound
               try {
                 if (client?.userRole !== 'bot') {
@@ -628,7 +628,7 @@ export function MeetingProvider({
                 setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
               }
               lastNetworkToastTime = now;
-            } else if (quality === 'poor') {
+            } else if (quality === 'unstable_network') {
               // toast.warning("Network connection is weak. Video or Audio quality might be degraded.");
               lastNetworkToastTime = now;
             } else if (quality === 'good') {

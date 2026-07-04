@@ -20,6 +20,7 @@ import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
 import { SecurityPanel } from "./SecurityPanel";
 import { QADiagnosticsOverlay } from "./QADiagnosticsOverlay";
+import { NetworkDebugOverlay } from "./NetworkDebugOverlay";
 import dynamic from "next/dynamic";
 
 const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
@@ -378,6 +379,7 @@ export function MeetingShell() {
 
       {/* Floating layers */}
       <QADiagnosticsOverlay />
+      <NetworkDebugOverlay />
       <ReactionsLayer />
       <LeaveDialog />
       <MicIssueDialog />
