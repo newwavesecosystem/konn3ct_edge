@@ -137,7 +137,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
       roomSlug,
       recordingId: recording.id,
       botToken,
-      url: `https://${frontendDomain}/meeting/${roomSlug}?botToken=${botToken}`
+      url: `https://${frontendDomain}/recording/${roomSlug}?botToken=${botToken}`
     });
 
     if (!launchResult.queued) {
@@ -171,7 +171,7 @@ recordingsRouter.post('/:id/stop', async (req: Request, res: Response) => {
     if (['stopping'].includes(recording.status)) {
       return res.status(200).json({ message: 'Recording already stopping', status: recording.status });
     }
-    if (['processing'].includes(recording.status)) {
+    if (['processing', 'finalizing', 'transcoding', 'uploading'].includes(recording.status)) {
       return res.status(200).json({ message: 'Recording already stopped and processing', status: recording.status });
     }
     if (['completed', 'failed', 'cancelled'].includes(recording.status)) {
@@ -252,10 +252,10 @@ recordingsRouter.post('/:id/callback/finalized', async (req: Request, res: Respo
 
     const { status, url, duration, failureReason, storageKey, storageBucket, contentType } = req.body;
     
-    if (status === 'processing') {
+    if (status === 'processing' || status === 'finalizing' || status === 'transcoding_queued' || status === 'transcoding' || status === 'uploading' || status === 'partial_available') {
       await db.recording.update({
         where: { id },
-        data: { status: 'processing' }
+        data: { status }
       });
     } else if (status === 'completed') {
       await db.recording.update({
