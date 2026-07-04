@@ -144,7 +144,9 @@ export function ParticipantTile({
             console.log('participant_tile_video_play_rejected');
             if (participant.cameraStats) {
               participant.cameraStats.lastVideoPlayResult = 'error';
-              if (e.name !== 'AbortError') {
+              const isAbort = e.name === 'AbortError' || 
+                              (e.message && e.message.includes('interrupted by a new load request'));
+              if (!isAbort) {
                 console.warn("Video play failed:", e);
                 (el as any)._lastError = e.message || e.name;
                 participant.cameraStats.lastVideoError = e.message || e.name;
