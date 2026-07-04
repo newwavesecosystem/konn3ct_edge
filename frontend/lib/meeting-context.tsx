@@ -1615,6 +1615,16 @@ export function MeetingProvider({
   }, [selectedDevices.audioInput, selectedDevices.videoInput, webrtcStatus]);
 
   const switchDevice = useCallback(async (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => {
+    if (kind === 'videoInput' && cameraOperationInProgress.current) {
+      console.log('camera_switch_ignored_operation_in_progress');
+      return;
+    }
+
+    if (kind === 'videoInput') {
+      cameraOperationInProgress.current = true;
+      console.log('camera_switch_started');
+    }
+
     setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
 
     if (kind === 'audioOutput') {
@@ -1635,9 +1645,13 @@ export function MeetingProvider({
           ));
         }
       }
+      if (kind === 'videoInput') console.log('camera_switch_completed');
     } catch (e) {
+      if (kind === 'videoInput') console.log('camera_switch_failed_preserved_old_track');
       console.error(`Failed to switch ${type} device`, e);
       toast.error(`Could not switch ${type} device`);
+    } finally {
+      if (kind === 'videoInput') cameraOperationInProgress.current = false;
     }
   }, [initialCurrentUser.id]);
 
@@ -1756,16 +1770,31 @@ export function MeetingProvider({
     setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isMuted: newState } : p));
   }, [isMuted, initialCurrentUser.id]);
 
+  const cameraOperationInProgress = useRef(false);
+
   const toggleCamera = useCallback(() => {
     if (isRecorderMode) return;
+    if (cameraOperationInProgress.current) {
+      console.log('camera_switch_ignored_operation_in_progress');
+      return;
+    }
     const newState = !isCameraOn;
     if (!newState) {
-      webrtcClient.current?.disableCamera();
-      localCameraTrackRef.current = null;
-      webrtcClient.current?.sendCameraState(newState);
-      setIsCameraOn(newState);
-      setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
+      cameraOperationInProgress.current = true;
+      try {
+        console.log('camera_switch_started');
+        webrtcClient.current?.disableCamera();
+        localCameraTrackRef.current = null;
+        webrtcClient.current?.sendCameraState(newState);
+        setIsCameraOn(newState);
+        setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
+        console.log('camera_switch_completed');
+      } finally {
+        cameraOperationInProgress.current = false;
+      }
     } else {
+      cameraOperationInProgress.current = true;
+      console.log('camera_switch_started');
       // Force fresh camera start on any toggle ON. No resumeCamera() usage for this flow.
       webrtcClient.current?.enableCamera().then(async track => {
         if (track.readyState !== 'live') {
@@ -1782,10 +1811,13 @@ export function MeetingProvider({
         setIsCameraOn(newState);
         setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
       }).catch(err => {
+        console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
         toast.error("Camera could not start. Please retry.");
         // Ensure UI stays off
         setIsCameraOn(false);
+      }).finally(() => {
+        cameraOperationInProgress.current = false;
       });
     }
   }, [isCameraOn, initialCurrentUser.id, vbMode, vbImageUrl]);

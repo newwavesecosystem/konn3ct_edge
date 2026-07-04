@@ -62,6 +62,7 @@ export function ParticipantTile({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = React.useState(true);
+  const [playError, setPlayError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const observer = new IntersectionObserver(
@@ -79,8 +80,13 @@ export function ParticipantTile({
   const handleRecover = React.useCallback(() => {
     // If recovery is triggered, we can try to re-attach the track to the srcObject
     if (videoRef.current && participant.videoTrack) {
+      console.log('participant_tile_video_recovered');
       videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
-      videoRef.current.play().catch(e => console.warn("Play failed on recover:", e));
+      videoRef.current.play().catch(e => {
+        console.warn("Play failed on recover:", e);
+        console.log('participant_tile_video_play_rejected');
+        setPlayError(e.message || e.name);
+      });
     }
   }, [participant.videoTrack]);
 
@@ -128,17 +134,22 @@ export function ParticipantTile({
           participant.cameraStats.lastVideoPlayAttemptAt = new Date().toISOString();
           
           el.play().then(() => {
+             console.log('participant_tile_video_play_started');
+             setPlayError(null);
              if (participant.cameraStats) {
                participant.cameraStats.lastVideoPlayResult = 'success';
                participant.cameraStats.lastVideoError = undefined;
              }
           }).catch((e) => {
+            console.log('participant_tile_video_play_rejected');
             if (participant.cameraStats) {
               participant.cameraStats.lastVideoPlayResult = 'error';
               if (e.name !== 'AbortError') {
                 console.warn("Video play failed:", e);
                 (el as any)._lastError = e.message || e.name;
                 participant.cameraStats.lastVideoError = e.message || e.name;
+                console.log('participant_tile_video_error');
+                setPlayError(e.message || e.name);
               }
             }
           });
@@ -156,6 +167,7 @@ export function ParticipantTile({
             }
           }
           el.srcObject = new MediaStream([participant.videoTrack]);
+          console.log('participant_tile_video_attached');
           attemptPlay();
         } else {
           el.srcObject = null;
@@ -542,6 +554,24 @@ export function ParticipantTile({
             )}
             <span>{mediaConnectionState}</span>
           </div>
+        </div>
+      )}
+      {/* ── Playback Error Overlay ── */}
+      {playError && participant.videoTrack && (
+        <div className="absolute top-2 inset-x-2 flex flex-col items-center gap-1 z-40">
+          <span className="text-white text-[10px] text-center bg-red-600/90 px-2 py-1 rounded shadow-lg border border-red-400">
+            Playback Failed: {playError}
+          </span>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setPlayError(null);
+              if (videoRef.current) videoRef.current.play().catch(console.error);
+            }}
+            className="text-[10px] bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded text-white cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       )}
 

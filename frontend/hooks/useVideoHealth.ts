@@ -101,6 +101,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
       if (health === 'recovering' && recoveryStartTimeRef.current > 0) {
         if (Date.now() - recoveryStartTimeRef.current > 5000) {
           logDev('Recovery overlay timed out, marking as stalled to prevent stuck UI.');
+          console.log('participant_tile_video_stalled');
           setHealth('stalled');
           recoveryStartTimeRef.current = 0;
           return; // Skip further checks this tick
@@ -128,6 +129,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           lastTimeRef.current = currentTime;
           stallCountRef.current = 0;
           if (health !== 'healthy' && health !== 'black') {
+             console.log('participant_tile_video_recovered');
              setHealth('healthy');
              recoveryStartTimeRef.current = 0;
              healthyStartTimeRef.current = Date.now();
@@ -144,6 +146,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           if (isSafariQuirk) {
              stallCountRef.current = 0;
              if (health !== 'healthy') {
+                console.log('participant_tile_video_recovered');
                 setHealth('healthy');
                 recoveryStartTimeRef.current = 0;
                 healthyStartTimeRef.current = Date.now();
@@ -152,6 +155,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
              if (health !== 'recovering' && !video.paused) {
                 stallCountRef.current++;
                 if (stallCountRef.current > 4) {
+                  console.log('participant_tile_video_stalled');
                   triggerRecovery('currentTime stalled');
                   return;
                 }
