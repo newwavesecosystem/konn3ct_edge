@@ -430,6 +430,25 @@ export function initializeSignaling(server: Server) {
         role = 'host';
       }
 
+      // Recover dynamic roles (e.g. co-host) from existing session or Redis
+      const existingClientForRole = participantIdParam ? rooms.get(room.id)?.get(participantIdParam) : null;
+      if (existingClientForRole && existingClientForRole.role === 'co-host') {
+        role = 'co-host';
+      } else {
+        try {
+          const redisParticipantsStr = await redis.get(`room:${roomSlug}:participants`);
+          if (redisParticipantsStr) {
+            const redisParticipants = JSON.parse(redisParticipantsStr);
+            const existingInRedis = redisParticipants.find((p: any) => p.userId === decoded.userId);
+            if (existingInRedis && existingInRedis.role === 'co-host') {
+              role = 'co-host';
+            }
+          }
+        } catch (e) {
+          logger.error('Failed to parse redis participants for role recovery', e);
+        }
+      }
+
       const currentParticipants = rooms.get(room.id)?.size || 0;
       const maxParticipants = room.maxParticipants ?? 100;
       const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
