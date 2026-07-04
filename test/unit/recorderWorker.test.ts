@@ -96,3 +96,13 @@ describe('Recorder Worker - Connection Behavior', () => {
     expect(maskedUrl).not.toContain('12345');
   });
 });
+
+describe('Recorder Worker - Resilience Guards', () => {
+  it('hard fails if URL is missing /recording/ path', () => {
+    const script = fs.readFileSync(path.join(__dirname, '../../recorder/index.js'), 'utf8');
+    const funcBodyRaw = script.split('async function processRecordingJob(job) {')[1];
+    
+    expect(funcBodyRaw).toContain("!url.includes('/recording/')");
+    expect(funcBodyRaw).toContain("recorder_invalid_route_detected");
+  });
+});

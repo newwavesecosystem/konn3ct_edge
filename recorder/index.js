@@ -19,6 +19,8 @@ const MAX_CONCURRENT_TRANSCODES = process.env.MAX_CONCURRENT_TRANSCODES ? parseI
 let activeBrowsers = 0;
 let activeTranscodes = 0;
 
+const recordingManifests = new Map();
+
 async function recoverOrphanTranscoders() {
   const activeKeys = await redis.keys('recorder:transcode:lease:*');
   for (const key of activeKeys) {
@@ -192,6 +194,29 @@ async function processRecordingJob(job) {
   const outputPathRaw = path.join(__dirname, `${roomId}_raw.webm`);
   const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
   
+  if (!url.includes('/recording/')) {
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recorder_invalid_route_detected",
+      roomId,
+      recordingId,
+      url
+    }));
+    return; // hard fail
+  }
+
+  recordingManifests.set(recordingId, {
+    recordingId,
+    roomId,
+    startedAt: new Date().toISOString(),
+    chunks: [],
+    totalChunks: 0,
+    totalBytes: 0,
+    emptyChunkCount: 0,
+    sequenceGapDetected: false,
+    validationStatus: 'pending'
+  });
+  
   try {
     const puppeteer = require('puppeteer');
     let chromePath = '/usr/bin/google-chrome';
@@ -339,42 +364,71 @@ async function processRecordingJob(job) {
       }
 
       if (req.method === 'POST' && req.url === '/chunk') {
-        const chunkIndex = parseInt(req.headers['x-chunk-index'] || '0');
-        const chunkStart = req.headers['x-chunk-start'];
-        
-        let chunkSize = 0;
-        req.on('data', chunk => {
-          chunkSize += chunk.length;
-          fileStream.write(chunk);
-        });
-        
-        req.on('end', () => {
-          const timestamp = Date.now();
-          manifestData.chunks.push({ chunkIndex, sizeBytes: chunkSize, receivedAt: timestamp, chunkStart });
-          manifestData.totalChunks++;
-          manifestData.totalBytes += chunkSize;
+        try {
+          const chunkIndex = parseInt(req.headers['x-chunk-index'] || '0');
+          const chunkStart = req.headers['x-chunk-start'];
           
-          console.log(JSON.stringify({
-            timestamp: new Date(timestamp).toISOString(),
-            event: "recorder_chunk_received",
-            recordingId: recordingId,
-            chunkIndex,
-            sizeBytes: chunkSize
-          }));
+          let chunkSize = 0;
+          req.on('data', chunk => {
+            chunkSize += chunk.length;
+            fileStream.write(chunk);
+          });
           
-          if (chunkSize === 0) {
-            manifestData.emptyChunkCount++;
-            console.log(JSON.stringify({
-              timestamp: new Date(timestamp).toISOString(),
-              event: "recorder_chunk_empty",
-              recordingId: recordingId,
-              chunkIndex
-            }));
-          }
-          
-          res.writeHead(200);
-          res.end('ok');
-        });
+          req.on('end', () => {
+            try {
+              const manifestData = recordingManifests.get(recordingId);
+              if (!manifestData) {
+                console.error(JSON.stringify({
+                  event: "recorder_manifest_missing",
+                  recordingId
+                }));
+                res.writeHead(500);
+                return res.end('missing_manifest');
+              }
+              const timestamp = Date.now();
+              manifestData.chunks.push({ chunkIndex, sizeBytes: chunkSize, receivedAt: timestamp, chunkStart });
+              manifestData.totalChunks++;
+              manifestData.totalBytes += chunkSize;
+              
+              console.log(JSON.stringify({
+                timestamp: new Date(timestamp).toISOString(),
+                event: "recorder_chunk_received",
+                recordingId: recordingId,
+                chunkIndex,
+                sizeBytes: chunkSize
+              }));
+              
+              if (chunkSize === 0) {
+                manifestData.emptyChunkCount++;
+                console.log(JSON.stringify({
+                  timestamp: new Date(timestamp).toISOString(),
+                  event: "recorder_chunk_empty",
+                  recordingId: recordingId,
+                  chunkIndex
+                }));
+              }
+              
+              res.writeHead(200);
+              res.end('ok');
+            } catch (err) {
+              console.error(JSON.stringify({
+                event: "recorder_chunk_processing_failed",
+                recordingId,
+                error: err.message
+              }));
+              res.writeHead(500);
+              res.end('chunk_error');
+            }
+          });
+        } catch (outerErr) {
+           console.error(JSON.stringify({
+             event: "recorder_chunk_processing_failed",
+             recordingId,
+             error: outerErr.message
+           }));
+           res.writeHead(500);
+           res.end('chunk_error');
+        }
       } else {
         res.writeHead(404);
         res.end('invalid');
@@ -569,31 +623,34 @@ async function processRecordingJob(job) {
               }
               
               // Finalize Manifest
-              manifestData.endedAt = Date.now();
-              manifestData.chunks.sort((a,b) => a.chunkIndex - b.chunkIndex);
-              for (let i = 1; i < manifestData.chunks.length; i++) {
-                if (manifestData.chunks[i].chunkIndex !== manifestData.chunks[i-1].chunkIndex + 1) {
-                  manifestData.sequenceGapDetected = true;
+              const manifestData = recordingManifests.get(recordingId);
+              if (manifestData) {
+                manifestData.endedAt = Date.now();
+                manifestData.chunks.sort((a,b) => a.chunkIndex - b.chunkIndex);
+                for (let i = 1; i < manifestData.chunks.length; i++) {
+                  if (manifestData.chunks[i].chunkIndex !== manifestData.chunks[i-1].chunkIndex + 1) {
+                    manifestData.sequenceGapDetected = true;
+                  }
                 }
-              }
-              
-              if (manifestData.totalBytes < 1000) {
-                manifestData.validationStatus = 'failed';
-                manifestData.failureReason = 'total_bytes_too_low';
-              } else if (manifestData.emptyChunkCount > manifestData.totalChunks / 2) {
-                manifestData.validationStatus = 'failed';
-                manifestData.failureReason = 'too_many_empty_chunks';
-              } else if (manifestData.sequenceGapDetected) {
-                manifestData.validationStatus = 'failed';
-                manifestData.failureReason = 'sequence_gap';
-              } else {
-                manifestData.validationStatus = 'valid';
-              }
-              
-              fs.writeFileSync(path.join(__dirname, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
-              
-              if (manifestData.validationStatus === 'failed') {
-                 throw new Error(`Manifest validation failed: ${manifestData.failureReason}`);
+                
+                if (manifestData.totalBytes < 1000) {
+                  manifestData.validationStatus = 'failed';
+                  manifestData.failureReason = 'total_bytes_too_low';
+                } else if (manifestData.emptyChunkCount > manifestData.totalChunks / 2) {
+                  manifestData.validationStatus = 'failed';
+                  manifestData.failureReason = 'too_many_empty_chunks';
+                } else if (manifestData.sequenceGapDetected) {
+                  manifestData.validationStatus = 'failed';
+                  manifestData.failureReason = 'sequence_gap';
+                } else {
+                  manifestData.validationStatus = 'valid';
+                }
+                
+                fs.writeFileSync(path.join(__dirname, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
+                
+                if (manifestData.validationStatus === 'failed') {
+                   throw new Error(`Manifest validation failed: ${manifestData.failureReason}`);
+                }
               }
 
               // Spawn background transcoder
@@ -653,7 +710,8 @@ async function processRecordingJob(job) {
 
   } catch (err) {
     console.error('Error in processRecordingJob:', err);
-    if (typeof manifestData !== 'undefined' && manifestData) {
+    const manifestData = recordingManifests.get(recordingId);
+    if (manifestData) {
        manifestData.endedAt = Date.now();
        manifestData.validationStatus = 'failed';
        manifestData.failureReason = err.message || err.toString();
