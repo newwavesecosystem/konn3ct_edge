@@ -35,7 +35,7 @@ export class WebRTCClient {
   public localScreenTrack: MediaStreamTrack | null = null;
   public consumers: Map<string, Consumer> = new Map();
   
-  private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
+  private pendingRequests: Map<string, { resolve: (val: any) => void, reject: (err: any) => void, timeoutId?: any, requestId?: string }[]> = new Map();
   
   // Media
   public rawAudioTrack: MediaStreamTrack | null = null;
@@ -287,26 +287,50 @@ export class WebRTCClient {
       if (this.pendingRequests.has(msg.type)) {
         const queue = this.pendingRequests.get(msg.type)!;
         if (queue.length > 0) {
-          const resolver = queue.shift()!;
-          resolver.resolve(msg);
-          if (queue.length === 0) {
-            this.pendingRequests.delete(msg.type);
+          if (msg.requestId) {
+            const index = queue.findIndex(req => req.requestId === msg.requestId);
+            if (index !== -1) {
+              const [resolver] = queue.splice(index, 1);
+              clearTimeout(resolver.timeoutId);
+              resolver.resolve(msg);
+              if (queue.length === 0) {
+                this.pendingRequests.delete(msg.type);
+              }
+              return;
+            } else {
+              console.warn('Received response for unknown requestId:', msg.requestId);
+            }
+          } else {
+            // Fallback for requests that don't echo requestId
+            const resolver = queue.shift()!;
+            clearTimeout(resolver.timeoutId);
+            resolver.resolve(msg);
+            if (queue.length === 0) {
+              this.pendingRequests.delete(msg.type);
+            }
+            return;
           }
-          return;
         }
       }
 
       // Handle server-initiated events
       switch (msg.type) {
         case 'consume_failed':
-          // If we receive consume_failed, we need to reject the pending 'consumed' request for this producer
           if (this.pendingRequests.has('consumed')) {
             const queue = this.pendingRequests.get('consumed')!;
-            // Find the pending request for this producerId. 
-            // We unfortunately don't have producerId in the queue item, so we just reject the first one
-            // because they are queued in order, or we can just reject all of them if it's a fatal error.
-            if (queue.length > 0) {
+            if (msg.requestId) {
+              const index = queue.findIndex(req => req.requestId === msg.requestId);
+              if (index !== -1) {
+                const [resolver] = queue.splice(index, 1);
+                clearTimeout(resolver.timeoutId);
+                resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
+                if (queue.length === 0) {
+                  this.pendingRequests.delete('consumed');
+                }
+              }
+            } else if (queue.length > 0) {
               const resolver = queue.shift()!;
+              clearTimeout(resolver.timeoutId);
               resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
               if (queue.length === 0) {
                 this.pendingRequests.delete('consumed');
@@ -367,7 +391,7 @@ export class WebRTCClient {
                 const res = await this.request('getProducers', 'producersList');
                 if (res.producers) {
                   for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
+                    await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -393,7 +417,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          await this.consumeRemoteStream(msg.producerId, msg.participantId || msg.userId, msg.name, msg.kind, msg.appData);
+          await this.consumeRemoteStream(msg.producerId, msg.participantId, msg.userId, msg.name, msg.kind, msg.appData);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -588,6 +612,9 @@ export class WebRTCClient {
   }
 
   private request(sendType: string, expectType: string, payload: any = {}): Promise<any> {
+    const requestId = payload.requestId || Math.random().toString(36).substring(2, 15);
+    if (!payload.requestId) payload.requestId = requestId;
+
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         return reject(new Error('WebSocket is not connected'));
@@ -610,7 +637,7 @@ export class WebRTCClient {
       if (!this.pendingRequests.has(expectType)) {
         this.pendingRequests.set(expectType, []);
       }
-      this.pendingRequests.get(expectType)!.push({ resolve, reject, timeoutId });
+      this.pendingRequests.get(expectType)!.push({ resolve, reject, timeoutId, requestId });
 
       this.ws.send(JSON.stringify({
         type: sendType,
@@ -1296,7 +1323,7 @@ export class WebRTCClient {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
         try {
-          await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
+          await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
         } catch (err) {
           console.error(`Failed to consume producer ${p.producerId}:`, err);
         }
@@ -1899,11 +1926,15 @@ export class WebRTCClient {
     }
   }
 
-  private async consumeRemoteStream(producerId: string, userId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
+  private async consumeRemoteStream(producerId: string, producerParticipantId: string | undefined, producerUserId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
+    if (this.participantId && producerParticipantId === this.participantId) {
+      console.log(`[WebRTC] consume_request_skipped_self_producer for ${kind} (producer: ${producerId})`);
+      return;
+    }
     if (!this.device || !this.recvTransport) return;
 
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
-    console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${userId} (Producer ID: ${producerId})...`);
+    console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${producerParticipantId || producerUserId} (Producer ID: ${producerId})...`);
 
     try {
       const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
@@ -1926,21 +1957,21 @@ export class WebRTCClient {
       // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
       consumer.on('pause', () => {
         if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId, isCameraOn: false });
+          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: false });
         } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId, isMuted: true });
+          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: true });
         }
       });
 
       consumer.on('resume', () => {
         if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId, isCameraOn: true });
+          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: true });
         } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId, isMuted: false });
+          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: false });
         }
       });
 
-      this.onNewConsumer?.(consumer, userId, userName);
+      this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);
       
       // Tell the backend to resume sending media (unpause the consumer)
       if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {
