@@ -37,6 +37,7 @@ export function RecorderShell() {
       let checkCount = 0;
       const maxChecks = 30; // 30 seconds
 
+      let recorderReadyAlreadySet = false;
       const checkReadiness = setInterval(() => {
         checkCount++;
         
@@ -56,35 +57,49 @@ export function RecorderShell() {
         // 2. Media verification
         let videoReady = false;
         let audioReady = false;
-        let noVideoExpected = true;
-        let noAudioExpected = true;
+        let noVideoExpected = false; // Do not blindly assume no video
+        let noAudioExpected = false; // Do not blindly assume no audio
         
         // Exclude bot itself from expectations
         const remoteParticipants = participants.filter(p => p.id !== currentUser?.id && p.role !== 'bot' && p.role !== 'recorder');
         
         if (remoteParticipants.length > 0) {
-          const expectedCameras = remoteParticipants.filter(p => p.isCameraOn);
+          const expectedCameras = remoteParticipants.filter(p => p.isCameraOn || p.videoTrack);
           if (expectedCameras.length > 0) {
-            noVideoExpected = false;
+            console.log(`recorder_expected_remote_video_count: ${expectedCameras.length}`);
+            
+            const consumersReady = expectedCameras.filter(p => p.videoTrack).length;
+            console.log(`recorder_remote_video_consumers_ready: ${consumersReady}`);
+            
             // Find video elements playing
             const videos = document.querySelectorAll('video');
             for (let i = 0; i < videos.length; i++) {
               if (videos[i].readyState >= 3 && videos[i].videoWidth > 0) {
                 videoReady = true;
+                console.log('recorder_first_video_frame_received');
                 break;
               }
             }
+          } else {
+            noVideoExpected = true;
           }
           
-          const expectedAudio = remoteParticipants.filter(p => !p.isMuted);
+          const expectedAudio = remoteParticipants.filter(p => !p.isMuted || p.audioTrack);
           if (expectedAudio.length > 0) {
-            noAudioExpected = false;
-            // Assuming audio tracks are playing if audio elements exist or track is added
-            const audios = document.querySelectorAll('audio');
-            if (audios.length > 0) audioReady = true;
-            // We can also assume audio ready if we receive media consumers
-            else audioReady = true; // Temporary simplification, normally check track active
+            console.log(`recorder_expected_remote_audio_count: ${expectedAudio.length}`);
+            
+            const audioConsumersReady = expectedAudio.filter(p => p.audioTrack).length;
+            console.log(`recorder_remote_audio_consumers_ready: ${audioConsumersReady}`);
+            
+            if (audioConsumersReady > 0) {
+              audioReady = true;
+              console.log('recorder_audio_ready');
+            }
+          } else {
+            noAudioExpected = true;
           }
+        } else {
+          console.log('media_expectation_unknown');
         }
 
         if (layoutReady) {
@@ -100,43 +115,49 @@ export function RecorderShell() {
 
           const isRecordingRoute = window.location.pathname.includes('/recording/');
           const noLocalMedia = !currentUser?.audioTrack && !currentUser?.videoTrack;
-          const isValidRecorderId = currentUser?.id && currentUser.id !== 'bot_recorder';
+          const isValidRecorderId = currentUser?.id && currentUser.id !== 'bot_recorder' && !currentUser?.id.includes('ssr-placeholder');
 
-          if (!isRecordingRoute) {
-            console.error("invalid_recorder_route");
-          }
-          if (!noLocalMedia) {
-            console.error("recorder_attempted_local_media");
-          }
-          if (!isValidRecorderId) {
-            console.error("invalid_recorder_participant_id");
-          }
-
-          if (vReady && aReady && isRecordingRoute && noLocalMedia && isValidRecorderId) {
+          if (!isRecordingRoute || !noLocalMedia || !isValidRecorderId) {
+            console.error("fatal_recorder_bug_detected", { isRecordingRoute, noLocalMedia, isValidRecorderId });
             clearInterval(checkReadiness);
-            console.log("recorder_ready");
             (window as any).__KONN3CT_RECORDER_READY__ = {
-              joined: true,
-              roomId: meetingInfo.roomSlug,
-              participantId: currentUser?.id,
-              signalingConnected: true,
-              mediaReady: true,
-              timestamp: Date.now()
+              joined: false,
+              error: "fatal_bug_detected_fast_fail",
+              details: { isRecordingRoute, noLocalMedia, isValidRecorderId, id: currentUser?.id }
             };
-            console.log("recorder_start_capture");
+            return;
+          }
+
+          if (vReady && aReady) {
+            clearInterval(checkReadiness);
+            if (!recorderReadyAlreadySet) {
+              recorderReadyAlreadySet = true;
+              console.log("recorder_ready");
+              (window as any).__KONN3CT_RECORDER_READY__ = {
+                joined: true,
+                roomId: meetingInfo.roomSlug,
+                participantId: currentUser?.id,
+                signalingConnected: true,
+                mediaReady: true,
+                timestamp: Date.now()
+              };
+              console.log("recorder_start_capture");
+            }
           }
         }
         
         if (checkCount >= maxChecks) {
           clearInterval(checkReadiness);
-          console.log("ready_timeout");
-          console.log("ready_failed");
-          // Fail explicitly
-          (window as any).__KONN3CT_RECORDER_READY__ = {
-            joined: false,
-            failed: true,
-            reason: "ready_timeout"
-          };
+          if (!recorderReadyAlreadySet) {
+            console.log("ready_timeout");
+            console.log("ready_failed");
+            // Fail explicitly
+            (window as any).__KONN3CT_RECORDER_READY__ = {
+              joined: false,
+              failed: true,
+              reason: "ready_timeout"
+            };
+          }
         }
       }, 1000);
 

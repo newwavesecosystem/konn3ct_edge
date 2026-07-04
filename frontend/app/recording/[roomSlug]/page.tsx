@@ -32,6 +32,7 @@ export default function RecordingPage({
         }).join(''));
         const parsed = JSON.parse(jsonPayload);
         if (parsed.participantId) {
+          console.log(`recorder_token_participant_id_decoded: ${parsed.participantId}`);
           setParticipantId(parsed.participantId);
         }
       } catch (e) {
