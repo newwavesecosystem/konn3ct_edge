@@ -5,3 +5,7 @@
 - **Constraint:** NEVER modify the audio handling, autoplay unlocking, or microphone re-acquisition logic in these files.
 - **Reasoning:** The audio architecture is perfectly stable and relies on delicate timing and browser-specific hacks.
 - **Override:** Do not touch this logic unless the user explicitly tells you to AND you have asked for and received their approval TWICE.
+
+### Testing Policy
+- **Constraint:** Every new feature, change, or bug fix MUST be accompanied by revisiting the corresponding test or creating a new one if it does not exist.
+- **Reasoning:** To ensure that the codebase maintains high test coverage and to prevent regressions, testing must be a mandatory part of every modification.

@@ -13,6 +13,40 @@ const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl, { retryStrategy: (times) => Math.min(times * 50, 2000) });
 const pubsub = new Redis(redisUrl, { retryStrategy: (times) => Math.min(times * 50, 2000) });
 
+const MAX_CONCURRENT_BROWSERS = process.env.MAX_CONCURRENT_BROWSERS ? parseInt(process.env.MAX_CONCURRENT_BROWSERS) : 2;
+const MAX_CONCURRENT_TRANSCODES = process.env.MAX_CONCURRENT_TRANSCODES ? parseInt(process.env.MAX_CONCURRENT_TRANSCODES) : 4;
+
+let activeBrowsers = 0;
+let activeTranscodes = 0;
+
+const recordingManifests = new Map();
+
+async function recoverOrphanTranscoders() {
+  const activeKeys = await redis.keys('recorder:transcode:lease:*');
+  for (const key of activeKeys) {
+    const pid = await redis.get(key + ':pid');
+    if (pid) {
+      try {
+        process.kill(parseInt(pid), 0);
+      } catch(e) {
+        console.log(`[ORPHAN RECOVERY] Transcoder ${pid} for ${key} is dead. Cleaning up lease.`);
+        await redis.del(key);
+        await redis.del(key + ':pid');
+        console.log(JSON.stringify({ event: "recorder_concurrency_orphan_reconciled", key }));
+      }
+    } else {
+       await redis.del(key);
+    }
+  }
+  
+  const browserKeys = await redis.keys('recorder:browser:lease:*');
+  // Normally we would check heartbeat, for now just log
+  for (const key of browserKeys) {
+    console.log(`[ORPHAN RECOVERY] Browser lease ${key} found on startup.`);
+  }
+}
+
+
 redis.on("error", () => {}); // Suppress harmless reconnection errors
 pubsub.on("error", () => {});
 
@@ -66,7 +100,13 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, jobId, 
         options.body = JSON.stringify(payload);
       }
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      options.signal = controller.signal;
+      
       const response = await fetch(url, options);
+      clearTimeout(timeoutId);
+      
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       success = true;
     } catch (err) {
@@ -103,11 +143,18 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, jobId, 
 }
 
 async function startWorker() {
+  await recoverOrphanTranscoders();
   console.log('Recorder Worker started, waiting for jobs...');
   
   while (true) {
     try {
-      // Pop a job from the queue. Blocks until a job arrives.
+      const browserKeys = await redis.keys('recorder:browser:lease:*');
+      const transcodeKeys = await redis.keys('recorder:transcode:lease:*');
+      if (browserKeys.length >= MAX_CONCURRENT_BROWSERS || transcodeKeys.length >= MAX_CONCURRENT_TRANSCODES) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      
       const result = await redis.brpop('recorder:queue', 0);
       if (!result) continue;
       
@@ -142,14 +189,42 @@ async function startWorker() {
 }
 
 async function processRecordingJob(job) {
+  activeBrowsers++;
+
   const { roomId, url, recordingId, botToken } = job;
   let browser = null;
   let stream = null;
   
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
   
-  const outputPathRaw = path.join(__dirname, `${roomId}_raw.webm`);
-  const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
+  const recordingsDir = process.env.RECORDINGS_DIR || path.join(__dirname, 'recordings');
+  require('fs').mkdirSync(recordingsDir, { recursive: true });
+  
+  const outputPathRaw = path.join(recordingsDir, `${roomId}_raw.webm`);
+  const outputPathMp4 = path.join(recordingsDir, `${roomId}.mp4`);
+  
+  if (!url.includes('/recording/')) {
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recorder_invalid_route_detected",
+      roomId,
+      recordingId,
+      url
+    }));
+    return; // hard fail
+  }
+
+  recordingManifests.set(recordingId, {
+    recordingId,
+    roomId,
+    startedAt: new Date().toISOString(),
+    chunks: [],
+    totalChunks: 0,
+    totalBytes: 0,
+    emptyChunkCount: 0,
+    sequenceGapDetected: false,
+    validationStatus: 'pending'
+  });
   
   try {
     const puppeteer = require('puppeteer');
@@ -235,24 +310,34 @@ async function processRecordingJob(job) {
       stage: "waiting_for_readiness"
     }));
 
+    await page.setViewport({ width: 1920, height: 1080 });
+
     try {
       await page.waitForFunction(
-        () => (window).__KONN3CT_RECORDER_READY__?.joined === true,
+        () => {
+           const state = (window).__KONN3CT_RECORDER_READY__;
+           return state?.joined === true || state?.failed === true;
+        },
         { timeout: 60000 }
       );
+      const readyState = await page.evaluate(() => (window).__KONN3CT_RECORDER_READY__);
+      if (readyState?.failed) {
+         throw new Error(readyState.reason || 'ready_failed');
+      }
     } catch (e) {
+      const failureReason = e.message || 'ready_timeout';
       console.log(JSON.stringify({
         timestamp: new Date().toISOString(),
         event: "recording_failed",
         roomId: roomId,
         recordingId: recordingId || 'unknown',
         stage: "readiness_timeout",
-        reason: "RECORDER_JOIN_TIMEOUT"
+        reason: failureReason
       }));
       if (botToken) {
-        await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/finalized`, recordingId, null, botToken, 'failed', { status: 'failed' });
+        await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/status`, recordingId, null, botToken, 'failed', { status: 'failed', failureReason });
       }
-      throw new Error("Timeout waiting for readiness marker");
+      throw new Error(`Failed readiness gate: ${failureReason}`);
     }
 
     console.log(JSON.stringify({
@@ -262,6 +347,13 @@ async function processRecordingJob(job) {
       recordingId: recordingId || 'unknown',
       stage: "meeting_ready"
     }));
+
+    // Diagnostic screenshot
+    try {
+      await page.screenshot({ path: path.join(recordingsDir, `${roomId}_diagnostic.png`) });
+    } catch (e) {
+      console.warn("Failed to take diagnostic screenshot", e);
+    }
 
     // Create WriteStream
     const fileStream = fs.createWriteStream(outputPathRaw);
@@ -281,11 +373,71 @@ async function processRecordingJob(job) {
       }
 
       if (req.method === 'POST' && req.url === '/chunk') {
-        req.pipe(fileStream, { end: false });
-        req.on('end', () => {
-          res.writeHead(200);
-          res.end('ok');
-        });
+        try {
+          const chunkIndex = parseInt(req.headers['x-chunk-index'] || '0');
+          const chunkStart = req.headers['x-chunk-start'];
+          
+          let chunkSize = 0;
+          req.on('data', chunk => {
+            chunkSize += chunk.length;
+            fileStream.write(chunk);
+          });
+          
+          req.on('end', () => {
+            try {
+              const manifestData = recordingManifests.get(recordingId);
+              if (!manifestData) {
+                console.error(JSON.stringify({
+                  event: "recorder_manifest_missing",
+                  recordingId
+                }));
+                res.writeHead(500);
+                return res.end('missing_manifest');
+              }
+              const timestamp = Date.now();
+              manifestData.chunks.push({ chunkIndex, sizeBytes: chunkSize, receivedAt: timestamp, chunkStart });
+              manifestData.totalChunks++;
+              manifestData.totalBytes += chunkSize;
+              
+              console.log(JSON.stringify({
+                timestamp: new Date(timestamp).toISOString(),
+                event: "recorder_chunk_received",
+                recordingId: recordingId,
+                chunkIndex,
+                sizeBytes: chunkSize
+              }));
+              
+              if (chunkSize === 0) {
+                manifestData.emptyChunkCount++;
+                console.log(JSON.stringify({
+                  timestamp: new Date(timestamp).toISOString(),
+                  event: "recorder_chunk_empty",
+                  recordingId: recordingId,
+                  chunkIndex
+                }));
+              }
+              
+              res.writeHead(200);
+              res.end('ok');
+            } catch (err) {
+              console.error(JSON.stringify({
+                event: "recorder_chunk_processing_failed",
+                recordingId,
+                error: err.message
+              }));
+              res.writeHead(500);
+              res.end('chunk_error');
+            }
+          });
+        } catch (outerErr) {
+           console.error(JSON.stringify({
+             event: "recorder_chunk_processing_failed",
+             recordingId,
+             error: outerErr.message
+           }));
+           res.writeHead(500);
+           res.end('chunk_error');
+        }
       } else {
         res.writeHead(404);
         res.end('invalid');
@@ -329,17 +481,23 @@ async function processRecordingJob(job) {
           const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
           window.uploadQueue = Promise.resolve();
           recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-              // Chain the uploads to guarantee sequential arrival at the server
-              window.uploadQueue = window.uploadQueue.then(() => 
-                fetch(`http://127.0.0.1:${serverPort}/chunk`, {
-                  method: 'POST',
-                  body: e.data
-                }).catch(err => console.error("Chunk upload failed", err))
-              );
-            }
+            const currentChunkIndex = window.chunkIndex || 0;
+            window.chunkIndex = currentChunkIndex + 1;
+            const chunkStart = Date.now();
+            
+            // Chain the uploads to guarantee sequential arrival at the server
+            window.uploadQueue = window.uploadQueue.then(() => 
+              fetch(`http://127.0.0.1:${serverPort}/chunk`, {
+                method: 'POST',
+                headers: {
+                  'x-chunk-index': currentChunkIndex.toString(),
+                  'x-chunk-start': chunkStart.toString()
+                },
+                body: e.data
+              }).catch(err => console.error("Chunk upload failed", err))
+            );
           };
-          recorder.start(1000); // 1 chunk per second
+          recorder.start(10000); // 10 seconds per chunk
           window.recorder = recorder;
           resolve();
         } catch (e) {
@@ -421,15 +579,16 @@ async function processRecordingJob(job) {
             server.close();
             
             fileStream.on('close', async () => {
-              console.log(JSON.stringify({
-                timestamp: new Date().toISOString(),
-                event: "recording_file_stream_closed",
-                roomId: roomId,
-                recordingId: recordingId || 'unknown',
-                stage: "file_stream_closed"
-              }));
-              
               try {
+                console.log(JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  event: "recording_file_stream_closed",
+                  roomId: roomId,
+                  recordingId: recordingId || 'unknown',
+                  stage: "file_stream_closed"
+                }));
+                
+                try {
                 const stats = fs.statSync(outputPathRaw);
                 console.log(JSON.stringify({
                   timestamp: new Date().toISOString(),
@@ -460,101 +619,94 @@ async function processRecordingJob(job) {
                 stage: "conversion_started"
               }));
               await browser.close();
+              await redis.del(`recorder:browser:lease:${recordingId}`);
+    console.log(JSON.stringify({ event: "recorder_browser_slot_released", recordingId }));
+              // Removed premature finalizing callback
+              
+              // Finalize Manifest
+              const manifestData = recordingManifests.get(recordingId);
+              if (manifestData) {
+                manifestData.endedAt = Date.now();
+                manifestData.chunks.sort((a,b) => a.chunkIndex - b.chunkIndex);
+                for (let i = 1; i < manifestData.chunks.length; i++) {
+                  if (manifestData.chunks[i].chunkIndex !== manifestData.chunks[i-1].chunkIndex + 1) {
+                    manifestData.sequenceGapDetected = true;
+                  }
+                }
+                
+                if (manifestData.totalBytes < 1000) {
+                  manifestData.validationStatus = 'failed';
+                  manifestData.failureReason = 'total_bytes_too_low';
+                } else if (manifestData.emptyChunkCount > manifestData.totalChunks / 2) {
+                  manifestData.validationStatus = 'failed';
+                  manifestData.failureReason = 'too_many_empty_chunks';
+                } else if (manifestData.sequenceGapDetected) {
+                  manifestData.validationStatus = 'failed';
+                  manifestData.failureReason = 'sequence_gap';
+                } else {
+                  manifestData.validationStatus = 'valid';
+                }
+                
+                fs.writeFileSync(path.join(recordingsDir, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
+                
+                if (manifestData.validationStatus === 'failed') {
+                   throw new Error(`Manifest validation failed: ${manifestData.failureReason}`);
+                }
+              }
+
+              // Spawn background transcoder
+              const { spawn } = require('child_process');
+              const transcoderPath = path.join(__dirname, 'transcoder.js');
+              const stdoutPath = path.join(recordingsDir, `${recordingId}_transcode_stdout.log`);
+              const stderrPath = path.join(recordingsDir, `${recordingId}_transcode_stderr.log`);
+              const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, outputPathRaw, stdoutPath, stderrPath], {
+                detached: true,
+                stdio: ['ignore', 1, 2] // Inherit container stdout/stderr so K8s captures logs
+              });
+              
+              const pid = child.pid;
+              await redis.set(`recorder:transcode:lease:${recordingId}`, Date.now(), 'EX', 1 * 60 * 60);
+              await redis.set(`recorder:transcode:lease:${recordingId}:pid`, pid, 'EX', 1 * 60 * 60);
+              console.log(JSON.stringify({ event: "recorder_transcode_slot_acquired", recordingId }));
+              
+              
+              console.log(JSON.stringify({
+                timestamp: new Date().toISOString(),
+                event: "transcode_process_spawned",
+                recordingId: recordingId,
+                pid: pid
+              }));
+              
+              console.log(JSON.stringify({
+                timestamp: new Date().toISOString(),
+                event: "transcode_process_pid_recorded",
+                recordingId: recordingId,
+                pid: pid
+              }));
+              
+              
+              child.unref(); // Allow the main worker to exit/take next job independently
+              
+              return resolve();
+            } catch (postprocessErr) {
+              console.error(JSON.stringify({
+                timestamp: new Date().toISOString(),
+                event: "recording_postprocess_failed",
+                recordingId: recordingId,
+                failureReason: postprocessErr.toString()
+              }));
               
               try {
-                await notifyBackendWithRetry(
-                  backendUrl, 
-                  `/api/recordings/${recordingId}/callback/finalized`,
-                  recordingId, job.jobId, botToken, "callback_processing",
-                  { status: 'processing' }
-                );
-              } catch (err) {
-                console.error('Failed to notify backend of processing state:', err);
-              }
+                const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+                await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/status`, recordingId, null, botToken, 'failed', { status: 'failed', failureReason: postprocessErr.toString() });
+              } catch (e) {}
               
-              // Convert WebM to MP4 using fluent-ffmpeg
-              ffmpeg(outputPathRaw)
-                .outputOptions([
-                  '-y', // Force overwrite to prevent hanging on prompt
-                  '-preset veryfast',
-                  '-c:v libx264',
-                  '-c:a aac',
-                  '-max_muxing_queue_size 9999',
-                  '-vsync 2'
-                ])
-              .on('progress', (progress) => {
-                console.log(`Processing: ${progress.percent}% done (Time: ${progress.timemark})`);
-              })
-              .save(outputPathMp4)
-              .on('error', (err, stdout, stderr) => {
-                console.error('FFmpeg stderr:', stderr);
-                console.error('FFmpeg error:', err);
-                reject(err);
-              })
-              .on('end', async () => {
-                console.log(JSON.stringify({
-                  timestamp: new Date().toISOString(),
-                  event: "recording_conversion_finished",
-                  roomId: roomId,
-                  recordingId: recordingId || 'unknown',
-                  stage: "conversion_finished"
-                }));
-                try {
-                  const fileStreamForUpload = fs.createReadStream(outputPathMp4);
-                  const uploadParams = {
-                    client: s3Client,
-                    params: {
-                      Bucket: BUCKET_NAME,
-                      Key: `recordings/${roomId}/${Date.now()}.mp4`,
-                      Body: fileStreamForUpload,
-                      ContentType: 'video/mp4',
-                    },
-                  };
-                  
-                  const uploader = new Upload(uploadParams);
-                  const data = await uploader.done();
-                  console.log(JSON.stringify({
-                    timestamp: new Date().toISOString(),
-                    event: "recording_upload_completed",
-                    roomId: roomId,
-                    recordingId: recordingId || 'unknown',
-                    stage: "upload_completed",
-                    location: data.Location
-                  }));
-                  
-                  // Publish completion back to signaling server via secure callback
-                  try {
-                    await notifyBackendWithRetry(
-                      backendUrl, 
-                      `/api/recordings/${recordingId}/callback/finalized`,
-                      recordingId, job.jobId, botToken, "callback_completed",
-                      {
-                        status: 'completed',
-                        url: data.Location,
-                        storageKey: uploadParams.params.Key,
-                        storageBucket: uploadParams.params.Bucket,
-                        contentType: uploadParams.params.ContentType,
-                        duration: 0
-                      }
-                    );
-                  } catch (err) {
-                    console.error('Failed to notify backend of completion:', err);
-                  }
-
-                  // Cleanup
-                  fs.unlinkSync(outputPathRaw);
-                  fs.unlinkSync(outputPathMp4);
-                  resolve();
-                } catch (uploadErr) {
-                  console.error('Upload failed:', uploadErr);
-                  resolve(); // Still resolve so worker can take next job
-                }
-              })
-              .on('error', (ffmpegErr) => {
-                console.error('FFmpeg conversion error:', ffmpegErr);
-                resolve();
-              });
-            });
+              try { await browser.close(); } catch (e) {}
+              try { await redis.del(`recorder:browser:lease:${recordingId}`); } catch (e) {}
+              
+              return resolve(); // Resolve instead of reject so the worker doesn't crash
+            }
+          });
               
           } catch (e) {
             console.error('Error during teardown:', e);
@@ -576,7 +728,16 @@ async function processRecordingJob(job) {
 
   } catch (err) {
     console.error('Error in processRecordingJob:', err);
+    const manifestData = recordingManifests.get(recordingId);
+    if (manifestData) {
+       manifestData.endedAt = Date.now();
+       manifestData.validationStatus = 'failed';
+       manifestData.failureReason = err.message || err.toString();
+       fs.writeFileSync(path.join(recordingsDir, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
+    }
     if (browser) await browser.close();
+    await redis.del(`recorder:browser:lease:${recordingId}`);
+    console.log(JSON.stringify({ event: "recorder_browser_slot_released", recordingId }));
     
     // Notify backend of failure
     if (job.recordingId && job.botToken) {
@@ -584,7 +745,7 @@ async function processRecordingJob(job) {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
         await notifyBackendWithRetry(
           backendUrl, 
-          `/api/recordings/${job.recordingId}/callback/finalized`,
+          `/api/recordings/${job.recordingId}/callback/status`,
           job.recordingId, job.jobId, job.botToken, "callback_failed",
           {
             status: 'failed',

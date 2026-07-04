@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import {
+  Mic,
   MicOff,
   VideoOff,
   MonitorUp,
@@ -61,6 +62,7 @@ export function ParticipantTile({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = React.useState(true);
+  const [playError, setPlayError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const observer = new IntersectionObserver(
@@ -78,8 +80,13 @@ export function ParticipantTile({
   const handleRecover = React.useCallback(() => {
     // If recovery is triggered, we can try to re-attach the track to the srcObject
     if (videoRef.current && participant.videoTrack) {
+      console.log('participant_tile_video_recovered');
       videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
-      videoRef.current.play().catch(e => console.warn("Play failed on recover:", e));
+      videoRef.current.play().catch(e => {
+        console.warn("Play failed on recover:", e);
+        console.log('participant_tile_video_play_rejected');
+        setPlayError(e.message || e.name);
+      });
     }
   }, [participant.videoTrack]);
 
@@ -127,17 +134,22 @@ export function ParticipantTile({
           participant.cameraStats.lastVideoPlayAttemptAt = new Date().toISOString();
           
           el.play().then(() => {
+             console.log('participant_tile_video_play_started');
+             setPlayError(null);
              if (participant.cameraStats) {
                participant.cameraStats.lastVideoPlayResult = 'success';
                participant.cameraStats.lastVideoError = undefined;
              }
           }).catch((e) => {
+            console.log('participant_tile_video_play_rejected');
             if (participant.cameraStats) {
               participant.cameraStats.lastVideoPlayResult = 'error';
               if (e.name !== 'AbortError') {
                 console.warn("Video play failed:", e);
                 (el as any)._lastError = e.message || e.name;
                 participant.cameraStats.lastVideoError = e.message || e.name;
+                console.log('participant_tile_video_error');
+                setPlayError(e.message || e.name);
               }
             }
           });
@@ -155,6 +167,7 @@ export function ParticipantTile({
             }
           }
           el.srcObject = new MediaStream([participant.videoTrack]);
+          console.log('participant_tile_video_attached');
           attemptPlay();
         } else {
           el.srcObject = null;
@@ -207,7 +220,11 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const effectiveVideoState = getEffectiveVideoState(participant);
+  const effectiveVideoState = 
+    (currentUser.audioOnlyMode && !isSelf) 
+      ? 'audio-only' 
+      : getEffectiveVideoState(participant);
+
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 
   // Determine diagnosis hint
@@ -267,17 +284,21 @@ export function ParticipantTile({
   const expectsMedia = isSelf || participant.isCameraOn || !participant.isMuted;
   let mediaConnectionState: string | null = null;
   
-  if (expectsMedia) {
-    if (health === 'black') {
+  if (expectsMedia && !currentUser.audioOnlyMode) {
+    if (participant.networkQuality === 'connecting_to_media_server') {
+      mediaConnectionState = "Connecting to Video";
+    } else if (participant.networkQuality === 'reconnecting') {
+      mediaConnectionState = "Reconnecting to Video";
+    } else if (participant.isConnecting) {
+      mediaConnectionState = "Connecting...";
+    } else if (health === 'black') {
       mediaConnectionState = isSelf 
         ? "Your camera hardware failed. Please toggle your video off and on." 
         : "Participant's camera feed failed.";
-    } else if (health === 'stalled') {
-      mediaConnectionState = "Media connection failed. Retrying...";
+    } else if (health === 'stalled' || (!isSelf && effectiveVideoState === 'stalled')) {
+      mediaConnectionState = "Connection failed. Retrying...";
     } else if (health === 'recovering') {
-      mediaConnectionState = "Reconnecting to Media Server";
-    } else if (participant.isConnecting) {
-      mediaConnectionState = "Connecting to Media Server";
+      mediaConnectionState = "Reconnecting to Video";
     }
   }
 
@@ -442,14 +463,44 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Muted mic pill (Google Meet style, top-right) ── */}
-      {participant.isMuted && !participant.isHandRaised && (
-        <div className="absolute top-3 right-3 z-10">
-          <div className="bg-black/55 backdrop-blur-md rounded-full p-1.5 shadow-md">
-            <MicOff className="w-3.5 h-3.5 text-white" />
+      {/* ── Audio Connection Status (Top-right) ── */}
+      {(!participant.isHandRaised) && (() => {
+        // Fallback to legacy isMuted if audioConnectionStatus is missing
+        const status = participant.audioConnectionStatus || (participant.isMuted ? 'muted' : 'connected');
+        
+        if (status === 'connected' && !participant.isMuted) return null; // Normal active mic is not shown here
+
+        let icon = null;
+        let tooltip = '';
+        let wrapperClass = "bg-black/55 backdrop-blur-md rounded-full p-1.5 shadow-md";
+
+        if (status === 'muted' || (status === 'connected' && participant.isMuted)) {
+          icon = <MicOff className="w-3.5 h-3.5 text-red-500" />;
+          tooltip = 'Muted';
+        } else if (status === 'failed') {
+          icon = <AlertTriangle className="w-3.5 h-3.5 text-red-500" />;
+          tooltip = isSelf ? 'Audio connection failed' : 'Audio unavailable';
+          wrapperClass = "bg-red-950/80 backdrop-blur-md rounded-full p-1.5 shadow-md border border-red-500/50";
+        } else if (status === 'connecting' || status === 'reconnecting') {
+          icon = <Mic className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
+          tooltip = status === 'connecting' ? 'Connecting audio...' : 'Reconnecting audio...';
+        }
+
+        if (!icon) return null;
+
+        return (
+          <div className="absolute top-3 right-3 z-10" title={tooltip}>
+            <div className={wrapperClass}>
+              {icon}
+            </div>
+            {isSelf && status === 'failed' && (
+              <div className="absolute top-8 right-0 bg-red-950/90 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap border border-red-900/50">
+                Check device / retry
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Name pill (bottom-left, no full-width gradient strip) ── */}
       <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-2 pointer-events-none">
@@ -472,11 +523,17 @@ export function ParticipantTile({
           {!isCameraEffectivelyOn && (
             <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
           )}
-          {participant.networkQuality === 'poor' && (
-            <span title="Poor Connection"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
+          {participant.networkQuality === 'unstable_network' && (
+            <span title="Unstable Network"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
           )}
-          {participant.networkQuality === 'bad' && (
-            <span title="Bad Connection"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
+          {participant.networkQuality === 'poor_network' && (
+            <span title="Poor Network"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'device_performance_issue' && (
+            <span title="Device Performance Issue"><AlertTriangle className="w-3.5 h-3.5 text-purple-400 drop-shadow-md" /></span>
+          )}
+          {participant.networkQuality === 'screen_share_performance_issue' && (
+            <span title="Screen Share Lag"><MonitorUp className="w-3.5 h-3.5 text-orange-400 drop-shadow-md" /></span>
           )}
           {participant.networkQuality === 'good' && (
             <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green drop-shadow-md" /></span>
@@ -497,6 +554,24 @@ export function ParticipantTile({
             )}
             <span>{mediaConnectionState}</span>
           </div>
+        </div>
+      )}
+      {/* ── Playback Error Overlay ── */}
+      {playError && participant.videoTrack && (
+        <div className="absolute top-2 inset-x-2 flex flex-col items-center gap-1 z-40">
+          <span className="text-white text-[10px] text-center bg-red-600/90 px-2 py-1 rounded shadow-lg border border-red-400">
+            Playback Failed: {playError}
+          </span>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setPlayError(null);
+              if (videoRef.current) videoRef.current.play().catch(console.error);
+            }}
+            className="text-[10px] bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded text-white cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       )}
 

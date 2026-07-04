@@ -3,6 +3,25 @@ import type { Device } from 'mediasoup-client';
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
 
+
+export type NetworkQualityLabel = 'good' | 'unstable_network' | 'poor_network' | 'reconnecting' | 'connecting_to_media_server' | 'device_performance_issue' | 'remote_receiver_issue' | 'screen_share_performance_issue';
+
+export interface NetworkDebugSnapshot {
+  label: NetworkQualityLabel;
+  rtt: number;
+  packetLoss: number;
+  jitter: number;
+  sendBitrate: number;
+  recvBitrate: number;
+  availableOutgoingBitrate: number | null;
+  framesEncoded: number;
+  framesDropped: number;
+  fps: number;
+  iceState: string;
+  reconnectCount: number;
+  diagnosticType: 'local_outbound' | 'local_inbound' | 'remote_receiver' | 'device' | 'media_server_recovery' | 'healthy';
+}
+
 export class WebRTCClient {
   private ws: WebSocket | null = null;
   private device: Device | null = null;
@@ -16,7 +35,7 @@ export class WebRTCClient {
   public localScreenTrack: MediaStreamTrack | null = null;
   public consumers: Map<string, Consumer> = new Map();
   
-  private pendingRequests: Map<string, Array<{ resolve: (val: any) => void, reject: (err: Error) => void, timeoutId: ReturnType<typeof setTimeout> }>> = new Map();
+  private pendingRequests: Map<string, { resolve: (val: any) => void, reject: (err: any) => void, timeoutId?: any, requestId?: string }[]> = new Map();
   
   // Media
   public rawAudioTrack: MediaStreamTrack | null = null;
@@ -51,7 +70,7 @@ export class WebRTCClient {
   public joinSessionId: string = Math.random().toString(36).substring(2, 15);
   public joinStartTime: number = Date.now();
 
-  public emitTelemetry(event: string) {
+  public emitTelemetry(event: string, data?: any) {
     console.log(JSON.stringify({
       event,
       joinSessionId: this.joinSessionId,
@@ -79,17 +98,36 @@ export class WebRTCClient {
   public onPollEnded?: (msg: any) => void;
   public onPollHistory?: (polls: any[]) => void;
   public onMuteState?: (msg: any) => void;
+  public onRemoteAudioConnectionStatus?: (msg: any) => void;
   public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
   public onChatHistory?: (messages: any[]) => void;
   public onNoteHistory?: (content: string) => void;
+  public onChatCleared?: () => void;
+  
+  public onForceMute?: (reason?: string) => void;
+  public onForceVideoOff?: (reason?: string) => void;
   public onMicError?: (error: Error) => void;
+  public audioConnectionStatus: string = 'not_started';
+  public onAudioStatusChanged?: (status: string) => void;
+  private audioConnectionTimeoutId?: NodeJS.Timeout;
+
+  private setAudioConnectionStatus(status: string) {
+    if (this.audioConnectionStatus === status) return;
+    this.audioConnectionStatus = status;
+    this.onAudioStatusChanged?.(status);
+
+    if (this.ws?.readyState === 1) {
+      this.ws.send(JSON.stringify({
+        type: 'audio_connection_status',
+        audioConnectionStatus: status
+      }));
+    }
+  }
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
-  public onForceMute?: (reason?: string) => void;
-  public onForceVideoOff?: (reason?: string) => void;
   public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean, bypassWaitingRoom: boolean }, updatedBy?: string) => void;
   public onQAHistory?: (messages: any[]) => void;
   public onQAUpdated?: (msg: any) => void;
@@ -97,8 +135,9 @@ export class WebRTCClient {
   public onECinemaAction?: (msg: any) => void;
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
-  public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
+  public onParticipantNetworkQuality?: (userId: string, quality: NetworkQualityLabel) => void;
   public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
+  public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
@@ -112,7 +151,8 @@ export class WebRTCClient {
   public onVbDegraded?: (severity: 'warning' | 'emergency') => void;
 
   // Network monitoring
-  public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
+  public onNetworkQualityChange?: (quality: NetworkQualityLabel) => void;
+  public onNetworkDebugSnapshot?: (snapshot: NetworkDebugSnapshot) => void;
   private networkInterval?: NodeJS.Timeout;
   public isAudioOnlyMode = false;
 
@@ -206,7 +246,7 @@ export class WebRTCClient {
   public lastCameraStateBroadcast?: string;
   public lastCameraStateReceived?: string;
 
-  constructor(private roomId: string, private token: string, participantId?: string | null) {
+  constructor(private roomId: string, private token: string, participantId?: string | null, public readonly isRecorderMode: boolean = false) {
     if (participantId !== undefined) {
       if (
         !participantId || 
@@ -219,6 +259,7 @@ export class WebRTCClient {
         throw new Error(`Invalid participantId: ${participantId}`);
       }
       this.participantId = participantId;
+      console.log(`recorder_webrtc_participant_id_used: ${this.participantId}`);
     }
   }
 
@@ -264,17 +305,57 @@ export class WebRTCClient {
       if (this.pendingRequests.has(msg.type)) {
         const queue = this.pendingRequests.get(msg.type)!;
         if (queue.length > 0) {
-          const resolver = queue.shift()!;
-          resolver.resolve(msg);
-          if (queue.length === 0) {
-            this.pendingRequests.delete(msg.type);
+          if (msg.requestId) {
+            const index = queue.findIndex(req => req.requestId === msg.requestId);
+            if (index !== -1) {
+              const [resolver] = queue.splice(index, 1);
+              clearTimeout(resolver.timeoutId);
+              resolver.resolve(msg);
+              if (queue.length === 0) {
+                this.pendingRequests.delete(msg.type);
+              }
+              return;
+            } else {
+              console.warn('Received response for unknown requestId:', msg.requestId);
+            }
+          } else {
+            // Fallback for requests that don't echo requestId
+            const resolver = queue.shift()!;
+            clearTimeout(resolver.timeoutId);
+            resolver.resolve(msg);
+            if (queue.length === 0) {
+              this.pendingRequests.delete(msg.type);
+            }
+            return;
           }
-          return;
         }
       }
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'consume_failed':
+          if (this.pendingRequests.has('consumed')) {
+            const queue = this.pendingRequests.get('consumed')!;
+            if (msg.requestId) {
+              const index = queue.findIndex(req => req.requestId === msg.requestId);
+              if (index !== -1) {
+                const [resolver] = queue.splice(index, 1);
+                clearTimeout(resolver.timeoutId);
+                resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
+                if (queue.length === 0) {
+                  this.pendingRequests.delete('consumed');
+                }
+              }
+            } else if (queue.length > 0) {
+              const resolver = queue.shift()!;
+              clearTimeout(resolver.timeoutId);
+              resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
+              if (queue.length === 0) {
+                this.pendingRequests.delete('consumed');
+              }
+            }
+          }
+          break;
         case 'action:ack':
           this.onActionAck?.(msg);
           break;
@@ -308,8 +389,11 @@ export class WebRTCClient {
             this.onConnectionStateChange?.('waiting');
             return; // Don't republish yet
           }
-          if (!msg.recovered && this.device?.loaded) {
-            console.log("Session lost by server. Executing Client-Side Auto-Republish...");
+          if (this.device?.loaded) {
+            console.log(`WebSocket reconnected (recovered=${msg.recovered}). Executing Client-Side Auto-Republish because server transports were destroyed...`);
+            if (msg.recovered && this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+            }
             this.republishMedia().catch(console.error);
             this.onConnectionStateChange?.('connected');
           } else if (!this.device?.loaded && msg.status === 'active') {
@@ -325,7 +409,7 @@ export class WebRTCClient {
                 const res = await this.request('getProducers', 'producersList');
                 if (res.producers) {
                   for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
+                    await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
                   }
                 }
                 // Only broadcast connected AFTER Mediasoup is fully loaded
@@ -351,7 +435,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          await this.consumeRemoteStream(msg.producerId, msg.participantId || msg.userId, msg.name, msg.kind, msg.appData);
+          await this.consumeRemoteStream(msg.producerId, msg.participantId, msg.userId, msg.name, msg.kind, msg.appData);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -370,6 +454,9 @@ export class WebRTCClient {
         case 'chat':
           this.onChatMessage?.(msg);
           break;
+        case 'chat_cleared':
+          this.onChatCleared?.();
+          break;
         case 'reaction':
           this.onReaction?.(msg);
           break;
@@ -387,6 +474,9 @@ export class WebRTCClient {
           break;
         case 'mute_state':
           this.onMuteState?.(msg);
+          break;
+        case 'audio_connection_status':
+          this.onRemoteAudioConnectionStatus?.(msg);
           break;
         case 'camera_state':
         this.lastCameraStateReceived = new Date().toISOString() + ' ' + JSON.stringify(msg);
@@ -421,8 +511,14 @@ export class WebRTCClient {
         case 'chat_history':
           this.onChatHistory?.(msg.messages);
           break;
+        case 'chat_cleared':
+          this.onChatCleared?.();
+          break;
         case 'poll_history':
           this.onPollHistory?.(msg.polls);
+          break;
+        case 'note_history':
+          this.onNoteHistory?.(msg.content);
           break;
         case 'qa_history':
           this.onQAHistory?.(msg.messages);
@@ -465,6 +561,9 @@ export class WebRTCClient {
           if (msg.message && msg.message.includes("Maximum number of active cameras")) {
             this.onServerReject?.(msg.message);
           }
+          break;
+        case 'ask_to_unmute':
+          this.onAskToUnmute?.(msg.hostName);
           break;
         case 'force_mute':
           this.onForceMute?.(msg.reason);
@@ -534,6 +633,9 @@ export class WebRTCClient {
   }
 
   private request(sendType: string, expectType: string, payload: any = {}): Promise<any> {
+    const requestId = payload.requestId || Math.random().toString(36).substring(2, 15);
+    if (!payload.requestId) payload.requestId = requestId;
+
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         return reject(new Error('WebSocket is not connected'));
@@ -556,7 +658,7 @@ export class WebRTCClient {
       if (!this.pendingRequests.has(expectType)) {
         this.pendingRequests.set(expectType, []);
       }
-      this.pendingRequests.get(expectType)!.push({ resolve, reject, timeoutId });
+      this.pendingRequests.get(expectType)!.push({ resolve, reject, timeoutId, requestId });
 
       this.ws.send(JSON.stringify({
         type: sendType,
@@ -573,6 +675,12 @@ export class WebRTCClient {
       this.ws.send(JSON.stringify({ type: 'chat', message, targetUserId, fileUrl, clientEventId: eventId }));
     }
     return eventId;
+  }
+
+  public sendClearChat() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'clear_chat' }));
+    }
   }
 
   public changeUserRole(userId: string, newRole: string) {
@@ -601,7 +709,14 @@ export class WebRTCClient {
 
   public forceMuteUser(userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target }));
+      const finalTarget = target || (userId ? 'specific' : 'all');
+      this.ws.send(JSON.stringify({ type: 'force_mute', userId, target: finalTarget }));
+    }
+  }
+
+  public askToUnmute(userId: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ask_to_unmute', userId }));
     }
   }
 
@@ -751,56 +866,58 @@ export class WebRTCClient {
 
     if (!this.device) throw new Error("Device not initialized");
 
-    // 1. Create Send Transport
-    console.log('[WebRTC] Requesting Send Transport creation...');
-    const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
-    console.log('[WebRTC] Send Transport created on server:', sendTransportData.transportParams.id);
-    this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
+    if (!this.isRecorderMode) {
+      // 1. Create Send Transport
+      console.log('[WebRTC] Requesting Send Transport creation...');
+      const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
+      console.log('[WebRTC] Send Transport created on server:', sendTransportData.transportParams.id);
+      this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
 
-    this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
-      console.log('[WebRTC] Send Transport connecting with DTLS parameters...');
-      try {
-        await this.request('connectWebRtcTransport', 'transportConnected', {
-          transportId: this.sendTransport!.id,
-          dtlsParameters
-        });
-        console.log('[WebRTC] Send Transport connected successfully!');
-        callback();
-      } catch (error: any) {
-        console.error('[WebRTC] Send Transport connect error:', error);
-        errback(error);
-      }
-    });
-
-    this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
-      console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
-      try {
-        const { id } = await this.request('produce', 'produced', {
-          transportId: this.sendTransport!.id,
-          kind,
-          rtpParameters,
-          appData // Forward source tag ('camera' | 'screen') to server
-        });
-        console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
-        callback({ id });
-      } catch (error: any) {
-        console.error(`[WebRTC] Produce error (${kind}):`, error);
-        errback(error);
-      }
-    });
-
-    this.sendTransport.on('connectionstatechange', (state: any) => {
-      console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
-      if (state === 'disconnected') {
-        console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
-      } else if (state === 'failed') {
-        console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+      this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+        console.log('[WebRTC] Send Transport connecting with DTLS parameters...');
+        try {
+          await this.request('connectWebRtcTransport', 'transportConnected', {
+            transportId: this.sendTransport!.id,
+            dtlsParameters
+          });
+          console.log('[WebRTC] Send Transport connected successfully!');
+          callback();
+        } catch (error: any) {
+          console.error('[WebRTC] Send Transport connect error:', error);
+          errback(error);
         }
-        this.republishMedia().catch(console.error);
-      }
-    });
+      });
+
+      this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
+        console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
+        try {
+          const { id } = await this.request('produce', 'produced', {
+            transportId: this.sendTransport!.id,
+            kind,
+            rtpParameters,
+            appData // Forward source tag ('camera' | 'screen') to server
+          });
+          console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
+          callback({ id });
+        } catch (error: any) {
+          console.error(`[WebRTC] Produce error (${kind}):`, error);
+          errback(error);
+        }
+      });
+
+      this.sendTransport.on('connectionstatechange', (state: any) => {
+        console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
+        if (state === 'disconnected') {
+          console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
+        } else if (state === 'failed') {
+          console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+          }
+          this.republishMedia().catch(console.error);
+        }
+      });
+    }
 
     // 4. Create Receive Transport
     console.log('[WebRTC] Requesting Receive Transport creation...');
@@ -842,43 +959,208 @@ export class WebRTCClient {
   private startNetworkMonitor() {
     if (this.networkInterval) clearInterval(this.networkInterval);
     
+    const WINDOW_SIZE = 5;
+    const history: Array<{
+      rtt: number;
+      packetLoss: number;
+      jitter: number;
+      sendBitrate: number;
+      recvBitrate: number;
+      framesDropped: number;
+      framesEncoded: number;
+    }> = [];
+
+    let lastBytesSent = 0;
+    let lastBytesRecv = 0;
+    let lastPacketsSent = 0;
+    let lastPacketsLost = 0;
+    let lastFramesDropped = 0;
+    let lastFramesEncoded = 0;
+    let lastTime = performance.now();
+    
+    let currentLabel: NetworkQualityLabel = 'good';
+    let labelStreak = 0;
+    let reconnectCount = 0;
+
     this.networkInterval = setInterval(async () => {
-      if (!this.sendTransport) return;
+      if (!this.sendTransport && !this.recvTransport) return;
+      
       try {
-        const stats = await this.sendTransport.getStats();
-        let maxRtt = 0;
-        let maxPacketLoss = 0;
+        const now = performance.now();
+        const dt = (now - lastTime) / 1000;
+        if (dt <= 0) return;
 
-        stats.forEach((stat: any) => {
-          if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
-            const rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : 0;
-            if (rtt > maxRtt) maxRtt = rtt;
-          }
-          if (stat.type === 'remote-inbound-rtp') {
-            const rtt = stat.roundTripTime ? stat.roundTripTime * 1000 : 0;
-            if (rtt > maxRtt) maxRtt = rtt;
-            const loss = stat.fractionLost ? stat.fractionLost * 100 : 0;
-            if (loss > maxPacketLoss) maxPacketLoss = loss;
-          }
-        });
+        let rtt = 0;
+        let jitter = 0;
+        let bytesSent = 0;
+        let bytesRecv = 0;
+        let packetsSent = 0;
+        let packetsLost = 0;
+        let framesDropped = 0;
+        let framesEncoded = 0;
+        let availableOutgoingBitrate: number | null = null;
+        let iceState = this.sendTransport?.connectionState || 'new';
 
-        let quality: 'good' | 'poor' | 'bad' = 'good';
-        // Zoom and modern platforms are highly tolerant due to FEC.
-        // We relax the thresholds so users don't get unnecessary warnings.
-        if (maxRtt > 1500 || maxPacketLoss > 25) {
-          quality = 'bad';
-        } else if (maxRtt > 800 || maxPacketLoss > 15) {
-          quality = 'poor';
+        if (this.sendTransport) {
+          const sendStats = await this.sendTransport.getStats();
+          sendStats.forEach((stat: any) => {
+            if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
+              rtt = Math.max(rtt, stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : 0);
+              if (stat.availableOutgoingBitrate) availableOutgoingBitrate = stat.availableOutgoingBitrate;
+            }
+            if (stat.type === 'remote-inbound-rtp') {
+              rtt = Math.max(rtt, stat.roundTripTime ? stat.roundTripTime * 1000 : 0);
+              jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
+            }
+            if (stat.type === 'outbound-rtp') {
+              bytesSent += stat.bytesSent || 0;
+              packetsSent += stat.packetsSent || 0;
+              if (stat.kind === 'video') {
+                framesEncoded += stat.framesEncoded || 0;
+              }
+            }
+            if (stat.type === 'media-source' && stat.kind === 'video') {
+              framesDropped += stat.droppedFrames || 0;
+            }
+          });
         }
 
-        this.onNetworkQualityChange?.(quality);
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'network_quality', quality }));
+        if (this.recvTransport) {
+          const recvStats = await this.recvTransport.getStats();
+          recvStats.forEach((stat: any) => {
+            if (stat.type === 'inbound-rtp') {
+              bytesRecv += stat.bytesReceived || 0;
+              packetsLost += stat.packetsLost || 0;
+              jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
+            }
+          });
         }
+
+        // Calculate deltas
+        const dBytesSent = Math.max(0, bytesSent - lastBytesSent);
+        const dBytesRecv = Math.max(0, bytesRecv - lastBytesRecv);
+        const dPacketsSent = Math.max(0, packetsSent - lastPacketsSent);
+        const dPacketsLost = Math.max(0, packetsLost - lastPacketsLost);
+        const dFramesDropped = Math.max(0, framesDropped - lastFramesDropped);
+        const dFramesEncoded = Math.max(0, framesEncoded - lastFramesEncoded);
+
+        lastBytesSent = bytesSent;
+        lastBytesRecv = bytesRecv;
+        lastPacketsSent = packetsSent;
+        lastPacketsLost = packetsLost;
+        lastFramesDropped = framesDropped;
+        lastFramesEncoded = framesEncoded;
+        lastTime = now;
+
+        const sendBitrate = (dBytesSent * 8) / dt;
+        const recvBitrate = (dBytesRecv * 8) / dt;
+        const packetLoss = dPacketsSent > 0 ? (dPacketsLost / (dPacketsSent + dPacketsLost)) * 100 : 0;
+        const fps = dFramesEncoded / dt;
+
+        history.push({ rtt, packetLoss, jitter, sendBitrate, recvBitrate, framesDropped: dFramesDropped, framesEncoded: dFramesEncoded });
+        if (history.length > WINDOW_SIZE) history.shift();
+
+        // Averages over window
+        const avgRtt = history.reduce((sum, h) => sum + h.rtt, 0) / history.length;
+        const avgLoss = history.reduce((sum, h) => sum + h.packetLoss, 0) / history.length;
+        const avgJitter = history.reduce((sum, h) => sum + h.jitter, 0) / history.length;
+        const totalFramesDropped = history.reduce((sum, h) => sum + h.framesDropped, 0);
+        const totalFramesEncoded = history.reduce((sum, h) => sum + h.framesEncoded, 0);
+        const frameDropRate = totalFramesEncoded > 0 ? (totalFramesDropped / (totalFramesEncoded + totalFramesDropped)) : 0;
+
+        let candidateLabel: NetworkQualityLabel = 'good';
+        let diag: NetworkDebugSnapshot['diagnosticType'] = 'healthy';
+
+        if (iceState === 'connecting' || iceState === 'checking') {
+          candidateLabel = 'connecting_to_media_server';
+          diag = 'media_server_recovery';
+        } else if (iceState === 'disconnected' || this.isRepublishing) {
+          candidateLabel = 'reconnecting';
+          diag = 'media_server_recovery';
+          reconnectCount++;
+        } else if (frameDropRate > 0.15 && avgLoss < 2 && avgRtt < 150) {
+          candidateLabel = 'device_performance_issue';
+          diag = 'device';
+        } else {
+          if (avgRtt > 300 || avgLoss > 8 || avgJitter > 60) {
+            candidateLabel = 'poor_network';
+            diag = 'local_outbound';
+          } else if (avgRtt >= 150 || avgLoss >= 2 || avgJitter >= 30) {
+            candidateLabel = 'unstable_network';
+            diag = 'local_outbound';
+          }
+        }
+
+        // Clean Hysteresis Logic
+        if (candidateLabel === currentLabel) {
+          labelStreak++;
+        } else {
+          if ((this as any).pendingCandidate !== candidateLabel) {
+             (this as any).pendingCandidate = candidateLabel;
+             (this as any).pendingStreak = 1;
+          } else {
+             (this as any).pendingStreak++;
+          }
+        }
+
+        let nextLabel = currentLabel;
+        const isNetworkLabel = (l: NetworkQualityLabel) => ['good', 'unstable_network', 'poor_network'].includes(l);
+        
+        if (!isNetworkLabel(candidateLabel)) {
+           nextLabel = candidateLabel;
+        } else {
+           if ((this as any).pendingCandidate === candidateLabel && (this as any).pendingStreak >= 3) {
+             nextLabel = candidateLabel;
+           }
+        }
+
+        if (nextLabel !== currentLabel) {
+          const oldLabel = currentLabel;
+          currentLabel = nextLabel;
+          labelStreak = 1;
+          (this as any).pendingCandidate = null;
+          (this as any).pendingStreak = 0;
+          
+          this.broadcastNetworkLabelChange(currentLabel);
+          
+          this.emitTelemetry('network_quality_label_changed', { old: oldLabel, new: currentLabel, avgRtt, avgLoss });
+          
+          if (currentLabel === 'device_performance_issue') this.emitTelemetry('device_performance_issue_detected');
+          if (currentLabel === 'reconnecting' || currentLabel === 'connecting_to_media_server') this.emitTelemetry('media_connecting_not_network_poor');
+          
+          if (oldLabel === 'poor_network' && currentLabel === 'good' && labelStreak === 1) {
+             this.emitTelemetry('network_quality_false_positive_suspected');
+          }
+        }
+
+        if (this.onNetworkDebugSnapshot) {
+          this.onNetworkDebugSnapshot({
+            label: currentLabel,
+            rtt: avgRtt,
+            packetLoss: avgLoss,
+            jitter: avgJitter,
+            sendBitrate,
+            recvBitrate,
+            availableOutgoingBitrate,
+            framesEncoded: dFramesEncoded,
+            framesDropped: dFramesDropped,
+            fps,
+            iceState,
+            reconnectCount,
+            diagnosticType: diag
+          });
+        }
+
       } catch (e) {
-        // Ignore stats errors
       }
-    }, 5000);
+    }, 2000);
+  }
+  
+  private broadcastNetworkLabelChange(label: NetworkQualityLabel) {
+    this.onNetworkQualityChange?.(label);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'network_quality', quality: label }));
+    }
   }
 
   private async republishMedia() {
@@ -965,27 +1247,39 @@ export class WebRTCClient {
     });
 
     // Republish saved tracks
-    if (videoTrack && videoTrack.readyState === 'live') {
-      const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
-      const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
-      
-      const encodings = this.isLowBandwidth 
-        ? [{ maxBitrate: 150000 }] 
-        : isSVC 
-          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }]
-          : [
-              { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
-              { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
-              { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
-            ];
+    if (videoTrack) {
+      if (videoTrack.readyState === 'live') {
+        console.log('camera_reconnect_republish_started');
+        const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
+        const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
+        
+        const encodings = this.isLowBandwidth 
+          ? [{ maxBitrate: 150000 }] 
+          : isSVC 
+            ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }]
+            : [
+                { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
+                { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
+                { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
+              ];
 
-      this.localVideoProducer = await this.sendTransport.produce({ 
-        track: videoTrack,
-        appData: { source: 'camera' },
-        encodings,
-        codecOptions: { videoGoogleStartBitrate: 1000 }
-      });
-      if (isVideoPaused) this.localVideoProducer.pause();
+        try {
+          this.localVideoProducer = await this.sendTransport.produce({ 
+            track: videoTrack,
+            appData: { source: 'camera' },
+            encodings,
+            codecOptions: { videoGoogleStartBitrate: 1000 }
+          });
+          if (isVideoPaused) this.localVideoProducer.pause();
+          console.log('camera_reconnect_republish_completed');
+        } catch (err) {
+          console.log('camera_reconnect_republish_failed', err);
+        }
+      } else {
+        console.log('camera_reconnect_republish_failed: track not live');
+      }
+    } else {
+      console.log('camera_reconnect_skipped_camera_was_off');
     }
     
     if (audioTrack) {
@@ -1064,7 +1358,7 @@ export class WebRTCClient {
       const res = await this.request('getProducers', 'producersList');
       for (const p of res.producers || []) {
         try {
-          await this.consumeRemoteStream(p.producerId, p.participantId || p.userId, p.name, p.kind, p.appData);
+          await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
         } catch (err) {
           console.error(`Failed to consume producer ${p.producerId}:`, err);
         }
@@ -1081,6 +1375,10 @@ export class WebRTCClient {
   }
 
   private async acquireCameraStream(deviceId?: string): Promise<MediaStream> {
+    if (this.isRecorderMode) {
+      throw new Error("Recorder mode cannot acquire camera stream");
+    }
+    
     this.cameraStartAttemptCount++;
     this.lastCameraErrorName = null;
     this.lastCameraErrorMessage = null;
@@ -1121,16 +1419,41 @@ export class WebRTCClient {
 
     for (const attempt of attempts) {
       this.lastCameraConstraintAttempt = attempt.name;
-      if (attempt.name === 'D (Fallback)') this.cameraFallbackReachedVideoTrue = true;
+      if (attempt.name === 'C (Safe)') console.log('camera_fallback_to_safe_profile');
+      if (attempt.name === 'D (Fallback)') {
+        this.cameraFallbackReachedVideoTrue = true;
+        console.log('camera_fallback_to_video_true');
+      }
 
       let retries = 2;
       while (retries > 0) {
         try {
-          return await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          console.log(`camera_permission_requested`);
+          console.log(`camera_constraint_attempt: ${attempt.name}`);
+          const stream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          console.log(`camera_permission_granted`);
+          console.log(`camera_constraint_success: ${attempt.name}`);
+          return stream;
         } catch (err: any) {
           this.lastCameraErrorName = err.name;
           this.lastCameraErrorMessage = err.message;
+          console.log(`camera_constraint_failed: ${attempt.name}`, err.name);
           retries--;
+          
+          if (err.name === 'NotAllowedError') {
+            console.log(`camera_permission_denied`);
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("Permission denied: Please allow camera access in your browser or system settings.");
+          } else if (err.name === 'NotFoundError') {
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("No camera found: Please connect a camera or continue audio-only.");
+          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("Camera busy: Another app may be using the camera, or the OS blocked it.");
+          } else if (err.name === 'SecurityError') {
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("Security Error: Camera cannot be accessed in this context.");
+          }
           
           if (err.name === 'AbortError' && retries > 0) {
             console.warn(`Camera start timeout (${attempt.name}), retrying... (${retries} left)`);
@@ -1168,6 +1491,7 @@ export class WebRTCClient {
       // Cleanup existing camera producer if replacing
       if (this.localVideoProducer) {
         this.localVideoProducer.close();
+        console.log('camera_stale_track_cleared');
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({
             type: 'stop_producer',
@@ -1183,6 +1507,7 @@ export class WebRTCClient {
       throw new Error("Failed to initialize camera stream");
     }
     this.emitTelemetry('video_track_ready');
+    console.log('camera_track_ready');
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
     // Initialize VideoProcessor if not exists
@@ -1222,6 +1547,9 @@ export class WebRTCClient {
     const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
     const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    if (isIOS) console.log('ios_safari_camera_safeguards_enabled');
 
     const encodings = this.isLowBandwidth 
       ? [{ maxBitrate: 150000 }] 
@@ -1238,9 +1566,12 @@ export class WebRTCClient {
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
       try {
+        console.log('camera_producer_replace_track_started');
         await this.localVideoProducer.replaceTrack({ track: videoTrack });
         this.localVideoProducer.resume();
+        console.log('camera_producer_replace_track_completed');
       } catch (err) {
+        console.log('camera_producer_replace_track_failed');
         console.error("Track replacement failed, will recreate producer:", err);
         this.localVideoProducer.close();
         this.localVideoProducer = null;
@@ -1251,13 +1582,20 @@ export class WebRTCClient {
     if (!this.localVideoProducer || this.localVideoProducer.closed) {
       // First time or after producer was closed — create with full simulcast encodings
       this.emitTelemetry('video_produce_started');
-      this.localVideoProducer = await this.sendTransport.produce({
-        track: videoTrack,
-        appData: { source: 'camera' },
-        encodings,
-        codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
-      });
-      this.emitTelemetry('video_producer_created');
+      console.log('camera_producer_creating');
+      try {
+        this.localVideoProducer = await this.sendTransport.produce({
+          track: videoTrack,
+          appData: { source: 'camera' },
+          encodings,
+          codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
+        });
+        this.emitTelemetry('video_producer_created');
+        console.log('camera_producer_created');
+      } catch (err) {
+        console.log('camera_producer_failed');
+        throw err;
+      }
     }
     
     this.emitTelemetry('video_ready');
@@ -1326,6 +1664,11 @@ export class WebRTCClient {
   }
 
   public disableMic() {
+    if (this.audioConnectionTimeoutId) {
+      clearTimeout(this.audioConnectionTimeoutId);
+      this.audioConnectionTimeoutId = undefined;
+    }
+    this.setAudioConnectionStatus('not_started');
     if (this.rawAudioTrack) {
       this.rawAudioTrack.stop();
       this.rawAudioTrack = null;
@@ -1343,8 +1686,26 @@ export class WebRTCClient {
     }
   }
 
-  public async enableMic(): Promise<MediaStreamTrack> {
+  public async enableMic(isReconnect = false): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    // Clear any pending timeout
+    if (this.audioConnectionTimeoutId) {
+      clearTimeout(this.audioConnectionTimeoutId);
+      this.audioConnectionTimeoutId = undefined;
+    }
+
+    this.setAudioConnectionStatus(isReconnect ? 'reconnecting' : 'connecting');
+    this.emitTelemetry('audio_connection_started');
+    
+    // 15-second timeout for audio connection
+    this.audioConnectionTimeoutId = setTimeout(() => {
+      this.emitTelemetry('audio_connection_timeout');
+      this.setAudioConnectionStatus('failed');
+    }, 15000);
+    
+    if (this.isRecorderMode) {
+      throw new Error("Recorder mode cannot acquire microphone");
+    }
     
     try {
       this.emitTelemetry('audio_permission_requested');
@@ -1409,10 +1770,20 @@ export class WebRTCClient {
         }
       };
 
-      this.emitTelemetry('audio_ready');
+      this.emitTelemetry('audio_connection_ready');
+      if (this.audioConnectionTimeoutId) {
+        clearTimeout(this.audioConnectionTimeoutId);
+        this.audioConnectionTimeoutId = undefined;
+      }
+      this.setAudioConnectionStatus(this.localAudioProducer?.paused ? 'muted' : 'connected');
       return activeTrack;
     } catch (err: any) {
-      this.emitTelemetry('audio_failed');
+      this.emitTelemetry('audio_connection_failed');
+      if (this.audioConnectionTimeoutId) {
+        clearTimeout(this.audioConnectionTimeoutId);
+        this.audioConnectionTimeoutId = undefined;
+      }
+      this.setAudioConnectionStatus('failed');
       this.onMicError?.(err);
       throw err;
     }
@@ -1565,18 +1936,25 @@ export class WebRTCClient {
     if (this.localAudioProducer && !this.localAudioProducer.paused) {
       this.localAudioProducer.pause();
     }
+    if (this.audioConnectionTimeoutId) {
+      clearTimeout(this.audioConnectionTimeoutId);
+      this.audioConnectionTimeoutId = undefined;
+      this.emitTelemetry('audio_connection_status_reset_on_mute');
+    }
+    this.setAudioConnectionStatus('muted');
   }
 
   public async resumeMic() {
     if (!this.localAudioProducer || this.localAudioProducer.closed || this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
       console.warn("[WebRTC] Microphone track is ended or producer is closed. Re-initializing hardware.");
       try {
-        await this.enableMic();
+        await this.enableMic(true);
       } catch (e) {
         console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
       }
     } else if (this.localAudioProducer.paused) {
       this.localAudioProducer.resume();
+      this.setAudioConnectionStatus('connected');
     }
   }
 
@@ -1667,11 +2045,15 @@ export class WebRTCClient {
     }
   }
 
-  private async consumeRemoteStream(producerId: string, userId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
+  private async consumeRemoteStream(producerId: string, producerParticipantId: string | undefined, producerUserId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
+    if (this.participantId && producerParticipantId === this.participantId) {
+      console.log(`[WebRTC] consume_request_skipped_self_producer for ${kind} (producer: ${producerId})`);
+      return;
+    }
     if (!this.device || !this.recvTransport) return;
 
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
-    console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${userId} (Producer ID: ${producerId})...`);
+    console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${producerParticipantId || producerUserId} (Producer ID: ${producerId})...`);
 
     try {
       const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
@@ -1694,21 +2076,21 @@ export class WebRTCClient {
       // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
       consumer.on('pause', () => {
         if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId, isCameraOn: false });
+          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: false });
         } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId, isMuted: true });
+          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: true });
         }
       });
 
       consumer.on('resume', () => {
         if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId, isCameraOn: true });
+          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: true });
         } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId, isMuted: false });
+          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: false });
         }
       });
 
-      this.onNewConsumer?.(consumer, userId, userName);
+      this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);
       
       // Tell the backend to resume sending media (unpause the consumer)
       if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {

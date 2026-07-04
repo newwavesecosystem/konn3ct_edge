@@ -228,38 +228,42 @@ export function SettingsPanel() {
 
         {/* General */}
         <SettingsGroup label="General">
-          <div className="flex flex-col gap-2 pt-2 pb-3">
-            <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--mt-text-muted)" }}>
-              <span>Caption Size</span>
-              <span>{Math.round(captionSize * 100)}%</span>
-            </div>
-            <input 
-              type="range" 
-              min="0.5" 
-              max="2.0" 
-              step="0.1" 
-              value={captionSize} 
-              onChange={(e) => setCaptionSize(parseFloat(e.target.value))}
-              className="w-full accent-brand-green"
-            />
-          </div>
-          <SettingsSelect
-            icon={<Globe className="w-4 h-4" />}
-            label="Caption Translation"
-            options={[
-              { value: "original", label: "Original Language" },
-              { value: "en", label: "English" },
-              { value: "fr", label: "French" },
-              { value: "es", label: "Spanish" },
-              { value: "de", label: "German" },
-              { value: "zh", label: "Chinese" },
-              { value: "yo", label: "Yoruba" },
-              { value: "ha", label: "Hausa" },
-              { value: "ig", label: "Igbo" }
-            ]}
-            value={translationLanguage}
-            onChange={(val) => setTranslationLanguage(val)}
-          />
+          {roomFeatureFlags.captionsEnabled && (
+            <>
+              <div className="flex flex-col gap-2 pt-2 pb-3">
+                <div className="flex items-center justify-between text-xs font-medium" style={{ color: "var(--mt-text-muted)" }}>
+                  <span>Caption Size</span>
+                  <span>{Math.round(captionSize * 100)}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="2.0" 
+                  step="0.1" 
+                  value={captionSize} 
+                  onChange={(e) => setCaptionSize(parseFloat(e.target.value))}
+                  className="w-full accent-brand-green"
+                />
+              </div>
+              <SettingsSelect
+                icon={<Globe className="w-4 h-4" />}
+                label="Caption Translation"
+                options={[
+                  { value: "original", label: "Original Language" },
+                  { value: "en", label: "English" },
+                  { value: "fr", label: "French" },
+                  { value: "es", label: "Spanish" },
+                  { value: "de", label: "German" },
+                  { value: "zh", label: "Chinese" },
+                  { value: "yo", label: "Yoruba" },
+                  { value: "ha", label: "Hausa" },
+                  { value: "ig", label: "Igbo" }
+                ]}
+                value={translationLanguage}
+                onChange={(val) => setTranslationLanguage(val)}
+              />
+            </>
+          )}
           <SettingsToggle 
             label="AI Noise Suppression (Premium)" 
             checked={isAINoiseSuppressionEnabled} 

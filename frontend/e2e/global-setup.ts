@@ -28,7 +28,6 @@ export default async function globalSetup(config: FullConfig) {
       const db = new PrismaClient();
 
       async function main() {
-        // Upsert a test owner user
         const owner = await db.user.upsert({
           where: { email: 'playwright-bot@konn3ct.test' },
           update: {},
@@ -39,7 +38,6 @@ export default async function globalSetup(config: FullConfig) {
           },
         });
 
-        // Upsert the test room
         const room = await db.room.upsert({
           where: { slug: '${TEST_ROOM_SLUG}' },
           update: { name: '${TEST_ROOM_NAME}' },
@@ -47,7 +45,7 @@ export default async function globalSetup(config: FullConfig) {
             slug: '${TEST_ROOM_SLUG}',
             name: '${TEST_ROOM_NAME}',
             ownerId: owner.id,
-            isWaitingRoomEnabled: false,  // no waiting room so tests join immediately
+            isWaitingRoomEnabled: false,
           },
         });
 

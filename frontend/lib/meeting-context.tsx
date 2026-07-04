@@ -68,6 +68,7 @@ interface MeetingContextValue {
   isDonationActive: boolean;
   totalDonations: number;
   captionSize: number;
+  micExempted: boolean;
 
   // Actions
   toggleMute: () => void;
@@ -101,6 +102,8 @@ interface MeetingContextValue {
   denyAllUsers: () => void;
   kickUser: (userId: string) => void;
   changeUserRole: (userId: string, newRole: string) => void;
+  askToUnmute: (userId: string) => void;
+  clearChat: () => void;
   forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
@@ -177,9 +180,13 @@ export function useMeeting() {
 export function MeetingProvider({
   children,
   roomSlug,
+  isRecorderMode = false,
+  recorderParticipantId = null,
 }: {
   children: React.ReactNode;
   roomSlug: string;
+  isRecorderMode?: boolean;
+  recorderParticipantId?: string | null;
 }) {
   // Extract user info from sessionStorage (passed from Join screen)
   let storedJoinInfo: any = null;
@@ -232,6 +239,12 @@ export function MeetingProvider({
     if (typeof window === 'undefined') return;
     const key = `konn3ct:participant:${roomSlug}`;
     const existing = sessionStorage.getItem(key);
+
+    if (isRecorderMode && recorderParticipantId) {
+      console.log(`recorder_provider_participant_id_set: ${recorderParticipantId}`);
+      setClientParticipantId(recorderParticipantId);
+      return;
+    }
 
     if (
       existing === "pending" || 
@@ -381,6 +394,7 @@ export function MeetingProvider({
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
 
   const [roomSettings, setRoomSettings] = useState({ micLocked: false, videoLocked: false, chatLocked: false });
+  const [micExempted, setMicExempted] = useState(false);
 
   // Virtual Background
   const [vbMode, setVbMode] = useState<'none' | 'blur' | 'image'>('none');
@@ -410,7 +424,7 @@ export function MeetingProvider({
           setIsMuted(true);
           setParticipants((prev) =>
             prev.map((p) =>
-              p.id === initialCurrentUser.id ? { ...p, isMuted: true } : p
+              p.userId === initialCurrentUser.userId ? { ...p, isMuted: true } : p
             )
           );
         }
@@ -539,7 +553,7 @@ export function MeetingProvider({
           return;
         }
 
-        client = new WebRTCClient(roomSlug, data.token, clientParticipantId);
+        client = new WebRTCClient(roomSlug, data.token, clientParticipantId, isRecorderMode);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
         
@@ -573,7 +587,7 @@ export function MeetingProvider({
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
-            setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: false } : p));
+            setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: false } : p));
           }
         };
 
@@ -582,7 +596,7 @@ export function MeetingProvider({
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
-            setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: false } : p));
+            setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: false } : p));
           }
         };
 
@@ -594,10 +608,10 @@ export function MeetingProvider({
           const now = Date.now();
           if (now - lastNetworkToastTime > 30000) {
 
-            if (quality === 'bad') {
+            if (quality === 'poor_network') {
               // Play Warning Sound
               try {
-                if (client?.userRole !== 'bot') {
+                if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
                   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
                   const oscillator = audioCtx.createOscillator();
                   const gainNode = audioCtx.createGain();
@@ -624,7 +638,7 @@ export function MeetingProvider({
                 setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
               }
               lastNetworkToastTime = now;
-            } else if (quality === 'poor') {
+            } else if (quality === 'unstable_network') {
               // toast.warning("Network connection is weak. Video or Audio quality might be degraded.");
               lastNetworkToastTime = now;
             } else if (quality === 'good') {
@@ -724,6 +738,11 @@ export function MeetingProvider({
           }
         };
 
+        client.onChatCleared = () => {
+          setChatMessages([]);
+          toast.info("The chat has been cleared by a host.");
+        };
+
         client.onChatHistory = (messages) => {
           setChatMessages(messages.map((m: any) => ({
             id: m.id,
@@ -789,7 +808,7 @@ export function MeetingProvider({
           if (msg.userId !== webrtcClient.current?.userId) {
             // Play a prominent "Ding-Ding" notification sound for chat
             try {
-              if (client?.userRole !== 'bot') {
+              if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
                 const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
                 
                 const playBeep = (timeOffset: number) => {
@@ -943,7 +962,20 @@ export function MeetingProvider({
           );
         };
 
-        const resolveUserId = (id: string) => id === webrtcClient.current?.userId ? initialCurrentUser.id : id;
+        const resolveUserId = (id: string) => id === webrtcClient.current?.userId ? (clientParticipantId || initialCurrentUser.id) : id;
+
+        client.onAudioStatusChanged = (status) => {
+          setParticipants((prev) => prev.map(p =>
+            p.userId === initialCurrentUser.userId ? { ...p, audioConnectionStatus: status as any } : p
+          ));
+        };
+
+        client.onRemoteAudioConnectionStatus = (msg) => {
+          const targetId = resolveUserId(msg.participantId || msg.userId);
+          setParticipants((prev) => prev.map(p =>
+            p.id === targetId ? { ...p, audioConnectionStatus: msg.audioConnectionStatus } : p
+          ));
+        };
 
         client.onMuteState = (msg) => {
           const targetId = resolveUserId(msg.userId);
@@ -974,7 +1006,7 @@ export function MeetingProvider({
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
-              if (client?.userRole !== 'bot') {
+              if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
                 const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -1030,7 +1062,7 @@ export function MeetingProvider({
 
         client.onActiveSpeaker = (userIds, participantIds) => {
           setParticipants((prev) => prev.map(p => {
-            if (p.id === initialCurrentUser.id) {
+            if (p.userId === initialCurrentUser.userId) {
               return { ...p, isSpeaking: localIsSpeakingRef.current || userIds.includes(p.userId) || (participantIds && participantIds.includes(p.id)) || userIds.includes(webrtcClient.current?.userId || '') };
             }
             return { ...p, isSpeaking: (participantIds && participantIds.includes(p.id)) || userIds.includes(p.userId) };
@@ -1045,7 +1077,7 @@ export function MeetingProvider({
 
           // Play Doorbell Sound (Ding-Dong)
           try {
-            if (client?.userRole !== 'bot') {
+            if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
               const oscillator = audioCtx.createOscillator();
               const gainNode = audioCtx.createGain();
@@ -1157,10 +1189,54 @@ export function MeetingProvider({
         };
 
         client.onRoomSettingsUpdated = (newSettings, updatedBy) => {
-          setRoomSettings(newSettings);
+          setRoomSettings(prev => {
+            if (currentUser.role !== 'host' && currentUser.role !== 'co-host') {
+              if (!prev.micLocked && newSettings.micLocked) {
+                setIsMuted(true);
+                setMicExempted(false);
+                webrtcClient.current?.pauseMic();
+                webrtcClient.current?.sendMuteState(true);
+              }
+              if (!prev.videoLocked && newSettings.videoLocked) {
+                setIsCameraOn(false);
+                webrtcClient.current?.disableCamera();
+                webrtcClient.current?.sendCameraState(false);
+              }
+            }
+            return newSettings;
+          });
           if (updatedBy && updatedBy !== currentUser.name) {
             toast.info(`${updatedBy} updated the room security settings.`);
           }
+        };
+
+        client.onAskToUnmute = (hostName) => {
+          setMicExempted(true);
+          toast.custom((t) => (
+            <div className="bg-[var(--mt-bg-elevated)] text-[var(--mt-text)] p-4 rounded-xl shadow-lg border border-[var(--mt-border)] w-full flex flex-col gap-3">
+              <div className="font-medium text-sm text-balance leading-tight">{hostName} would like you to unmute.</div>
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => toast.dismiss(t)}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border border-[var(--mt-border)] text-[var(--mt-text)]"
+                >
+                  Stay Muted
+                </button>
+                <button 
+                  onClick={() => {
+                    toast.dismiss(t);
+                    webrtcClient.current?.resumeMic().then(() => {
+                      webrtcClient.current?.sendMuteState(false);
+                      setIsMuted(false);
+                    }).catch(console.error);
+                  }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors bg-brand-green hover:bg-brand-green/90 text-white"
+                >
+                  Unmute Now
+                </button>
+              </div>
+            </div>
+          ), { duration: 15000 });
         };
 
         client.onECinemaUpdate = (link) => {
@@ -1177,7 +1253,7 @@ export function MeetingProvider({
             let staleRemoved = false;
             
             // Add local user
-            const localUser = prev.find(p => p.id === initialCurrentUser.id);
+            const localUser = prev.find(p => p.userId === initialCurrentUser.userId);
             if (localUser) nextParticipants.push(localUser);
 
             const seenParticipantIds = new Set<string>();
@@ -1200,7 +1276,8 @@ export function MeetingProvider({
                   isMobile: p.isMobile, 
                   isCameraOn: p.isCameraOn ?? existing.isCameraOn, 
                   audioOnlyMode: p.audioOnlyMode ?? existing.audioOnlyMode, 
-                  videoSuspendedReason: p.videoSuspendedReason ?? existing.videoSuspendedReason 
+                  videoSuspendedReason: p.videoSuspendedReason ?? existing.videoSuspendedReason,
+                  audioConnectionStatus: (p as any).audioConnectionStatus ?? existing.audioConnectionStatus 
                 });
               } else {
                 nextParticipants.push({
@@ -1280,7 +1357,7 @@ export function MeetingProvider({
           setParticipants((prev) => prev.map(p => 
             (p.id === targetId || p.userId === userId) ? { ...p, role: newRole as any } : p
           ));
-          if (targetId === initialCurrentUser.id) {
+          if (targetId === (clientParticipantId || initialCurrentUser.id)) {
             toast.info(`Your role has been updated to ${newRole}`);
           }
         };
@@ -1416,7 +1493,7 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
-          if (initialCurrentUser.role === 'bot') {
+          if (initialCurrentUser.role === 'bot' || isRecorderMode) {
             return;
           }
 
@@ -1438,7 +1515,7 @@ export function MeetingProvider({
 
           setParticipants((prev) =>
             prev.map((p) => {
-              if (p.id === initialCurrentUser.id) {
+              if (p.userId === initialCurrentUser.userId) {
                 return { ...p, audioTrack: audioTrack || undefined, isMuted };
               }
               return p;
@@ -1459,7 +1536,7 @@ export function MeetingProvider({
               
               setParticipants((prev) =>
                 prev.map((p) => {
-                  if (p.id === initialCurrentUser.id) {
+                  if (p.userId === initialCurrentUser.userId) {
                     return { ...p, videoTrack: videoTrack || undefined, isCameraOn };
                   }
                   return p;
@@ -1538,6 +1615,16 @@ export function MeetingProvider({
   }, [selectedDevices.audioInput, selectedDevices.videoInput, webrtcStatus]);
 
   const switchDevice = useCallback(async (kind: 'audioInput' | 'videoInput' | 'audioOutput', deviceId: string) => {
+    if (kind === 'videoInput' && cameraOperationInProgress.current) {
+      console.log('camera_switch_ignored_operation_in_progress');
+      return;
+    }
+
+    if (kind === 'videoInput') {
+      cameraOperationInProgress.current = true;
+      console.log('camera_switch_started');
+    }
+
     setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
 
     if (kind === 'audioOutput') {
@@ -1554,13 +1641,17 @@ export function MeetingProvider({
         } else {
           localCameraTrackRef.current = newTrack;
           setParticipants(prev => prev.map(p => 
-            p.id === initialCurrentUser.id ? { ...p, videoTrack: newTrack } : p
+            p.userId === initialCurrentUser.userId ? { ...p, videoTrack: newTrack } : p
           ));
         }
       }
+      if (kind === 'videoInput') console.log('camera_switch_completed');
     } catch (e) {
+      if (kind === 'videoInput') console.log('camera_switch_failed_preserved_old_track');
       console.error(`Failed to switch ${type} device`, e);
       toast.error(`Could not switch ${type} device`);
+    } finally {
+      if (kind === 'videoInput') cameraOperationInProgress.current = false;
     }
   }, [initialCurrentUser.id]);
 
@@ -1670,23 +1761,40 @@ export function MeetingProvider({
 
   // ── Actions ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
+    if (isRecorderMode) return;
     const newState = !isMuted;
     if (newState) webrtcClient.current?.pauseMic();
     else webrtcClient.current?.resumeMic();
     webrtcClient.current?.sendMuteState(newState);
     setIsMuted(newState);
-    setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isMuted: newState } : p));
+    setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isMuted: newState } : p));
   }, [isMuted, initialCurrentUser.id]);
 
+  const cameraOperationInProgress = useRef(false);
+
   const toggleCamera = useCallback(() => {
+    if (isRecorderMode) return;
+    if (cameraOperationInProgress.current) {
+      console.log('camera_switch_ignored_operation_in_progress');
+      return;
+    }
     const newState = !isCameraOn;
     if (!newState) {
-      webrtcClient.current?.disableCamera();
-      localCameraTrackRef.current = null;
-      webrtcClient.current?.sendCameraState(newState);
-      setIsCameraOn(newState);
-      setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
+      cameraOperationInProgress.current = true;
+      try {
+        console.log('camera_switch_started');
+        webrtcClient.current?.disableCamera();
+        localCameraTrackRef.current = null;
+        webrtcClient.current?.sendCameraState(newState);
+        setIsCameraOn(newState);
+        setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
+        console.log('camera_switch_completed');
+      } finally {
+        cameraOperationInProgress.current = false;
+      }
     } else {
+      cameraOperationInProgress.current = true;
+      console.log('camera_switch_started');
       // Force fresh camera start on any toggle ON. No resumeCamera() usage for this flow.
       webrtcClient.current?.enableCamera().then(async track => {
         if (track.readyState !== 'live') {
@@ -1701,12 +1809,15 @@ export function MeetingProvider({
         localCameraTrackRef.current = finalTrack;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+        setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
       }).catch(err => {
+        console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
         toast.error("Camera could not start. Please retry.");
         // Ensure UI stays off
         setIsCameraOn(false);
+      }).finally(() => {
+        cameraOperationInProgress.current = false;
       });
     }
   }, [isCameraOn, initialCurrentUser.id, vbMode, vbImageUrl]);
@@ -1717,20 +1828,20 @@ export function MeetingProvider({
         await webrtcClient.current?.disableScreenShare();
         setIsScreenSharing(false);
         setParticipants(prev => prev.map(p =>
-          p.id === initialCurrentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
+          p.userId === initialCurrentUser.userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
         ));
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
           setIsScreenSharing(true);
           setParticipants(prev => prev.map(p =>
-            p.id === initialCurrentUser.id ? { ...p, isScreenSharing: true, screenTrack } : p
+            p.userId === initialCurrentUser.userId ? { ...p, isScreenSharing: true, screenTrack } : p
           ));
           screenTrack.onended = async () => {
             await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
             setParticipants(prev => prev.map(p =>
-              p.id === initialCurrentUser.id ? { ...p, isScreenSharing: false, screenTrack: null } : p
+              p.userId === initialCurrentUser.userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
             ));
           };
         }
@@ -1754,7 +1865,7 @@ export function MeetingProvider({
     const newState = !isHandRaised;
     setIsHandRaised(newState);
     webrtcClient.current?.sendHandRaise(newState);
-    setParticipants(prev => prev.map(p => p.id === initialCurrentUser.id ? { ...p, isHandRaised: newState } : p));
+    setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isHandRaised: newState } : p));
   }, [isHandRaised, initialCurrentUser.id]);
 
   const sendMessage = useCallback(
@@ -1917,6 +2028,14 @@ export function MeetingProvider({
     webrtcClient.current?.sendForceMute(userId, target);
   }, []);
 
+  const askToUnmute = useCallback((userId: string) => {
+    webrtcClient.current?.askToUnmute(userId);
+  }, []);
+
+  const clearChat = useCallback(() => {
+    webrtcClient.current?.sendClearChat();
+  }, []);
+
   const forceVideoOffUser = useCallback((userId?: string) => {
     webrtcClient.current?.sendForceVideoOff(userId);
   }, []);
@@ -1976,6 +2095,9 @@ export function MeetingProvider({
         markChatMessageRendered,
         layoutMode,
         gridOverflowMode,
+        micExempted,
+        askToUnmute,
+        clearChat,
         isMuted,
         isCameraOn,
         isScreenSharing,

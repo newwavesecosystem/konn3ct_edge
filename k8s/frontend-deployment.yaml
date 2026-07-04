@@ -81,6 +81,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: BOT_SECRET
+            - name: NEXT_PUBLIC_MEETING_ONLY_MODE
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_MEETING_ONLY_MODE
           resources:
             requests:
               cpu: "100m"

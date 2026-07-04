@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
 import {
@@ -216,7 +217,7 @@ function ParticipantRow({
     .slice(0, 2)
     .toUpperCase();
 
-  const { currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole } = useMeeting();
+  const { currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole, roomSettings, askToUnmute } = useMeeting();
   const isSpeaking = participant.isSpeaking;
   const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
   const canManage = isHost && !isMe && participant.role !== 'host';
@@ -311,11 +312,23 @@ function ParticipantRow({
             {!participant.isMuted && (
               <button 
                 onClick={() => forceMuteUser(participant.userId)}
-                title="Mute for everyone"
+                title="Mute User"
                 className="p-1 rounded-lg hover:bg-white/10"
                 style={{ color: "var(--mt-text-faint)" }}
               >
                 <MicOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {participant.isMuted && roomSettings.micLocked && (
+              <button 
+                onClick={() => {
+                  askToUnmute(participant.userId);
+                  toast.success(`Requested ${participant.name} to unmute`);
+                }}
+                title="Ask to Unmute"
+                className="p-1 rounded-lg hover:bg-brand-green/20 text-brand-green"
+              >
+                <Mic className="w-3.5 h-3.5" />
               </button>
             )}
             {participant.isCameraOn && (

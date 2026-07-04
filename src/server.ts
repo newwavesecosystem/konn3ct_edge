@@ -24,6 +24,7 @@ import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
 import { streamingRouter } from './routes/streaming';
+import { internalRecordingsRouter } from './routes/internalRecordings';
 
 if (process.env.NODE_ENV === 'production') {
   const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
@@ -102,6 +103,7 @@ app.use('/api/telephony', telephonyRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/external/v1', externalRouter);
 app.use('/api/streaming', streamingRouter);
+app.use('/api/internal/recordings', internalRecordingsRouter);
 
 // Basic 404 handler
 app.use((req, res) => {
