@@ -246,7 +246,7 @@ export class WebRTCClient {
   public lastCameraStateBroadcast?: string;
   public lastCameraStateReceived?: string;
 
-  constructor(private roomId: string, private token: string, participantId?: string | null) {
+  constructor(private roomId: string, private token: string, participantId?: string | null, public readonly isRecorderMode: boolean = false) {
     if (participantId !== undefined) {
       if (
         !participantId || 
@@ -259,6 +259,7 @@ export class WebRTCClient {
         throw new Error(`Invalid participantId: ${participantId}`);
       }
       this.participantId = participantId;
+      console.log(`recorder_webrtc_participant_id_used: ${this.participantId}`);
     }
   }
 
@@ -865,56 +866,58 @@ export class WebRTCClient {
 
     if (!this.device) throw new Error("Device not initialized");
 
-    // 1. Create Send Transport
-    console.log('[WebRTC] Requesting Send Transport creation...');
-    const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
-    console.log('[WebRTC] Send Transport created on server:', sendTransportData.transportParams.id);
-    this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
+    if (!this.isRecorderMode) {
+      // 1. Create Send Transport
+      console.log('[WebRTC] Requesting Send Transport creation...');
+      const sendTransportData = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
+      console.log('[WebRTC] Send Transport created on server:', sendTransportData.transportParams.id);
+      this.sendTransport = this.device.createSendTransport(sendTransportData.transportParams);
 
-    this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
-      console.log('[WebRTC] Send Transport connecting with DTLS parameters...');
-      try {
-        await this.request('connectWebRtcTransport', 'transportConnected', {
-          transportId: this.sendTransport!.id,
-          dtlsParameters
-        });
-        console.log('[WebRTC] Send Transport connected successfully!');
-        callback();
-      } catch (error: any) {
-        console.error('[WebRTC] Send Transport connect error:', error);
-        errback(error);
-      }
-    });
-
-    this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
-      console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
-      try {
-        const { id } = await this.request('produce', 'produced', {
-          transportId: this.sendTransport!.id,
-          kind,
-          rtpParameters,
-          appData // Forward source tag ('camera' | 'screen') to server
-        });
-        console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
-        callback({ id });
-      } catch (error: any) {
-        console.error(`[WebRTC] Produce error (${kind}):`, error);
-        errback(error);
-      }
-    });
-
-    this.sendTransport.on('connectionstatechange', (state: any) => {
-      console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
-      if (state === 'disconnected') {
-        console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
-      } else if (state === 'failed') {
-        console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+      this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+        console.log('[WebRTC] Send Transport connecting with DTLS parameters...');
+        try {
+          await this.request('connectWebRtcTransport', 'transportConnected', {
+            transportId: this.sendTransport!.id,
+            dtlsParameters
+          });
+          console.log('[WebRTC] Send Transport connected successfully!');
+          callback();
+        } catch (error: any) {
+          console.error('[WebRTC] Send Transport connect error:', error);
+          errback(error);
         }
-        this.republishMedia().catch(console.error);
-      }
-    });
+      });
+
+      this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
+        console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
+        try {
+          const { id } = await this.request('produce', 'produced', {
+            transportId: this.sendTransport!.id,
+            kind,
+            rtpParameters,
+            appData // Forward source tag ('camera' | 'screen') to server
+          });
+          console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
+          callback({ id });
+        } catch (error: any) {
+          console.error(`[WebRTC] Produce error (${kind}):`, error);
+          errback(error);
+        }
+      });
+
+      this.sendTransport.on('connectionstatechange', (state: any) => {
+        console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
+        if (state === 'disconnected') {
+          console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
+        } else if (state === 'failed') {
+          console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+          }
+          this.republishMedia().catch(console.error);
+        }
+      });
+    }
 
     // 4. Create Receive Transport
     console.log('[WebRTC] Requesting Receive Transport creation...');
@@ -1360,6 +1363,10 @@ export class WebRTCClient {
   }
 
   private async acquireCameraStream(deviceId?: string): Promise<MediaStream> {
+    if (this.isRecorderMode) {
+      throw new Error("Recorder mode cannot acquire camera stream");
+    }
+    
     this.cameraStartAttemptCount++;
     this.lastCameraErrorName = null;
     this.lastCameraErrorMessage = null;
@@ -1643,6 +1650,10 @@ export class WebRTCClient {
       this.emitTelemetry('audio_connection_timeout');
       this.setAudioConnectionStatus('failed');
     }, 15000);
+    
+    if (this.isRecorderMode) {
+      throw new Error("Recorder mode cannot acquire microphone");
+    }
     
     try {
       this.emitTelemetry('audio_permission_requested');

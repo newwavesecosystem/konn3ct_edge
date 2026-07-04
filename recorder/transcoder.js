@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
+const { exec } = require('child_process');
 const { S3Client } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 
@@ -47,26 +48,78 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, botToke
   }
 }
 
+async function checkFfprobe(filePath, recordingId) {
+  return new Promise((resolve, reject) => {
+    exec(`ffprobe -hide_banner -show_streams -show_format -of json "${filePath}"`, (err, stdout, stderr) => {
+      if (err) {
+        console.error(`[${recordingId}] ffprobe failed:`, err);
+        return reject(err);
+      }
+      try {
+        const data = JSON.parse(stdout);
+        console.log(`[${recordingId}] ffprobe_raw_result: ${JSON.stringify(data)}`);
+        const streams = data.streams || [];
+        const hasVideo = streams.some(s => s.codec_type === 'video');
+        const hasAudio = streams.some(s => s.codec_type === 'audio');
+        if (hasVideo) console.log(`[${recordingId}] recording_video_stream_detected`);
+        if (hasAudio) console.log(`[${recordingId}] recording_audio_stream_detected`);
+        if (!hasVideo && !hasAudio) {
+          throw new Error("No video or audio stream detected in file");
+        }
+        resolve(data);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
 async function run() {
   const args = process.argv.slice(2);
   const roomId = args[0];
   const recordingId = args[1];
   const botToken = args[2];
   const outputPathRaw = args[3];
+  const stdoutPath = args[4];
+  const stderrPath = args[5];
 
   if (!roomId || !recordingId || !botToken || !outputPathRaw) {
     console.error("Missing arguments");
     process.exit(1);
   }
 
+  // Setup teeing of console to file
+  const originalLog = console.log;
+  const originalError = console.error;
+  let stdoutStream, stderrStream;
+  if (stdoutPath) stdoutStream = fs.createWriteStream(stdoutPath, { flags: 'a' });
+  if (stderrPath) stderrStream = fs.createWriteStream(stderrPath, { flags: 'a' });
+
+  console.log = (...args) => {
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ') + '\\n';
+    if (stdoutStream) stdoutStream.write(msg);
+    originalLog.apply(console, args);
+  };
+  
+  console.error = (...args) => {
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ') + '\\n';
+    if (stderrStream) stderrStream.write(msg);
+    originalError.apply(console, args);
+  };
+
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
   const outputPathMp4 = path.join(path.dirname(outputPathRaw), `${roomId}.mp4`);
 
   try {
+    console.log(`[${recordingId}] transcoder process started for ${outputPathRaw}`);
+    
+    // FFprobe on raw file
+    await checkFfprobe(outputPathRaw, recordingId);
+
     // Notify transcoding
     await notifyBackendWithRetry(
       backendUrl, 
-      `/api/recordings/${recordingId}/callback/finalized`,
+      `/api/recordings/${recordingId}/callback/status`,
       recordingId, botToken,
       { status: 'transcoding' }
     );
@@ -99,7 +152,7 @@ async function run() {
     // Notify uploading
     await notifyBackendWithRetry(
       backendUrl, 
-      `/api/recordings/${recordingId}/callback/finalized`,
+      `/api/recordings/${recordingId}/callback/status`,
       recordingId, botToken,
       { status: 'uploading' }
     );
@@ -130,7 +183,7 @@ async function run() {
     // Notify completed
     await notifyBackendWithRetry(
       backendUrl, 
-      `/api/recordings/${recordingId}/callback/finalized`,
+      `/api/recordings/${recordingId}/callback/status`,
       recordingId, botToken,
       {
         status: 'completed',
@@ -143,8 +196,8 @@ async function run() {
     );
 
     // Cleanup
-    fs.unlinkSync(outputPathRaw);
-    fs.unlinkSync(outputPathMp4);
+    try { fs.unlinkSync(outputPathRaw); } catch(e) {}
+    try { fs.unlinkSync(outputPathMp4); } catch(e) {}
     
     const Redis = require('ioredis');
     const redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
@@ -159,7 +212,7 @@ async function run() {
     try {
       await notifyBackendWithRetry(
         backendUrl, 
-        `/api/recordings/${recordingId}/callback/finalized`,
+        `/api/recordings/${recordingId}/callback/status`,
         recordingId, botToken,
         {
           status: 'failed',

@@ -100,7 +100,13 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, jobId, 
         options.body = JSON.stringify(payload);
       }
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      options.signal = controller.signal;
+      
       const response = await fetch(url, options);
+      clearTimeout(timeoutId);
+      
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       success = true;
     } catch (err) {
@@ -191,8 +197,11 @@ async function processRecordingJob(job) {
   
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
   
-  const outputPathRaw = path.join(__dirname, `${roomId}_raw.webm`);
-  const outputPathMp4 = path.join(__dirname, `${roomId}.mp4`);
+  const recordingsDir = process.env.RECORDINGS_DIR || path.join(__dirname, 'recordings');
+  require('fs').mkdirSync(recordingsDir, { recursive: true });
+  
+  const outputPathRaw = path.join(recordingsDir, `${roomId}_raw.webm`);
+  const outputPathMp4 = path.join(recordingsDir, `${roomId}.mp4`);
   
   if (!url.includes('/recording/')) {
     console.error(JSON.stringify({
@@ -326,7 +335,7 @@ async function processRecordingJob(job) {
         reason: failureReason
       }));
       if (botToken) {
-        await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/finalized`, recordingId, null, botToken, 'failed', { status: 'failed', failureReason });
+        await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/status`, recordingId, null, botToken, 'failed', { status: 'failed', failureReason });
       }
       throw new Error(`Failed readiness gate: ${failureReason}`);
     }
@@ -341,7 +350,7 @@ async function processRecordingJob(job) {
 
     // Diagnostic screenshot
     try {
-      await page.screenshot({ path: path.join(__dirname, `${roomId}_diagnostic.png`) });
+      await page.screenshot({ path: path.join(recordingsDir, `${roomId}_diagnostic.png`) });
     } catch (e) {
       console.warn("Failed to take diagnostic screenshot", e);
     }
@@ -570,15 +579,16 @@ async function processRecordingJob(job) {
             server.close();
             
             fileStream.on('close', async () => {
-              console.log(JSON.stringify({
-                timestamp: new Date().toISOString(),
-                event: "recording_file_stream_closed",
-                roomId: roomId,
-                recordingId: recordingId || 'unknown',
-                stage: "file_stream_closed"
-              }));
-              
               try {
+                console.log(JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  event: "recording_file_stream_closed",
+                  roomId: roomId,
+                  recordingId: recordingId || 'unknown',
+                  stage: "file_stream_closed"
+                }));
+                
+                try {
                 const stats = fs.statSync(outputPathRaw);
                 console.log(JSON.stringify({
                   timestamp: new Date().toISOString(),
@@ -611,16 +621,7 @@ async function processRecordingJob(job) {
               await browser.close();
               await redis.del(`recorder:browser:lease:${recordingId}`);
     console.log(JSON.stringify({ event: "recorder_browser_slot_released", recordingId }));
-              try {
-                await notifyBackendWithRetry(
-                  backendUrl, 
-                  `/api/recordings/${recordingId}/callback/finalized`,
-                  recordingId, job.jobId, botToken, "callback_finalizing",
-                  { status: 'finalizing' }
-                );
-              } catch (err) {
-                console.error('Failed to notify backend of finalizing state:', err);
-              }
+              // Removed premature finalizing callback
               
               // Finalize Manifest
               const manifestData = recordingManifests.get(recordingId);
@@ -646,7 +647,7 @@ async function processRecordingJob(job) {
                   manifestData.validationStatus = 'valid';
                 }
                 
-                fs.writeFileSync(path.join(__dirname, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
+                fs.writeFileSync(path.join(recordingsDir, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
                 
                 if (manifestData.validationStatus === 'failed') {
                    throw new Error(`Manifest validation failed: ${manifestData.failureReason}`);
@@ -656,13 +657,11 @@ async function processRecordingJob(job) {
               // Spawn background transcoder
               const { spawn } = require('child_process');
               const transcoderPath = path.join(__dirname, 'transcoder.js');
-              
-              const out = fs.openSync(path.join(__dirname, `${recordingId}_transcode_stdout.log`), 'a');
-              const err = fs.openSync(path.join(__dirname, `${recordingId}_transcode_stderr.log`), 'a');
-              
-              const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, outputPathRaw], {
+              const stdoutPath = path.join(recordingsDir, `${recordingId}_transcode_stdout.log`);
+              const stderrPath = path.join(recordingsDir, `${recordingId}_transcode_stderr.log`);
+              const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, outputPathRaw, stdoutPath, stderrPath], {
                 detached: true,
-                stdio: ['ignore', out, err]
+                stdio: ['ignore', 1, 2] // Inherit container stdout/stderr so K8s captures logs
               });
               
               const pid = child.pid;
@@ -685,10 +684,29 @@ async function processRecordingJob(job) {
                 pid: pid
               }));
               
+              
               child.unref(); // Allow the main worker to exit/take next job independently
               
-              resolve();
-            });
+              return resolve();
+            } catch (postprocessErr) {
+              console.error(JSON.stringify({
+                timestamp: new Date().toISOString(),
+                event: "recording_postprocess_failed",
+                recordingId: recordingId,
+                failureReason: postprocessErr.toString()
+              }));
+              
+              try {
+                const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+                await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/status`, recordingId, null, botToken, 'failed', { status: 'failed', failureReason: postprocessErr.toString() });
+              } catch (e) {}
+              
+              try { await browser.close(); } catch (e) {}
+              try { await redis.del(`recorder:browser:lease:${recordingId}`); } catch (e) {}
+              
+              return resolve(); // Resolve instead of reject so the worker doesn't crash
+            }
+          });
               
           } catch (e) {
             console.error('Error during teardown:', e);
@@ -715,7 +733,7 @@ async function processRecordingJob(job) {
        manifestData.endedAt = Date.now();
        manifestData.validationStatus = 'failed';
        manifestData.failureReason = err.message || err.toString();
-       fs.writeFileSync(path.join(__dirname, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
+       fs.writeFileSync(path.join(recordingsDir, `${recordingId}_manifest.json`), JSON.stringify(manifestData, null, 2));
     }
     if (browser) await browser.close();
     await redis.del(`recorder:browser:lease:${recordingId}`);
@@ -727,7 +745,7 @@ async function processRecordingJob(job) {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
         await notifyBackendWithRetry(
           backendUrl, 
-          `/api/recordings/${job.recordingId}/callback/finalized`,
+          `/api/recordings/${job.recordingId}/callback/status`,
           job.recordingId, job.jobId, job.botToken, "callback_failed",
           {
             status: 'failed',

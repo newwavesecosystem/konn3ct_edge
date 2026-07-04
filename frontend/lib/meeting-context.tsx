@@ -241,6 +241,7 @@ export function MeetingProvider({
     const existing = sessionStorage.getItem(key);
 
     if (isRecorderMode && recorderParticipantId) {
+      console.log(`recorder_provider_participant_id_set: ${recorderParticipantId}`);
       setClientParticipantId(recorderParticipantId);
       return;
     }
@@ -552,7 +553,7 @@ export function MeetingProvider({
           return;
         }
 
-        client = new WebRTCClient(roomSlug, data.token, clientParticipantId);
+        client = new WebRTCClient(roomSlug, data.token, clientParticipantId, isRecorderMode);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
         

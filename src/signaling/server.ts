@@ -430,6 +430,10 @@ export function initializeSignaling(server: Server) {
         role = 'host';
       }
 
+      if (role === 'bot' || role === 'recorder') {
+        logger.info(`recorder_signaling_join_participant_id: ${participantIdParam}`);
+      }
+
       // Recover dynamic roles (e.g. co-host) from existing session or Redis
       const existingClientForRole = participantIdParam ? rooms.get(room.id)?.get(participantIdParam) : null;
       if (existingClientForRole && existingClientForRole.role === 'co-host') {

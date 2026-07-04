@@ -55,6 +55,7 @@ internalRecordingsRouter.post('/smoke-test', async (req: Request, res: Response)
 
     // 4. Generate valid recorder JWT
     const participantId = crypto.randomUUID();
+    logger.info(`recorder_token_participant_id_generated: ${participantId}`);
     const botToken = jwt.sign(
       { 
         role: 'recorder', 
@@ -70,8 +71,8 @@ internalRecordingsRouter.post('/smoke-test', async (req: Request, res: Response)
 
     const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     
-    // 5. Force the recorder navigation URL to /recording/
-    const recorderUrl = `https://${frontendDomain}/recording/${roomSlug}?botToken=${botToken}`;
+    const protocol = frontendDomain.includes('localhost') ? 'http' : 'https';
+    const recorderUrl = `${protocol}://${frontendDomain}/recording/${roomSlug}?botToken=${botToken}`;
 
     // 6. Queue the recorder job
     const launchResult = await launchRecorderBot({
@@ -90,24 +91,34 @@ internalRecordingsRouter.post('/smoke-test', async (req: Request, res: Response)
       return res.status(500).json({ error: launchResult.error || 'Failed to launch recorder' });
     }
 
-    // 7. Auto-stop the recording
-    setTimeout(() => {
-      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-      const redis = new Redis(redisUrl);
-      
-      logger.info(`[SMOKE TEST] Auto-stopping recording ${recording.id} after ${durationSeconds} seconds.`);
-      
-      // Update DB to stopping
-      db.recording.update({
-        where: { id: recording.id },
-        data: { status: 'stopping', endedAt: new Date() }
-      }).catch(e => logger.error('Failed to update DB for smoke test stop', e));
+    // 7. Auto-stop the recording after it actually starts
+    const checkInterval = setInterval(async () => {
+      const rec = await db.recording.findUnique({ where: { id: recording.id } });
+      if (rec && rec.status === 'recording') {
+        clearInterval(checkInterval);
+        logger.info(`[SMOKE TEST] Recording status is 'recording'. Starting ${durationSeconds}-second timer now (Reference event: DB status reached 'recording').`);
+        setTimeout(() => {
+          const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+          const redis = new Redis(redisUrl);
+          
+          logger.info(`[SMOKE TEST] Auto-stopping recording ${recording.id} after ${durationSeconds} seconds of active recording.`);
+          
+          // Update DB to stopping
+          db.recording.update({
+            where: { id: recording.id },
+            data: { status: 'stopping', endedAt: new Date() }
+          }).catch(e => logger.error('Failed to update DB for smoke test stop', e));
 
-      // Publish stop command to worker
-      redis.publish(`recorder:stop:${room.id}`, JSON.stringify({ reason: 'smoke_test_auto_stop' }))
-        .then(() => redis.quit())
-        .catch(e => logger.error('Failed to publish stop recording for smoke test', e));
-    }, durationSeconds * 1000);
+          // Publish stop command to worker
+          redis.publish(`recorder:stop:${room.id}`, JSON.stringify({ reason: 'smoke_test_auto_stop' }))
+            .then(() => redis.quit())
+            .catch(e => logger.error('Failed to publish stop recording for smoke test', e));
+        }, durationSeconds * 1000);
+      } else if (rec && (rec.status === 'failed' || rec.status === 'completed')) {
+        clearInterval(checkInterval);
+      }
+    }, 1000);
+
 
     const maskedUrl = recorderUrl.replace(botToken, '***MASKED***');
     logger.info(`[SMOKE TEST] Queued smoke test recording ${recording.id} for room ${roomSlug}. Target URL: ${maskedUrl}`);

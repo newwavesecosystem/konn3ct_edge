@@ -140,7 +140,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
       roomSlug,
       recordingId: recording.id,
       botToken,
-      url: `https://${frontendDomain}/recording/${roomSlug}?botToken=${botToken}`
+      url: `${frontendDomain.includes('localhost') ? 'http' : 'https'}://${frontendDomain}/recording/${roomSlug}?botToken=${botToken}`
     });
 
     if (!launchResult.queued) {
@@ -233,7 +233,7 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
   }
 });
 
-recordingsRouter.post('/:id/callback/finalized', async (req: Request, res: Response) => {
+recordingsRouter.post('/:id/callback/status', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const authHeader = req.headers.authorization;
