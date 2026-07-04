@@ -36,6 +36,8 @@ export interface QAPlaybackStats {
   diagnosisHint?: string;
 }
 
+export type AudioConnectionStatus = "not_started" | "connecting" | "connected" | "muted" | "reconnecting" | "failed";
+
 export interface Participant {
   id: string; // This is now participantId (sessionId)
   userId: string; // The identity user ID
@@ -43,6 +45,7 @@ export interface Participant {
   avatarUrl?: string;
   role: ParticipantRole;
   isMuted: boolean;
+  audioConnectionStatus?: AudioConnectionStatus;
   isCameraOn: boolean;
   isScreenSharing: boolean;
   isHandRaised: boolean;

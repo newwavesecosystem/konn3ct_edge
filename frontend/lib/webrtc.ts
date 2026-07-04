@@ -98,6 +98,7 @@ export class WebRTCClient {
   public onPollEnded?: (msg: any) => void;
   public onPollHistory?: (polls: any[]) => void;
   public onMuteState?: (msg: any) => void;
+  public onRemoteAudioConnectionStatus?: (msg: any) => void;
   public onCameraState?: (msg: any) => void;
   public onHandRaise?: (msg: any) => void;
   public onWaitingRoomRequest?: (msg: any) => void;
@@ -108,6 +109,22 @@ export class WebRTCClient {
   public onForceMute?: (reason?: string) => void;
   public onForceVideoOff?: (reason?: string) => void;
   public onMicError?: (error: Error) => void;
+  public audioConnectionStatus: string = 'not_started';
+  public onAudioStatusChanged?: (status: string) => void;
+  private audioConnectionTimeoutId?: NodeJS.Timeout;
+
+  private setAudioConnectionStatus(status: string) {
+    if (this.audioConnectionStatus === status) return;
+    this.audioConnectionStatus = status;
+    this.onAudioStatusChanged?.(status);
+
+    if (this.ws?.readyState === 1) {
+      this.ws.send(JSON.stringify({
+        type: 'audio_connection_status',
+        audioConnectionStatus: status
+      }));
+    }
+  }
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
@@ -456,6 +473,9 @@ export class WebRTCClient {
           break;
         case 'mute_state':
           this.onMuteState?.(msg);
+          break;
+        case 'audio_connection_status':
+          this.onRemoteAudioConnectionStatus?.(msg);
           break;
         case 'camera_state':
         this.lastCameraStateReceived = new Date().toISOString() + ' ' + JSON.stringify(msg);
@@ -1585,6 +1605,11 @@ export class WebRTCClient {
   }
 
   public disableMic() {
+    if (this.audioConnectionTimeoutId) {
+      clearTimeout(this.audioConnectionTimeoutId);
+      this.audioConnectionTimeoutId = undefined;
+    }
+    this.setAudioConnectionStatus('not_started');
     if (this.rawAudioTrack) {
       this.rawAudioTrack.stop();
       this.rawAudioTrack = null;
@@ -1602,8 +1627,22 @@ export class WebRTCClient {
     }
   }
 
-  public async enableMic(): Promise<MediaStreamTrack> {
+  public async enableMic(isReconnect = false): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    // Clear any pending timeout
+    if (this.audioConnectionTimeoutId) {
+      clearTimeout(this.audioConnectionTimeoutId);
+      this.audioConnectionTimeoutId = undefined;
+    }
+
+    this.setAudioConnectionStatus(isReconnect ? 'reconnecting' : 'connecting');
+    this.emitTelemetry('audio_connection_started');
+    
+    // 15-second timeout for audio connection
+    this.audioConnectionTimeoutId = setTimeout(() => {
+      this.emitTelemetry('audio_connection_timeout');
+      this.setAudioConnectionStatus('failed');
+    }, 15000);
     
     try {
       this.emitTelemetry('audio_permission_requested');
@@ -1668,10 +1707,20 @@ export class WebRTCClient {
         }
       };
 
-      this.emitTelemetry('audio_ready');
+      this.emitTelemetry('audio_connection_ready');
+      if (this.audioConnectionTimeoutId) {
+        clearTimeout(this.audioConnectionTimeoutId);
+        this.audioConnectionTimeoutId = undefined;
+      }
+      this.setAudioConnectionStatus(this.localAudioProducer?.paused ? 'muted' : 'connected');
       return activeTrack;
     } catch (err: any) {
-      this.emitTelemetry('audio_failed');
+      this.emitTelemetry('audio_connection_failed');
+      if (this.audioConnectionTimeoutId) {
+        clearTimeout(this.audioConnectionTimeoutId);
+        this.audioConnectionTimeoutId = undefined;
+      }
+      this.setAudioConnectionStatus('failed');
       this.onMicError?.(err);
       throw err;
     }
@@ -1824,18 +1873,25 @@ export class WebRTCClient {
     if (this.localAudioProducer && !this.localAudioProducer.paused) {
       this.localAudioProducer.pause();
     }
+    if (this.audioConnectionTimeoutId) {
+      clearTimeout(this.audioConnectionTimeoutId);
+      this.audioConnectionTimeoutId = undefined;
+      this.emitTelemetry('audio_connection_status_reset_on_mute');
+    }
+    this.setAudioConnectionStatus('muted');
   }
 
   public async resumeMic() {
     if (!this.localAudioProducer || this.localAudioProducer.closed || this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
       console.warn("[WebRTC] Microphone track is ended or producer is closed. Re-initializing hardware.");
       try {
-        await this.enableMic();
+        await this.enableMic(true);
       } catch (e) {
         console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
       }
     } else if (this.localAudioProducer.paused) {
       this.localAudioProducer.resume();
+      this.setAudioConnectionStatus('connected');
     }
   }
 

@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import {
+  Mic,
   MicOff,
   VideoOff,
   MonitorUp,
@@ -450,14 +451,44 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Muted mic pill (Google Meet style, top-right) ── */}
-      {participant.isMuted && !participant.isHandRaised && (
-        <div className="absolute top-3 right-3 z-10">
-          <div className="bg-black/55 backdrop-blur-md rounded-full p-1.5 shadow-md">
-            <MicOff className="w-3.5 h-3.5 text-white" />
+      {/* ── Audio Connection Status (Top-right) ── */}
+      {(!participant.isHandRaised) && (() => {
+        // Fallback to legacy isMuted if audioConnectionStatus is missing
+        const status = participant.audioConnectionStatus || (participant.isMuted ? 'muted' : 'connected');
+        
+        if (status === 'connected' && !participant.isMuted) return null; // Normal active mic is not shown here
+
+        let icon = null;
+        let tooltip = '';
+        let wrapperClass = "bg-black/55 backdrop-blur-md rounded-full p-1.5 shadow-md";
+
+        if (status === 'muted' || (status === 'connected' && participant.isMuted)) {
+          icon = <MicOff className="w-3.5 h-3.5 text-red-500" />;
+          tooltip = 'Muted';
+        } else if (status === 'failed') {
+          icon = <AlertTriangle className="w-3.5 h-3.5 text-red-500" />;
+          tooltip = isSelf ? 'Audio connection failed' : 'Audio unavailable';
+          wrapperClass = "bg-red-950/80 backdrop-blur-md rounded-full p-1.5 shadow-md border border-red-500/50";
+        } else if (status === 'connecting' || status === 'reconnecting') {
+          icon = <Mic className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
+          tooltip = status === 'connecting' ? 'Connecting audio...' : 'Reconnecting audio...';
+        }
+
+        if (!icon) return null;
+
+        return (
+          <div className="absolute top-3 right-3 z-10" title={tooltip}>
+            <div className={wrapperClass}>
+              {icon}
+            </div>
+            {isSelf && status === 'failed' && (
+              <div className="absolute top-8 right-0 bg-red-950/90 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap border border-red-900/50">
+                Check device / retry
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Name pill (bottom-left, no full-width gradient strip) ── */}
       <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-2 pointer-events-none">

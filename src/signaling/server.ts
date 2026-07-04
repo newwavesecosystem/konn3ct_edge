@@ -835,7 +835,7 @@ export function initializeSignaling(server: Server) {
       return;
     }
 
-    const confirmableActions = new Set(['chat', 'camera_state', 'mute_state', 'hand_raise', 'reaction', 'produce']);
+    const confirmableActions = new Set(['chat', 'camera_state', 'mute_state', 'audio_connection_status', 'hand_raise', 'reaction', 'produce']);
     const isConfirmable = confirmableActions.has(data.type) || (data.type === 'stop_producer' && data.appData?.source === 'screen');
     
     // Ensure clientEventId exists for QA/Bot scripts in these actions
@@ -1411,6 +1411,33 @@ export function initializeSignaling(server: Server) {
           logger.error("Failed to vote on poll", e);
         }
         break;
+
+      case 'audio_connection_status': {
+        const serverEventId = crypto.randomUUID();
+        if (clientEventId) emitActionAck(client, clientEventId, 'audio_connection_status', serverEventId, 'accepted');
+        
+        logger.info(JSON.stringify({
+          event: "audio_connection_status_broadcast",
+          roomId,
+          userId,
+          participantId: client.participantId,
+          audioConnectionStatus: data.audioConnectionStatus,
+          timestamp: new Date().toISOString()
+        }));
+
+        broadcastToRoom(roomId, {
+          type: 'audio_connection_status',
+          actionType: 'audio_connection_status',
+          clientEventId,
+          serverEventId,
+          roomId,
+          userId,
+          participantId: client.participantId,
+          audioConnectionStatus: data.audioConnectionStatus,
+          broadcastAt: new Date().toISOString()
+        }, client.participantId);
+        break;
+      }
 
       case 'mute_state': {
         const serverEventId = crypto.randomUUID();
