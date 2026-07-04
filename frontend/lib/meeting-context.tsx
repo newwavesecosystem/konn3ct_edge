@@ -601,7 +601,7 @@ export function MeetingProvider({
             if (quality === 'poor_network') {
               // Play Warning Sound
               try {
-                if (client?.userRole !== 'bot') {
+                if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
                   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
                   const oscillator = audioCtx.createOscillator();
                   const gainNode = audioCtx.createGain();
@@ -798,7 +798,7 @@ export function MeetingProvider({
           if (msg.userId !== webrtcClient.current?.userId) {
             // Play a prominent "Ding-Ding" notification sound for chat
             try {
-              if (client?.userRole !== 'bot') {
+              if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
                 const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
                 
                 const playBeep = (timeOffset: number) => {
@@ -996,7 +996,7 @@ export function MeetingProvider({
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
             // Play Ding Sound
             try {
-              if (client?.userRole !== 'bot') {
+              if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
                 const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -1067,7 +1067,7 @@ export function MeetingProvider({
 
           // Play Doorbell Sound (Ding-Dong)
           try {
-            if (client?.userRole !== 'bot') {
+            if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
               const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
               const oscillator = audioCtx.createOscillator();
               const gainNode = audioCtx.createGain();

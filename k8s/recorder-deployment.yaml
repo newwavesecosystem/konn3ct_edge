@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-recorder
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: conn3ct-recorder
