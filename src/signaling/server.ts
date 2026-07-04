@@ -1546,8 +1546,9 @@ export function initializeSignaling(server: Server) {
               });
 
               // 2. Generate secure short-lived token for the bot
+              const participantId = crypto.randomUUID();
               const botToken = jwt.sign(
-                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id },
+                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id, participantId },
                 process.env.JWT_SECRET || 'fallback',
                 { expiresIn: '4h' }
               );
@@ -1558,7 +1559,7 @@ export function initializeSignaling(server: Server) {
                 roomSlug: room.slug,
                 recordingId: recording.id,
                 botToken,
-                url: `${protocol}://${domain}/meeting/${room.slug}?botToken=${botToken}`
+                url: `${protocol}://${domain}/recording/${room.slug}?botToken=${botToken}`
               });
 
               if (launchResult.queued) {

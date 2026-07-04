@@ -98,7 +98,21 @@ export function RecorderShell() {
           if (noAudioExpected) console.log("no_audio_expected");
           else if (audioReady) console.log("audio_ready");
 
-          if (vReady && aReady) {
+          const isRecordingRoute = window.location.pathname.includes('/recording/');
+          const noLocalMedia = !currentUser?.audioTrack && !currentUser?.videoTrack;
+          const isValidRecorderId = currentUser?.id && currentUser.id !== 'bot_recorder';
+
+          if (!isRecordingRoute) {
+            console.error("invalid_recorder_route");
+          }
+          if (!noLocalMedia) {
+            console.error("recorder_attempted_local_media");
+          }
+          if (!isValidRecorderId) {
+            console.error("invalid_recorder_participant_id");
+          }
+
+          if (vReady && aReady && isRecordingRoute && noLocalMedia && isValidRecorderId) {
             clearInterval(checkReadiness);
             console.log("recorder_ready");
             (window as any).__KONN3CT_RECORDER_READY__ = {

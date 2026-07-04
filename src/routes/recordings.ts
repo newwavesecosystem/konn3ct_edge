@@ -4,6 +4,8 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
 import { launchRecorderBot } from '../services/recorderLauncher';
+import crypto from 'crypto';
+
 export const recordingsRouter = Router();
 
 // Public route to view recording metadata (no media access yet)
@@ -126,8 +128,9 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
     const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     
     // Generate secure short-lived token for the bot
+    const participantId = crypto.randomUUID();
     const botToken = jwt.sign(
-      { role: 'recorder', purpose: 'recording_bot', roomId: room.id, recordingId: recording.id },
+      { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id, participantId },
       process.env.JWT_SECRET || 'fallback',
       { expiresIn: '4h' }
     );

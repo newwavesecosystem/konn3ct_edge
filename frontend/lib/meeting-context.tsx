@@ -180,9 +180,13 @@ export function useMeeting() {
 export function MeetingProvider({
   children,
   roomSlug,
+  isRecorderMode = false,
+  recorderParticipantId = null,
 }: {
   children: React.ReactNode;
   roomSlug: string;
+  isRecorderMode?: boolean;
+  recorderParticipantId?: string | null;
 }) {
   // Extract user info from sessionStorage (passed from Join screen)
   let storedJoinInfo: any = null;
@@ -235,6 +239,11 @@ export function MeetingProvider({
     if (typeof window === 'undefined') return;
     const key = `konn3ct:participant:${roomSlug}`;
     const existing = sessionStorage.getItem(key);
+
+    if (isRecorderMode && recorderParticipantId) {
+      setClientParticipantId(recorderParticipantId);
+      return;
+    }
 
     if (
       existing === "pending" || 
@@ -1483,7 +1492,7 @@ export function MeetingProvider({
 
       const initMedia = async () => {
         try {
-          if (initialCurrentUser.role === 'bot') {
+          if (initialCurrentUser.role === 'bot' || isRecorderMode) {
             return;
           }
 
@@ -1737,6 +1746,7 @@ export function MeetingProvider({
 
   // ── Actions ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
+    if (isRecorderMode) return;
     const newState = !isMuted;
     if (newState) webrtcClient.current?.pauseMic();
     else webrtcClient.current?.resumeMic();
@@ -1746,6 +1756,7 @@ export function MeetingProvider({
   }, [isMuted, initialCurrentUser.id]);
 
   const toggleCamera = useCallback(() => {
+    if (isRecorderMode) return;
     const newState = !isCameraOn;
     if (!newState) {
       webrtcClient.current?.disableCamera();
