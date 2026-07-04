@@ -1247,27 +1247,39 @@ export class WebRTCClient {
     });
 
     // Republish saved tracks
-    if (videoTrack && videoTrack.readyState === 'live') {
-      const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
-      const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
-      
-      const encodings = this.isLowBandwidth 
-        ? [{ maxBitrate: 150000 }] 
-        : isSVC 
-          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }]
-          : [
-              { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
-              { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
-              { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
-            ];
+    if (videoTrack) {
+      if (videoTrack.readyState === 'live') {
+        console.log('camera_reconnect_republish_started');
+        const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
+        const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
+        
+        const encodings = this.isLowBandwidth 
+          ? [{ maxBitrate: 150000 }] 
+          : isSVC 
+            ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }]
+            : [
+                { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
+                { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
+                { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
+              ];
 
-      this.localVideoProducer = await this.sendTransport.produce({ 
-        track: videoTrack,
-        appData: { source: 'camera' },
-        encodings,
-        codecOptions: { videoGoogleStartBitrate: 1000 }
-      });
-      if (isVideoPaused) this.localVideoProducer.pause();
+        try {
+          this.localVideoProducer = await this.sendTransport.produce({ 
+            track: videoTrack,
+            appData: { source: 'camera' },
+            encodings,
+            codecOptions: { videoGoogleStartBitrate: 1000 }
+          });
+          if (isVideoPaused) this.localVideoProducer.pause();
+          console.log('camera_reconnect_republish_completed');
+        } catch (err) {
+          console.log('camera_reconnect_republish_failed', err);
+        }
+      } else {
+        console.log('camera_reconnect_republish_failed: track not live');
+      }
+    } else {
+      console.log('camera_reconnect_skipped_camera_was_off');
     }
     
     if (audioTrack) {
@@ -1407,16 +1419,41 @@ export class WebRTCClient {
 
     for (const attempt of attempts) {
       this.lastCameraConstraintAttempt = attempt.name;
-      if (attempt.name === 'D (Fallback)') this.cameraFallbackReachedVideoTrue = true;
+      if (attempt.name === 'C (Safe)') console.log('camera_fallback_to_safe_profile');
+      if (attempt.name === 'D (Fallback)') {
+        this.cameraFallbackReachedVideoTrue = true;
+        console.log('camera_fallback_to_video_true');
+      }
 
       let retries = 2;
       while (retries > 0) {
         try {
-          return await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          console.log(`camera_permission_requested`);
+          console.log(`camera_constraint_attempt: ${attempt.name}`);
+          const stream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          console.log(`camera_permission_granted`);
+          console.log(`camera_constraint_success: ${attempt.name}`);
+          return stream;
         } catch (err: any) {
           this.lastCameraErrorName = err.name;
           this.lastCameraErrorMessage = err.message;
+          console.log(`camera_constraint_failed: ${attempt.name}`, err.name);
           retries--;
+          
+          if (err.name === 'NotAllowedError') {
+            console.log(`camera_permission_denied`);
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("Permission denied: Please allow camera access in your browser or system settings.");
+          } else if (err.name === 'NotFoundError') {
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("No camera found: Please connect a camera or continue audio-only.");
+          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("Camera busy: Another app may be using the camera, or the OS blocked it.");
+          } else if (err.name === 'SecurityError') {
+            console.log(`camera_permission_error: ${err.name}`);
+            throw new Error("Security Error: Camera cannot be accessed in this context.");
+          }
           
           if (err.name === 'AbortError' && retries > 0) {
             console.warn(`Camera start timeout (${attempt.name}), retrying... (${retries} left)`);
@@ -1454,6 +1491,7 @@ export class WebRTCClient {
       // Cleanup existing camera producer if replacing
       if (this.localVideoProducer) {
         this.localVideoProducer.close();
+        console.log('camera_stale_track_cleared');
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({
             type: 'stop_producer',
@@ -1469,6 +1507,7 @@ export class WebRTCClient {
       throw new Error("Failed to initialize camera stream");
     }
     this.emitTelemetry('video_track_ready');
+    console.log('camera_track_ready');
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
     // Initialize VideoProcessor if not exists
@@ -1508,6 +1547,9 @@ export class WebRTCClient {
     const firstVideoCodec = this.device.rtpCapabilities.codecs?.find(c => c.kind === 'video');
     const isSVC = firstVideoCodec?.mimeType.toLowerCase().includes('av1') || firstVideoCodec?.mimeType.toLowerCase().includes('vp9');
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    if (isIOS) console.log('ios_safari_camera_safeguards_enabled');
 
     const encodings = this.isLowBandwidth 
       ? [{ maxBitrate: 150000 }] 
@@ -1524,9 +1566,12 @@ export class WebRTCClient {
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
       try {
+        console.log('camera_producer_replace_track_started');
         await this.localVideoProducer.replaceTrack({ track: videoTrack });
         this.localVideoProducer.resume();
+        console.log('camera_producer_replace_track_completed');
       } catch (err) {
+        console.log('camera_producer_replace_track_failed');
         console.error("Track replacement failed, will recreate producer:", err);
         this.localVideoProducer.close();
         this.localVideoProducer = null;
@@ -1537,13 +1582,20 @@ export class WebRTCClient {
     if (!this.localVideoProducer || this.localVideoProducer.closed) {
       // First time or after producer was closed — create with full simulcast encodings
       this.emitTelemetry('video_produce_started');
-      this.localVideoProducer = await this.sendTransport.produce({
-        track: videoTrack,
-        appData: { source: 'camera' },
-        encodings,
-        codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
-      });
-      this.emitTelemetry('video_producer_created');
+      console.log('camera_producer_creating');
+      try {
+        this.localVideoProducer = await this.sendTransport.produce({
+          track: videoTrack,
+          appData: { source: 'camera' },
+          encodings,
+          codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
+        });
+        this.emitTelemetry('video_producer_created');
+        console.log('camera_producer_created');
+      } catch (err) {
+        console.log('camera_producer_failed');
+        throw err;
+      }
     }
     
     this.emitTelemetry('video_ready');

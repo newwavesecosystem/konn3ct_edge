@@ -205,6 +205,39 @@ describe('WebRTCClient Camera Fallback', () => {
       JSON.stringify({ type: 'stop_producer', producerId: 'prod1', appData: { source: 'camera' } })
     );
   });
+
+  it('translates NotAllowedError to actionable message', async () => {
+    const getUserMedia = global.navigator.mediaDevices.getUserMedia as any;
+    getUserMedia.mockImplementation(async () => {
+      const err = new Error('Permission denied');
+      err.name = 'NotAllowedError';
+      throw err;
+    });
+
+    await expect(webrtc.enableCamera()).rejects.toThrow("Permission denied: Please allow camera access in your browser or system settings.");
+  });
+
+  it('translates NotFoundError to actionable message', async () => {
+    const getUserMedia = global.navigator.mediaDevices.getUserMedia as any;
+    getUserMedia.mockImplementation(async () => {
+      const err = new Error('Not found');
+      err.name = 'NotFoundError';
+      throw err;
+    });
+
+    await expect(webrtc.enableCamera()).rejects.toThrow("No camera found: Please connect a camera or continue audio-only.");
+  });
+
+  it('translates NotReadableError to actionable message', async () => {
+    const getUserMedia = global.navigator.mediaDevices.getUserMedia as any;
+    getUserMedia.mockImplementation(async () => {
+      const err = new Error('Not readable');
+      err.name = 'NotReadableError';
+      throw err;
+    });
+
+    await expect(webrtc.enableCamera()).rejects.toThrow("Camera busy: Another app may be using the camera, or the OS blocked it.");
+  });
 });
 
 describe('WebRTCClient Screen Share Codec Selection', () => {
