@@ -273,17 +273,17 @@ export function ParticipantTile({
   
   if (expectsMedia && !currentUser.audioOnlyMode) {
     if (participant.networkQuality === 'connecting_to_media_server') {
-      mediaConnectionState = "Connecting to Media Server";
+      mediaConnectionState = "Connecting to Video";
     } else if (participant.networkQuality === 'reconnecting') {
-      mediaConnectionState = "Reconnecting to Media Server";
+      mediaConnectionState = "Reconnecting to Video";
     } else if (participant.isConnecting) {
       mediaConnectionState = "Connecting...";
     } else if (health === 'black') {
       mediaConnectionState = isSelf 
         ? "Your camera hardware failed. Please toggle your video off and on." 
         : "Participant's camera feed failed.";
-    } else if (health === 'stalled' || effectiveVideoState === 'stalled') {
-      mediaConnectionState = "Media connection failed. Retrying...";
+    } else if (health === 'stalled' || (!isSelf && effectiveVideoState === 'stalled')) {
+      mediaConnectionState = "Connection failed. Retrying...";
     } else if (health === 'recovering') {
       mediaConnectionState = "Reconnecting to Video";
     }

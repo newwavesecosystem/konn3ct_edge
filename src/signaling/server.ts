@@ -880,7 +880,7 @@ export function initializeSignaling(server: Server) {
               if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
               updatedAdmissions.add(targetClient.userId);
 
-              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
+              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.participantId);
               broadcastRoomState(roomId);
               sendRoomHistoryAndState(targetClient);
               syncRoomStateToRedis(roomId, client.roomSlug);
@@ -1169,7 +1169,7 @@ export function initializeSignaling(server: Server) {
               }
             }
           } else {
-            broadcastToRoom(roomId, msgPayload, userId);
+            broadcastToRoom(roomId, msgPayload, client.participantId);
           }
 
           asyncWithRetry(
@@ -1235,7 +1235,7 @@ export function initializeSignaling(server: Server) {
             name: client.name, // Always include name so clients don't need to look it up
             reaction: data.reaction,
             broadcastAt: new Date().toISOString()
-          }, userId); // <-- userId as excludeUserId prevents the double-animation
+          }, client.participantId); // <-- userId as excludeUserId prevents the double-animation
         } else {
           broadcastToRoom(roomId, {
             type: 'reaction',
@@ -1246,7 +1246,7 @@ export function initializeSignaling(server: Server) {
             name: client.name,
             reaction: data.reaction,
             broadcastAt: new Date().toISOString()
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1255,7 +1255,7 @@ export function initializeSignaling(server: Server) {
           type: 'network_quality',
           userId,
           quality: data.quality
-        }, userId);
+        }, client.participantId);
         break;
 
       case 'caption':
@@ -1294,7 +1294,7 @@ export function initializeSignaling(server: Server) {
             type: 'ecinema_action',
             action: data.action,
             time: data.time
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1303,7 +1303,7 @@ export function initializeSignaling(server: Server) {
           broadcastToRoom(roomId, {
             type: 'donation_status',
             active: data.active
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1314,7 +1314,7 @@ export function initializeSignaling(server: Server) {
           name: client.name,
           amount: data.amount,
           currency: data.currency
-        }, userId);
+        }, client.participantId);
         break;
 
       case 'note_update':
@@ -1328,7 +1328,7 @@ export function initializeSignaling(server: Server) {
             type: 'note_update',
             userId,
             content: data.content
-          }, userId);
+          }, client.participantId);
         } catch (e) {
           logger.error("Failed to update shared note", e);
         }
@@ -1352,7 +1352,7 @@ export function initializeSignaling(server: Server) {
               question: newPoll.question,
               options: newPoll.options,
               userId
-            }, userId);
+            }, client.participantId);
           } catch (e) {
             logger.error("Failed to create poll", e);
           }
@@ -1477,7 +1477,7 @@ export function initializeSignaling(server: Server) {
           broadcastToRoom(roomId, {
             type: 'sync_panel',
             panel: data.panel
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1811,7 +1811,7 @@ export function initializeSignaling(server: Server) {
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
 
         // Broadcast to others — include appData.source so they render screen share correctly
-        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData }, userId);
+        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData }, client.participantId);
 
         // For screen share, send a dedicated state event so peers update isScreenSharing immediately
         if (source === 'screen') {
@@ -1826,7 +1826,7 @@ export function initializeSignaling(server: Server) {
             senderParticipantId: userId,
             producerId,
             broadcastAt: new Date().toISOString()
-          }, userId);
+          }, client.participantId);
         }
         break;
       }
@@ -1867,7 +1867,7 @@ export function initializeSignaling(server: Server) {
           if (!hasRecvTransport) failReason = "RECV_TRANSPORT_NOT_READY";
           else if (!hasRtpCapabilities) failReason = "MISSING_RTP_CAPABILITIES";
           else if (!targetProducer) failReason = "PRODUCER_CLOSED";
-          else if (targetProducer.userId === userId) failReason = "SELF_CONSUME_BLOCKED";
+          else if (targetProducer.participantId === client.participantId) failReason = "SELF_CONSUME_NOT_ALLOWED";
           else if (!canConsume) {
             failReason = "RTP_CAPABILITIES_MISMATCH";
             sfuProducer = getProducer(data.producerId);
@@ -1936,7 +1936,8 @@ export function initializeSignaling(server: Server) {
             logger.warn(JSON.stringify(errPayload));
             client.ws.send(JSON.stringify({
               type: 'consume_failed',
-              errorCode: 'CLIENT_CANNOT_CONSUME_PRODUCER',
+              requestId: data.requestId,
+              errorCode: failReason === "RTP_CAPABILITIES_MISMATCH" ? preciseReason : failReason,
               producerId: data.producerId,
               producerKind: targetProducer?.kind || "unknown",
               producerSource: targetProducer?.appData?.source || "unknown",
@@ -1983,7 +1984,7 @@ export function initializeSignaling(server: Server) {
           );
           // Track which client owns this consumer for cleanup
           consumerOwners.set(consumerParams.id, client);
-          client.ws.send(JSON.stringify({ type: 'consumed', ...consumerParams }));
+          client.ws.send(JSON.stringify({ type: 'consumed', requestId: data.requestId, ...consumerParams }));
         } catch (e) {
           logger.warn(`Consume failed for producer ${data.producerId}:`, e);
           // Don't send a response, let the client timeout or we can send an error response if we want.
@@ -2052,10 +2053,10 @@ export function initializeSignaling(server: Server) {
               senderParticipantId: userId,
               producerId: pidToStop,
               broadcastAt: new Date().toISOString()
-            }, userId);
+            }, client.participantId);
           } else {
             // Send producer_closed event to everyone else
-            broadcastToRoom(roomId, { type: 'producer_closed', producerId: pidToStop }, userId);
+            broadcastToRoom(roomId, { type: 'producer_closed', producerId: pidToStop }, client.participantId);
           };
         }
         break;
@@ -2092,7 +2093,7 @@ export function initializeSignaling(server: Server) {
       case 'getProducers': {
         const producers = roomProducers.get(roomId) || [];
         // Exclude own producers
-        const othersProducers = producers.filter(p => p.userId !== userId);
+        const othersProducers = producers.filter(p => p.participantId !== client.participantId);
         // Include appData so late joiners know which producers are screen share vs camera
         client.ws.send(JSON.stringify({ type: 'producersList', producers: othersProducers }));
         break;
@@ -2113,7 +2114,7 @@ export function initializeSignaling(server: Server) {
     broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
   }
 
-  function broadcastToRoom(roomId: string, message: any, excludeUserId?: string) {
+  function broadcastToRoom(roomId: string, message: any, excludeParticipantId?: string) {
     const roomClients = rooms.get(roomId);
     if (!roomClients) return;
 
@@ -2127,7 +2128,7 @@ export function initializeSignaling(server: Server) {
       const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
       for (let i = currentIndex; i < end; i++) {
         const [id, client] = clientsArr[i];
-        if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+        if (id !== excludeParticipantId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
           client.ws.send(payload);
         }
       }
