@@ -61,7 +61,7 @@ export interface Participant {
   screenTrackId?: string;
 
   isConnecting?: boolean;
-  networkQuality?: 'good' | 'poor' | 'bad';
+  networkQuality?: import('../webrtc').NetworkQualityLabel;
   isMobile?: boolean;
   isBot?: boolean;
   isRecorder?: boolean;

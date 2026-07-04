@@ -3,6 +3,25 @@ import type { Device } from 'mediasoup-client';
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
 
+
+export type NetworkQualityLabel = 'good' | 'unstable_network' | 'poor_network' | 'reconnecting' | 'connecting_to_media_server' | 'device_performance_issue' | 'remote_receiver_issue' | 'screen_share_performance_issue';
+
+export interface NetworkDebugSnapshot {
+  label: NetworkQualityLabel;
+  rtt: number;
+  packetLoss: number;
+  jitter: number;
+  sendBitrate: number;
+  recvBitrate: number;
+  availableOutgoingBitrate: number | null;
+  framesEncoded: number;
+  framesDropped: number;
+  fps: number;
+  iceState: string;
+  reconnectCount: number;
+  diagnosticType: 'local_outbound' | 'local_inbound' | 'remote_receiver' | 'device' | 'media_server_recovery' | 'healthy';
+}
+
 export class WebRTCClient {
   private ws: WebSocket | null = null;
   private device: Device | null = null;
@@ -51,7 +70,7 @@ export class WebRTCClient {
   public joinSessionId: string = Math.random().toString(36).substring(2, 15);
   public joinStartTime: number = Date.now();
 
-  public emitTelemetry(event: string) {
+  public emitTelemetry(event: string, data?: any) {
     console.log(JSON.stringify({
       event,
       joinSessionId: this.joinSessionId,
@@ -99,7 +118,7 @@ export class WebRTCClient {
   public onECinemaAction?: (msg: any) => void;
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
-  public onParticipantNetworkQuality?: (userId: string, quality: 'good' | 'poor' | 'bad') => void;
+  public onParticipantNetworkQuality?: (userId: string, quality: NetworkQualityLabel) => void;
   public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
   public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
@@ -115,7 +134,8 @@ export class WebRTCClient {
   public onVbDegraded?: (severity: 'warning' | 'emergency') => void;
 
   // Network monitoring
-  public onNetworkQualityChange?: (quality: 'good' | 'poor' | 'bad') => void;
+  public onNetworkQualityChange?: (quality: NetworkQualityLabel) => void;
+  public onNetworkDebugSnapshot?: (snapshot: NetworkDebugSnapshot) => void;
   private networkInterval?: NodeJS.Timeout;
   public isAudioOnlyMode = false;
 
@@ -889,57 +909,208 @@ export class WebRTCClient {
   private startNetworkMonitor() {
     if (this.networkInterval) clearInterval(this.networkInterval);
     
-    let consecutiveBadChecks = 0;
+    const WINDOW_SIZE = 5;
+    const history: Array<{
+      rtt: number;
+      packetLoss: number;
+      jitter: number;
+      sendBitrate: number;
+      recvBitrate: number;
+      framesDropped: number;
+      framesEncoded: number;
+    }> = [];
+
+    let lastBytesSent = 0;
+    let lastBytesRecv = 0;
+    let lastPacketsSent = 0;
+    let lastPacketsLost = 0;
+    let lastFramesDropped = 0;
+    let lastFramesEncoded = 0;
+    let lastTime = performance.now();
+    
+    let currentLabel: NetworkQualityLabel = 'good';
+    let labelStreak = 0;
+    let reconnectCount = 0;
 
     this.networkInterval = setInterval(async () => {
-      if (!this.sendTransport) return;
+      if (!this.sendTransport && !this.recvTransport) return;
+      
       try {
-        const stats = await this.sendTransport.getStats();
-        let maxRtt = 0;
-        let maxPacketLoss = 0;
+        const now = performance.now();
+        const dt = (now - lastTime) / 1000;
+        if (dt <= 0) return;
 
-        stats.forEach((stat: any) => {
-          if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
-            const rtt = stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : 0;
-            if (rtt > maxRtt) maxRtt = rtt;
-          }
-          if (stat.type === 'remote-inbound-rtp') {
-            const rtt = stat.roundTripTime ? stat.roundTripTime * 1000 : 0;
-            if (rtt > maxRtt) maxRtt = rtt;
-            const loss = stat.fractionLost ? stat.fractionLost * 100 : 0;
-            if (loss > maxPacketLoss) maxPacketLoss = loss;
-          }
-        });
+        let rtt = 0;
+        let jitter = 0;
+        let bytesSent = 0;
+        let bytesRecv = 0;
+        let packetsSent = 0;
+        let packetsLost = 0;
+        let framesDropped = 0;
+        let framesEncoded = 0;
+        let availableOutgoingBitrate: number | null = null;
+        let iceState = this.sendTransport?.connectionState || 'new';
 
-        let currentQuality: 'good' | 'poor' | 'bad' = 'good';
-        // Zoom and modern platforms are highly tolerant due to FEC.
-        // We relax the thresholds so users don't get unnecessary warnings.
-        if (maxRtt > 1500 || maxPacketLoss > 25) {
-          currentQuality = 'bad';
-        } else if (maxRtt > 800 || maxPacketLoss > 15) {
-          currentQuality = 'poor';
+        if (this.sendTransport) {
+          const sendStats = await this.sendTransport.getStats();
+          sendStats.forEach((stat: any) => {
+            if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
+              rtt = Math.max(rtt, stat.currentRoundTripTime ? stat.currentRoundTripTime * 1000 : 0);
+              if (stat.availableOutgoingBitrate) availableOutgoingBitrate = stat.availableOutgoingBitrate;
+            }
+            if (stat.type === 'remote-inbound-rtp') {
+              rtt = Math.max(rtt, stat.roundTripTime ? stat.roundTripTime * 1000 : 0);
+              jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
+            }
+            if (stat.type === 'outbound-rtp') {
+              bytesSent += stat.bytesSent || 0;
+              packetsSent += stat.packetsSent || 0;
+              if (stat.kind === 'video') {
+                framesEncoded += stat.framesEncoded || 0;
+              }
+            }
+            if (stat.type === 'media-source' && stat.kind === 'video') {
+              framesDropped += stat.droppedFrames || 0;
+            }
+          });
         }
 
-        let emittedQuality = currentQuality;
+        if (this.recvTransport) {
+          const recvStats = await this.recvTransport.getStats();
+          recvStats.forEach((stat: any) => {
+            if (stat.type === 'inbound-rtp') {
+              bytesRecv += stat.bytesReceived || 0;
+              packetsLost += stat.packetsLost || 0;
+              jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
+            }
+          });
+        }
 
-        // Require 3 consecutive bad checks (15 seconds) before confirming 'bad'
-        if (currentQuality === 'bad') {
-          consecutiveBadChecks++;
-          if (consecutiveBadChecks < 3) {
-            emittedQuality = 'poor'; // Emit 'poor' while we wait for confirmation
-          }
+        // Calculate deltas
+        const dBytesSent = Math.max(0, bytesSent - lastBytesSent);
+        const dBytesRecv = Math.max(0, bytesRecv - lastBytesRecv);
+        const dPacketsSent = Math.max(0, packetsSent - lastPacketsSent);
+        const dPacketsLost = Math.max(0, packetsLost - lastPacketsLost);
+        const dFramesDropped = Math.max(0, framesDropped - lastFramesDropped);
+        const dFramesEncoded = Math.max(0, framesEncoded - lastFramesEncoded);
+
+        lastBytesSent = bytesSent;
+        lastBytesRecv = bytesRecv;
+        lastPacketsSent = packetsSent;
+        lastPacketsLost = packetsLost;
+        lastFramesDropped = framesDropped;
+        lastFramesEncoded = framesEncoded;
+        lastTime = now;
+
+        const sendBitrate = (dBytesSent * 8) / dt;
+        const recvBitrate = (dBytesRecv * 8) / dt;
+        const packetLoss = dPacketsSent > 0 ? (dPacketsLost / (dPacketsSent + dPacketsLost)) * 100 : 0;
+        const fps = dFramesEncoded / dt;
+
+        history.push({ rtt, packetLoss, jitter, sendBitrate, recvBitrate, framesDropped: dFramesDropped, framesEncoded: dFramesEncoded });
+        if (history.length > WINDOW_SIZE) history.shift();
+
+        // Averages over window
+        const avgRtt = history.reduce((sum, h) => sum + h.rtt, 0) / history.length;
+        const avgLoss = history.reduce((sum, h) => sum + h.packetLoss, 0) / history.length;
+        const avgJitter = history.reduce((sum, h) => sum + h.jitter, 0) / history.length;
+        const totalFramesDropped = history.reduce((sum, h) => sum + h.framesDropped, 0);
+        const totalFramesEncoded = history.reduce((sum, h) => sum + h.framesEncoded, 0);
+        const frameDropRate = totalFramesEncoded > 0 ? (totalFramesDropped / (totalFramesEncoded + totalFramesDropped)) : 0;
+
+        let candidateLabel: NetworkQualityLabel = 'good';
+        let diag: NetworkDebugSnapshot['diagnosticType'] = 'healthy';
+
+        if (iceState === 'connecting' || iceState === 'checking') {
+          candidateLabel = 'connecting_to_media_server';
+          diag = 'media_server_recovery';
+        } else if (iceState === 'disconnected' || this.isRepublishing) {
+          candidateLabel = 'reconnecting';
+          diag = 'media_server_recovery';
+          reconnectCount++;
+        } else if (frameDropRate > 0.15 && avgLoss < 2 && avgRtt < 150) {
+          candidateLabel = 'device_performance_issue';
+          diag = 'device';
         } else {
-          consecutiveBadChecks = 0;
+          if (avgRtt > 300 || avgLoss > 8 || avgJitter > 60) {
+            candidateLabel = 'poor_network';
+            diag = 'local_outbound';
+          } else if (avgRtt >= 150 || avgLoss >= 2 || avgJitter >= 30) {
+            candidateLabel = 'unstable_network';
+            diag = 'local_outbound';
+          }
         }
 
-        this.onNetworkQualityChange?.(emittedQuality);
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'network_quality', quality: emittedQuality }));
+        // Clean Hysteresis Logic
+        if (candidateLabel === currentLabel) {
+          labelStreak++;
+        } else {
+          if ((this as any).pendingCandidate !== candidateLabel) {
+             (this as any).pendingCandidate = candidateLabel;
+             (this as any).pendingStreak = 1;
+          } else {
+             (this as any).pendingStreak++;
+          }
         }
+
+        let nextLabel = currentLabel;
+        const isNetworkLabel = (l: NetworkQualityLabel) => ['good', 'unstable_network', 'poor_network'].includes(l);
+        
+        if (!isNetworkLabel(candidateLabel)) {
+           nextLabel = candidateLabel;
+        } else {
+           if ((this as any).pendingCandidate === candidateLabel && (this as any).pendingStreak >= 3) {
+             nextLabel = candidateLabel;
+           }
+        }
+
+        if (nextLabel !== currentLabel) {
+          const oldLabel = currentLabel;
+          currentLabel = nextLabel;
+          labelStreak = 1;
+          (this as any).pendingCandidate = null;
+          (this as any).pendingStreak = 0;
+          
+          this.broadcastNetworkLabelChange(currentLabel);
+          
+          this.emitTelemetry('network_quality_label_changed', { old: oldLabel, new: currentLabel, avgRtt, avgLoss });
+          
+          if (currentLabel === 'device_performance_issue') this.emitTelemetry('device_performance_issue_detected');
+          if (currentLabel === 'reconnecting' || currentLabel === 'connecting_to_media_server') this.emitTelemetry('media_connecting_not_network_poor');
+          
+          if (oldLabel === 'poor_network' && currentLabel === 'good' && labelStreak === 1) {
+             this.emitTelemetry('network_quality_false_positive_suspected');
+          }
+        }
+
+        if (this.onNetworkDebugSnapshot) {
+          this.onNetworkDebugSnapshot({
+            label: currentLabel,
+            rtt: avgRtt,
+            packetLoss: avgLoss,
+            jitter: avgJitter,
+            sendBitrate,
+            recvBitrate,
+            availableOutgoingBitrate,
+            framesEncoded: dFramesEncoded,
+            framesDropped: dFramesDropped,
+            fps,
+            iceState,
+            reconnectCount,
+            diagnosticType: diag
+          });
+        }
+
       } catch (e) {
-        // Ignore stats errors
       }
-    }, 5000);
+    }, 2000);
+  }
+  
+  private broadcastNetworkLabelChange(label: NetworkQualityLabel) {
+    this.onNetworkQualityChange?.(label);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'network_quality', quality: label }));
+    }
   }
 
   private async republishMedia() {
