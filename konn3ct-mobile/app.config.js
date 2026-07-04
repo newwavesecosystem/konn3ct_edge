@@ -1,9 +1,10 @@
-const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Gov Conference';
+// Gov Conference — dedicated branch (gov1_mobile)
+const APP_NAME = 'Gov Conference';
 
 module.exports = {
   expo: {
     name: APP_NAME,
-    slug: 'konn3ct',
+    slug: 'gov-conference',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
@@ -11,11 +12,11 @@ module.exports = {
     splash: {
       image: './assets/splash.png',
       resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0a5c36',
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.konn3ct.mobile',
+      bundleIdentifier: 'com.konn3ct.govconference',
       buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: `Allow ${APP_NAME} to access your camera for video meetings.`,
@@ -24,10 +25,10 @@ module.exports = {
       },
     },
     android: {
-      package: 'com.konn3ct.mobile',
+      package: 'com.konn3ct.govconference',
       versionCode: 1,
       adaptiveIcon: {
-        backgroundColor: '#ffffff',
+        backgroundColor: '#0a5c36',
         foregroundImage: './assets/adaptive-icon.png',
       },
       permissions: [
