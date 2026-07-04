@@ -1335,7 +1335,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'poll_create':
-        if (client.role === 'host') {
+        if (client.role === 'host' || client.role === 'co-host') {
           try {
             const newPoll = await db.meetingPoll.create({
               data: {
