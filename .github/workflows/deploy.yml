@@ -63,16 +63,16 @@ jobs:
             docker push $IMAGE_NAME:1gov_stag
           fi
 
-      # - name: Build and Push Recorder Docker Image
-      #   if: github.ref != 'refs/heads/1gov_stag'
-      #   run: |
-      #     IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
-      #     docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
-      #     docker push $IMAGE_NAME:${{ github.sha }}
-      #     if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
-      #       docker push $IMAGE_NAME:staging-latest
-      #     fi
+      - name: Build and Push Recorder Docker Image
+        if: github.ref != 'refs/heads/1gov_stag'
+        run: |
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
+          docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
+          docker push $IMAGE_NAME:${{ github.sha }}
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
 
       # - name: Build and Push Streaming Worker Docker Image
       #   run: |
