@@ -68,6 +68,7 @@ interface MeetingContextValue {
   isDonationActive: boolean;
   totalDonations: number;
   captionSize: number;
+  micExempted: boolean;
 
   // Actions
   toggleMute: () => void;
@@ -101,6 +102,8 @@ interface MeetingContextValue {
   denyAllUsers: () => void;
   kickUser: (userId: string) => void;
   changeUserRole: (userId: string, newRole: string) => void;
+  askToUnmute: (userId: string) => void;
+  clearChat: () => void;
   forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
@@ -381,6 +384,7 @@ export function MeetingProvider({
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
 
   const [roomSettings, setRoomSettings] = useState({ micLocked: false, videoLocked: false, chatLocked: false });
+  const [micExempted, setMicExempted] = useState(false);
 
   // Virtual Background
   const [vbMode, setVbMode] = useState<'none' | 'blur' | 'image'>('none');
@@ -722,6 +726,11 @@ export function MeetingProvider({
             })
             .catch(err => console.error('Translation failed', err));
           }
+        };
+
+        client.onChatCleared = () => {
+          setChatMessages([]);
+          toast.info("The chat has been cleared by a host.");
         };
 
         client.onChatHistory = (messages) => {
@@ -1157,10 +1166,54 @@ export function MeetingProvider({
         };
 
         client.onRoomSettingsUpdated = (newSettings, updatedBy) => {
-          setRoomSettings(newSettings);
+          setRoomSettings(prev => {
+            if (currentUser.role !== 'host' && currentUser.role !== 'co-host') {
+              if (!prev.micLocked && newSettings.micLocked) {
+                setIsMuted(true);
+                setMicExempted(false);
+                webrtcClient.current?.pauseMic();
+                webrtcClient.current?.sendMuteState(true);
+              }
+              if (!prev.videoLocked && newSettings.videoLocked) {
+                setIsCameraOn(false);
+                webrtcClient.current?.disableCamera();
+                webrtcClient.current?.sendCameraState(false);
+              }
+            }
+            return newSettings;
+          });
           if (updatedBy && updatedBy !== currentUser.name) {
             toast.info(`${updatedBy} updated the room security settings.`);
           }
+        };
+
+        client.onAskToUnmute = (hostName) => {
+          setMicExempted(true);
+          toast.custom((t) => (
+            <div className="bg-[var(--mt-bg-elevated)] text-[var(--mt-text)] p-4 rounded-xl shadow-lg border border-[var(--mt-border)] w-full flex flex-col gap-3">
+              <div className="font-medium text-sm text-balance leading-tight">{hostName} would like you to unmute.</div>
+              <div className="flex gap-2 justify-end">
+                <button 
+                  onClick={() => toast.dismiss(t)}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border border-[var(--mt-border)] text-[var(--mt-text)]"
+                >
+                  Stay Muted
+                </button>
+                <button 
+                  onClick={() => {
+                    toast.dismiss(t);
+                    webrtcClient.current?.resumeMic().then(() => {
+                      webrtcClient.current?.sendMuteState(false);
+                      setIsMuted(false);
+                    }).catch(console.error);
+                  }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors bg-brand-green hover:bg-brand-green/90 text-white"
+                >
+                  Unmute Now
+                </button>
+              </div>
+            </div>
+          ), { duration: 15000 });
         };
 
         client.onECinemaUpdate = (link) => {
@@ -1298,14 +1351,14 @@ export function MeetingProvider({
           });
         };
 
-        client.onNewConsumer = (consumer, userId, userName) => {
+        client.onNewConsumer = (consumer, participantId, userName) => {
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
           setParticipants((prev) => {
-            const exists = prev.find((p) => p.id === userId || p.userId === userId);
+            const exists = prev.find((p) => p.id === participantId);
             if (exists) {
               return prev.map((p) => {
-                if (p.id === userId || p.userId === userId) {
+                if (p.id === participantId) {
                   if (consumer.kind === 'audio') {
                     return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
                   }
@@ -1353,9 +1406,9 @@ export function MeetingProvider({
             } else {
               client?.emitTelemetry('participant_missing_but_media_active');
               const newParticipant: Participant = {
-                id: userId,
-                userId: userId,
-                name: userName || `Participant ${userId.substring(5, 9)}`,
+                id: participantId,
+                userId: participantId, // Fallback, though ideally we'd have the real userId
+                name: userName || `Participant ${participantId.substring(5, 9)}`,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
@@ -1917,6 +1970,14 @@ export function MeetingProvider({
     webrtcClient.current?.sendForceMute(userId, target);
   }, []);
 
+  const askToUnmute = useCallback((userId: string) => {
+    webrtcClient.current?.askToUnmute(userId);
+  }, []);
+
+  const clearChat = useCallback(() => {
+    webrtcClient.current?.sendClearChat();
+  }, []);
+
   const forceVideoOffUser = useCallback((userId?: string) => {
     webrtcClient.current?.sendForceVideoOff(userId);
   }, []);
@@ -1976,6 +2037,9 @@ export function MeetingProvider({
         markChatMessageRendered,
         layoutMode,
         gridOverflowMode,
+        micExempted,
+        askToUnmute,
+        clearChat,
         isMuted,
         isCameraOn,
         isScreenSharing,

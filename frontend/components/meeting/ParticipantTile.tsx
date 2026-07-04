@@ -12,7 +12,8 @@ import {
   SignalHigh,
   SignalMedium,
   SignalLow,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -152,11 +153,8 @@ export function ParticipantTile({
               attemptPlay();
               return;
             }
-            stream.getTracks().forEach(t => stream.removeTrack(t));
-            stream.addTrack(participant.videoTrack);
-          } else {
-            el.srcObject = new MediaStream([participant.videoTrack]);
           }
+          el.srcObject = new MediaStream([participant.videoTrack]);
           attemptPlay();
         } else {
           el.srcObject = null;
@@ -182,11 +180,9 @@ export function ParticipantTile({
     };
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('pageshow', handleVisibility);
-    window.addEventListener('focus', handleVisibility);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pageshow', handleVisibility);
-      window.removeEventListener('focus', handleVisibility);
     };
   }, [participant.videoTrack]);
 
@@ -198,11 +194,8 @@ export function ParticipantTile({
           if (el.srcObject) {
             const stream = el.srcObject as MediaStream;
             if (stream.getVideoTracks()[0] === participant.screenTrack) return;
-            stream.getTracks().forEach(t => stream.removeTrack(t));
-            stream.addTrack(participant.screenTrack);
-          } else {
-            el.srcObject = new MediaStream([participant.screenTrack]);
           }
+          el.srcObject = new MediaStream([participant.screenTrack]);
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
           });
@@ -214,7 +207,11 @@ export function ParticipantTile({
     [participant.screenTrack]
   );
 
-  const effectiveVideoState = getEffectiveVideoState(participant);
+  const effectiveVideoState = 
+    (currentUser.audioOnlyMode && !isSelf) 
+      ? 'audio-only' 
+      : getEffectiveVideoState(participant);
+
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 
   // Determine diagnosis hint
@@ -274,13 +271,17 @@ export function ParticipantTile({
   const expectsMedia = isSelf || participant.isCameraOn || !participant.isMuted;
   let mediaConnectionState: string | null = null;
   
-  if (expectsMedia) {
-    if (health === 'stalled') {
-      mediaConnectionState = "Media connection failed. Retrying...";
+  if (expectsMedia && !currentUser.audioOnlyMode) {
+    if (participant.isConnecting) {
+      mediaConnectionState = "Connecting...";
+    } else if (health === 'black') {
+      mediaConnectionState = isSelf 
+        ? "Your camera hardware failed. Please toggle your video off and on." 
+        : "Participant's camera feed failed.";
+    } else if (health === 'stalled' || effectiveVideoState === 'stalled') {
+      mediaConnectionState = "Connection failed. Retrying...";
     } else if (health === 'recovering') {
-      mediaConnectionState = "Reconnecting to Media Server";
-    } else if (participant.isConnecting) {
-      mediaConnectionState = "Connecting to Media Server";
+      mediaConnectionState = "Reconnecting to Video";
     }
   }
 
@@ -489,9 +490,15 @@ export function ParticipantTile({
 
       {/* ── Media Connection State Overlay ── */}
       {mediaConnectionState && (
-        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-black/60 backdrop-blur-sm text-white font-medium text-sm text-center px-4">
+        <div className="absolute inset-0 z-[5] flex items-center justify-center bg-black/70 text-white font-medium text-sm text-center px-4">
           <div className="flex flex-col items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-brand-green" />
+            {health === 'black' ? (
+               <AlertTriangle className="w-5 h-5 text-red-400" />
+            ) : health === 'stalled' ? (
+               <AlertTriangle className="w-5 h-5 text-yellow-400" />
+            ) : (
+               <Loader2 className="w-5 h-5 animate-spin text-brand-green" />
+            )}
             <span>{mediaConnectionState}</span>
           </div>
         </div>

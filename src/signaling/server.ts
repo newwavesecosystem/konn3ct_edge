@@ -123,11 +123,13 @@ interface Client {
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
   maxActiveCameras?: number;
+  preempted?: boolean;
   maxParticipants?: number;
   roomCreatedDate: Date;
   isBot?: boolean;
   cleanupStarted?: boolean;
   participantId: string;
+  micExemption?: boolean;
 }
 
 const rooms = new Map<string, Map<string, Client>>();
@@ -448,13 +450,22 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Guardrails: Check for duplicate active connections using the same participantId (not a reconnect)
+      // Guardrails: Check for duplicate active connections using the same participantId
       const existingClient = rooms.get(room.id)?.get(participantIdParam);
-      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN && !disconnectTimeouts.has(`${participantIdParam}:${room.id}`)) {
-        logger.warn(`Rejecting connection due to duplicate active participantId: ${participantIdParam}`);
-        socket.write('HTTP/1.1 409 Conflict\r\nX-Conn3ct-Error: Duplicate session\r\n\r\n');
-        socket.destroy();
-        return;
+      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
+        logger.info(`Preempting old connection for participantId: ${participantIdParam}`);
+        existingClient.preempted = true;
+        
+        // If a disconnect timeout was already running for this user, clear it
+        const timeoutKey = `${participantIdParam}:${room.id}`;
+        if (disconnectTimeouts.has(timeoutKey)) {
+          clearTimeout(disconnectTimeouts.get(timeoutKey));
+          disconnectTimeouts.delete(timeoutKey);
+        }
+
+        try {
+          existingClient.ws.terminate();
+        } catch(e) {}
       }
 
       wss.handleUpgrade(request, socket, head, (ws) => {
@@ -490,7 +501,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -639,6 +650,10 @@ export function initializeSignaling(server: Server) {
     });
 
     ws.on('close', () => {
+      if (client.preempted) {
+        logger.info(`[CLEANUP] client_cleanup_ignored_preempted for user ${userId}`);
+        return;
+      }
       if (client.cleanupStarted) {
         logger.info(`[CLEANUP] client_cleanup_ignored_duplicate for user ${userId}`);
         return;
@@ -689,7 +704,7 @@ export function initializeSignaling(server: Server) {
           } else {
             // Remove their producers from the array
             const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
+            roomProducers.set(roomId, producers.filter(p => p.participantId !== participantId));
 
             broadcastToRoom(roomId, {
               type: 'user_left',
@@ -941,8 +956,7 @@ export function initializeSignaling(server: Server) {
           };
 
           if (data.userId) {
-            const targetClient = roomClients.get(data.userId);
-            if (targetClient) targetClient.ws.send(JSON.stringify({ type: 'force_mute', reason: 'host_action' }));
+            broadcastForceMute(c => c.userId === data.userId);
           } else if (data.target === 'all') {
             broadcastForceMute(c => c.userId !== userId);
           } else if (data.target === 'all_except_hosts') {
@@ -960,14 +974,47 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
-      case 'force_video_off':
+      case 'ask_to_unmute':
         if (client.role === 'host' || client.role === 'co-host') {
           const roomClients = rooms.get(roomId);
           if (!roomClients) break;
           for (const [id, c] of roomClients.entries()) {
-            if (c.status === 'active' && c.userId !== userId) {
-              c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+            if (c.status === 'active' && c.userId === data.userId) {
+              c.micExemption = true;
+              c.ws.send(JSON.stringify({ type: 'ask_to_unmute', hostName: client.name }));
             }
+          }
+        }
+        break;
+
+      case 'force_video_off':
+        if (client.role === 'host' || client.role === 'co-host') {
+          const roomClients = rooms.get(roomId);
+          if (!roomClients) break;
+
+          const broadcastForceVideoOff = (predicate: (c: Client) => boolean) => {
+            for (const [id, c] of roomClients.entries()) {
+              if (c.status === 'active' && predicate(c)) {
+                c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+              }
+            }
+          };
+
+          if (data.userId) {
+            broadcastForceVideoOff(c => c.userId === data.userId);
+          } else if (data.target === 'all') {
+            broadcastForceVideoOff(c => c.userId !== userId);
+          } else if (data.target === 'all_except_hosts') {
+            broadcastForceVideoOff(c => c.role !== 'host' && c.role !== 'co-host');
+          } else if (data.target === 'all_except_presenters') {
+            const presenters = new Set(
+              (roomProducers.get(roomId) || [])
+                .filter(p => p.appData?.source === 'screen')
+                .map(p => p.userId)
+            );
+            broadcastForceVideoOff(c => c.userId !== userId && !presenters.has(c.userId));
+          } else {
+            broadcastForceVideoOff(c => c.role !== 'host');
           }
         }
         break;
@@ -983,6 +1030,27 @@ export function initializeSignaling(server: Server) {
             settings: newSettings,
             updatedBy: client.name
           });
+
+          const roomClients = rooms.get(roomId);
+          if (roomClients) {
+            // If mic just got locked, force mute all attendees
+            if (!currentSettings.micLocked && newSettings.micLocked) {
+              for (const [id, c] of roomClients.entries()) {
+                if (c.status === 'active' && c.role !== 'host' && c.role !== 'co-host') {
+                  c.micExemption = false;
+                  c.ws.send(JSON.stringify({ type: 'force_mute', reason: 'host_action' }));
+                }
+              }
+            }
+            // If video just got locked, force video off for all attendees
+            if (!currentSettings.videoLocked && newSettings.videoLocked) {
+              for (const [id, c] of roomClients.entries()) {
+                if (c.status === 'active' && c.role !== 'host' && c.role !== 'co-host') {
+                  c.ws.send(JSON.stringify({ type: 'force_video_off', reason: 'host_action' }));
+                }
+              }
+            }
+          }
         }
         break;
 
@@ -990,7 +1058,7 @@ export function initializeSignaling(server: Server) {
         logger.info(`User ${userId} explicitly left room ${roomId}. Skipping grace period.`);
         const rc = rooms.get(roomId);
         if (rc) {
-          rc.delete(userId);
+          rc.delete(client.participantId);
           if (rc.size === 0) {
             rooms.delete(roomId);
             roomProducers.delete(roomId);
@@ -1001,8 +1069,8 @@ export function initializeSignaling(server: Server) {
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.userId !== userId));
-            broadcastToRoom(roomId, { type: 'user_left', userId });
+            roomProducers.set(roomId, producers.filter(p => p.participantId !== client.participantId));
+            broadcastToRoom(roomId, { type: 'user_left', userId, participantId: client.participantId });
             syncRoomStateToRedis(roomId, client.roomSlug);
           }
         }
@@ -1136,6 +1204,20 @@ export function initializeSignaling(server: Server) {
           if (clientEventId) emitActionAck(client, clientEventId, 'chat', '', 'failed', 'SERVER_ERROR', 'Failed to process chat message');
         }
         break;
+
+      case 'clear_chat': {
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            await db.chatMessage.deleteMany({
+              where: { roomId }
+            });
+            broadcastToRoom(roomId, { type: 'chat_cleared' });
+          } catch (e) {
+            logger.error("Failed to clear chat", e);
+          }
+        }
+        break;
+      }
 
       case 'reaction':
         if (clientEventId) {
@@ -1678,6 +1760,10 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
           return;
         }
+        if (data.kind === 'audio' && settings?.micLocked && client.role === 'attendee' && !client.micExemption) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Microphones are locked by the host.' }));
+          return;
+        }
 
         const appData: Record<string, any> = data.appData || {};
         const source = appData.source || 'camera'; // 'camera' | 'screen'
@@ -1927,7 +2013,7 @@ export function initializeSignaling(server: Server) {
         
         const rp = roomProducers.get(roomId);
         if (rp) {
-          roomProducers.set(roomId, rp.filter(p => p.userId !== userId));
+          roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
         }
         break;
       }

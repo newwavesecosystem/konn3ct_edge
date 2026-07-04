@@ -37,6 +37,9 @@ jobs:
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
             docker push $IMAGE_NAME:staging-latest
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+            docker push $IMAGE_NAME:prod-latest
           fi
 
       - name: Build and Push Frontend Docker Image
@@ -46,11 +49,15 @@ jobs:
             --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} \
             --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
             --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
+            --build-arg NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
             docker push $IMAGE_NAME:staging-latest
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+            docker push $IMAGE_NAME:prod-latest
           elif [ "${{ github.ref }}" = "refs/heads/1gov_stag" ]; then
             docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:1gov_stag
             docker push $IMAGE_NAME:1gov_stag
@@ -110,6 +117,7 @@ jobs:
             --from-literal=DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
             --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
             --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
+            --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
           # Apply all our deployment, service, and redis yaml files

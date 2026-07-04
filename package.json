@@ -59,6 +59,9 @@
     "zod": "^4.0.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
     "@types/ejs": "^3.1.5",
@@ -70,6 +73,7 @@
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "@types/yamljs": "^0.2.34",
+    "@vitest/coverage-v8": "^4.1.9",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.29.0",
     "husky": "^9.1.7",
