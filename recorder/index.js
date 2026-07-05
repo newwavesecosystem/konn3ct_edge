@@ -247,7 +247,10 @@ async function processRecordingJob(job) {
         '--disable-setuid-sandbox',
         '--autoplay-policy=no-user-gesture-required',
         '--disable-dev-shm-usage',
-        '--disable-gpu',
+        '--use-gl=angle',
+        '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader',
+        '--ignore-gpu-blocklist',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
@@ -260,6 +263,11 @@ async function processRecordingJob(job) {
         '--hide-scrollbars'
       ],
     });
+
+    console.log("recorder_chromium_launched");
+    if (browser.process().spawnargs.join(' ').includes('swiftshader')) {
+      console.log("recorder_swiftshader_enabled");
+    }
 
     const pages = await browser.pages();
     const page = pages[0];
@@ -458,14 +466,118 @@ async function processRecordingJob(job) {
       stage: "media_recorder_starting"
     }));
 
+    // Diagnostic Screenshot
+    const screenshotPath = require('path').join(__dirname, 'recordings', `${roomId}_diagnostic.png`);
+    await page.screenshot({ path: screenshotPath });
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recorder_diagnostic_screenshot_saved",
+      recordingId: recordingId || 'unknown',
+      path: screenshotPath
+    }));
+
     // Inject recording logic directly into the browser context
     await page.evaluate((serverPort) => {
       return new Promise(async (resolve, reject) => {
         try {
+          // Real Video-Frame Readiness
+          console.log("PAGE LOG: recorder_video_elements_detected");
+          await new Promise((resolveVideo) => {
+            let attempt = 0;
+            const checkVideo = () => {
+              const videos = document.querySelectorAll('video');
+              let ready = false;
+              for (let i = 0; i < videos.length; i++) {
+                const v = videos[i];
+                if (v.readyState >= 3 && v.videoWidth > 0 && v.videoHeight > 0) {
+                  ready = true;
+                  if (typeof v.requestVideoFrameCallback === 'function') {
+                    v.requestVideoFrameCallback(() => {
+                      console.log("PAGE LOG: recorder_first_video_frame_received");
+                      if (v.currentTime > 0) {
+                        console.log("PAGE LOG: recorder_video_current_time_advancing");
+                      }
+                      console.log("PAGE LOG: recorder_video_render_ready");
+                      resolveVideo();
+                    });
+                    return;
+                  } else {
+                    console.log("PAGE LOG: recorder_first_video_frame_received");
+                    console.log("PAGE LOG: recorder_video_render_ready");
+                    resolveVideo();
+                    return;
+                  }
+                }
+              }
+              attempt++;
+              if (attempt > 60) {
+                console.log("PAGE LOG: recorder_video_render_failed");
+                resolveVideo(); // proceed anyway after 30s timeout
+                return;
+              }
+              setTimeout(checkVideo, 500);
+            };
+            checkVideo();
+          });
+
+          // Real Audio Readiness
+          console.log("PAGE LOG: recorder_audio_elements_detected");
+          await new Promise((resolveAudio) => {
+            try {
+              const AudioContext = window.AudioContext || window.webkitAudioContext;
+              const ctx = new AudioContext();
+              const analyser = ctx.createAnalyser();
+              analyser.fftSize = 256;
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              
+              let audioFound = false;
+              const audios = document.querySelectorAll('audio, video');
+              for (let i = 0; i < audios.length; i++) {
+                try {
+                  const source = ctx.createMediaElementSource(audios[i]);
+                  source.connect(analyser);
+                  analyser.connect(ctx.destination);
+                  audioFound = true;
+                  console.log("PAGE LOG: recorder_audio_play_started");
+                } catch(e) {}
+              }
+
+              if (!audioFound || ctx.state === 'suspended') {
+                 console.log("PAGE LOG: recorder_audio_play_rejected");
+                 resolveAudio();
+                 return;
+              }
+              console.log("PAGE LOG: recorder_audio_context_running");
+
+              let attempt = 0;
+              const checkAudio = () => {
+                analyser.getByteFrequencyData(dataArray);
+                const sum = dataArray.reduce((a, b) => a + b, 0);
+                if (sum > 0) {
+                  console.log("PAGE LOG: recorder_audio_level_detected", sum);
+                  console.log("PAGE LOG: recorder_audio_capture_ready");
+                  resolveAudio();
+                  return;
+                }
+                attempt++;
+                if (attempt > 60) {
+                  console.log("PAGE LOG: recorder_audio_silence_detected");
+                  resolveAudio();
+                  return;
+                }
+                setTimeout(checkAudio, 500);
+              };
+              checkAudio();
+            } catch (e) {
+              console.log("PAGE LOG: recorder_audio_play_rejected");
+              resolveAudio();
+            }
+          });
+
           // Spoof title right before capture so auto-select-tab-capture-source-by-title finds it instantly
           document.title = 'BotRecord';
           await new Promise(r => setTimeout(r, 500));
-
+          
           let stream;
           try {
             stream = await navigator.mediaDevices.getDisplayMedia({
