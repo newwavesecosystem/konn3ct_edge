@@ -229,7 +229,9 @@ export function ParticipantTile({
   const effectiveVideoState = 
     (currentUser.audioOnlyMode && !isSelf) 
       ? 'audio-only' 
-      : getEffectiveVideoState(participant);
+      : (isRecorderMode && participant.videoTrack)
+          ? 'video-active'
+          : getEffectiveVideoState(participant);
 
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 
