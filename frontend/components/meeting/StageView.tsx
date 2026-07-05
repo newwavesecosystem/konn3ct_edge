@@ -32,7 +32,7 @@ export function StageView() {
 
   // Grid view sorting (no active speaker rearranging)
   const gridSorted = useMemo(() => {
-    return [...participants].filter(p => p.role !== 'bot').sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot' && p.role !== 'recorder').sort((a, b) => {
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
     });
@@ -40,7 +40,7 @@ export function StageView() {
 
   // Speaker view sorting (uses active speaker)
   const speakerSorted = useMemo(() => {
-    return [...participants].filter(p => p.role !== 'bot').sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot' && p.role !== 'recorder').sort((a, b) => {
       if (a.isSpeaking !== b.isSpeaking) return a.isSpeaking ? -1 : 1;
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
@@ -66,7 +66,7 @@ export function StageView() {
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
   const others = gridSorted; // Keep all participants in the strip to prevent swapping/rearranging
 
-  if (layoutMode === "grid" || currentUser.role === 'bot') {
+  if (layoutMode === "grid" || currentUser.role === 'bot' || currentUser.role === 'recorder') {
     return <GridLayout participants={gridSorted} />;
   }
 
@@ -413,7 +413,7 @@ function GridInner({
 }) {
   const { currentUser } = useMeeting();
   const count = participants.length;
-  const isBotViewer = currentUser.role === 'bot';
+  const isBotViewer = currentUser.role === 'bot' || currentUser.role === 'recorder';
 
   // For bots, we want 0 padding and 0 gap to perfectly fill the screen
   const paddingX = isBotViewer ? 0 : TILE_PADDING_X;
