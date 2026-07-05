@@ -166,6 +166,7 @@ async function run() {
         Key: `recordings/${roomId}/${Date.now()}.mp4`,
         Body: fileStreamForUpload,
         ContentType: 'video/mp4',
+        ACL: 'public-read',
       },
       queueSize: 4, // Concurrent parts
       partSize: 5 * 1024 * 1024 // 5 MB part size
