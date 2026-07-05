@@ -74,6 +74,59 @@ async function checkFfprobe(filePath, recordingId) {
   });
 }
 
+async function validateMp4(filePath, recordingId) {
+  return new Promise((resolve, reject) => {
+    // Run blackdetect and silencedetect on the mp4
+    console.log(`[${recordingId}] starting deep mp4 validation...`);
+    exec(`ffmpeg -v info -i "${filePath}" -vf "blackdetect=d=2:pix_th=0.10" -af "silencedetect=noise=-50dB:d=2" -f null - 2>&1`, (err, stdout, stderr) => {
+      const output = stderr.toString();
+      
+      const blackDetected = output.includes('blackdetect');
+      const silenceDetected = output.includes('silence_start');
+      const durationMatch = output.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
+      let durationSec = 0;
+      if (durationMatch) {
+        durationSec = parseInt(durationMatch[1]) * 3600 + parseInt(durationMatch[2]) * 60 + parseFloat(durationMatch[3]);
+        console.log(`[${recordingId}] recording_duration_verified: ${durationSec}s`);
+      }
+      
+      const resMatch = output.match(/Video: .*, (\d{3,4}x\d{3,4})/);
+      if (resMatch) {
+        console.log(`[${recordingId}] recording_video_resolution_verified: ${resMatch[1]}`);
+      }
+
+      if (blackDetected && durationSec > 0) {
+         const blackLines = output.split('\n').filter(l => l.includes('blackdetect'));
+         // If there's a black frame that spans the whole duration, fail
+         const blackDurationMatch = output.match(/black_duration: ([0-9.]+)/g);
+         let totalBlack = 0;
+         if (blackDurationMatch) {
+           totalBlack = blackDurationMatch.reduce((acc, match) => acc + parseFloat(match.split(':')[1]), 0);
+         }
+         if (totalBlack > durationSec * 0.9) {
+           console.log(`[${recordingId}] recording_black_video_detected`);
+           return reject(new Error("Video is completely black. Validation failed."));
+         }
+      }
+
+      if (silenceDetected && durationSec > 0) {
+         const silenceDurationMatch = output.match(/silence_duration: ([0-9.]+)/g);
+         let totalSilence = 0;
+         if (silenceDurationMatch) {
+           totalSilence = silenceDurationMatch.reduce((acc, match) => acc + parseFloat(match.split(':')[1]), 0);
+         }
+         if (totalSilence > durationSec * 0.9) {
+           console.log(`[${recordingId}] recording_silent_audio_detected`);
+           return reject(new Error("Audio is completely silent. Validation failed."));
+         }
+      }
+
+      console.log(`[${recordingId}] ffprobe_mp4_result: PASSED`);
+      resolve(durationSec);
+    });
+  });
+}
+
 async function run() {
   const args = process.argv.slice(2);
   const roomId = args[0];
@@ -149,6 +202,20 @@ async function run() {
         });
     });
 
+    let finalDuration = 0;
+    try {
+      finalDuration = await validateMp4(outputPathMp4, recordingId);
+    } catch (e) {
+      console.error(`[${recordingId}] Validation failed:`, e);
+      await notifyBackendWithRetry(
+        backendUrl, 
+        `/api/recordings/${recordingId}/callback/status`,
+        recordingId, botToken,
+        { status: 'failed', error: e.message }
+      );
+      process.exit(1);
+    }
+
     // Notify uploading
     await notifyBackendWithRetry(
       backendUrl, 
@@ -166,7 +233,7 @@ async function run() {
         Key: `recordings/${roomId}/${Date.now()}.mp4`,
         Body: fileStreamForUpload,
         ContentType: 'video/mp4',
-        ACL: 'public-read',
+        ACL: 'private', // Security fix: no longer public-read
       },
       queueSize: 4, // Concurrent parts
       partSize: 5 * 1024 * 1024 // 5 MB part size
