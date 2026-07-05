@@ -167,6 +167,7 @@ interface MeetingContextValue {
 
   // QA Diagnostics
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
+  isRecorderMode: boolean;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -2250,6 +2251,7 @@ export function MeetingProvider({
         micError,
         setMicError,
         webrtcClientRef: webrtcClient,
+        isRecorderMode,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
