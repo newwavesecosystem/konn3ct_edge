@@ -5,6 +5,11 @@ import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
 import { launchRecorderBot } from '../services/recorderLauncher';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import Redis from 'ioredis';
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redis = new Redis(redisUrl);
 
 export const recordingsRouter = Router();
 
@@ -84,7 +89,6 @@ const startRecordingSchema = z.object({
   durationMinutes: z.number().min(1).max(120).optional()
 });
 
-import jwt from 'jsonwebtoken';
 
 recordingsRouter.post('/start', async (req: Request, res: Response) => {
   try {
@@ -188,6 +192,8 @@ recordingsRouter.post('/:id/stop', async (req: Request, res: Response) => {
       where: { id },
       data: { status: 'stopping', endedAt: new Date() }
     });
+
+    redis.publish(`recorder:stop:${recording.roomId}`, JSON.stringify({ recordingId: id, reason: 'host_requested_stop' })).catch(e => logger.error("Failed to publish stop signal", e));
 
     res.status(200).json({ message: 'Stop signal sent to recording bot', status: 'stopping' });
   } catch (error) {

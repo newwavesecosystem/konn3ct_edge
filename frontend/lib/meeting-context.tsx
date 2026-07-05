@@ -681,11 +681,13 @@ export function MeetingProvider({
 
         client.onRecordingStarted = () => {
           setIsRecording(true);
+          setRecordingStatus('recording');
           toast.info("This meeting is now being recorded.", { icon: "🔴" });
         };
 
         client.onRecordingStopped = () => {
           setIsRecording(false);
+          setRecordingStatus('idle');
           toast.info("Recording has stopped.");
         };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { StageView } from "./StageView";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -15,6 +15,14 @@ export function RecorderShell() {
 
   const searchParams = useSearchParams();
   const botToken = searchParams?.get('botToken');
+
+  const participantsRef = useRef(participants);
+  const currentUserRef = useRef(currentUser);
+
+  useEffect(() => {
+    participantsRef.current = participants;
+    currentUserRef.current = currentUser;
+  }, [participants, currentUser]);
 
   useEffect(() => {
     console.log("recorder_page_loaded");
@@ -60,8 +68,11 @@ export function RecorderShell() {
         let noVideoExpected = false; // Do not blindly assume no video
         let noAudioExpected = false; // Do not blindly assume no audio
         
+        const currentParticipants = participantsRef.current;
+        const currentLocalUser = currentUserRef.current;
+
         // Exclude bot itself from expectations
-        const remoteParticipants = participants.filter(p => p.id !== currentUser?.id && p.role !== 'bot' && p.role !== 'recorder');
+        const remoteParticipants = currentParticipants.filter(p => p.id !== currentLocalUser?.id && p.role !== 'bot' && p.role !== 'recorder');
         
         if (remoteParticipants.length > 0) {
           const expectedCameras = remoteParticipants.filter(p => p.isCameraOn || p.videoTrack);
@@ -114,8 +125,8 @@ export function RecorderShell() {
           else if (audioReady) console.log("audio_ready");
 
           const isRecordingRoute = window.location.pathname.includes('/recording/');
-          const noLocalMedia = !currentUser?.audioTrack && !currentUser?.videoTrack;
-          const isValidRecorderId = currentUser?.id && currentUser.id !== 'bot_recorder' && !currentUser?.id.includes('ssr-placeholder');
+          const noLocalMedia = !currentLocalUser?.audioTrack && !currentLocalUser?.videoTrack;
+          const isValidRecorderId = currentLocalUser?.id && currentLocalUser.id !== 'bot_recorder' && !currentLocalUser?.id.includes('ssr-placeholder');
 
           if (!isRecordingRoute || !noLocalMedia || !isValidRecorderId) {
             console.error("fatal_recorder_bug_detected", { isRecordingRoute, noLocalMedia, isValidRecorderId });
@@ -123,7 +134,7 @@ export function RecorderShell() {
             (window as any).__KONN3CT_RECORDER_READY__ = {
               joined: false,
               error: "fatal_bug_detected_fast_fail",
-              details: { isRecordingRoute, noLocalMedia, isValidRecorderId, id: currentUser?.id }
+              details: { isRecordingRoute, noLocalMedia, isValidRecorderId, id: currentLocalUser?.id }
             };
             return;
           }
@@ -136,7 +147,7 @@ export function RecorderShell() {
               (window as any).__KONN3CT_RECORDER_READY__ = {
                 joined: true,
                 roomId: meetingInfo.roomSlug,
-                participantId: currentUser?.id,
+                participantId: currentLocalUser?.id,
                 signalingConnected: true,
                 mediaReady: true,
                 timestamp: Date.now()
@@ -163,7 +174,7 @@ export function RecorderShell() {
 
       return () => clearInterval(checkReadiness);
     }
-  }, [webrtcStatus, meetingInfo.roomSlug, currentUser?.id, participants]);
+  }, [webrtcStatus, meetingInfo.roomSlug, currentUser?.id]);
 
   if (!botToken) {
     return <div className="min-h-screen bg-black flex items-center justify-center text-red-500">Missing Bot Token</div>;
