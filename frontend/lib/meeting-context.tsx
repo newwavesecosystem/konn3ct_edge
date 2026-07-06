@@ -1136,6 +1136,16 @@ export function MeetingProvider({
           });
         };
 
+        client.onWaitingRoomDenied = (msg) => {
+          setWaitingUsers(prev => prev.filter(u => u.userId !== msg.userId));
+          notifiedWaitingUsersRef.current.delete(msg.userId);
+        };
+
+        client.onWaitingRoomDeniedAll = () => {
+          setWaitingUsers([]);
+          notifiedWaitingUsersRef.current.clear();
+        };
+
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);

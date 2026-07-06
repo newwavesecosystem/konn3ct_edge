@@ -128,6 +128,8 @@ export class WebRTCClient {
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
+  public onWaitingRoomDenied?: (msg: any) => void;
+  public onWaitingRoomDeniedAll?: () => void;
   public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean, bypassWaitingRoom: boolean }, updatedBy?: string) => void;
   public onQAHistory?: (messages: any[]) => void;
   public onQAUpdated?: (msg: any) => void;
@@ -507,6 +509,12 @@ export class WebRTCClient {
           break;
         case 'waiting_room_request':
           this.onWaitingRoomRequest?.(msg);
+          break;
+        case 'waiting_room_denied':
+          this.onWaitingRoomDenied?.(msg);
+          break;
+        case 'waiting_room_denied_all':
+          this.onWaitingRoomDeniedAll?.();
           break;
         case 'chat_history':
           this.onChatHistory?.(msg.messages);
