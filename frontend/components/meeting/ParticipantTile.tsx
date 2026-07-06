@@ -2,7 +2,6 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Mic,
   MicOff,
@@ -58,11 +57,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, reactionsByParticipantId } = useMeeting();
-
-  const tileReactions = React.useMemo(() => {
-    return (reactionsByParticipantId[participant.id] || []).slice(-3); // Cap at 3
-  }, [reactionsByParticipantId, participant.id]);
+  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -465,40 +460,6 @@ export function ParticipantTile({
           </div>
         </div>
       )}
-
-      {/* ── Reactions Badge ── */}
-      <div className="absolute top-2 right-2 z-20 flex flex-row gap-1 items-start pointer-events-none">
-        <AnimatePresence>
-          {tileReactions.map((r) => (
-            <motion.div
-              key={r.id}
-              initial={{ scale: 0, opacity: 0, y: 10 }}
-              animate={{
-                scale: [0, 1.2, 1, 1, 0.8],
-                opacity: [0, 1, 1, 0],
-                y: [10, 0, 0, -20],
-              }}
-              exit={{ opacity: 0 }}
-              onAnimationStart={() => console.log("reaction_rendered_tile")}
-              transition={{
-                duration: 4.5, // 0.2s pop, hold to 3.2s, fade by 4.5s
-                scale: { times: [0, 0.05, 0.1, 0.7, 1], ease: "easeOut" },
-                opacity: { times: [0, 0.05, 0.7, 1], ease: "easeOut" },
-                y: { times: [0, 0.1, 0.7, 1], ease: "easeOut" },
-              }}
-              className="bg-black/40 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center shadow-xl overflow-hidden"
-              style={{
-                width: isLarge ? "56px" : "36px",
-                height: isLarge ? "56px" : "36px",
-              }}
-            >
-              <span className={cn("drop-shadow-md", isLarge ? "text-3xl" : "text-xl")} style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.4))" }}>
-                {r.emoji}
-              </span>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
 
       {/* ── Overlays (Name, Mic, Controls) ── */}
       {participant.isScreenSharing && (
