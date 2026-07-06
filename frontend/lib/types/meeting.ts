@@ -123,10 +123,16 @@ export interface Poll {
 
 export interface Reaction {
   id: string;
+  clientEventId?: string;
+  serverEventId?: string;
   emoji: string;
   senderId: string;
+  senderParticipantId: string;
   senderName: string;
   timestamp: number;
+  lane: number;
+  xOffset: number;
+  source: "local" | "remote";
 }
 
 export interface MeetingInfo {
