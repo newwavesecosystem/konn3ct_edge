@@ -258,4 +258,67 @@ describe('WebRTCClient Core', () => {
     const produceArgs = mockProduce.mock.calls[mockProduce.mock.calls.length - 1][0];
     expect(produceArgs.track).toBe(mockTrack);
   });
+
+  it('updates audioConnectionStatus correctly during mic lifecycle', async () => {
+    const ws = new MockWebSocket();
+    (webrtc as any).ws = ws;
+    
+    let statusUpdates: string[] = [];
+    webrtc.onAudioStatusChanged = (status) => {
+      statusUpdates.push(status);
+    };
+
+    vi.spyOn(webrtc as any, 'request').mockResolvedValue({
+      routerRtpCapabilities: { codecs: [] },
+      transportParams: { id: 't-1', iceParameters: {}, iceCandidates: [], dtlsParameters: {} }
+    });
+
+    vi.spyOn(webrtc, 'createDevice').mockImplementation(async () => {
+      webrtc.device = {
+        load: vi.fn().mockResolvedValue(undefined),
+        createSendTransport: vi.fn().mockReturnValue(mockSendTransport),
+        createRecvTransport: vi.fn().mockReturnValue(mockRecvTransport),
+        rtpCapabilities: { codecs: [] }
+      } as any;
+    });
+
+    const mockTrack = { kind: 'audio', stop: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    const mockStream = { getAudioTracks: () => [mockTrack], getTracks: () => [mockTrack] };
+    (global.navigator.mediaDevices.getUserMedia as any).mockResolvedValueOnce(mockStream);
+
+    await webrtc.initializeMediasoup();
+    (webrtc as any).sendTransport = mockSendTransport;
+    
+    await webrtc.enableMic();
+    
+    // Status should transition from not_started -> connecting -> connected
+    expect(statusUpdates).toEqual(['connecting', 'connected']);
+    expect(webrtc.audioConnectionStatus).toBe('connected');
+
+    // Pause mic
+    webrtc.pauseMic();
+    expect(webrtc.audioConnectionStatus).toBe('muted');
+    expect(statusUpdates).toEqual(['connecting', 'connected', 'muted']);
+  });
+
+  it('drops self-consume requests if participantId matches', async () => {
+    // MEDIA-CONSUME-001 safeguard
+    webrtc.participantId = 'participant-local';
+    
+    const ws = new MockWebSocket();
+    (webrtc as any).ws = ws;
+    
+    const consumeSpy = vi.spyOn(webrtc as any, 'request');
+    
+    await (webrtc as any).consumeRemoteStream(
+      'remote-prod-1',
+      'participant-local',
+      'user-1',
+      'User Name',
+      'video'
+    );
+
+    // Should NOT call request('consume')
+    expect(consumeSpy).not.toHaveBeenCalled();
+  });
 });

@@ -4,6 +4,13 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
 import { launchRecorderBot } from '../services/recorderLauncher';
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import Redis from 'ioredis';
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redis = new Redis(redisUrl);
+
 export const recordingsRouter = Router();
 
 // Public route to view recording metadata (no media access yet)
@@ -82,7 +89,6 @@ const startRecordingSchema = z.object({
   durationMinutes: z.number().min(1).max(120).optional()
 });
 
-import jwt from 'jsonwebtoken';
 
 recordingsRouter.post('/start', async (req: Request, res: Response) => {
   try {
@@ -126,8 +132,9 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
     const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     
     // Generate secure short-lived token for the bot
+    const participantId = crypto.randomUUID();
     const botToken = jwt.sign(
-      { role: 'recorder', purpose: 'recording_bot', roomId: room.id, recordingId: recording.id },
+      { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id, participantId },
       process.env.JWT_SECRET || 'fallback',
       { expiresIn: '4h' }
     );
@@ -137,7 +144,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
       roomSlug,
       recordingId: recording.id,
       botToken,
-      url: `https://${frontendDomain}/meeting/${roomSlug}?botToken=${botToken}`
+      url: `${frontendDomain.includes('localhost') ? 'http' : 'https'}://${frontendDomain}/recording/${roomSlug}?botToken=${botToken}`
     });
 
     if (!launchResult.queued) {
@@ -171,7 +178,7 @@ recordingsRouter.post('/:id/stop', async (req: Request, res: Response) => {
     if (['stopping'].includes(recording.status)) {
       return res.status(200).json({ message: 'Recording already stopping', status: recording.status });
     }
-    if (['processing'].includes(recording.status)) {
+    if (['processing', 'finalizing', 'transcoding', 'uploading'].includes(recording.status)) {
       return res.status(200).json({ message: 'Recording already stopped and processing', status: recording.status });
     }
     if (['completed', 'failed', 'cancelled'].includes(recording.status)) {
@@ -185,6 +192,8 @@ recordingsRouter.post('/:id/stop', async (req: Request, res: Response) => {
       where: { id },
       data: { status: 'stopping', endedAt: new Date() }
     });
+
+    redis.publish(`recorder:stop:${recording.roomId}`, JSON.stringify({ recordingId: id, reason: 'host_requested_stop' })).catch(e => logger.error("Failed to publish stop signal", e));
 
     res.status(200).json({ message: 'Stop signal sent to recording bot', status: 'stopping' });
   } catch (error) {
@@ -230,7 +239,7 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
   }
 });
 
-recordingsRouter.post('/:id/callback/finalized', async (req: Request, res: Response) => {
+recordingsRouter.post('/:id/callback/status', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const authHeader = req.headers.authorization;
@@ -252,10 +261,10 @@ recordingsRouter.post('/:id/callback/finalized', async (req: Request, res: Respo
 
     const { status, url, duration, failureReason, storageKey, storageBucket, contentType } = req.body;
     
-    if (status === 'processing') {
+    if (status === 'processing' || status === 'finalizing' || status === 'transcoding_queued' || status === 'transcoding' || status === 'uploading' || status === 'partial_available') {
       await db.recording.update({
         where: { id },
-        data: { status: 'processing' }
+        data: { status }
       });
     } else if (status === 'completed') {
       await db.recording.update({

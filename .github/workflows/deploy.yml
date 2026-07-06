@@ -50,6 +50,7 @@ jobs:
             --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
             --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
             --build-arg NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+            --build-arg NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -63,16 +64,16 @@ jobs:
             docker push $IMAGE_NAME:1gov_stag
           fi
 
-      # - name: Build and Push Recorder Docker Image
-      #   if: github.ref != 'refs/heads/1gov_stag'
-      #   run: |
-      #     IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
-      #     docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
-      #     docker push $IMAGE_NAME:${{ github.sha }}
-      #     if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
-      #       docker push $IMAGE_NAME:staging-latest
-      #     fi
+      - name: Build and Push Recorder Docker Image
+        if: github.ref != 'refs/heads/1gov_stag'
+        run: |
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
+          docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
+          docker push $IMAGE_NAME:${{ github.sha }}
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
 
       # - name: Build and Push Streaming Worker Docker Image
       #   run: |
@@ -118,6 +119,7 @@ jobs:
             --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
             --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
             --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+            --from-literal=NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
           # Apply all our deployment, service, and redis yaml files

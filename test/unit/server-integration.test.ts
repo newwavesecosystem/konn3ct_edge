@@ -26,6 +26,7 @@ vi.mock('../../src/db', () => ({
     },
     meetingPoll: {
       findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockImplementation(async ({ data }) => data),
     },
     sharedNote: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -141,6 +142,93 @@ describe('Signaling Server Integration', () => {
 
       ws.on('unexpected-response', (req, res) => {
         reject(new Error(`Unexpected response: ${res.statusCode}`));
+      });
+    });
+  });
+
+  it('allows co-host to create polls and retains role on reconnect', async () => {
+    return new Promise<void>(async (resolve, reject) => {
+      // Create a mock co-host token
+      const cohostToken = jwt.sign({ userId: 'cohost-1', email: 'cohost@conn3ct', name: 'Co-Host', role: 'co-host' }, 'dummy_secret');
+      const url = `${wsUrl}/signal?roomId=test-room-1&token=${cohostToken}&participantId=part-cohost`;
+      
+      const ws = new WebSocket(url);
+      
+      ws.on('open', () => {
+        // Send a poll create message
+        ws.send(JSON.stringify({ 
+          type: 'poll_create', 
+          pollId: 'poll-123',
+          question: 'Is this working?',
+          options: ['Yes', 'No']
+        }));
+        
+        setTimeout(() => {
+          ws.close();
+        }, 50);
+      });
+
+      ws.on('close', () => {
+        // Reconnect with same participantId
+        const reconnectUrl = `${wsUrl}/signal?roomId=test-room-1&token=${cohostToken}&participantId=part-cohost`;
+        const wsReconnect = new WebSocket(reconnectUrl);
+        
+        let receivedSessionStatus = false;
+        
+        wsReconnect.on('message', (data: Buffer) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'session_status') {
+             receivedSessionStatus = true;
+             // Ensure role was preserved
+             expect(msg.role).toBe('co-host');
+          }
+        });
+
+        wsReconnect.on('open', () => {
+          setTimeout(() => {
+            expect(receivedSessionStatus).toBe(true);
+            wsReconnect.close();
+            resolve();
+          }, 50);
+        });
+      });
+      
+      ws.on('unexpected-response', (req, res) => {
+        reject(new Error(`Unexpected response: ${res.statusCode}`));
+      });
+    });
+  });
+
+  it('allows co-host to broadcast poll creation successfully', async () => {
+    return new Promise<void>((resolve, reject) => {
+      // Client 1 (Viewer)
+      const viewerToken = jwt.sign({ userId: 'viewer-1', email: 'viewer@conn3ct', name: 'Viewer', role: 'audience' }, 'dummy_secret');
+      const wsViewer = new WebSocket(`${wsUrl}/signal?roomId=test-room-1&token=${viewerToken}&participantId=part-viewer`);
+      
+      wsViewer.on('open', () => {
+        // Client 2 (Co-Host)
+        const cohostToken = jwt.sign({ userId: 'cohost-2', email: 'cohost@conn3ct', name: 'Co-Host', role: 'co-host' }, 'dummy_secret');
+        const wsCohost = new WebSocket(`${wsUrl}/signal?roomId=test-room-1&token=${cohostToken}&participantId=part-cohost-2`);
+        
+        wsViewer.on('message', (data: Buffer) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'poll_create') {
+            expect(msg.question).toBe('Is the test working?');
+            wsViewer.close();
+            wsCohost.close();
+            resolve();
+          }
+        });
+
+        wsCohost.on('open', () => {
+          // Send a poll create message
+          wsCohost.send(JSON.stringify({ 
+            type: 'poll_create', 
+            pollId: 'poll-456',
+            question: 'Is the test working?',
+            options: ['Yes', 'No']
+          }));
+        });
       });
     });
   });

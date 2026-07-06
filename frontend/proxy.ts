@@ -21,6 +21,8 @@ export function proxy(request: NextRequest) {
     if (
       pathname.startsWith('/post-meeting/') ||
       pathname.startsWith('/join/') ||
+      pathname.startsWith('/recording/') ||
+      pathname.startsWith('/recordings/') ||
       pathname.startsWith('/meeting/')
     ) {
       return NextResponse.next();
