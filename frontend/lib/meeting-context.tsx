@@ -25,7 +25,7 @@ import {
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
 
-export const REACTION_DURATION = 8000;
+export const REACTION_DURATION = 4500;
 
 interface MeetingContextValue {
   // State
@@ -37,6 +37,8 @@ interface MeetingContextValue {
   sharedNoteContent: string;
   meetingInfo: MeetingInfo;
   reactions: Reaction[];
+  reactionsByParticipantId: Record<string, Reaction[]>;
+  isReactionCooldown: boolean;
   activePanel: SidePanel;
   hasUnreadChat: boolean;
   markChatMessageRendered: (messageId: string) => void;
@@ -338,6 +340,14 @@ export function MeetingProvider({
     roomSlug,
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
+  const reactionsByParticipantId = useMemo(() => {
+    return reactions.reduce((acc, r) => {
+      if (!acc[r.senderParticipantId]) acc[r.senderParticipantId] = [];
+      acc[r.senderParticipantId].push(r);
+      return acc;
+    }, {} as Record<string, Reaction[]>);
+  }, [reactions]);
+  const [isReactionCooldown, setIsReactionCooldown] = useState(false);
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
   const activePanelRef = useRef<SidePanel>(null);
   useEffect(() => { activePanelRef.current = activePanel; }, [activePanel]);
@@ -905,19 +915,59 @@ export function MeetingProvider({
                 ? { ...m, serverEventId: ack.serverEventId, lifecycleState: ack.status === 'accepted' ? 'acknowledged' : 'failed' } 
                 : m
             ));
+          } else if (ack.actionType === 'reaction') {
+            console.log("reaction_acknowledged", ack);
+            if (ack.status === 'REACTION_RATE_LIMITED') {
+              console.log("reaction_rate_limited", ack);
+              setReactions(prev => prev.filter(r => r.clientEventId !== ack.clientEventId));
+            } else if (ack.status === 'accepted') {
+              setReactions(prev => prev.map(r => 
+                r.clientEventId === ack.clientEventId 
+                  ? { ...r, serverEventId: ack.serverEventId } 
+                  : r
+              ));
+            }
           }
         };
 
         client.onReaction = (msg) => {
+          console.log("reaction_broadcast_received", msg);
           const reaction: Reaction = {
-            id: `r-${Date.now()}-${Math.random()}`,
+            id: msg.serverEventId || `r-${Date.now()}-${crypto.randomUUID()}`,
+            clientEventId: msg.clientEventId,
+            serverEventId: msg.serverEventId,
             emoji: msg.reaction,
-            senderId: msg.userId,
+            senderId: msg.senderUserId || msg.userId,
+            senderParticipantId: msg.senderParticipantId || msg.userId,
             senderName: msg.name || `Participant`,
             timestamp: Date.now(),
+            lane: Math.floor(Math.random() * 4),
+            xOffset: Math.random() * 40 - 20,
+            source: "remote",
           };
-          setReactions((prev) => [...prev, reaction]);
-          setTimeout(() => setReactions((prev) => prev.filter((r) => r.id !== reaction.id)), REACTION_DURATION);
+          setReactions((prev) => {
+            if (msg.serverEventId && prev.some(r => r.serverEventId === msg.serverEventId)) {
+              console.log("reaction_deduplicated");
+              return prev;
+            }
+            if (msg.clientEventId && prev.some(r => r.clientEventId === msg.clientEventId)) {
+              console.log("reaction_deduplicated");
+              return prev;
+            }
+            const newReactions = [...prev, reaction];
+            if (newReactions.length > 30) {
+              console.log("reaction_dropped_max_visible_limit");
+              return newReactions.slice(newReactions.length - 30);
+            }
+            return newReactions;
+          });
+          setTimeout(() => {
+            setReactions((prev) => {
+              const remaining = prev.filter((r) => r.id !== reaction.id);
+              if (remaining.length < prev.length) console.log("reaction_removed");
+              return remaining;
+            });
+          }, REACTION_DURATION);
         };
 
         client.onPollCreate = (msg) => {
@@ -1933,20 +1983,47 @@ export function MeetingProvider({
 
   const sendReaction = useCallback(
     (emoji: string) => {
-      webrtcClient.current?.sendReaction(emoji);
+      if (isReactionCooldown) return;
+      
+      const clientEventId = crypto.randomUUID();
+      webrtcClient.current?.sendReaction(emoji, clientEventId);
+      
       const reaction: Reaction = {
-        id: `r-${Date.now()}`,
+        id: `r-${Date.now()}-${clientEventId}`,
+        clientEventId,
         emoji,
-        senderId: currentUser.id,
+        senderId: currentUser.userId || currentUser.id,
+        senderParticipantId: currentUser.id, // currently id maps to participantId in the context
         senderName: currentUser.name,
         timestamp: Date.now(),
+        lane: Math.floor(Math.random() * 4),
+        xOffset: Math.random() * 40 - 20,
+        source: "local",
       };
-      setReactions((prev) => [...prev, reaction]);
+      
+      setReactions((prev) => {
+        const newReactions = [...prev, reaction];
+        if (newReactions.length > 30) {
+          console.log("reaction_dropped_max_visible_limit");
+          return newReactions.slice(newReactions.length - 30);
+        }
+        return newReactions;
+      });
+      
+      console.log("reaction_sent", reaction);
+      
+      setIsReactionCooldown(true);
+      setTimeout(() => setIsReactionCooldown(false), 1000); // 1s UI cooldown
+      
       setTimeout(() => {
-        setReactions((prev) => prev.filter((r) => r.id !== reaction.id));
+        setReactions((prev) => {
+          const remaining = prev.filter((r) => r.id !== reaction.id);
+          if (remaining.length < prev.length) console.log("reaction_removed");
+          return remaining;
+        });
       }, REACTION_DURATION);
     },
-    [currentUser]
+    [currentUser, isReactionCooldown]
   );
 
   const votePoll = useCallback((pollId: string, optionId: string) => {
@@ -2103,6 +2180,8 @@ export function MeetingProvider({
         sharedNoteContent,
         meetingInfo,
         reactions,
+        reactionsByParticipantId,
+        isReactionCooldown,
         activePanel,
         hasUnreadChat,
         markChatMessageRendered,
