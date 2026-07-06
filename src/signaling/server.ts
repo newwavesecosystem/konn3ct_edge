@@ -896,7 +896,7 @@ export function initializeSignaling(server: Server) {
           for (const targetClient of rooms.get(roomId)?.values() || []) {
             if (targetClient.userId === data.userId && targetClient.status === 'waiting') {
               targetClient.status = 'active';
-              targetClient.ws.send(JSON.stringify({ type: 'admitted' }));
+              targetClient.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: targetClient.userId, name: targetClient.name, role: targetClient.role }));
               
               // Re-fetch admissions set since the client object may be recreated
               let updatedAdmissions = roomAdmissions.get(roomId);
@@ -1636,11 +1636,16 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           const roomClients = rooms.get(roomId);
           if (roomClients) {
+            let deniedAny = false;
             for (const [id, c] of Array.from(roomClients.entries())) {
               if (c.status === 'waiting') {
                 c.ws.send(JSON.stringify({ type: 'error', message: 'You have been denied entry to this room.' }));
                 roomClients.delete(id);
+                deniedAny = true;
               }
+            }
+            if (deniedAny) {
+              broadcastToHosts(roomId, { type: 'waiting_room_denied_all' });
             }
           }
         }
