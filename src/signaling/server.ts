@@ -141,7 +141,6 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
-const reactionRateLimits = new Map<string, number[]>();
 
 async function asyncWithRetry<T>(
   operation: () => Promise<T>,
@@ -753,7 +752,7 @@ export function initializeSignaling(server: Server) {
     actionType: string;
     roomId: string;
     senderParticipantId: string;
-    status: 'accepted' | 'failed' | 'REACTION_RATE_LIMITED';
+    status: 'accepted' | 'failed';
     acceptedAt?: string;
     failedAt?: string;
     errorCode?: string;
@@ -815,7 +814,7 @@ export function initializeSignaling(server: Server) {
     clientEventId: string,
     actionType: string,
     serverEventId: string,
-    status: 'accepted' | 'failed' | 'REACTION_RATE_LIMITED' = 'accepted',
+    status: 'accepted' | 'failed' = 'accepted',
     errorCode?: string,
     message?: string
   ) {
@@ -1243,51 +1242,36 @@ export function initializeSignaling(server: Server) {
         break;
       }
 
-      case 'reaction': {
-        const now = Date.now();
-        const timestamps = reactionRateLimits.get(client.participantId) || [];
-        // Clean up old timestamps (older than 5 seconds)
-        const recentTimestamps = timestamps.filter(t => now - t < 5000);
-        
-        // Rate limit: max 1 per second
-        const lastReactionTime = recentTimestamps.length > 0 ? recentTimestamps[recentTimestamps.length - 1] : 0;
-        if (now - lastReactionTime < 1000) {
-          if (clientEventId) emitActionAck(client, clientEventId, 'reaction', '', 'REACTION_RATE_LIMITED');
-          logger.warn(`reaction_rate_limited for ${client.participantId} (1 per sec)`);
-          break;
-        }
-
-        // Rate limit: max 3 per 5 seconds
-        if (recentTimestamps.length >= 3) {
-          if (clientEventId) emitActionAck(client, clientEventId, 'reaction', '', 'REACTION_RATE_LIMITED');
-          logger.warn(`reaction_rate_limited for ${client.participantId} (burst 3 per 5 sec)`);
-          break;
-        }
-
-        recentTimestamps.push(now);
-        reactionRateLimits.set(client.participantId, recentTimestamps);
-
-        const serverEventId = crypto.randomUUID();
-        const payload = {
-          type: 'reaction',
-          actionType: 'reaction',
-          roomId,
-          reaction: data.reaction,
-          senderName: client.name,
-          senderUserId: userId,
-          senderParticipantId: client.participantId,
-          clientEventId: clientEventId || '',
-          serverEventId,
-          broadcastAt: new Date(now).toISOString()
-        };
-
+      case 'reaction':
         if (clientEventId) {
+          const serverEventId = crypto.randomUUID();
           emitActionAck(client, clientEventId, 'reaction', serverEventId, 'accepted');
+          // Exclude the sender — they already show the reaction locally via sendReaction()
+          broadcastToRoom(roomId, {
+            type: 'reaction',
+            actionType: 'reaction',
+            clientEventId,
+            serverEventId,
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            name: client.name, // Always include name so clients don't need to look it up
+            reaction: data.reaction,
+            broadcastAt: new Date().toISOString()
+          }, client.participantId); // <-- userId as excludeUserId prevents the double-animation
+        } else {
+          broadcastToRoom(roomId, {
+            type: 'reaction',
+            actionType: 'reaction',
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            name: client.name,
+            reaction: data.reaction,
+            broadcastAt: new Date().toISOString()
+          }, client.participantId);
         }
-
-        broadcastToRoom(roomId, payload, client.participantId);
         break;
-      }
 
       case 'network_quality':
         broadcastToRoom(roomId, {

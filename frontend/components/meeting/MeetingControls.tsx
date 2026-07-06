@@ -231,10 +231,7 @@ export function MeetingControls() {
           <ControlBtn
             icon={<SmilePlus className="w-5 h-5" />}
             active={showReactionPicker}
-            onClick={() => {
-              console.log(showReactionPicker ? "reaction_picker_closed" : "reaction_picker_opened");
-              setShowReactionPicker(!showReactionPicker);
-            }}
+            onClick={() => setShowReactionPicker(!showReactionPicker)}
             tooltip="React"
             className="hidden sm:flex"
           />
@@ -270,11 +267,7 @@ export function MeetingControls() {
                   <MoreMenuItem
                     icon={<SmilePlus className="w-4 h-4" />}
                     label="React"
-                    onClick={() => { 
-                      console.log(showReactionPicker ? "reaction_picker_closed" : "reaction_picker_opened");
-                      setShowReactionPicker(!showReactionPicker); 
-                      setShowMoreMenu(false); 
-                    }}
+                    onClick={() => { setShowReactionPicker(!showReactionPicker); setShowMoreMenu(false); }}
                   />
                   <MoreMenuItem
                     icon={<Hand className="w-4 h-4" />}
