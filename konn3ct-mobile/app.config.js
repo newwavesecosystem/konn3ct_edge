@@ -1,4 +1,5 @@
-const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Gov Conference';
+// Gov Conference — dedicated branch (gov1_mobile)
+const APP_NAME = 'Gov Conference';
 
 module.exports = {
   expo: {
@@ -11,7 +12,7 @@ module.exports = {
     splash: {
       image: './assets/splash.png',
       resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0a5c36',
     },
     ios: {
       supportsTablet: true,
@@ -27,7 +28,7 @@ module.exports = {
       package: 'com.konn3ct.mobile',
       versionCode: 1,
       adaptiveIcon: {
-        backgroundColor: '#ffffff',
+        backgroundColor: '#0a5c36',
         foregroundImage: './assets/adaptive-icon.png',
       },
       permissions: [
