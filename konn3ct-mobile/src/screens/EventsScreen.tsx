@@ -63,6 +63,7 @@ import {
   CreateEventPayload,
 } from '../api/events';
 import { fetchMyRooms, Room } from '../api/rooms';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -383,7 +384,7 @@ function CreateEventModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalContainer}
       >
         <View style={[styles.modalHeaderTop, { paddingTop: Platform.OS === 'android' ? Math.max(insets.top, 24) : 24 }]}>
@@ -610,17 +611,19 @@ function CreateEventModal({
             <View style={styles.divider} />
             <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
               <TouchableOpacity
-                style={[styles.ticketTypeBtn, isFree && styles.ticketTypeActive]}
+                style={[styles.ticketTypeBtn, isFree && styles.ticketTypeActive, APP_CONFIG.GOV_LOGIN && { flex: 0.5 }]}
                 onPress={() => setIsFree(true)}
               >
                 <Text style={[styles.ticketTypeText, isFree && styles.ticketTypeTextActive]}>Free</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.ticketTypeBtn, !isFree && styles.ticketTypeActive]}
-                onPress={() => setIsFree(false)}
-              >
-                <Text style={[styles.ticketTypeText, !isFree && styles.ticketTypeTextActive]}>Paid</Text>
-              </TouchableOpacity>
+              {!APP_CONFIG.GOV_LOGIN && (
+                <TouchableOpacity
+                  style={[styles.ticketTypeBtn, !isFree && styles.ticketTypeActive]}
+                  onPress={() => setIsFree(false)}
+                >
+                  <Text style={[styles.ticketTypeText, !isFree && styles.ticketTypeTextActive]}>Paid</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {!isFree && (

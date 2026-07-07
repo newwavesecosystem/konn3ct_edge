@@ -82,6 +82,15 @@ type Props = {
 };
 
 // Skeleton loading placeholder
+const formatNameOrder = (name: string) => {
+  if (!name || name === 'Unknown Host') return name;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length > 1) {
+    return `${parts[parts.length - 1]} ${parts.slice(0, -1).join(' ')}`;
+  }
+  return name;
+};
+
 function SkeletonBlock({ width: w, height: h, style }: { width: number | string; height: number; style?: any }) {
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
 
@@ -201,7 +210,13 @@ export default function DashboardScreen({ navigation }: Props) {
       ]);
       setPastRooms(summariesRes.data.slice(0, 3));
       const schedulesArray = Array.isArray(schedRes) ? schedRes : schedRes?.data || [];
-      setUpcoming(schedulesArray.slice(0, 3));
+      const now = new Date().getTime();
+      const futureSchedules = schedulesArray.filter((m: any) => {
+        const meetingTime = new Date(m.time || m.start_time || m.startTime || m.date).getTime();
+        // Keep it if it's in the future, or if parsing failed
+        return isNaN(meetingTime) || meetingTime >= now;
+      });
+      setUpcoming(futureSchedules);
       setDashboardStats(statsRes);
       setTodayMeetings(todayRes);
 
@@ -311,7 +326,7 @@ export default function DashboardScreen({ navigation }: Props) {
         console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
         
         const roomId = room.url || room.slug || String(room.id);
-        navigation.navigate('Meeting', { roomId, meetingToken });
+        navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
       } else {
         // Fallback if user has absolutely no rooms — create one and start it
         if (IS_DEV) {
@@ -331,7 +346,7 @@ export default function DashboardScreen({ navigation }: Props) {
             console.log(JSON.stringify(startRes, null, 2));
             const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
             console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES' : 'NO');
-            navigation.navigate('Meeting', { roomId: randomSlug, meetingToken });
+            navigation.navigate('Meeting', { roomId: randomSlug, meetingToken, micOn: false, cameraOn: false });
           } else {
             Alert.alert('Error', 'Room was created but could not be found. Please try again.');
           }
@@ -354,7 +369,7 @@ export default function DashboardScreen({ navigation }: Props) {
           console.log(JSON.stringify(startRes, null, 2));
           const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
           console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES' : 'NO');
-          navigation.navigate('Meeting', { roomId, meetingToken });
+          navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
         }
       }
     } catch (e: any) {
@@ -766,7 +781,8 @@ export default function DashboardScreen({ navigation }: Props) {
             todayMeetings.map((meeting, i) => {
               const accent = ACCENT_COLORS[i % 3];
               const title = meeting.topic || meeting.title || 'Untitled Meeting';
-              const host = meeting.host_name || meeting.hostname || meeting.host || 'Unknown Host';
+              const rawHost = meeting.host_name || meeting.hostname || meeting.host || meeting.name || 'Unknown Host';
+              const host = formatNameOrder(rawHost);
               const duration = meeting.duration ? `${meeting.duration} mins` : 'Flexible duration';
               
               let timeStr = meeting.start_time || meeting.startTime || 'Pending Time';

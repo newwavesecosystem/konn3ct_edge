@@ -118,7 +118,7 @@ export default function LoginScreen() {
       id: String(userData?.id || 'unknown-id'),
       email: userData?.email || email,
       name: userData?.firstname
-        ? `${userData.firstname} ${userData.lastname || ''}`.trim()
+        ? `${userData.lastname || ''} ${userData.firstname}`.trim()
         : (userData?.name || email.split('@')[0]),
       role: userData?.roles?.[0]?.name || userData?.role || undefined,
     };
@@ -374,9 +374,9 @@ export default function LoginScreen() {
                 </View>
               )}
 
-              {/* ── Email / Username Field ── */}
+              {/* ── Email Field ── */}
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>{APP_CONFIG.GOV_LOGIN ? 'Username / Email' : 'Email'}</Text>
+                <Text style={styles.label}>Email</Text>
                 <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
                   <Mail
                     color={emailFocused ? COLORS.inputFocus : COLORS.textMuted}
@@ -385,7 +385,7 @@ export default function LoginScreen() {
                   />
                   <TextInput
                     style={styles.input}
-                    placeholder={APP_CONFIG.GOV_LOGIN ? 'your@email.com' : 'demo@email.com'}
+                    placeholder={APP_CONFIG.GOV_LOGIN ? 'Your@email.com' : 'Demo@email.com'}
                     placeholderTextColor={COLORS.textMuted}
                     value={email}
                     onChangeText={setEmail}
@@ -408,7 +408,7 @@ export default function LoginScreen() {
                   />
                   <TextInput
                     style={styles.input}
-                    placeholder="enter your password"
+                    placeholder="Enter your password"
                     placeholderTextColor={COLORS.textMuted}
                     value={password}
                     onChangeText={setPassword}
@@ -428,19 +428,8 @@ export default function LoginScreen() {
                 </View>
               </View>
 
-              {/* ── Options Row (Remember Me + Forgot Password) ── */}
-              <View style={styles.optionsRow}>
-                <TouchableOpacity
-                  style={styles.rememberBtn}
-                  onPress={() => setRememberMe(!rememberMe)}
-                  activeOpacity={0.7}
-                >
-                  {rememberMe
-                    ? <CheckSquare color={COLORS.brandGreen} size={18} />
-                    : <Square color={COLORS.textMuted} size={18} />}
-                  <Text style={styles.rememberText}>Remember Me</Text>
-                </TouchableOpacity>
-
+              {/* ── Options Row (Forgot Password) ── */}
+              <View style={[styles.optionsRow, { justifyContent: 'flex-end' }]}>
                 {APP_CONFIG.SHOW_FORGOT_PASSWORD && (
                   <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Text style={styles.forgotText}>Forgot Password?</Text>

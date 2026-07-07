@@ -78,8 +78,8 @@ export default function AttendanceScreen() {
 
   const handleAction = async (action: string, meeting: MeetingAttendanceSession) => {
     if (action === 'View Participants') {
-      const roomId = meeting.room_id || meeting.roomId || meeting.id;
-      const meetingId = meeting.meeting_id || meeting.meetingId || meeting.id;
+      const roomId = meeting.room_info?.id || meeting.room_id || meeting.roomId || meeting.id;
+      const meetingId = meeting.identifier || meeting.meeting_id || meeting.meetingId || meeting.id;
       setSelectedMeetingId(String(meeting.id));
       setModalVisible(true);
       
@@ -97,7 +97,7 @@ export default function AttendanceScreen() {
   };
 
   const renderAttendanceCard = (meeting: MeetingAttendanceSession, index: number) => {
-    const host = meeting.host || meeting.host_name || meeting.hostname || 'Unknown Host';
+    const host = meeting.host || meeting.host_name || meeting.hostname || meeting.name || 'Unknown Host';
     const date = meeting.date ? formatDate(meeting.date) : meeting.created_at ? formatDate(meeting.created_at) : 'No date';
     const time = meeting.time || '—';
 
@@ -148,7 +148,7 @@ export default function AttendanceScreen() {
       <View style={[styles.modalHeaderTop, { paddingTop: Math.max(insets.top, 24) }]}>
         <View style={{ flex: 1, paddingRight: 16 }}>
           <Text style={styles.modalTitle}>Meeting Attendance</Text>
-          <Text style={styles.modalSubtitle}>View detailed participant logs and AI summaries for your past meetings.</Text>
+          <Text style={styles.modalSubtitle}>View detailed participant logs for past meetings.</Text>
         </View>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
           <X size={24} color="#64748b" />
