@@ -50,6 +50,7 @@ export class WebRTCClient {
   private maxReconnectAttempts = 10;
   private reconnectTimeoutId?: NodeJS.Timeout;
   private isRepublishing = false;
+  private pendingConsumes: any[] = [];
 
   // Camera state tracking
   public lastCameraErrorName: string | null = null;
@@ -414,7 +415,7 @@ export class WebRTCClient {
                     await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
                   }
                 }
-                // Only broadcast connected AFTER Mediasoup is fully loaded
+
                 this.onConnectionStateChange?.('connected');
               } catch (e) {
                 console.error("Failed to load existing producers:", e);
@@ -960,6 +961,15 @@ export class WebRTCClient {
         this.republishMedia().catch(console.error);
       }
     });
+
+    // 5. Drain any queued consume requests that arrived while initializing
+    if (this.pendingConsumes.length > 0) {
+      console.log(`[WebRTC] Draining ${this.pendingConsumes.length} queued consume requests...`);
+      for (const req of this.pendingConsumes) {
+        this.consumeRemoteStream(req.producerId, req.producerParticipantId, req.producerUserId, req.userName, req.kind, req.appData).catch(console.error);
+      }
+      this.pendingConsumes = [];
+    }
 
     this.startNetworkMonitor();
   }
@@ -2058,7 +2068,11 @@ export class WebRTCClient {
       console.log(`[WebRTC] consume_request_skipped_self_producer for ${kind} (producer: ${producerId})`);
       return;
     }
-    if (!this.device || !this.recvTransport) return;
+    if (!this.device || !this.recvTransport) {
+      console.log(`[WebRTC] Queuing consume request for ${kind} (producer: ${producerId}) until transport is ready`);
+      this.pendingConsumes.push({ producerId, producerParticipantId, producerUserId, userName, kind, appData });
+      return;
+    }
 
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
     console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${producerParticipantId || producerUserId} (Producer ID: ${producerId})...`);
@@ -2123,8 +2137,8 @@ export class WebRTCClient {
     // Pause all existing video consumers locally and on server, EXCEPT screenshares
     for (const [id, consumer] of this.consumers.entries()) {
       if (consumer.kind === 'video' && consumer.appData?.source !== 'screen') {
-        this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
         consumer.pause();
+        this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
       }
     }
   }
@@ -2144,8 +2158,8 @@ export class WebRTCClient {
   public async pauseRemoteVideoByTrack(trackId: string) {
     const consumer = Array.from(this.consumers.values()).find(c => c.track.id === trackId && c.kind === 'video');
     if (consumer && !consumer.paused && consumer.appData?.source !== 'screen') {
-      await this.request('pause_consumer', 'consumer_paused', { consumerId: consumer.id }).catch(console.error);
       consumer.pause();
+      this.request('pause_consumer', 'consumer_paused', { consumerId: consumer.id }).catch(console.error);
     }
   }
 
