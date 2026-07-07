@@ -503,7 +503,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
   };
 
   const enterPip = () => {
+    console.log('[PiP] enterPip called. isAvailable:', PipService.isAvailable());
     if (PipService.isAvailable()) {
+      console.log('[PiP] Calling PipService.enter(16, 9)...');
       PipService.enter(16, 9);
     } else {
       Alert.alert('Not Supported', 'Picture-in-Picture is only supported on Android.');
