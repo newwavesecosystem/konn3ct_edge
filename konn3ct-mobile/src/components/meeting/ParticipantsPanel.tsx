@@ -13,10 +13,9 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   const participants = useMeetingStore(state => state.participants);
   const waitingRoom = useMeetingStore(state => state.waitingRoom);
   const setActivePane = useMeetingStore(state => state.setActivePane);
-  const currentUserRole = useMeetingStore(state => state.currentUserRole);
+  const isHost = useMeetingStore(state => state.isHost);
   const currentUserId = useMeetingStore(state => state.currentUserId);
   
-  const isHost = currentUserRole === 'host';
   const theme = useMeetingStore(state => state.theme);
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);

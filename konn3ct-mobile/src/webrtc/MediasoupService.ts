@@ -622,10 +622,7 @@ export class MediasoupService {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack as any, 
         appData: { source: 'camera' },
-        encodings: [{
-          scaleResolutionDownBy: 1,
-          maxBitrate: 600000,    // 600kbps — optimised for mobile connections
-        }]
+        codecOptions: { videoGoogleStartBitrate: 1000 }
       });
       console.log(`[enableCamera] Video producer created: id=${this.localVideoProducer.id}`);
     } catch (err) {
