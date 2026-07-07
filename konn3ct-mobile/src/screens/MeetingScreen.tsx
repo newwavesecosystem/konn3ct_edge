@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -25,6 +25,8 @@ import { DocsPanel } from '../components/meeting/DocsPanel';
 import { DonationPanel } from '../components/meeting/DonationPanel';
 import { ReactionsLayer } from '../components/meeting/ReactionsLayer';
 import { CaptionsOverlay } from '../components/meeting/CaptionsOverlay';
+import { APP_CONFIG } from '../config/appConfig';
+import { useNetworkQuality } from '../hooks/useNetworkQuality';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Meeting'>;
 
@@ -42,12 +44,17 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPipMode, setIsPipMode] = useState(false);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   
   const insets = useSafeAreaInsets();
   const serviceRef = useRef<MediasoupService | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null); // Fix 10: ref for cleanup
   
   // Zustand Store
-  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, currentUserId, participants, waitingRoom, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
+  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, participants, waitingRoom, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
+  const currentUserId = useMeetingStore(state => state.currentUserId);
+  const isLocalUserSpeaking = useMeetingStore(state => state.isLocalUserSpeaking);
   const user = useAuthStore((s) => s.user);
   const localUserName = user?.name || 'Me';
   const isHost = currentUserRole === 'host';
@@ -58,6 +65,19 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const safeTop = insets.top > 0 ? insets.top + 8 : 16;
 
   const activeScreenShare = remoteStreams.find(p => p.screenStream != null);
+
+  // Fix 13: Network quality monitoring
+  const { quality: networkQuality } = useNetworkQuality({
+    service: serviceRef.current,
+    isConnected,
+    onQualityBad: () => {
+      Alert.alert('Poor Connection', 'Your network connection is unstable. Video quality may be reduced.');
+    },
+    onQualityGood: () => {
+      // Silently recover — no need to alert on good connection
+      console.log('Network quality recovered to good');
+    },
+  });
 
   const handleAdmitUser = (userId: string) => {
     if (serviceRef.current) serviceRef.current.admitUser(userId);
@@ -85,22 +105,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
     async function init() {
       try {
-        const stream = await mediaDevices.getUserMedia({
-          audio: true,
-          video: { width: 1280, height: 720, frameRate: 30, facingMode: 'user' }
-        });
-        
-        if (!initialMicOn) {
-          const audioTrack = stream.getAudioTracks()[0];
-          if (audioTrack) audioTrack.enabled = false;
+        // We no longer aggressively grab the camera/mic on load!
+        // We initialize with an empty MediaStream to bind the RTCView.
+        const emptyStream = new MediaStream();
+        if (isMounted) {
+          setLocalStream(emptyStream);
+          localStreamRef.current = emptyStream;
         }
-
-        if (!initialCameraOn) {
-          const videoTrack = stream.getVideoTracks()[0];
-          if (videoTrack) videoTrack.enabled = false;
-        }
-        
-        if (isMounted) setLocalStream(stream);
 
         // ── Reuse pre-connected service from LobbyScreen if available ────────
         // When a user is admitted from the lobby, LobbyScreen stores the live
@@ -119,7 +130,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
           if (!isMounted) return;
           if (status === 'active') {
             setIsConnected(true);
-            if (stream) await service.broadcast(stream);
+            // Re-enable existing hardware tracks on reconnect
+            if (localStreamRef.current && serviceRef.current) {
+              const videoTrack = localStreamRef.current.getVideoTracks()[0];
+              const audioTrack = localStreamRef.current.getAudioTracks()[0];
+              if (videoTrack && videoTrack.enabled) serviceRef.current.enableCamera(videoTrack);
+              if (audioTrack && audioTrack.enabled) serviceRef.current.enableMic(audioTrack);
+            }
           } else if (status === 'ended') {
             Alert.alert(
               'Meeting Ended',
@@ -141,18 +158,56 @@ export default function MeetingScreen({ route, navigation }: Props) {
           }
         };
 
+        // Fix 11: Reconnection UI callbacks
+        service.onReconnecting = (attempt) => {
+          if (isMounted) {
+            setIsReconnecting(true);
+            setReconnectAttempt(attempt);
+          }
+        };
+        service.onReconnected = () => {
+          if (isMounted) {
+            setIsReconnecting(false);
+            setReconnectAttempt(0);
+          }
+        };
+        service.onReconnectFailed = () => {
+          if (isMounted) {
+            setIsReconnecting(false);
+            Alert.alert(
+              'Connection Lost',
+              'Unable to reconnect to the meeting. Please rejoin.',
+              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+            );
+          }
+        };
+
         // Setup Collaboration Callbacks
-        service.onChatMessage = (msg) => useMeetingStore.getState().addChatMessage(msg);
+        service.onChatMessage = (msg) => {
+          const state = useMeetingStore.getState();
+          if (msg.userId === state.currentUserId) return;
+          state.addChatMessage(msg);
+        };
         service.onChatHistory = (msgs) => useMeetingStore.getState().setChatHistory(msgs);
-        service.onReaction = (reaction) => {
-          reaction.id = Math.random().toString(36).substring(7);
-          useMeetingStore.getState().addReaction(reaction);
+        service.onReaction = (msg) => {
+          const state = useMeetingStore.getState();
+          // The local client already optimistically added this reaction, ignore the server echo
+          if (msg.userId === state.currentUserId) return; 
+
+          const reactionObj = {
+            id: Math.random().toString(36).substring(7),
+            userId: msg.userId,
+            name: msg.name || 'Participant',
+            emoji: msg.reaction || msg.emoji,
+            timestamp: msg.timestamp || Date.now()
+          };
+          state.addReaction(reactionObj);
         };
         service.onParticipantsList = (list) => {
           const inMeeting = list.filter(p => p.status !== 'waiting');
           const waiting = list.filter(p => p.status === 'waiting');
           useMeetingStore.getState().setParticipants(inMeeting);
-          useMeetingStore.getState().waitingRoom = waiting;
+          useMeetingStore.getState().setWaitingRoom(waiting);
         };
         service.onUserJoined = (user) => {
           useMeetingStore.getState().addParticipant(user);
@@ -187,10 +242,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onWaitingRoomRequest = (user) => useMeetingStore.getState().addWaitingRoomUser(user);
         service.onForceMute = () => {
           setIsMicMuted(true);
-          if (stream) {
-            const track = stream.getAudioTracks()[0];
-            if (track) track.enabled = false;
+          if (localStreamRef.current) {
+            const track = localStreamRef.current.getAudioTracks()[0];
+            if (track) {
+              track.stop();
+              localStreamRef.current.removeTrack(track);
+            }
           }
+          if (serviceRef.current) serviceRef.current.disableMic();
           Alert.alert("Muted by Host", "The host has muted your microphone.");
         };
         service.onHandRaise = (msg) => {
@@ -210,13 +269,48 @@ export default function MeetingScreen({ route, navigation }: Props) {
           Alert.alert("Recording Stopped", "Cloud recording has been stopped.");
         };
 
+        const applyInitialMedia = async () => {
+          if (!localStreamRef.current || !serviceRef.current || !isMounted) return;
+          
+          if (initialMicOn) {
+            try {
+              const audioStream = await mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } as any });
+              const track = audioStream.getAudioTracks()[0];
+              if (track) {
+                localStreamRef.current.addTrack(track);
+                await serviceRef.current.enableMic(track);
+                setIsMicMuted(false);
+              }
+            } catch (err) {
+              console.error('Failed to get initial mic', err);
+            }
+          }
+      
+          if (initialCameraOn) {
+            try {
+              const videoStream = await mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 }, facingMode: 'user' }
+              });
+              const track = videoStream.getVideoTracks()[0];
+              if (track) {
+                localStreamRef.current.addTrack(track);
+                await serviceRef.current.enableCamera(track);
+                setIsCameraOff(false);
+                setCameraKey(k => k + 1);
+              }
+            } catch (err) {
+              console.error('Failed to get initial camera', err);
+            }
+          }
+        };
+
         if (handedOffService) {
           // Already connected and admitted via LobbyScreen — start broadcasting immediately
           // Replay events (participants_list, chat_history, etc.) that fired
           // during the admit flow before these callbacks were registered.
           service.replayCachedEvents();
           if (isMounted) {
-            await service.broadcast(stream);
+            await applyInitialMedia();
             setIsConnected(true);
           }
         } else {
@@ -225,7 +319,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
           if (!isMounted) return;
           
           if (initialStatus === 'active') {
-            await service.broadcast(stream);
+            await applyInitialMedia();
             setIsConnected(true);
           }
         }
@@ -256,8 +350,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
       if (serviceRef.current) {
         serviceRef.current.disconnect();
       }
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
       }
       if (pipListener) {
         pipListener.remove();
@@ -306,48 +400,74 @@ export default function MeetingScreen({ route, navigation }: Props) {
   };
 
   const copyMeetingLink = async () => {
-    await Clipboard.setStringAsync(roomId);
+    const meetingUrl = `https://meetingapp.konn3ct.net/join/${roomId}`;
+    await Clipboard.setStringAsync(meetingUrl);
     Alert.alert(
-      "Room ID Copied! 🎉",
-      `Room ID: ${roomId}\n\nShare this ID with others so they can tap Join and enter it to join your meeting.`,
+      "Meeting Link Copied! 🎉",
+      `${meetingUrl}\n\nShare this link with others so they can join your meeting.`,
       [{ text: 'OK' }]
     );
   };
 
-  const toggleMic = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        const newMutedState = !audioTrack.enabled;
-        setIsMicMuted(newMutedState);
-        
-        if (serviceRef.current) {
-          if (newMutedState) serviceRef.current.pauseMic();
-          else serviceRef.current.resumeMic();
+  const toggleMic = async () => {
+    if (!localStream) return;
+    
+    if (isMicMuted) {
+      // Turning ON
+      try {
+        const stream = await mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } as any });
+        const track = stream.getAudioTracks()[0];
+        if (track) {
+          localStream.addTrack(track);
+          if (serviceRef.current) await serviceRef.current.enableMic(track);
+          setIsMicMuted(false);
         }
+      } catch (err) {
+        console.error('Failed to get mic', err);
+        Alert.alert('Microphone Error', 'Could not access the microphone.');
       }
+    } else {
+      // Turning OFF
+      const track = localStream.getAudioTracks()[0];
+      if (track) {
+        track.stop();
+        localStream.removeTrack(track);
+      }
+      if (serviceRef.current) serviceRef.current.disableMic();
+      setIsMicMuted(true);
     }
   };
 
-  const toggleCamera = () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        // Determine the INTENDED new state BEFORE flipping the track
-        const cameraShouldBeOff = videoTrack.enabled; // currently on → turning off
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsCameraOff(cameraShouldBeOff);
-        // Bump key to force RTCView to fully unmount/remount on Android.
-        // Android's GL surface freezes when a track is disabled and won't
-        // recover without a full remount — toggling enabled alone is not enough.
-        setCameraKey(k => k + 1);
-        
-        if (serviceRef.current) {
-          if (cameraShouldBeOff) serviceRef.current.pauseCamera();
-          else serviceRef.current.resumeCamera();
+  const toggleCamera = async () => {
+    if (!localStream) return;
+    
+    if (isCameraOff) {
+      // Turning ON
+      try {
+        const stream = await mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 }, facingMode: 'user' }
+        });
+        const track = stream.getVideoTracks()[0];
+        if (track) {
+          localStream.addTrack(track);
+          if (serviceRef.current) await serviceRef.current.enableCamera(track);
+          setIsCameraOff(false);
+          setCameraKey(k => k + 1); // bump key to remount RTCView
         }
+      } catch (err) {
+        console.error('Failed to get camera', err);
+        Alert.alert('Camera Error', 'Could not access the camera.');
       }
+    } else {
+      // Turning OFF
+      const track = localStream.getVideoTracks()[0];
+      if (track) {
+        track.stop();
+        localStream.removeTrack(track);
+      }
+      if (serviceRef.current) serviceRef.current.disableCamera();
+      setIsCameraOff(true);
+      setCameraKey(k => k + 1);
     }
   };
 
@@ -418,7 +538,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return parts[0].substring(0, 2).toUpperCase();
+    return parts[0].substring(0, 1).toUpperCase();
   };
 
   const renderCards = () => (
@@ -485,7 +605,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {!isPipMode && (
         <View style={[
           getCardStyle(), 
-          participants.find(p => p.userId === currentUserId)?.isSpeaking && styles.activeSpeakerBorder
+          isLocalUserSpeaking && styles.activeSpeakerBorder
         ]}>
           {localStream && !isCameraOff ? (
             // key forces a full unmount+remount on Android every toggle.
@@ -520,6 +640,11 @@ export default function MeetingScreen({ route, navigation }: Props) {
             <View style={styles.raisedHandBadge}>
               <Hand size={12} color="#a83b00" fill="#a83b00" />
               <Text style={styles.raisedHandText}>Raised</Text>
+            </View>
+          )}
+          {isLocalUserSpeaking && (
+            <View style={styles.activeSpeakerBadge}>
+              <Radio size={12} color="#0b57d0" />
             </View>
           )}
           {isMicMuted && (
@@ -700,6 +825,18 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {/* Overlays */}
       {!isPipMode && <CaptionsOverlay />}
 
+      {/* Fix 11: Reconnecting overlay */}
+      {isReconnecting && (
+        <View style={styles.reconnectingOverlay}>
+          <View style={styles.reconnectingBox}>
+            <ActivityIndicator size="small" color={tokens.primary} />
+            <Text style={styles.reconnectingText}>
+              Reconnecting{reconnectAttempt > 0 ? ` (${reconnectAttempt}/5)` : ''}...
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* More Options Modal Bottom Sheet */}
       <Modal
         visible={isMoreMenuVisible}
@@ -794,44 +931,48 @@ export default function MeetingScreen({ route, navigation }: Props) {
                     <Text style={styles.optionLabel}>Polls</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.gridOption}
-                    onPress={() => {
-                      setIsMoreMenuVisible(false);
-                      setActivePane(activePane === 'whiteboard' ? 'none' : 'whiteboard');
-                    }}
-                  >
-                    <View style={styles.optionIconContainer}>
-                      <Presentation size={22} color={tokens.textSecondary} />
-                    </View>
-                    <Text style={styles.optionLabel}>Whiteboard</Text>
-                  </TouchableOpacity>
+                  {!APP_CONFIG.GOV_LOGIN && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.gridOption}
+                        onPress={() => {
+                          setIsMoreMenuVisible(false);
+                          setActivePane(activePane === 'whiteboard' ? 'none' : 'whiteboard');
+                        }}
+                      >
+                        <View style={styles.optionIconContainer}>
+                          <Presentation size={22} color={tokens.textSecondary} />
+                        </View>
+                        <Text style={styles.optionLabel}>Whiteboard</Text>
+                      </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.gridOption}
-                    onPress={() => {
-                      setIsMoreMenuVisible(false);
-                      setActivePane(activePane === 'docs' ? 'none' : 'docs');
-                    }}
-                  >
-                    <View style={styles.optionIconContainer}>
-                      <FileText size={22} color={tokens.textSecondary} />
-                    </View>
-                    <Text style={styles.optionLabel}>Docs</Text>
-                  </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.gridOption}
+                        onPress={() => {
+                          setIsMoreMenuVisible(false);
+                          setActivePane(activePane === 'docs' ? 'none' : 'docs');
+                        }}
+                      >
+                        <View style={styles.optionIconContainer}>
+                          <FileText size={22} color={tokens.textSecondary} />
+                        </View>
+                        <Text style={styles.optionLabel}>Docs</Text>
+                      </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.gridOption}
-                    onPress={() => {
-                      setIsMoreMenuVisible(false);
-                      setActivePane(activePane === 'donation' ? 'none' : 'donation');
-                    }}
-                  >
-                    <View style={styles.optionIconContainer}>
-                      <Gift size={22} color={tokens.textSecondary} />
-                    </View>
-                    <Text style={styles.optionLabel}>Donation</Text>
-                  </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.gridOption}
+                        onPress={() => {
+                          setIsMoreMenuVisible(false);
+                          setActivePane(activePane === 'donation' ? 'none' : 'donation');
+                        }}
+                      >
+                        <View style={styles.optionIconContainer}>
+                          <Gift size={22} color={tokens.textSecondary} />
+                        </View>
+                        <Text style={styles.optionLabel}>Donation</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
 
                   {isHost && (
                     <TouchableOpacity
@@ -1237,6 +1378,37 @@ const getStyles = (t: any) => StyleSheet.create({
   
   // Misc
   pipIconWrapper: { width: 18, height: 14, borderWidth: 1.5, borderColor: t.textSecondary, borderRadius: 3, alignItems: 'flex-end', justifyContent: 'flex-end', padding: 1 },
-  pipIconDot: { width: 7, height: 5, backgroundColor: t.textSecondary, borderRadius: 1 }
+  pipIconDot: { width: 7, height: 5, backgroundColor: t.textSecondary, borderRadius: 1 },
+  
+  // Reconnecting overlay
+  reconnectingOverlay: {
+    ...(StyleSheet.absoluteFill as object),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  reconnectingBox: {
+    backgroundColor: t.bgElevated,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: t.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  reconnectingText: {
+    color: t.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
 });
 

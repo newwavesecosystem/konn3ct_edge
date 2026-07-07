@@ -53,12 +53,15 @@ const GRID_ITEMS = [
   { id: 'payments', title: 'Payments', subtitle: 'Billing & plans', icon: CreditCard, colors: ['#eab308', '#ca8a04'] },
   { id: 'donations', title: 'Donations', subtitle: 'Support & gifts', icon: Heart, colors: ['#f43f5e', '#e11d48'] },
   { id: 'referees', title: 'Referees', subtitle: 'Manage officials', icon: Users, colors: ['#84cc16', '#65a30d'] },
+  { id: 'past_meetings', title: 'Past Meetings', subtitle: 'Previous sessions', icon: History, colors: ['#64748b', '#475569'] },
 ];
 
 // Filter grid items based on feature flags
 const FILTERED_GRID_ITEMS = GRID_ITEMS.filter(item => {
   if (item.id === 'payments' && !APP_CONFIG.SHOW_PAYMENTS) return false;
   if (item.id === 'events' && !APP_CONFIG.SHOW_ADDONS_TAB) return false;
+  if (item.id === 'donations' && APP_CONFIG.GOV_LOGIN) return false;
+  if (item.id === 'referees' && APP_CONFIG.GOV_LOGIN) return false;
   return true;
 });
 
@@ -66,7 +69,10 @@ const LIST_ITEMS = [
   { id: 'history', title: 'History', icon: History, color: '#64748b', bg: '#f8fafc' },
   { id: 'settings', title: 'Settings', icon: Settings, color: '#475569', bg: '#f1f5f9' },
   { id: 'logout', title: 'Log Out', icon: LogOut, color: COLORS.danger, bg: '#fef2f2', action: 'logout' },
-];
+].filter(item => {
+  if (item.id === 'history' && APP_CONFIG.GOV_LOGIN) return false;
+  return true;
+});
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
@@ -97,6 +103,8 @@ export default function MoreScreen() {
       navigation.navigate('Donations');
     } else if (item.id === 'referees') {
       navigation.navigate('Referees');
+    } else if (item.id === 'past_meetings') {
+      navigation.navigate('PastMeetings');
     } else if (item.id === 'history') {
       navigation.navigate('History');
     } else if (item.id === 'settings') {
