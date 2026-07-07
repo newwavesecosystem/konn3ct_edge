@@ -53,9 +53,10 @@ interface MeetingState {
   captions: CaptionMessage[];
   unreadChatCount: number;
   
-  currentUserRole: string | null;
+  currentUserRole: 'host' | 'participant' | 'bot' | null;
   currentUserId: string | null;
   isHandRaisedLocally: boolean;
+  isLocalUserSpeaking: boolean;
 
   // Active UI Panes
   activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation';
@@ -79,6 +80,7 @@ interface MeetingState {
   setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
+  setWaitingRoom: (users: Participant[]) => void;
   setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation') => void;
   setTheme: (theme: 'sage' | 'midnight') => void;
   setCaptions: (updater: (curr: CaptionMessage[]) => CaptionMessage[]) => void;
@@ -98,6 +100,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   currentUserRole: null,
   currentUserId: null,
   isHandRaisedLocally: false,
+  isLocalUserSpeaking: false,
 
   setCurrentUser: (userId, role) => set({ currentUserId: userId, currentUserRole: role }),
   setTheme: (theme) => set({ theme }),
@@ -172,7 +175,8 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     participants: state.participants.map(p => ({
       ...p,
       isSpeaking: userIds.includes(p.userId)
-    }))
+    })),
+    isLocalUserSpeaking: state.currentUserId ? userIds.includes(state.currentUserId) : false
   })),
 
   addWaitingRoomUser: (user) => set((state) => {
@@ -183,6 +187,8 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   removeWaitingRoomUser: (userId) => set((state) => ({
     waitingRoom: state.waitingRoom.filter(u => u.userId !== userId)
   })),
+
+  setWaitingRoom: (users) => set({ waitingRoom: users }),
 
   setActivePane: (pane) => set((state) => ({
     activePane: pane,
@@ -200,6 +206,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     theme: 'sage',
     currentUserRole: null,
     currentUserId: null,
-    isHandRaisedLocally: false
+    isHandRaisedLocally: false,
+    isLocalUserSpeaking: false
   })
 }));
