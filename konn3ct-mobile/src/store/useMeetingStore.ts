@@ -53,8 +53,9 @@ interface MeetingState {
   captions: CaptionMessage[];
   unreadChatCount: number;
   
-  currentUserRole: 'host' | 'participant' | 'bot' | null;
+  currentUserRole: string | null;
   currentUserId: string | null;
+  isHost: boolean;
   isHandRaisedLocally: boolean;
   isLocalUserSpeaking: boolean;
 
@@ -99,10 +100,15 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   theme: 'sage',
   currentUserRole: null,
   currentUserId: null,
+  isHost: false,
   isHandRaisedLocally: false,
   isLocalUserSpeaking: false,
 
-  setCurrentUser: (userId, role) => set({ currentUserId: userId, currentUserRole: role }),
+  setCurrentUser: (userId, role) => set({ 
+    currentUserId: userId, 
+    currentUserRole: role,
+    isHost: role === 'host' || role === 'moderator' || role === 'owner' || role === 'admin' 
+  }),
   setTheme: (theme) => set({ theme }),
   setIsHandRaisedLocally: (isRaised) => set({ isHandRaisedLocally: isRaised }),
   setCaptions: (updater) => set((state) => ({ captions: updater(state.captions) })),
@@ -206,6 +212,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     theme: 'sage',
     currentUserRole: null,
     currentUserId: null,
+    isHost: false,
     isHandRaisedLocally: false,
     isLocalUserSpeaking: false
   })

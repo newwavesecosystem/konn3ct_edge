@@ -12,7 +12,7 @@ interface StreamingPanelProps {
 }
 
 export const StreamingPanel: React.FC<StreamingPanelProps> = ({ roomId }) => {
-  const { currentUserRole, theme, setActivePane } = useMeetingStore();
+  const { isHost, theme, setActivePane } = useMeetingStore();
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
 
@@ -52,7 +52,7 @@ export const StreamingPanel: React.FC<StreamingPanelProps> = ({ roomId }) => {
   }, [roomId]);
 
   const fetchStreams = async () => {
-    if (currentUserRole !== 'host' || !roomId) return;
+    if (!isHost || !roomId) return;
     try {
       const streams = await streamingApi.getStreams(roomId);
       setActiveStreams(streams.filter(s => s.status === 'live' || s.status === 'processing'));
@@ -104,7 +104,8 @@ export const StreamingPanel: React.FC<StreamingPanelProps> = ({ roomId }) => {
     }
   };
 
-  if (currentUserRole !== 'host') {
+  // Only host can initiate streaming
+  if (!isHost) {
     return (
       <View style={styles.container}>
         <View style={styles.dragIndicatorContainer}>

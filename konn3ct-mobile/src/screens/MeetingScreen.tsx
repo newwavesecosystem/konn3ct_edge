@@ -11,7 +11,7 @@ import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
 import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, SwitchCamera, Sun, Moon, Lock } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
-import PipAndroid from 'react-native-pip-android';
+import PipService from '../native/KonnPip';
 import { LinearGradient } from 'expo-linear-gradient';
 import { meetingThemeTokens } from '../theme/meetingTheme';
 // Components
@@ -52,12 +52,11 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const localStreamRef = useRef<MediaStream | null>(null); // Fix 10: ref for cleanup
   
   // Zustand Store
-  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, participants, waitingRoom, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
+  const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, isHost, participants, waitingRoom, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
   const currentUserId = useMeetingStore(state => state.currentUserId);
   const isLocalUserSpeaking = useMeetingStore(state => state.isLocalUserSpeaking);
   const user = useAuthStore((s) => s.user);
   const localUserName = user?.name || 'Me';
-  const isHost = currentUserRole === 'host';
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
   
@@ -93,9 +92,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
     
     // Setup PiP Listener for Android
     let pipListener: any = null;
-    if (Platform.OS === 'android' && PipAndroid) {
-      pipListener = PipAndroid.onPipModeChanged((isPip: Boolean) => {
-        if (isMounted) setIsPipMode(isPip.valueOf());
+    if (PipService.isAvailable()) {
+      pipListener = PipService.onModeChanged((isInPip: boolean) => {
+        if (isMounted) setIsPipMode(isInPip);
       });
     }
 
@@ -504,10 +503,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
   };
 
   const enterPip = () => {
-    if (Platform.OS === 'android' && PipAndroid) {
-      PipAndroid.enterPipMode();
+    if (PipService.isAvailable()) {
+      PipService.enter(16, 9);
     } else {
-      Alert.alert("Not Supported", "Picture-in-Picture is only supported on Android.");
+      Alert.alert('Not Supported', 'Picture-in-Picture is only supported on Android.');
     }
   };
 
@@ -1006,12 +1005,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
                     <Text style={styles.optionLabel}>Streaming</Text>
                   </TouchableOpacity>
 
-                  {Platform.OS === 'android' && (
+                  {PipService.isAvailable() && (
                     <TouchableOpacity
                       style={styles.gridOption}
                       onPress={() => {
                         setIsMoreMenuVisible(false);
-                        enterPip();
+                        setTimeout(() => {
+                          enterPip();
+                        }, 300);
                       }}
                     >
                       <View style={styles.optionIconContainer}>

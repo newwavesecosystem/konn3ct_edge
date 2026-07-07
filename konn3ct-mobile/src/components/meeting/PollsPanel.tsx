@@ -13,10 +13,8 @@ interface PollsPanelProps {
 
 export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
   const polls = useMeetingStore(state => state.polls);
+  const isHost = useMeetingStore(state => state.isHost);
   const setActivePane = useMeetingStore(state => state.setActivePane);
-  const currentUserRole = useMeetingStore(state => state.currentUserRole);
-  
-  const isHost = currentUserRole === 'host';
   const theme = useMeetingStore(state => state.theme);
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
