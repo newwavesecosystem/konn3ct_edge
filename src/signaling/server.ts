@@ -2099,7 +2099,7 @@ export function initializeSignaling(server: Server) {
       const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
       for (let i = currentIndex; i < end; i++) {
         const [id, client] = clientsArr[i];
-        if (id !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+        if (client.userId !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
           client.ws.send(payload);
         }
       }

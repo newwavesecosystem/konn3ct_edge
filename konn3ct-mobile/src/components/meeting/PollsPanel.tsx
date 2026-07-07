@@ -66,7 +66,7 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
       service.createPoll(
         'poll-' + Math.random().toString(36).substr(2, 9),
         question.trim(),
-        options.filter(o => o.trim()).map(text => ({ text }))
+        options.filter(o => o.trim()).map((text, index) => ({ id: `o${index + 1}`, text, votes: 0 }))
       );
     }
     setQuestion('');
@@ -156,18 +156,20 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
                   </View>
                 )}
               </View>
-              {poll.options.map(opt => {
-                const percent = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0;
+              {poll.options.map((opt, idx) => {
+                const optVotes = opt.votes || 0;
+                const percent = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+                const optId = opt.id || `o${idx + 1}`;
                 return (
                   <TouchableOpacity 
-                    key={opt.id} 
+                    key={optId} 
                     style={styles.optionRow}
-                    onPress={() => !poll.votedOptionId && !pollEnded && handleVote(poll.id, opt.id)}
+                    onPress={() => !poll.votedOptionId && !pollEnded && handleVote(poll.id, optId)}
                     disabled={!!poll.votedOptionId || pollEnded}
                   >
                     <View style={styles.optionContent}>
                       <Text style={[styles.optionText, pollEnded && { opacity: 0.6 }]}>{opt.text}</Text>
-                      <Text style={styles.optionVotes}>{percent}% ({opt.votes})</Text>
+                      <Text style={styles.optionVotes}>{percent}% ({optVotes})</Text>
                     </View>
                     <View style={styles.progressTrack}>
                       <View style={[styles.progressFill, { width: `${percent}%` }, pollEnded && styles.progressFillEnded]} />

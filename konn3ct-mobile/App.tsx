@@ -35,6 +35,7 @@ import AttendanceScreen from './src/screens/AttendanceScreen';
 import PaymentsScreen from './src/screens/PaymentsScreen';
 import DonationsScreen from './src/screens/DonationsScreen';
 import RefereesScreen from './src/screens/RefereesScreen';
+import PastMeetingsScreen from './src/screens/PastMeetingsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -61,6 +62,7 @@ export type RootStackParamList = {
   Payments: undefined;
   Donations: undefined;
   Referees: undefined;
+  PastMeetings: undefined;
   Notifications: undefined;
   History: undefined;
   Settings: undefined;
@@ -158,6 +160,11 @@ export default function App() {
               <Stack.Screen 
                 name="Referees" 
                 component={RefereesScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
+                name="PastMeetings" 
+                component={PastMeetingsScreen} 
                 options={{ headerShown: false }} 
               />
               <Stack.Screen 

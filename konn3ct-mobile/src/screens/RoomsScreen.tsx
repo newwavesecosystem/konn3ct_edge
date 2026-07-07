@@ -47,6 +47,8 @@ import {
 } from '../api/rooms';
 import { APP_CONFIG } from '../config/appConfig';
 
+const EDGE_FRONTEND_URL = process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL || 'https://meetingapp.konn3ct.net';
+
 const { width } = Dimensions.get('window');
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
@@ -274,7 +276,7 @@ export default function RoomsScreen() {
       const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
       console.log('ROOMS SCREEN EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
 
-      navigation.navigate('Meeting', { roomId, meetingToken });
+      navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
     } catch (err: any) {
       Alert.alert(
         'Start Failed',
@@ -324,8 +326,9 @@ export default function RoomsScreen() {
 
   // ─── Copy URL ─────────────────────────────────────────────────────────────
 
-  const handleCopyUrl = async (url: string) => {
-    await Clipboard.setStringAsync(url);
+  const handleCopyUrl = async (roomSlug: string) => {
+    const fullUrl = `${EDGE_FRONTEND_URL}/join/${roomSlug}`;
+    await Clipboard.setStringAsync(fullUrl);
     showToast('Room URL copied!');
   };
 

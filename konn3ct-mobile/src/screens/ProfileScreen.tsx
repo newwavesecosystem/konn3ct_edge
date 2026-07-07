@@ -33,6 +33,7 @@ import { useNavigation } from '@react-navigation/native';
 import { fetchProfile, updateProfile, updatePassword, ProfileData } from '../api/profile';
 import { useAuthStore } from '../store/useAuthStore';
 import { APP_CONFIG } from '../config/appConfig';
+import * as Device from 'expo-device';
 
 const { width } = Dimensions.get('window');
 
@@ -186,7 +187,7 @@ export default function ProfileScreen() {
       >
         {/* Page Header */}
         <View style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Settings</Text>
+          <Text style={styles.pageTitle}>Profile</Text>
           <Text style={styles.pageSubtitle}>Manage your account preferences and profile.</Text>
         </View>
 
@@ -208,7 +209,7 @@ export default function ProfileScreen() {
                 <Text style={styles.profileMetaInitial}>{firstName.charAt(0)}</Text>
               </View>
               <View style={styles.profileMetaText}>
-                <Text style={styles.profileName}>{firstName} {lastName}</Text>
+                <Text style={styles.profileName}>{lastName ? `${lastName} ` : ''}{firstName}</Text>
                 <Text style={styles.profileEmail}>{email}</Text>
               </View>
               <TouchableOpacity style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>
@@ -216,51 +217,57 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.divider} />
+            {!APP_CONFIG.GOV_LOGIN && (
+              <>
+                <View style={styles.divider} />
 
-            <View style={styles.planInfoBox}>
-              <View style={styles.planInfoLeft}>
-                <CreditCard color={COLORS.textPrimary} size={18} />
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.planName}>{plan}</Text>
-                  <Text style={styles.planDesc}>Current subscription plan</Text>
+                <View style={styles.planInfoBox}>
+                  <View style={styles.planInfoLeft}>
+                    <CreditCard color={COLORS.textPrimary} size={18} />
+                    <View style={{ marginLeft: 12 }}>
+                      <Text style={styles.planName}>{plan}</Text>
+                      <Text style={styles.planDesc}>Current subscription plan</Text>
+                    </View>
+                  </View>
+                  <View style={styles.planBadge}>
+                    <Text style={styles.planBadgeText}>ACTIVE</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.planBadge}>
-                <Text style={styles.planBadgeText}>ACTIVE</Text>
-              </View>
-            </View>
+              </>
+            )}
           </View>
         </View>
 
         {/* --- Referral Card --- */}
-        <View style={styles.card}>
-          <View style={styles.cardBody}>
-            <View style={styles.referralHeaderRow}>
-              <Text style={styles.cardTitle}>Referral Program</Text>
-              <View style={styles.referralCodeBox}>
-                <Text style={styles.referralCodeText}>{referralCode}</Text>
-                <TouchableOpacity onPress={() => handleCopy(referralCode)} style={styles.iconBtnSmall}>
-                  <Copy color={COLORS.textMuted} size={14} />
-                </TouchableOpacity>
+        {!APP_CONFIG.GOV_LOGIN && (
+          <View style={styles.card}>
+            <View style={styles.cardBody}>
+              <View style={styles.referralHeaderRow}>
+                <Text style={styles.cardTitle}>Referral Program</Text>
+                <View style={styles.referralCodeBox}>
+                  <Text style={styles.referralCodeText}>{referralCode}</Text>
+                  <TouchableOpacity onPress={() => handleCopy(referralCode)} style={styles.iconBtnSmall}>
+                    <Copy color={COLORS.textMuted} size={14} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-            
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.inputLabel}>Referral Link</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.textInput}
-                  value={referralLink}
-                  editable={false}
-                />
-                <TouchableOpacity onPress={() => handleCopy(referralLink)} style={styles.outlineBtnSquare}>
-                  <Copy color={COLORS.textPrimary} size={18} />
-                </TouchableOpacity>
+              
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.inputLabel}>Referral Link</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.textInput}
+                    value={referralLink}
+                    editable={false}
+                  />
+                  <TouchableOpacity onPress={() => handleCopy(referralLink)} style={styles.outlineBtnSquare}>
+                    <Copy color={COLORS.textPrimary} size={18} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* --- Security Card --- */}
         <View style={styles.card}>
@@ -311,7 +318,7 @@ export default function ProfileScreen() {
                   <Smartphone color={COLORS.textMuted} size={18} />
                 </View>
                 <View>
-                  <Text style={styles.actionRowTitle}>iPhone 14 Pro - App</Text>
+                  <Text style={styles.actionRowTitle}>{Device.modelName || Device.deviceName || (Platform.OS === 'ios' ? 'iOS Device' : 'Android Device')} - App</Text>
                   <Text style={styles.actionRowSubtitle}>Lagos, Nigeria • <Text style={{ color: COLORS.brandGreen }}>This device</Text></Text>
                 </View>
               </View>
