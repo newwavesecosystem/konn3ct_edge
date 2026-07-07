@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
+import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache } from './historyCache';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
@@ -20,7 +21,7 @@ if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
 }
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl, {
+export const redis = new Redis(redisUrl, {
   retryStrategy: (times) => {
     if (process.env.NODE_ENV !== 'production') return null;
     return Math.min(times * 50, 2000);
@@ -202,44 +203,28 @@ export async function sendRoomHistoryAndState(client: Client) {
     const activeParticipants = getActiveRoomParticipants(roomId);
     ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
-    const chatHistory = await db.chatMessage.findMany({
-      where: { 
-        roomId: roomId, 
-        createdAt: { gte: roomCreatedDate },
-        OR: [
-          { isPrivate: false },
-          { targetUserId: participantId },
-          { userId: userId }
-        ]
-      },
-      orderBy: { createdAt: 'asc' },
-      take: 50,
-    });
-
-    ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+    const history = await getOrLoadRoomHistory(roomId, roomCreatedDate, participantId, userId);
+    
+    if (ws.readyState === WebSocket.OPEN && history) {
+      // Filter chat history for private messages intended for this user
+      const filteredChatHistory = history.chatHistory.filter((msg: any) => {
+        return !msg.isPrivate || msg.targetUserId === participantId || msg.userId === userId;
+      });
+      
+      ws.send(JSON.stringify({ type: 'chat_history', messages: filteredChatHistory }));
+      ws.send(JSON.stringify({ type: 'poll_history', polls: history.pollHistory }));
+      ws.send(JSON.stringify({ type: 'qa_history', messages: history.qaHistory }));
+      if (history.noteHistory) {
+        ws.send(JSON.stringify({ type: 'note_history', content: history.noteHistory.content }));
+      }
+    }
 
     const settings = roomSettingsMap.get(roomId);
-    if (settings) {
+    if (settings && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
     }
-    const pollHistory = await db.meetingPoll.findMany({
-      where: { roomId, isActive: true },
-      orderBy: { createdAt: 'asc' }
-    });
-    const noteHistory = await db.sharedNote.findUnique({
-      where: { roomId }
-    });
-    const qaHistory = await db.meetingQA.findMany({
-      where: { roomId },
-      orderBy: { upvotes: 'desc' }
-    });
 
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-      ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
-      if (noteHistory) {
-        ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
-      }
       const eCinemaLink = roomECinema.get(roomId);
       if (eCinemaLink) {
         ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
@@ -1225,6 +1210,8 @@ export function initializeSignaling(server: Server) {
                   createdAt
                 }
               });
+              // Write-through to cache after successful DB persist (Option A)
+              await appendChatToCache(roomId, msgPayload);
             },
             (err) => {
               logger.error("Failed to persist chat message after retries", err);
@@ -1362,6 +1349,7 @@ export function initializeSignaling(server: Server) {
             create: { roomId, content: data.content },
             update: { content: data.content }
           });
+          await refreshNoteCache(roomId, data.content);
           broadcastToRoom(roomId, {
             type: 'note_update',
             userId,
@@ -1384,6 +1372,7 @@ export function initializeSignaling(server: Server) {
                 createdBy: userId,
               }
             });
+            await refreshPollsCache(roomId);
             broadcastToRoom(roomId, {
               type: 'poll_create',
               pollId: newPoll.id,
@@ -1403,6 +1392,7 @@ export function initializeSignaling(server: Server) {
               where: { id: data.pollId },
               data: { isActive: false }
             });
+            await refreshPollsCache(roomId);
             broadcastToRoom(roomId, {
               type: 'poll_ended',
               pollId: data.pollId
@@ -1436,6 +1426,7 @@ export function initializeSignaling(server: Server) {
               where: { id: data.pollId },
               data: { options: updatedOptions }
             });
+            await refreshPollsCache(roomId);
           }
 
           broadcastToRoom(roomId, {
@@ -1677,6 +1668,7 @@ export function initializeSignaling(server: Server) {
               question: data.question,
             }
           });
+          await refreshQaCache(roomId);
           broadcastToRoom(roomId, {
             type: 'qa_updated',
             action: 'ask',
@@ -1700,6 +1692,7 @@ export function initializeSignaling(server: Server) {
                   voterIds: [...voterIds, userId]
                 }
               });
+              await refreshQaCache(roomId);
               broadcastToRoom(roomId, {
                 type: 'qa_updated',
                 action: 'upvote',
@@ -1723,6 +1716,7 @@ export function initializeSignaling(server: Server) {
                 answeredBy: client.name
               }
             });
+            await refreshQaCache(roomId);
             broadcastToRoom(roomId, {
               type: 'qa_updated',
               action: 'answer',
@@ -1738,6 +1732,7 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           try {
             await db.meetingQA.delete({ where: { id: data.questionId } });
+            await refreshQaCache(roomId);
             broadcastToRoom(roomId, {
               type: 'qa_updated',
               action: 'delete',
