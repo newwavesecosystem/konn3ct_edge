@@ -182,11 +182,8 @@ async function run() {
       ffmpeg(outputPathRaw)
         .outputOptions([
           '-y',
-          '-preset veryfast',
-          '-c:v libx264',
-          '-c:a aac',
-          '-max_muxing_queue_size 9999',
-          '-vsync 2'
+          '-c copy',
+          '-max_muxing_queue_size 9999'
         ])
         .on('progress', (progress) => {
           console.log(`[${recordingId}] ffmpeg_progress: ${progress.percent}% done`);

@@ -195,7 +195,7 @@ export interface RoomSettings {
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
 export async function sendRoomHistoryAndState(client: Client) {
-  const { ws, roomId, roomCreatedDate } = client;
+  const { ws, roomId, roomCreatedDate, participantId, userId } = client;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   try {
@@ -203,7 +203,15 @@ export async function sendRoomHistoryAndState(client: Client) {
     ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
     const chatHistory = await db.chatMessage.findMany({
-      where: { roomId: roomId, createdAt: { gte: roomCreatedDate } },
+      where: { 
+        roomId: roomId, 
+        createdAt: { gte: roomCreatedDate },
+        OR: [
+          { isPrivate: false },
+          { targetUserId: participantId },
+          { userId: userId }
+        ]
+      },
       orderBy: { createdAt: 'asc' },
       take: 50,
     });
@@ -705,6 +713,13 @@ export function initializeSignaling(server: Server) {
         }
       });
       client.transports = [];
+
+      // Clean up consumer owners to prevent invalid ownership spam
+      for (const [consumerId, owner] of consumerOwners.entries()) {
+        if (owner === client) {
+          consumerOwners.delete(consumerId);
+        }
+      }
 
       const gracePeriodMs = 30000;
       const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
@@ -2068,6 +2083,13 @@ export function initializeSignaling(server: Server) {
         }
         client.transports = [];
         
+        // Clean up consumer owners to prevent invalid ownership spam on reconnect
+        for (const [consumerId, owner] of consumerOwners.entries()) {
+          if (owner === client) {
+            consumerOwners.delete(consumerId);
+          }
+        }
+        
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
@@ -2130,7 +2152,9 @@ export function initializeSignaling(server: Server) {
 
       case 'pause_consumer': {
         if (consumerOwners.get(data.consumerId) !== client) {
-          logger.warn(`User ${userId} tried to pause a consumer they don't own`);
+          logger.warn(`User ${userId} tried to pause a consumer they don't own (${data.consumerId})`);
+          // Send an error response so the client's await doesn't time out
+          client.ws.send(JSON.stringify({ type: 'error', errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
           return;
         }
         await pauseConsumer(data.consumerId);
