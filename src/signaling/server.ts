@@ -1197,21 +1197,22 @@ export function initializeSignaling(server: Server) {
 
           asyncWithRetry(
             async () => {
+              const dbFormatMessage = {
+                id: serverEventId,
+                roomId,
+                userId,
+                senderName: client.name,
+                content: data.message,
+                fileUrl: data.fileUrl || null,
+                isPrivate: !!data.targetUserId,
+                targetUserId: data.targetUserId || null,
+                createdAt
+              };
               await db.chatMessage.create({
-                data: {
-                  id: serverEventId,
-                  roomId,
-                  userId,
-                  senderName: client.name,
-                  content: data.message,
-                  fileUrl: data.fileUrl || null,
-                  isPrivate: !!data.targetUserId,
-                  targetUserId: data.targetUserId || null,
-                  createdAt
-                }
+                data: dbFormatMessage
               });
               // Write-through to cache after successful DB persist (Option A)
-              await appendChatToCache(roomId, msgPayload);
+              await appendChatToCache(roomId, dbFormatMessage);
             },
             (err) => {
               logger.error("Failed to persist chat message after retries", err);

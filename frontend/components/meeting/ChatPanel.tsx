@@ -17,6 +17,7 @@ const roleBadge: Record<string, { icon: React.ReactNode; color: string }> = {
 };
 
 const LinkifiedText = ({ text }: { text: string }) => {
+  if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
 
