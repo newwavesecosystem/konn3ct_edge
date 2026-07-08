@@ -25,7 +25,7 @@ import {
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
 
-export const REACTION_DURATION = 30000;
+export const REACTION_DURATION = 10000;
 
 interface MeetingContextValue {
   // State

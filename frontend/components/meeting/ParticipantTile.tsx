@@ -137,6 +137,11 @@ export function ParticipantTile({
           participant.cameraStats = participant.cameraStats || {};
           participant.cameraStats.lastVideoPlayAttemptAt = new Date().toISOString();
           
+          // Force DOM properties to prevent browser autoplay blocking
+          // React sometimes fails to apply the 'muted' attribute in time for play()
+          el.muted = true;
+          el.playsInline = true;
+          
           el.play().then(() => {
              console.log('participant_tile_video_play_started');
              setPlayError(null);
@@ -215,6 +220,8 @@ export function ParticipantTile({
             if (stream.getVideoTracks()[0] === participant.screenTrack) return;
           }
           el.srcObject = new MediaStream([participant.screenTrack]);
+          el.muted = true;
+          el.playsInline = true;
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
           });
