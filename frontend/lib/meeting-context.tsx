@@ -607,9 +607,10 @@ export function MeetingProvider({
         let lastNetworkToastTime = 0;
         client.onNetworkQualityChange = (quality) => {
           const now = Date.now();
-          if (now - lastNetworkToastTime > 30000) {
+          const canToast = now - lastNetworkToastTime > 30000;
 
-            if (quality === 'poor_network') {
+          if (quality === 'poor_network') {
+            if (canToast) {
               // Play Warning Sound
               try {
                 if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
@@ -628,33 +629,39 @@ export function MeetingProvider({
                   oscillator.stop(audioCtx.currentTime + 0.3);
                 }
               } catch(e) {}
-
-              if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
-                toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
-                webrtcClient.current.isAudioOnlyMode = true; // Set local WebRTC flag synchronously before React update
-                webrtcClient.current.disableCamera(); // Pause producer cleanly
-                localCameraTrackRef.current = null; // Clear stale track
-                webrtcClient.current.sendCameraState(false, true, 'network');
-                setIsCameraOn(false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
-              }
-              lastNetworkToastTime = now;
-            } else if (quality === 'unstable_network') {
-              // toast.warning("Network connection is weak. Video or Audio quality might be degraded.");
-              lastNetworkToastTime = now;
-            } else if (quality === 'good') {
-              if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
-                toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
-                webrtcClient.current.disableAudioOnlyMode();
-                // We only clear audioOnlyMode locally. We do not automatically turn the camera back ON unless the user does it.
-                webrtcClient.current.sendCameraState(false, false);
-                setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
-              }
             }
-            
-            // Update local user's network quality indicator
-            setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, networkQuality: quality } : p));
+
+            if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
+              if (canToast) {
+                toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
+                lastNetworkToastTime = now;
+              }
+              webrtcClient.current.isAudioOnlyMode = true; // Set local WebRTC flag synchronously before React update
+              webrtcClient.current.disableCamera(); // Pause producer cleanly
+              localCameraTrackRef.current = null; // Clear stale track
+              webrtcClient.current.sendCameraState(false, true, 'network');
+              setIsCameraOn(false);
+              setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
+            }
+          } else if (quality === 'unstable_network') {
+            if (canToast) {
+              lastNetworkToastTime = now;
+            }
+          } else if (quality === 'good') {
+            if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
+              if (canToast) {
+                toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
+                lastNetworkToastTime = now;
+              }
+              webrtcClient.current.disableAudioOnlyMode();
+              // We only clear audioOnlyMode locally. We do not automatically turn the camera back ON unless the user does it.
+              webrtcClient.current.sendCameraState(false, false);
+              setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+            }
           }
+          
+          // Always update local user's network quality indicator
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, networkQuality: quality } : p));
         };
 
         client.onDonationStatusReceived = (active) => {

@@ -117,6 +117,18 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
 }
 
 /**
+ * Close a Router and remove it from memory
+ */
+export function closeRouter(roomId: string) {
+  const router = routers.get(roomId);
+  if (router) {
+    router.close();
+    routers.delete(roomId);
+    logger.info(`Router closed for room ${roomId}`);
+  }
+}
+
+/**
  * Create a WebRTC Transport for a client to send/receive media
  */
 export async function createWebRtcTransport(roomId: string) {
