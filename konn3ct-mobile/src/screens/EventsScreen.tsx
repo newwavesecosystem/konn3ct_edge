@@ -919,19 +919,21 @@ export default function EventsScreen() {
           <Text style={styles.pageTitle}>Events</Text>
           <Text style={styles.pageSubtitle}>Manage pre-registered events & participants</Text>
         </View>
-        <TouchableOpacity 
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              // @ts-ignore
-              navigation.navigate('MainTabs');
-            }
-          }} 
-          style={styles.closeBtn}
-        >
-          <X size={24} color="#64748b" />
-        </TouchableOpacity>
+        {!APP_CONFIG.GOV_LOGIN && (
+          <TouchableOpacity 
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                // @ts-ignore
+                navigation.navigate('MainTabs');
+              }
+            }} 
+            style={styles.closeBtn}
+          >
+            <X size={24} color="#64748b" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
