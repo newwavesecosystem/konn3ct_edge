@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -446,18 +446,6 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      const currentParticipants = rooms.get(room.id)?.size || 0;
-      const maxParticipants = room.maxParticipants ?? 100;
-      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
-      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
-
-      // Allow hosts and bots to bypass capacity
-      if (role !== 'host' && role !== 'bot' && currentParticipants >= limit) {
-        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-
       // Guardrails: Validate participantId
       if (!participantIdParam || participantIdParam === 'ssr-placeholder' || participantIdParam === 'pending' || participantIdParam.trim() === '') {
         logger.warn(`Rejecting connection due to invalid participantId: ${participantIdParam}`);
@@ -466,8 +454,21 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Guardrails: Check for duplicate active connections using the same participantId
+      // Guardrails: Check if this user is already in the room (e.g. reconnecting within 15s grace period)
       const existingClient = rooms.get(room.id)?.get(participantIdParam);
+
+      const currentParticipants = rooms.get(room.id)?.size || 0;
+      const maxParticipants = room.maxParticipants ?? 100;
+      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
+      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
+
+      // Allow hosts, bots, and already-connected users (reconnecting) to bypass capacity limits
+      if (role !== 'host' && role !== 'bot' && !existingClient && currentParticipants >= limit) {
+        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
       if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
         logger.info(`Preempting old connection for participantId: ${participantIdParam}`);
         existingClient.preempted = true;
@@ -721,6 +722,7 @@ export function initializeSignaling(server: Server) {
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
+            closeRouter(roomId); // Prevent Mediasoup Router memory leaks
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
