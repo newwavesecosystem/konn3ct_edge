@@ -146,6 +146,8 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: NEXT_PUBLIC_FRONTEND_DOMAIN
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=5120"
           resources:
             requests:
               cpu: "1500m"

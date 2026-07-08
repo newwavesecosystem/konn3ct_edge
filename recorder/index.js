@@ -200,7 +200,7 @@ async function processRecordingJob(job) {
   const recordingsDir = process.env.RECORDINGS_DIR || path.join(__dirname, 'recordings');
   require('fs').mkdirSync(recordingsDir, { recursive: true });
   
-  const outputPathRaw = path.join(recordingsDir, `${roomId}_raw.webm`);
+  const outputPathRaw = path.join(recordingsDir, `${roomId}_raw.mkv`);
   const outputPathMp4 = path.join(recordingsDir, `${roomId}.mp4`);
   
   if (!url.includes('/recording/')) {
@@ -247,7 +247,10 @@ async function processRecordingJob(job) {
         '--disable-setuid-sandbox',
         '--autoplay-policy=no-user-gesture-required',
         '--disable-dev-shm-usage',
-        '--disable-gpu',
+        '--use-gl=angle',
+        '--use-angle=swiftshader',
+        '--enable-unsafe-swiftshader',
+        '--ignore-gpu-blocklist',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
@@ -260,6 +263,11 @@ async function processRecordingJob(job) {
         '--hide-scrollbars'
       ],
     });
+
+    console.log("recorder_chromium_launched");
+    if (browser.process().spawnargs.join(' ').includes('swiftshader')) {
+      console.log("recorder_swiftshader_enabled");
+    }
 
     const pages = await browser.pages();
     const page = pages[0];
@@ -355,101 +363,6 @@ async function processRecordingJob(job) {
       console.warn("Failed to take diagnostic screenshot", e);
     }
 
-    // Create WriteStream
-    const fileStream = fs.createWriteStream(outputPathRaw);
-
-    // Spin up an ephemeral HTTP server to receive binary video chunks directly
-    // This bypasses Puppeteer's slow IPC channel which drops large base64 strings!
-    const server = http.createServer((req, res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', '*');
-      res.setHeader('Access-Control-Allow-Headers', '*');
-      res.setHeader('Access-Control-Allow-Private-Network', 'true');
-
-      if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-      }
-
-      if (req.method === 'POST' && req.url === '/chunk') {
-        try {
-          const chunkIndex = parseInt(req.headers['x-chunk-index'] || '0');
-          const chunkStart = req.headers['x-chunk-start'];
-          
-          let chunkSize = 0;
-          req.on('data', chunk => {
-            chunkSize += chunk.length;
-            fileStream.write(chunk);
-          });
-          
-          req.on('end', () => {
-            try {
-              const manifestData = recordingManifests.get(recordingId);
-              if (!manifestData) {
-                console.error(JSON.stringify({
-                  event: "recorder_manifest_missing",
-                  recordingId
-                }));
-                res.writeHead(500);
-                return res.end('missing_manifest');
-              }
-              const timestamp = Date.now();
-              manifestData.chunks.push({ chunkIndex, sizeBytes: chunkSize, receivedAt: timestamp, chunkStart });
-              manifestData.totalChunks++;
-              manifestData.totalBytes += chunkSize;
-              
-              console.log(JSON.stringify({
-                timestamp: new Date(timestamp).toISOString(),
-                event: "recorder_chunk_received",
-                recordingId: recordingId,
-                chunkIndex,
-                sizeBytes: chunkSize
-              }));
-              
-              if (chunkSize === 0) {
-                manifestData.emptyChunkCount++;
-                console.log(JSON.stringify({
-                  timestamp: new Date(timestamp).toISOString(),
-                  event: "recorder_chunk_empty",
-                  recordingId: recordingId,
-                  chunkIndex
-                }));
-              }
-              
-              res.writeHead(200);
-              res.end('ok');
-            } catch (err) {
-              console.error(JSON.stringify({
-                event: "recorder_chunk_processing_failed",
-                recordingId,
-                error: err.message
-              }));
-              res.writeHead(500);
-              res.end('chunk_error');
-            }
-          });
-        } catch (outerErr) {
-           console.error(JSON.stringify({
-             event: "recorder_chunk_processing_failed",
-             recordingId,
-             error: outerErr.message
-           }));
-           res.writeHead(500);
-           res.end('chunk_error');
-        }
-      } else {
-        res.writeHead(404);
-        res.end('invalid');
-      }
-    });
-
-    const port = await new Promise((resolve) => {
-      server.listen(3300, '127.0.0.1', () => {
-        resolve(server.address().port);
-      });
-    });
-
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       event: "recording_server_started",
@@ -458,53 +371,153 @@ async function processRecordingJob(job) {
       stage: "media_recorder_starting"
     }));
 
+    // Diagnostic Screenshot
+    const screenshotPath = require('path').join(__dirname, 'recordings', `${roomId}_diagnostic.png`);
+    await page.screenshot({ path: screenshotPath });
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "recorder_diagnostic_screenshot_saved",
+      recordingId: recordingId || 'unknown',
+      path: screenshotPath
+    }));
+
     // Inject recording logic directly into the browser context
-    await page.evaluate((serverPort) => {
+    await page.evaluate(() => {
       return new Promise(async (resolve, reject) => {
         try {
+          // Real Video-Frame Readiness
+          console.log("PAGE LOG: recorder_video_elements_detected");
+          await new Promise((resolveVideo) => {
+            let attempt = 0;
+            const checkVideo = () => {
+              const videos = document.querySelectorAll('video');
+              let ready = false;
+              for (let i = 0; i < videos.length; i++) {
+                const v = videos[i];
+                if (v.readyState >= 3 && v.videoWidth > 0 && v.videoHeight > 0) {
+                  ready = true;
+                  if (typeof v.requestVideoFrameCallback === 'function') {
+                    v.requestVideoFrameCallback(() => {
+                      console.log("PAGE LOG: recorder_first_video_frame_received");
+                      if (v.currentTime > 0) {
+                        console.log("PAGE LOG: recorder_video_current_time_advancing");
+                      }
+                      console.log("PAGE LOG: recorder_video_render_ready");
+                      resolveVideo();
+                    });
+                    return;
+                  } else {
+                    console.log("PAGE LOG: recorder_first_video_frame_received");
+                    console.log("PAGE LOG: recorder_video_render_ready");
+                    resolveVideo();
+                    return;
+                  }
+                }
+              }
+              attempt++;
+              if (attempt > 60) {
+                console.log("PAGE LOG: recorder_video_render_failed");
+                resolveVideo(); // proceed anyway after 30s timeout
+                return;
+              }
+              setTimeout(checkVideo, 500);
+            };
+            checkVideo();
+          });
+
+          // Real Audio Readiness
+          console.log("PAGE LOG: recorder_audio_elements_detected");
+          await new Promise((resolveAudio) => {
+            try {
+              const AudioContext = window.AudioContext || window.webkitAudioContext;
+              const ctx = new AudioContext();
+              const analyser = ctx.createAnalyser();
+              analyser.fftSize = 256;
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              
+              let audioFound = false;
+              const audios = document.querySelectorAll('audio, video');
+              for (let i = 0; i < audios.length; i++) {
+                try {
+                  const source = ctx.createMediaElementSource(audios[i]);
+                  source.connect(analyser);
+                  analyser.connect(ctx.destination);
+                  audioFound = true;
+                  console.log("PAGE LOG: recorder_audio_play_started");
+                } catch(e) {}
+              }
+
+              if (!audioFound || ctx.state === 'suspended') {
+                 console.log("PAGE LOG: recorder_audio_play_rejected");
+                 resolveAudio();
+                 return;
+              }
+              console.log("PAGE LOG: recorder_audio_context_running");
+
+              let attempt = 0;
+              const checkAudio = () => {
+                analyser.getByteFrequencyData(dataArray);
+                const sum = dataArray.reduce((a, b) => a + b, 0);
+                if (sum > 0) {
+                  console.log("PAGE LOG: recorder_audio_level_detected", sum);
+                  console.log("PAGE LOG: recorder_audio_capture_ready");
+                  resolveAudio();
+                  return;
+                }
+                attempt++;
+                if (attempt > 60) {
+                  console.log("PAGE LOG: recorder_audio_silence_detected");
+                  resolveAudio();
+                  return;
+                }
+                setTimeout(checkAudio, 500);
+              };
+              checkAudio();
+            } catch (e) {
+              console.log("PAGE LOG: recorder_audio_play_rejected");
+              resolveAudio();
+            }
+          });
+
           // Spoof title right before capture so auto-select-tab-capture-source-by-title finds it instantly
           document.title = 'BotRecord';
           await new Promise(r => setTimeout(r, 500));
-
-          let stream;
-          try {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { displaySurface: "browser", width: 1920, height: 1080 },
-              audio: true
-            });
-          } catch (err) {
-            console.warn("getDisplayMedia with audio failed, falling back to video only:", err.toString());
-            stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { displaySurface: "browser", width: 1920, height: 1080 }
-            });
-          }
-          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-          window.uploadQueue = Promise.resolve();
-          recorder.ondataavailable = (e) => {
-            const currentChunkIndex = window.chunkIndex || 0;
-            window.chunkIndex = currentChunkIndex + 1;
-            const chunkStart = Date.now();
-            
-            // Chain the uploads to guarantee sequential arrival at the server
-            window.uploadQueue = window.uploadQueue.then(() => 
-              fetch(`http://127.0.0.1:${serverPort}/chunk`, {
-                method: 'POST',
-                headers: {
-                  'x-chunk-index': currentChunkIndex.toString(),
-                  'x-chunk-start': chunkStart.toString()
-                },
-                body: e.data
-              }).catch(err => console.error("Chunk upload failed", err))
-            );
-          };
-          recorder.start(10000); // 10 seconds per chunk
-          window.recorder = recorder;
+          
           resolve();
         } catch (e) {
           reject(e.toString());
         }
       });
-    }, port);
+    });
+
+    const { spawn } = require('child_process');
+    const ffmpegArgs = [
+      '-y',
+      '-video_size', '1920x1080',
+      '-framerate', '30',
+      '-f', 'x11grab',
+      '-i', process.env.DISPLAY || ':99',
+      '-f', 'pulse',
+      '-i', 'recorder_sink.monitor',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      outputPathRaw
+    ];
+    
+    console.log(`[${recordingId}] Spawning FFmpeg with args: ${ffmpegArgs.join(' ')}`);
+    const ffmpegProc = spawn('ffmpeg', ffmpegArgs);
+    
+    ffmpegProc.stdout.on('data', (data) => {
+      // console.log(`FFmpeg stdout: ${data}`); // noisy
+    });
+    
+    ffmpegProc.stderr.on('data', (data) => {
+      // console.error(`FFmpeg stderr: ${data}`); // noisy
+    });
+
 
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
@@ -524,8 +537,10 @@ async function processRecordingJob(job) {
     } catch (err) {
       console.error('Failed to notify backend of start after retries:', err);
       // Stop recording and throw error to mark job failed
-      fileStream.end();
-      server.close();
+      // Stop recording and throw error to mark job failed
+      if (ffmpegProc) {
+        ffmpegProc.kill('SIGKILL');
+      }
       try { await browser.close(); } catch(e){}
       throw new Error('Recording start callback failed');
     }
@@ -557,28 +572,12 @@ async function processRecordingJob(job) {
           pubsub.removeListener('message', stopHandler);
 
           try {
-            // Signal the browser stream to stop and wait for final upload
-            await page.evaluate(() => {
-              return new Promise((resolve) => {
-                if (window.recorder && window.recorder.state !== 'inactive') {
-                  window.recorder.onstop = () => {
-                    // Wait for the final chunk in the queue to finish uploading
-                    window.uploadQueue.then(resolve);
-                  };
-                  window.recorder.stop();
-                } else {
-                  resolve();
-                }
-              });
-            });
-            
-            // Wait a tiny bit extra just for the Node HTTP server to flush the file pipe
+            // Wait a tiny bit extra just for the page to settle
             await new Promise(r => setTimeout(r, 500));
             
-            fileStream.end();
-            server.close();
+            ffmpegProc.kill('SIGINT');
             
-            fileStream.on('close', async () => {
+            ffmpegProc.on('exit', async (code) => {
               try {
                 console.log(JSON.stringify({
                   timestamp: new Date().toISOString(),
@@ -627,22 +626,11 @@ async function processRecordingJob(job) {
               const manifestData = recordingManifests.get(recordingId);
               if (manifestData) {
                 manifestData.endedAt = Date.now();
-                manifestData.chunks.sort((a,b) => a.chunkIndex - b.chunkIndex);
-                for (let i = 1; i < manifestData.chunks.length; i++) {
-                  if (manifestData.chunks[i].chunkIndex !== manifestData.chunks[i-1].chunkIndex + 1) {
-                    manifestData.sequenceGapDetected = true;
-                  }
-                }
+                manifestData.ffmpegExitCode = code;
                 
-                if (manifestData.totalBytes < 1000) {
+                if (code !== 0 && code !== 255) { // 255 is normal for SIGINT in some ffmpeg builds
                   manifestData.validationStatus = 'failed';
-                  manifestData.failureReason = 'total_bytes_too_low';
-                } else if (manifestData.emptyChunkCount > manifestData.totalChunks / 2) {
-                  manifestData.validationStatus = 'failed';
-                  manifestData.failureReason = 'too_many_empty_chunks';
-                } else if (manifestData.sequenceGapDetected) {
-                  manifestData.validationStatus = 'failed';
-                  manifestData.failureReason = 'sequence_gap';
+                  manifestData.failureReason = 'ffmpeg_error';
                 } else {
                   manifestData.validationStatus = 'valid';
                 }

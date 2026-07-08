@@ -49,7 +49,10 @@ export class WebRTCClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectTimeoutId?: NodeJS.Timeout;
+  private iceReconnectAttempts = 0;
+  private maxIceReconnectAttempts = 3;
   private isRepublishing = false;
+  private pendingConsumes: any[] = [];
 
   // Camera state tracking
   public lastCameraErrorName: string | null = null;
@@ -128,6 +131,8 @@ export class WebRTCClient {
   public onNoteUpdate?: (msg: any) => void;
   public onServerLoadHigh?: () => void;
   public onServerReject?: (msg: string) => void;
+  public onWaitingRoomDenied?: (msg: any) => void;
+  public onWaitingRoomDeniedAll?: () => void;
   public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean, bypassWaitingRoom: boolean }, updatedBy?: string) => void;
   public onQAHistory?: (messages: any[]) => void;
   public onQAUpdated?: (msg: any) => void;
@@ -276,8 +281,6 @@ export class WebRTCClient {
 
     this.ws.onopen = async () => {
       try {
-        // Send auth token as first message (not in URL to avoid logging in server access logs)
-        this.ws!.send(JSON.stringify({ type: 'auth', token: this.token }));
         this.reconnectAttempts = 0; // Reset on success
 
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
@@ -412,7 +415,7 @@ export class WebRTCClient {
                     await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
                   }
                 }
-                // Only broadcast connected AFTER Mediasoup is fully loaded
+
                 this.onConnectionStateChange?.('connected');
               } catch (e) {
                 console.error("Failed to load existing producers:", e);
@@ -507,6 +510,12 @@ export class WebRTCClient {
           break;
         case 'waiting_room_request':
           this.onWaitingRoomRequest?.(msg);
+          break;
+        case 'waiting_room_denied':
+          this.onWaitingRoomDenied?.(msg);
+          break;
+        case 'waiting_room_denied_all':
+          this.onWaitingRoomDeniedAll?.();
           break;
         case 'chat_history':
           this.onChatHistory?.(msg.messages);
@@ -907,7 +916,9 @@ export class WebRTCClient {
 
       this.sendTransport.on('connectionstatechange', (state: any) => {
         console.log(`[WebRTC] Send Transport ICE State changed to: ${state}`);
-        if (state === 'disconnected') {
+        if (state === 'connected') {
+          this.iceReconnectAttempts = 0;
+        } else if (state === 'disconnected') {
           console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
         } else if (state === 'failed') {
           console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
@@ -942,7 +953,9 @@ export class WebRTCClient {
 
     this.recvTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Receive Transport ICE State changed to: ${state}`);
-      if (state === 'disconnected') {
+      if (state === 'connected') {
+        this.iceReconnectAttempts = 0;
+      } else if (state === 'disconnected') {
         console.warn('[WebRTC] Receive Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
@@ -952,6 +965,15 @@ export class WebRTCClient {
         this.republishMedia().catch(console.error);
       }
     });
+
+    // 5. Drain any queued consume requests that arrived while initializing
+    if (this.pendingConsumes.length > 0) {
+      console.log(`[WebRTC] Draining ${this.pendingConsumes.length} queued consume requests...`);
+      for (const req of this.pendingConsumes) {
+        this.consumeRemoteStream(req.producerId, req.producerParticipantId, req.producerUserId, req.userName, req.kind, req.appData).catch(console.error);
+      }
+      this.pendingConsumes = [];
+    }
 
     this.startNetworkMonitor();
   }
@@ -1165,6 +1187,14 @@ export class WebRTCClient {
 
   private async republishMedia() {
     if (!this.device || this.isRepublishing) return;
+    
+    if (this.iceReconnectAttempts >= this.maxIceReconnectAttempts) {
+      console.error(`[WebRTC] Exceeded max ICE reconnect attempts (${this.maxIceReconnectAttempts}). Halting recovery.`);
+      this.onConnectionStateChange?.('failed');
+      return;
+    }
+    this.iceReconnectAttempts++;
+    
     this.isRepublishing = true;
     this.emitTelemetry('media_recovery_started');
     try {
@@ -1209,7 +1239,9 @@ export class WebRTCClient {
 
     this.sendTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Republish Send Transport ICE State changed to: ${state}`);
-      if (state === 'disconnected') {
+      if (state === 'connected') {
+        this.iceReconnectAttempts = 0;
+      } else if (state === 'disconnected') {
         console.warn('[WebRTC] Republish Send Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Send Transport connection failed! Forcing republish...');
@@ -1235,7 +1267,9 @@ export class WebRTCClient {
 
     this.recvTransport.on('connectionstatechange', (state: any) => {
       console.log(`[WebRTC] Republish Receive Transport ICE State changed to: ${state}`);
-      if (state === 'disconnected') {
+      if (state === 'connected') {
+        this.iceReconnectAttempts = 0;
+      } else if (state === 'disconnected') {
         console.warn('[WebRTC] Republish Receive Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! Forcing republish...');
@@ -2050,7 +2084,11 @@ export class WebRTCClient {
       console.log(`[WebRTC] consume_request_skipped_self_producer for ${kind} (producer: ${producerId})`);
       return;
     }
-    if (!this.device || !this.recvTransport) return;
+    if (!this.device || !this.recvTransport) {
+      console.log(`[WebRTC] Queuing consume request for ${kind} (producer: ${producerId}) until transport is ready`);
+      this.pendingConsumes.push({ producerId, producerParticipantId, producerUserId, userName, kind, appData });
+      return;
+    }
 
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
     console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${producerParticipantId || producerUserId} (Producer ID: ${producerId})...`);
@@ -2115,8 +2153,8 @@ export class WebRTCClient {
     // Pause all existing video consumers locally and on server, EXCEPT screenshares
     for (const [id, consumer] of this.consumers.entries()) {
       if (consumer.kind === 'video' && consumer.appData?.source !== 'screen') {
-        this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
         consumer.pause();
+        this.request('pause_consumer', 'consumer_paused', { consumerId: id }).catch(console.error);
       }
     }
   }
@@ -2136,8 +2174,8 @@ export class WebRTCClient {
   public async pauseRemoteVideoByTrack(trackId: string) {
     const consumer = Array.from(this.consumers.values()).find(c => c.track.id === trackId && c.kind === 'video');
     if (consumer && !consumer.paused && consumer.appData?.source !== 'screen') {
-      await this.request('pause_consumer', 'consumer_paused', { consumerId: consumer.id }).catch(console.error);
       consumer.pause();
+      this.request('pause_consumer', 'consumer_paused', { consumerId: consumer.id }).catch(console.error);
     }
   }
 

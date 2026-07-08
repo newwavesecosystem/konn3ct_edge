@@ -57,7 +57,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo } = useMeeting();
+  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -65,6 +65,10 @@ export function ParticipantTile({
   const [playError, setPlayError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    if (isRecorderMode) {
+      setIsVisible(true);
+      return;
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         setIsVisible(entry.isIntersecting);
@@ -73,7 +77,7 @@ export function ParticipantTile({
     );
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [isRecorderMode]);
 
   const isSelf = participant.id === currentUser.id;
 
@@ -144,7 +148,9 @@ export function ParticipantTile({
             console.log('participant_tile_video_play_rejected');
             if (participant.cameraStats) {
               participant.cameraStats.lastVideoPlayResult = 'error';
-              if (e.name !== 'AbortError') {
+              const isAbort = e.name === 'AbortError' || 
+                              (e.message && e.message.includes('interrupted by a new load request'));
+              if (!isAbort) {
                 console.warn("Video play failed:", e);
                 (el as any)._lastError = e.message || e.name;
                 participant.cameraStats.lastVideoError = e.message || e.name;
@@ -223,7 +229,9 @@ export function ParticipantTile({
   const effectiveVideoState = 
     (currentUser.audioOnlyMode && !isSelf) 
       ? 'audio-only' 
-      : getEffectiveVideoState(participant);
+      : (isRecorderMode && participant.videoTrack)
+          ? 'video-active'
+          : getEffectiveVideoState(participant);
 
   const isCameraEffectivelyOn = effectiveVideoState === 'video-active' && isVisible;
 

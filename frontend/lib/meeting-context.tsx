@@ -25,7 +25,7 @@ import {
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
 
-export const REACTION_DURATION = 8000;
+export const REACTION_DURATION = 30000;
 
 interface MeetingContextValue {
   // State
@@ -167,6 +167,7 @@ interface MeetingContextValue {
 
   // QA Diagnostics
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
+  isRecorderMode: boolean;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -681,11 +682,13 @@ export function MeetingProvider({
 
         client.onRecordingStarted = () => {
           setIsRecording(true);
+          setRecordingStatus('recording');
           toast.info("This meeting is now being recorded.", { icon: "🔴" });
         };
 
         client.onRecordingStopped = () => {
           setIsRecording(false);
+          setRecordingStatus('idle');
           toast.info("Recording has stopped.");
         };
 
@@ -1131,6 +1134,16 @@ export function MeetingProvider({
             if (prev.find(u => u.userId === msg.userId)) return prev;
             return [...prev, { userId: msg.userId, name: msg.name }];
           });
+        };
+
+        client.onWaitingRoomDenied = (msg) => {
+          setWaitingUsers(prev => prev.filter(u => u.userId !== msg.userId));
+          notifiedWaitingUsersRef.current.delete(msg.userId);
+        };
+
+        client.onWaitingRoomDeniedAll = () => {
+          setWaitingUsers([]);
+          notifiedWaitingUsersRef.current.clear();
         };
 
         client.onConnectionStateChange = (state) => {
@@ -2248,6 +2261,7 @@ export function MeetingProvider({
         micError,
         setMicError,
         webrtcClientRef: webrtcClient,
+        isRecorderMode,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
