@@ -14,6 +14,7 @@ import type {
   GridOverflowMode,
   ParticipantRole,
   CaptionMessage,
+  RoomSettings,
 } from "@/lib/types/meeting";
 import {
   mockParticipants,
@@ -147,8 +148,8 @@ interface MeetingContextValue {
   pauseRemoteVideo: (trackId: string) => void;
   resumeRemoteVideo: (trackId: string) => void;
 
-  roomSettings: { micLocked: boolean; videoLocked: boolean; chatLocked: boolean; bypassWaitingRoom?: boolean };
-  updateRoomSettings: (settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean; bypassWaitingRoom?: boolean }) => void;
+  roomSettings: RoomSettings;
+  updateRoomSettings: (settings: Partial<RoomSettings>) => void;
   forceVideoOffUser: (userId?: string) => void;
 
   // Q&A
@@ -394,7 +395,21 @@ export function MeetingProvider({
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
 
-  const [roomSettings, setRoomSettings] = useState({ micLocked: false, videoLocked: false, chatLocked: false });
+  const DEFAULT_NETWORK_DETECTION_CONFIG = {
+    networkDetectionEnabled: true,
+    poorNetworkRttMs: 300,
+    poorNetworkLossPercent: 8,
+    poorNetworkJitterMs: 60,
+    networkWindowSize: 5,
+    networkMonitorIntervalMs: 2000,
+  };
+
+  const [roomSettings, setRoomSettings] = useState<RoomSettings>({ 
+    micLocked: false, 
+    videoLocked: false, 
+    chatLocked: false,
+    ...DEFAULT_NETWORK_DETECTION_CONFIG
+  });
   const [micExempted, setMicExempted] = useState(false);
 
   // Virtual Background
@@ -557,6 +572,14 @@ export function MeetingProvider({
         client = new WebRTCClient(roomSlug, data.token, clientParticipantId, isRecorderMode);
         client.isHDVideo = isHDVideoEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
+        client.networkConfig = {
+          networkDetectionEnabled: roomSettings.networkDetectionEnabled ?? true,
+          poorNetworkRttMs: roomSettings.poorNetworkRttMs ?? 300,
+          poorNetworkLossPercent: roomSettings.poorNetworkLossPercent ?? 8,
+          poorNetworkJitterMs: roomSettings.poorNetworkJitterMs ?? 60,
+          networkWindowSize: roomSettings.networkWindowSize ?? 5,
+          networkMonitorIntervalMs: roomSettings.networkMonitorIntervalMs ?? 2000,
+        };
         
         // Extract room limits from the JWT token and initialize flags
         if (data.token) {
@@ -1223,10 +1246,23 @@ export function MeetingProvider({
                 webrtcClient.current?.sendCameraState(false);
               }
             }
-            return newSettings;
+            
+            // Sync network detection config to WebRTC
+            if (newSettings.networkDetectionEnabled !== undefined && webrtcClient.current) {
+               webrtcClient.current.updateNetworkConfig({
+                 networkDetectionEnabled: newSettings.networkDetectionEnabled,
+                 poorNetworkRttMs: newSettings.poorNetworkRttMs,
+                 poorNetworkLossPercent: newSettings.poorNetworkLossPercent,
+                 poorNetworkJitterMs: newSettings.poorNetworkJitterMs,
+                 networkWindowSize: newSettings.networkWindowSize,
+                 networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
+               });
+            }
+            
+            return { ...prev, ...newSettings };
           });
           if (updatedBy && updatedBy !== currentUser.name) {
-            toast.info(`${updatedBy} updated the room security settings.`);
+            toast.info(`${updatedBy} updated the room settings.`);
           }
         };
 
@@ -2060,7 +2096,7 @@ export function MeetingProvider({
     webrtcClient.current?.sendForceVideoOff(userId);
   }, []);
 
-  const updateRoomSettings = useCallback((settings: { micLocked?: boolean; videoLocked?: boolean; chatLocked?: boolean }) => {
+  const updateRoomSettings = useCallback((settings: Partial<RoomSettings>) => {
     webrtcClient.current?.sendUpdateRoomSettings(settings);
     // Optimistic update
     setRoomSettings(prev => ({ ...prev, ...settings }));

@@ -192,6 +192,12 @@ export interface RoomSettings {
   videoLocked: boolean;
   chatLocked: boolean;
   bypassWaitingRoom: boolean;
+  networkDetectionEnabled?: boolean;
+  poorNetworkRttMs?: number;
+  poorNetworkLossPercent?: number;
+  poorNetworkJitterMs?: number;
+  networkWindowSize?: number;
+  networkMonitorIntervalMs?: number;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
@@ -415,6 +421,21 @@ export function initializeSignaling(server: Server) {
         socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
         socket.destroy();
         return;
+      }
+
+      if (!roomSettingsMap.has(room.id)) {
+        roomSettingsMap.set(room.id, {
+          micLocked: false,
+          videoLocked: false,
+          chatLocked: false,
+          bypassWaitingRoom: false,
+          networkDetectionEnabled: room.networkDetectionEnabled,
+          poorNetworkRttMs: room.poorNetworkRttMs,
+          poorNetworkLossPercent: room.poorNetworkLossPercent,
+          poorNetworkJitterMs: room.poorNetworkJitterMs,
+          networkWindowSize: room.networkWindowSize,
+          networkMonitorIntervalMs: room.networkMonitorIntervalMs,
+        });
       }
 
       // Extract role directly from the JWT token (set by the frontend API)
@@ -1046,9 +1067,50 @@ export function initializeSignaling(server: Server) {
 
       case 'update_room_settings':
         if (client.role === 'host' || client.role === 'co-host') {
-          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false };
-          const newSettings = { ...currentSettings, ...data.settings };
+          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false, bypassWaitingRoom: false };
+          const d = data.settings || {};
+          const newSettings = { ...currentSettings };
+          
+          if (d.micLocked !== undefined) newSettings.micLocked = d.micLocked;
+          if (d.videoLocked !== undefined) newSettings.videoLocked = d.videoLocked;
+          if (d.chatLocked !== undefined) newSettings.chatLocked = d.chatLocked;
+          if (d.bypassWaitingRoom !== undefined) newSettings.bypassWaitingRoom = d.bypassWaitingRoom;
+          
+          if (d.networkDetectionEnabled !== undefined) newSettings.networkDetectionEnabled = d.networkDetectionEnabled;
+          if (d.poorNetworkRttMs !== undefined) {
+             if (d.poorNetworkRttMs >= 100 && d.poorNetworkRttMs <= 3000) newSettings.poorNetworkRttMs = d.poorNetworkRttMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (RTT)");
+          }
+          if (d.poorNetworkLossPercent !== undefined) {
+             if (d.poorNetworkLossPercent >= 1 && d.poorNetworkLossPercent <= 50) newSettings.poorNetworkLossPercent = d.poorNetworkLossPercent;
+             else logger.warn("network_detection_settings_update_rejected_validation (Loss)");
+          }
+          if (d.poorNetworkJitterMs !== undefined) {
+             if (d.poorNetworkJitterMs >= 10 && d.poorNetworkJitterMs <= 1000) newSettings.poorNetworkJitterMs = d.poorNetworkJitterMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Jitter)");
+          }
+          if (d.networkWindowSize !== undefined) {
+             if (d.networkWindowSize >= 3 && d.networkWindowSize <= 20) newSettings.networkWindowSize = d.networkWindowSize;
+             else logger.warn("network_detection_settings_update_rejected_validation (WindowSize)");
+          }
+          if (d.networkMonitorIntervalMs !== undefined) {
+             if (d.networkMonitorIntervalMs >= 1000 && d.networkMonitorIntervalMs <= 10000) newSettings.networkMonitorIntervalMs = d.networkMonitorIntervalMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Interval)");
+          }
+          
           roomSettingsMap.set(roomId, newSettings);
+          
+          db.room.update({
+            where: { id: roomId },
+            data: {
+              networkDetectionEnabled: newSettings.networkDetectionEnabled,
+              poorNetworkRttMs: newSettings.poorNetworkRttMs,
+              poorNetworkLossPercent: newSettings.poorNetworkLossPercent,
+              poorNetworkJitterMs: newSettings.poorNetworkJitterMs,
+              networkWindowSize: newSettings.networkWindowSize,
+              networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
+            }
+          }).catch(e => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
@@ -1076,6 +1138,8 @@ export function initializeSignaling(server: Server) {
               }
             }
           }
+        } else {
+          logger.warn(`network_detection_settings_update_rejected_permission: User ${client.userId} (${client.role}) attempted to update room settings in ${roomId}`);
         }
         break;
 

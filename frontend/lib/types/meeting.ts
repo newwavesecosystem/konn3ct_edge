@@ -153,4 +153,20 @@ export interface DocNote {
   lastEditedAt: string;
 }
 
+export interface NetworkDetectionConfig {
+  networkDetectionEnabled: boolean;
+  poorNetworkRttMs: number;
+  poorNetworkLossPercent: number;
+  poorNetworkJitterMs: number;
+  networkWindowSize: number;
+  networkMonitorIntervalMs: number;
+}
+
+export interface RoomSettings extends Partial<NetworkDetectionConfig> {
+  micLocked?: boolean;
+  videoLocked?: boolean;
+  chatLocked?: boolean;
+  bypassWaitingRoom?: boolean;
+}
+
 export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | "streaming" | "qa" | "security" | null;
