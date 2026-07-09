@@ -137,6 +137,8 @@ interface MeetingContextValue {
   setIsMirrorVideoEnabled: (enabled: boolean) => void;
   isLowBandwidthEnabled: boolean;
   setIsLowBandwidthEnabled: (enabled: boolean) => void;
+  isAudioOnlyModeEnabled: boolean;
+  setIsAudioOnlyModeEnabled: (enabled: boolean) => void;
   isAlwaysMuteOnJoin: boolean;
   setIsAlwaysMuteOnJoin: (enabled: boolean) => void;
   
@@ -393,6 +395,7 @@ export function MeetingProvider({
   const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
+  const [isAudioOnlyModeEnabled, setIsAudioOnlyModeEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
 
   const DEFAULT_NETWORK_DETECTION_CONFIG = {
@@ -423,6 +426,9 @@ export function MeetingProvider({
   // Load preferences from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const vol = localStorage.getItem("mtg_outputVolume");
+      if (vol !== null) setOutputVolume(Number(vol));
+
       const hd = localStorage.getItem("mtg_hdVideo");
       if (hd !== null) setIsHDVideoEnabled(hd === "true");
 
@@ -431,6 +437,9 @@ export function MeetingProvider({
 
       const lowBw = localStorage.getItem("mtg_lowBandwidth");
       if (lowBw !== null) setIsLowBandwidthEnabled(lowBw === "true");
+      
+      const audioOnly = localStorage.getItem("mtg_audioOnlyMode");
+      if (audioOnly !== null) setIsAudioOnlyModeEnabled(audioOnly === "true");
 
       const alwaysMute = localStorage.getItem("mtg_alwaysMute");
       if (alwaysMute !== null) {
@@ -470,21 +479,36 @@ export function MeetingProvider({
     localStorage.setItem("mtg_mirrorVideo", String(val));
   };
 
-  const updateLowBandwidth = (val: boolean) => {
+  const updateLowBandwidth = useCallback((val: boolean) => {
     setIsLowBandwidthEnabled(val);
-    localStorage.setItem("mtg_lowBandwidth", String(val));
-    toast.info(val ? "Low bandwidth mode active. Optimizing feeds..." : "Low bandwidth mode disabled.");
-
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mtg_lowBandwidth", String(val));
+    }
     if (webrtcClient.current && webrtcClient.current.isLowBandwidth !== val) {
       webrtcClient.current.isLowBandwidth = val;
-      if (isCameraOn) {
-        webrtcClient.current.enableCamera().then(track => {
-          localCameraTrackRef.current = track;
-          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: track } : p));
-        });
+    }
+  }, []);
+
+  const updateAudioOnlyMode = useCallback((val: boolean) => {
+    setIsAudioOnlyModeEnabled(val);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mtg_audioOnlyMode", String(val));
+    }
+    if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode !== val) {
+      if (val) {
+        webrtcClient.current.isAudioOnlyMode = true;
+        webrtcClient.current.disableCamera();
+        localCameraTrackRef.current = null;
+        webrtcClient.current.sendCameraState(false, true, 'network');
+        setIsCameraOn(false);
+        setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: undefined, videoTrack: undefined } : p));
+      } else {
+        webrtcClient.current.disableAudioOnlyMode();
+        webrtcClient.current.sendCameraState(false, false);
+        setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false } : p));
       }
     }
-  };
+  }, [currentUser.id]);
 
   const updateAlwaysMute = (val: boolean) => {
     setIsAlwaysMuteOnJoin(val);
@@ -654,32 +678,26 @@ export function MeetingProvider({
               } catch(e) {}
             }
 
-            if (webrtcClient.current && !webrtcClient.current.isAudioOnlyMode) {
+            if (webrtcClient.current && !webrtcClient.current.isLowBandwidth) {
               if (canToast) {
-                toast.error("Network is extremely poor. Switching to Audio-Only mode to save bandwidth.", { duration: 6000 });
+                toast.error("Network is extremely poor. Enabling Low Bandwidth mode to save bandwidth.", { duration: 6000 });
                 lastNetworkToastTime = now;
               }
-              webrtcClient.current.isAudioOnlyMode = true; // Set local WebRTC flag synchronously before React update
-              webrtcClient.current.disableCamera(); // Pause producer cleanly
-              localCameraTrackRef.current = null; // Clear stale track
-              webrtcClient.current.sendCameraState(false, true, 'network');
-              setIsCameraOn(false);
-              setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, isCameraOn: false, audioOnlyMode: true, videoSuspendedReason: 'network', videoTrack: undefined } : p));
+              webrtcClient.current.isLowBandwidth = true;
+              setIsLowBandwidthEnabled(true);
             }
           } else if (quality === 'unstable_network') {
             if (canToast) {
               lastNetworkToastTime = now;
             }
           } else if (quality === 'good') {
-            if (webrtcClient.current && webrtcClient.current.isAudioOnlyMode) {
+            if (webrtcClient.current && webrtcClient.current.isLowBandwidth) {
               if (canToast) {
-                toast.success("Network connection stabilized. Resuming incoming video streams.", { duration: 5000 });
+                toast.success("Network connection stabilized. Disabling Low Bandwidth mode.", { duration: 5000 });
                 lastNetworkToastTime = now;
               }
-              webrtcClient.current.disableAudioOnlyMode();
-              // We only clear audioOnlyMode locally. We do not automatically turn the camera back ON unless the user does it.
-              webrtcClient.current.sendCameraState(false, false);
-              setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+              webrtcClient.current.isLowBandwidth = false;
+              setIsLowBandwidthEnabled(false);
             }
           }
           
@@ -2256,6 +2274,8 @@ export function MeetingProvider({
         setIsMirrorVideoEnabled: updateMirrorVideo,
         isLowBandwidthEnabled,
         setIsLowBandwidthEnabled: updateLowBandwidth,
+        isAudioOnlyModeEnabled,
+        setIsAudioOnlyModeEnabled: updateAudioOnlyMode,
         isAlwaysMuteOnJoin,
         setIsAlwaysMuteOnJoin: updateAlwaysMute,
         

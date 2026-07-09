@@ -38,6 +38,8 @@ export function SettingsPanel() {
     setIsMirrorVideoEnabled,
     isLowBandwidthEnabled,
     setIsLowBandwidthEnabled,
+    isAudioOnlyModeEnabled,
+    setIsAudioOnlyModeEnabled,
     isAlwaysMuteOnJoin,
     setIsAlwaysMuteOnJoin,
     vbMode,
@@ -277,6 +279,11 @@ export function SettingsPanel() {
             label="Low bandwidth mode" 
             checked={isLowBandwidthEnabled} 
             onChange={setIsLowBandwidthEnabled}
+          />
+          <SettingsToggle 
+            label="Audio-only mode" 
+            checked={isAudioOnlyModeEnabled} 
+            onChange={setIsAudioOnlyModeEnabled}
           />
           <SettingsToggle 
             label="Always mute on join" 
