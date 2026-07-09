@@ -87,9 +87,12 @@ export function ParticipantTile({
       console.log('participant_tile_video_recovered');
       videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
       videoRef.current.play().catch(e => {
-        console.warn("Play failed on recover:", e);
-        console.log('participant_tile_video_play_rejected');
-        setPlayError(e.message || e.name);
+        const isAbort = e.name === 'AbortError' || (e.message && e.message.includes('interrupted by a new load request'));
+        if (!isAbort) {
+          console.warn("Play failed on recover:", e);
+          console.log('participant_tile_video_play_rejected');
+          setPlayError(e.message || e.name);
+        }
       });
     }
   }, [participant.videoTrack]);
