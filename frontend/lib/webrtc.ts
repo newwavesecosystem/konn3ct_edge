@@ -981,7 +981,7 @@ export class WebRTCClient {
   private startNetworkMonitor() {
     if (this.networkInterval) clearInterval(this.networkInterval);
     
-    const WINDOW_SIZE = 5;
+    const WINDOW_SIZE = Number(process.env.NEXT_PUBLIC_NETWORK_WINDOW_SIZE) || 5;
     const history: Array<{
       rtt: number;
       packetLoss: number;
@@ -1183,7 +1183,7 @@ export class WebRTCClient {
 
       } catch (e) {
       }
-    }, 2000);
+    }, Number(process.env.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL) || 2000);
   }
   
   private broadcastNetworkLabelChange(label: NetworkQualityLabel) {
