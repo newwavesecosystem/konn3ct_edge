@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -192,6 +192,12 @@ export interface RoomSettings {
   videoLocked: boolean;
   chatLocked: boolean;
   bypassWaitingRoom: boolean;
+  networkDetectionEnabled?: boolean;
+  poorNetworkRttMs?: number;
+  poorNetworkLossPercent?: number;
+  poorNetworkJitterMs?: number;
+  networkWindowSize?: number;
+  networkMonitorIntervalMs?: number;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
@@ -417,6 +423,21 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
+      if (!roomSettingsMap.has(room.id)) {
+        roomSettingsMap.set(room.id, {
+          micLocked: false,
+          videoLocked: false,
+          chatLocked: false,
+          bypassWaitingRoom: false,
+          networkDetectionEnabled: room.networkDetectionEnabled,
+          poorNetworkRttMs: room.poorNetworkRttMs,
+          poorNetworkLossPercent: room.poorNetworkLossPercent,
+          poorNetworkJitterMs: room.poorNetworkJitterMs,
+          networkWindowSize: room.networkWindowSize,
+          networkMonitorIntervalMs: room.networkMonitorIntervalMs,
+        });
+      }
+
       // Extract role directly from the JWT token (set by the frontend API)
       let role = decoded.role || 'audience';
       if (room.ownerId === decoded.userId) {
@@ -446,18 +467,6 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      const currentParticipants = rooms.get(room.id)?.size || 0;
-      const maxParticipants = room.maxParticipants ?? 100;
-      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
-      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
-
-      // Allow hosts and bots to bypass capacity
-      if (role !== 'host' && role !== 'bot' && currentParticipants >= limit) {
-        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-
       // Guardrails: Validate participantId
       if (!participantIdParam || participantIdParam === 'ssr-placeholder' || participantIdParam === 'pending' || participantIdParam.trim() === '') {
         logger.warn(`Rejecting connection due to invalid participantId: ${participantIdParam}`);
@@ -466,8 +475,21 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Guardrails: Check for duplicate active connections using the same participantId
+      // Guardrails: Check if this user is already in the room (e.g. reconnecting within 15s grace period)
       const existingClient = rooms.get(room.id)?.get(participantIdParam);
+
+      const currentParticipants = rooms.get(room.id)?.size || 0;
+      const maxParticipants = room.maxParticipants ?? 100;
+      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
+      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
+
+      // Allow hosts, bots, and already-connected users (reconnecting) to bypass capacity limits
+      if (role !== 'host' && role !== 'bot' && !existingClient && currentParticipants >= limit) {
+        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
       if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
         logger.info(`Preempting old connection for participantId: ${participantIdParam}`);
         existingClient.preempted = true;
@@ -721,6 +743,7 @@ export function initializeSignaling(server: Server) {
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
+            closeRouter(roomId); // Prevent Mediasoup Router memory leaks
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
@@ -1044,9 +1067,50 @@ export function initializeSignaling(server: Server) {
 
       case 'update_room_settings':
         if (client.role === 'host' || client.role === 'co-host') {
-          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false };
-          const newSettings = { ...currentSettings, ...data.settings };
+          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false, bypassWaitingRoom: false };
+          const d = data.settings || {};
+          const newSettings = { ...currentSettings };
+          
+          if (d.micLocked !== undefined) newSettings.micLocked = d.micLocked;
+          if (d.videoLocked !== undefined) newSettings.videoLocked = d.videoLocked;
+          if (d.chatLocked !== undefined) newSettings.chatLocked = d.chatLocked;
+          if (d.bypassWaitingRoom !== undefined) newSettings.bypassWaitingRoom = d.bypassWaitingRoom;
+          
+          if (d.networkDetectionEnabled !== undefined) newSettings.networkDetectionEnabled = d.networkDetectionEnabled;
+          if (d.poorNetworkRttMs !== undefined) {
+             if (d.poorNetworkRttMs >= 100 && d.poorNetworkRttMs <= 3000) newSettings.poorNetworkRttMs = d.poorNetworkRttMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (RTT)");
+          }
+          if (d.poorNetworkLossPercent !== undefined) {
+             if (d.poorNetworkLossPercent >= 1 && d.poorNetworkLossPercent <= 50) newSettings.poorNetworkLossPercent = d.poorNetworkLossPercent;
+             else logger.warn("network_detection_settings_update_rejected_validation (Loss)");
+          }
+          if (d.poorNetworkJitterMs !== undefined) {
+             if (d.poorNetworkJitterMs >= 10 && d.poorNetworkJitterMs <= 1000) newSettings.poorNetworkJitterMs = d.poorNetworkJitterMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Jitter)");
+          }
+          if (d.networkWindowSize !== undefined) {
+             if (d.networkWindowSize >= 3 && d.networkWindowSize <= 20) newSettings.networkWindowSize = d.networkWindowSize;
+             else logger.warn("network_detection_settings_update_rejected_validation (WindowSize)");
+          }
+          if (d.networkMonitorIntervalMs !== undefined) {
+             if (d.networkMonitorIntervalMs >= 1000 && d.networkMonitorIntervalMs <= 10000) newSettings.networkMonitorIntervalMs = d.networkMonitorIntervalMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Interval)");
+          }
+          
           roomSettingsMap.set(roomId, newSettings);
+          
+          db.room.update({
+            where: { id: roomId },
+            data: {
+              networkDetectionEnabled: newSettings.networkDetectionEnabled,
+              poorNetworkRttMs: newSettings.poorNetworkRttMs,
+              poorNetworkLossPercent: newSettings.poorNetworkLossPercent,
+              poorNetworkJitterMs: newSettings.poorNetworkJitterMs,
+              networkWindowSize: newSettings.networkWindowSize,
+              networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
+            }
+          }).catch(e => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
@@ -1074,6 +1138,8 @@ export function initializeSignaling(server: Server) {
               }
             }
           }
+        } else {
+          logger.warn(`network_detection_settings_update_rejected_permission: User ${client.userId} (${client.role}) attempted to update room settings in ${roomId}`);
         }
         break;
 
@@ -1197,21 +1263,22 @@ export function initializeSignaling(server: Server) {
 
           asyncWithRetry(
             async () => {
+              const dbFormatMessage = {
+                id: serverEventId,
+                roomId,
+                userId,
+                senderName: client.name,
+                content: data.message,
+                fileUrl: data.fileUrl || null,
+                isPrivate: !!data.targetUserId,
+                targetUserId: data.targetUserId || null,
+                createdAt
+              };
               await db.chatMessage.create({
-                data: {
-                  id: serverEventId,
-                  roomId,
-                  userId,
-                  senderName: client.name,
-                  content: data.message,
-                  fileUrl: data.fileUrl || null,
-                  isPrivate: !!data.targetUserId,
-                  targetUserId: data.targetUserId || null,
-                  createdAt
-                }
+                data: dbFormatMessage
               });
               // Write-through to cache after successful DB persist (Option A)
-              await appendChatToCache(roomId, msgPayload);
+              await appendChatToCache(roomId, dbFormatMessage);
             },
             (err) => {
               logger.error("Failed to persist chat message after retries", err);

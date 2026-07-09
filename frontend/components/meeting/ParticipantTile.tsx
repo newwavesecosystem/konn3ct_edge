@@ -87,9 +87,12 @@ export function ParticipantTile({
       console.log('participant_tile_video_recovered');
       videoRef.current.srcObject = new MediaStream([participant.videoTrack]);
       videoRef.current.play().catch(e => {
-        console.warn("Play failed on recover:", e);
-        console.log('participant_tile_video_play_rejected');
-        setPlayError(e.message || e.name);
+        const isAbort = e.name === 'AbortError' || (e.message && e.message.includes('interrupted by a new load request'));
+        if (!isAbort) {
+          console.warn("Play failed on recover:", e);
+          console.log('participant_tile_video_play_rejected');
+          setPlayError(e.message || e.name);
+        }
       });
     }
   }, [participant.videoTrack]);
@@ -136,6 +139,11 @@ export function ParticipantTile({
           if (!el) return;
           participant.cameraStats = participant.cameraStats || {};
           participant.cameraStats.lastVideoPlayAttemptAt = new Date().toISOString();
+          
+          // Force DOM properties to prevent browser autoplay blocking
+          // React sometimes fails to apply the 'muted' attribute in time for play()
+          el.muted = true;
+          el.playsInline = true;
           
           el.play().then(() => {
              console.log('participant_tile_video_play_started');
@@ -215,6 +223,8 @@ export function ParticipantTile({
             if (stream.getVideoTracks()[0] === participant.screenTrack) return;
           }
           el.srcObject = new MediaStream([participant.screenTrack]);
+          el.muted = true;
+          el.playsInline = true;
           el.play().catch((e) => {
             if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
           });

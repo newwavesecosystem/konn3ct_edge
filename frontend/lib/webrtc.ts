@@ -2,6 +2,7 @@ import type { Device } from 'mediasoup-client';
 // @ts-ignore
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
+import { NetworkDetectionConfig } from './types/meeting';
 
 
 export type NetworkQualityLabel = 'good' | 'unstable_network' | 'poor_network' | 'reconnecting' | 'connecting_to_media_server' | 'device_performance_issue' | 'remote_receiver_issue' | 'screen_share_performance_issue';
@@ -133,7 +134,7 @@ export class WebRTCClient {
   public onServerReject?: (msg: string) => void;
   public onWaitingRoomDenied?: (msg: any) => void;
   public onWaitingRoomDeniedAll?: () => void;
-  public onRoomSettingsUpdated?: (settings: { micLocked: boolean, videoLocked: boolean, chatLocked: boolean, bypassWaitingRoom: boolean }, updatedBy?: string) => void;
+  public onRoomSettingsUpdated?: (settings: any, updatedBy?: string) => void;
   public onQAHistory?: (messages: any[]) => void;
   public onQAUpdated?: (msg: any) => void;
   public onECinemaUpdate?: (link: string | null) => void;
@@ -159,7 +160,18 @@ export class WebRTCClient {
   public onNetworkQualityChange?: (quality: NetworkQualityLabel) => void;
   public onNetworkDebugSnapshot?: (snapshot: NetworkDebugSnapshot) => void;
   private networkInterval?: NodeJS.Timeout;
-  public isAudioOnlyMode = false;
+  
+  // Audio-only toggle mode
+  public isAudioOnlyMode: boolean = false;
+  
+  public networkConfig: NetworkDetectionConfig = {
+    networkDetectionEnabled: true,
+    poorNetworkRttMs: 300,
+    poorNetworkLossPercent: 8,
+    poorNetworkJitterMs: 60,
+    networkWindowSize: 5,
+    networkMonitorIntervalMs: 2000,
+  };
 
   // Settings
   public isHDVideo: boolean = true;
@@ -978,10 +990,61 @@ export class WebRTCClient {
     this.startNetworkMonitor();
   }
 
+  public stopNetworkMonitor() {
+    if (this.networkInterval) {
+      clearInterval(this.networkInterval);
+      this.networkInterval = undefined;
+    }
+    // Clear states
+    (this as any).pendingCandidate = undefined;
+    (this as any).pendingStreak = 0;
+    console.log('[WebRTC] network_monitor_stopped');
+    console.log('[WebRTC] network_quality_state_cleared');
+    this.broadcastNetworkLabelChange('good');
+  }
+
+  public updateNetworkConfig(newConfig: NetworkDetectionConfig) {
+    const oldConfig = this.networkConfig;
+    this.networkConfig = { ...newConfig };
+    console.log('[WebRTC] network_detection_config_updated', this.networkConfig);
+
+    if (!this.networkConfig.networkDetectionEnabled) {
+      if (oldConfig.networkDetectionEnabled) {
+        console.log('[WebRTC] network_detection_disabled');
+        this.stopNetworkMonitor();
+      }
+      return;
+    }
+
+    if (!oldConfig.networkDetectionEnabled) {
+      console.log('[WebRTC] network_detection_enabled');
+    }
+
+    // Restart if intervals or window changed, or if it was just enabled
+    if (
+      !oldConfig.networkDetectionEnabled ||
+      oldConfig.networkMonitorIntervalMs !== this.networkConfig.networkMonitorIntervalMs ||
+      oldConfig.networkWindowSize !== this.networkConfig.networkWindowSize ||
+      oldConfig.poorNetworkRttMs !== this.networkConfig.poorNetworkRttMs ||
+      oldConfig.poorNetworkLossPercent !== this.networkConfig.poorNetworkLossPercent ||
+      oldConfig.poorNetworkJitterMs !== this.networkConfig.poorNetworkJitterMs
+    ) {
+      console.log('[WebRTC] network_monitor_restarted_with_new_config', this.networkConfig);
+      this.startNetworkMonitor();
+    }
+  }
+
   private startNetworkMonitor() {
-    if (this.networkInterval) clearInterval(this.networkInterval);
+    this.stopNetworkMonitor();
     
-    const WINDOW_SIZE = 5;
+    if (!this.networkConfig.networkDetectionEnabled) {
+      console.log('[WebRTC] Network detection is disabled, skipping startNetworkMonitor.');
+      return;
+    }
+    
+    console.log('[WebRTC] network_monitor_started', this.networkConfig);
+
+    const WINDOW_SIZE = this.networkConfig.networkWindowSize;
     const history: Array<{
       rtt: number;
       packetLoss: number;
@@ -1104,10 +1167,19 @@ export class WebRTCClient {
           candidateLabel = 'device_performance_issue';
           diag = 'device';
         } else {
-          if (avgRtt > 300 || avgLoss > 8 || avgJitter > 60) {
+          const POOR_RTT = this.networkConfig.poorNetworkRttMs;
+          const POOR_LOSS = this.networkConfig.poorNetworkLossPercent;
+          const POOR_JITTER = this.networkConfig.poorNetworkJitterMs;
+
+          // For unstable, we use slightly lower thresholds based on the poor thresholds
+          const UNSTABLE_RTT = Math.max(100, Math.floor(POOR_RTT * 0.7));
+          const UNSTABLE_LOSS = Math.max(1, Math.floor(POOR_LOSS * 0.5));
+          const UNSTABLE_JITTER = Math.max(20, Math.floor(POOR_JITTER * 0.6));
+
+          if (avgRtt > POOR_RTT || avgLoss > POOR_LOSS || avgJitter > POOR_JITTER) {
             candidateLabel = 'poor_network';
             diag = 'local_outbound';
-          } else if (avgRtt >= 150 || avgLoss >= 2 || avgJitter >= 30) {
+          } else if (avgRtt >= UNSTABLE_RTT || avgLoss >= UNSTABLE_LOSS || avgJitter >= UNSTABLE_JITTER) {
             candidateLabel = 'unstable_network';
             diag = 'local_outbound';
           }
@@ -1175,7 +1247,7 @@ export class WebRTCClient {
 
       } catch (e) {
       }
-    }, 2000);
+    }, this.networkConfig.networkMonitorIntervalMs);
   }
   
   private broadcastNetworkLabelChange(label: NetworkQualityLabel) {
@@ -1956,7 +2028,23 @@ export class WebRTCClient {
            const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
            newTrack = processedStream.getVideoTracks()[0];
         }
-        this.localVideoProducer = await this.sendTransport.produce({ track: newTrack, appData: { source: 'camera' } });
+        const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
+        const encodings = this.isLowBandwidth 
+          ? [{ maxBitrate: 150000 }] 
+          : isMobileDevice
+            ? [{ maxBitrate: 600000, maxFramerate: 30 }]
+            : [
+                { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
+                { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
+                { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
+              ];
+          
+        this.localVideoProducer = await this.sendTransport.produce({ 
+          track: newTrack, 
+          appData: { source: 'camera' },
+          encodings,
+          codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
+        });
         this.cameraSwitchInProgress = false;
       }
     }

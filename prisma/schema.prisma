@@ -87,6 +87,13 @@ model Room {
   captionsEnabled Boolean @default(true)
   donationsEnabled Boolean @default(true)
   virtualBackgroundEnabled Boolean @default(true)
+  networkDetectionEnabled Boolean @default(true)
+  poorNetworkRttMs Int @default(300)
+  poorNetworkLossPercent Float @default(8.0)
+  poorNetworkJitterMs Int @default(60)
+  networkWindowSize Int @default(5)
+  networkMonitorIntervalMs Int @default(2000)
+
   createdAt DateTime @default(now())
 
   owner User @relation("RoomOwner", fields: [ownerId], references: [id])
