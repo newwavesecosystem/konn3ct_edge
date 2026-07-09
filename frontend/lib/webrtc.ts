@@ -2028,7 +2028,23 @@ export class WebRTCClient {
            const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
            newTrack = processedStream.getVideoTracks()[0];
         }
-        this.localVideoProducer = await this.sendTransport.produce({ track: newTrack, appData: { source: 'camera' } });
+        const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
+        const encodings = this.isLowBandwidth 
+          ? [{ maxBitrate: 150000 }] 
+          : isMobileDevice
+            ? [{ maxBitrate: 600000, maxFramerate: 30 }]
+            : [
+                { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 },
+                { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 },
+                { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
+              ];
+          
+        this.localVideoProducer = await this.sendTransport.produce({ 
+          track: newTrack, 
+          appData: { source: 'camera' },
+          encodings,
+          codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
+        });
         this.cameraSwitchInProgress = false;
       }
     }

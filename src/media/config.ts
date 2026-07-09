@@ -66,7 +66,7 @@ export const config = {
           announcedIp: process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1' // Update this in prod
         }
       ],
-      maxIncomingBitrate: 1500000,
+      maxIncomingBitrate: 5000000,
       initialAvailableOutgoingBitrate: 1000000
     }
   }
