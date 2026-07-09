@@ -4,13 +4,14 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
+import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache } from './historyCache';
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
@@ -20,7 +21,7 @@ if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
 }
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl, {
+export const redis = new Redis(redisUrl, {
   retryStrategy: (times) => {
     if (process.env.NODE_ENV !== 'production') return null;
     return Math.min(times * 50, 2000);
@@ -141,7 +142,6 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
-const reactionRateLimits = new Map<string, number[]>();
 
 async function asyncWithRetry<T>(
   operation: () => Promise<T>,
@@ -192,47 +192,45 @@ export interface RoomSettings {
   videoLocked: boolean;
   chatLocked: boolean;
   bypassWaitingRoom: boolean;
+  networkDetectionEnabled?: boolean;
+  poorNetworkRttMs?: number;
+  poorNetworkLossPercent?: number;
+  poorNetworkJitterMs?: number;
+  networkWindowSize?: number;
+  networkMonitorIntervalMs?: number;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
 export async function sendRoomHistoryAndState(client: Client) {
-  const { ws, roomId, roomCreatedDate } = client;
+  const { ws, roomId, roomCreatedDate, participantId, userId } = client;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   try {
     const activeParticipants = getActiveRoomParticipants(roomId);
     ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
-    const chatHistory = await db.chatMessage.findMany({
-      where: { roomId: roomId, createdAt: { gte: roomCreatedDate } },
-      orderBy: { createdAt: 'asc' },
-      take: 50,
-    });
-
-    ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+    const history = await getOrLoadRoomHistory(roomId, roomCreatedDate, participantId, userId);
+    
+    if (ws.readyState === WebSocket.OPEN && history) {
+      // Filter chat history for private messages intended for this user
+      const filteredChatHistory = history.chatHistory.filter((msg: any) => {
+        return !msg.isPrivate || msg.targetUserId === participantId || msg.userId === userId;
+      });
+      
+      ws.send(JSON.stringify({ type: 'chat_history', messages: filteredChatHistory }));
+      ws.send(JSON.stringify({ type: 'poll_history', polls: history.pollHistory }));
+      ws.send(JSON.stringify({ type: 'qa_history', messages: history.qaHistory }));
+      if (history.noteHistory) {
+        ws.send(JSON.stringify({ type: 'note_history', content: history.noteHistory.content }));
+      }
+    }
 
     const settings = roomSettingsMap.get(roomId);
-    if (settings) {
+    if (settings && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
     }
-    const pollHistory = await db.meetingPoll.findMany({
-      where: { roomId, isActive: true },
-      orderBy: { createdAt: 'asc' }
-    });
-    const noteHistory = await db.sharedNote.findUnique({
-      where: { roomId }
-    });
-    const qaHistory = await db.meetingQA.findMany({
-      where: { roomId },
-      orderBy: { upvotes: 'desc' }
-    });
 
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-      ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
-      if (noteHistory) {
-        ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
-      }
       const eCinemaLink = roomECinema.get(roomId);
       if (eCinemaLink) {
         ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
@@ -425,6 +423,21 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
+      if (!roomSettingsMap.has(room.id)) {
+        roomSettingsMap.set(room.id, {
+          micLocked: false,
+          videoLocked: false,
+          chatLocked: false,
+          bypassWaitingRoom: false,
+          networkDetectionEnabled: room.networkDetectionEnabled,
+          poorNetworkRttMs: room.poorNetworkRttMs,
+          poorNetworkLossPercent: room.poorNetworkLossPercent,
+          poorNetworkJitterMs: room.poorNetworkJitterMs,
+          networkWindowSize: room.networkWindowSize,
+          networkMonitorIntervalMs: room.networkMonitorIntervalMs,
+        });
+      }
+
       // Extract role directly from the JWT token (set by the frontend API)
       let role = decoded.role || 'audience';
       if (room.ownerId === decoded.userId) {
@@ -454,18 +467,6 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      const currentParticipants = rooms.get(room.id)?.size || 0;
-      const maxParticipants = room.maxParticipants ?? 100;
-      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
-      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
-
-      // Allow hosts and bots to bypass capacity
-      if (role !== 'host' && role !== 'bot' && currentParticipants >= limit) {
-        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-
       // Guardrails: Validate participantId
       if (!participantIdParam || participantIdParam === 'ssr-placeholder' || participantIdParam === 'pending' || participantIdParam.trim() === '') {
         logger.warn(`Rejecting connection due to invalid participantId: ${participantIdParam}`);
@@ -474,8 +475,21 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Guardrails: Check for duplicate active connections using the same participantId
+      // Guardrails: Check if this user is already in the room (e.g. reconnecting within 15s grace period)
       const existingClient = rooms.get(room.id)?.get(participantIdParam);
+
+      const currentParticipants = rooms.get(room.id)?.size || 0;
+      const maxParticipants = room.maxParticipants ?? 100;
+      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
+      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
+
+      // Allow hosts, bots, and already-connected users (reconnecting) to bypass capacity limits
+      if (role !== 'host' && role !== 'bot' && !existingClient && currentParticipants >= limit) {
+        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
       if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
         logger.info(`Preempting old connection for participantId: ${participantIdParam}`);
         existingClient.preempted = true;
@@ -707,6 +721,13 @@ export function initializeSignaling(server: Server) {
       });
       client.transports = [];
 
+      // Clean up consumer owners to prevent invalid ownership spam
+      for (const [consumerId, owner] of consumerOwners.entries()) {
+        if (owner === client) {
+          consumerOwners.delete(consumerId);
+        }
+      }
+
       const gracePeriodMs = 30000;
       const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
@@ -722,6 +743,7 @@ export function initializeSignaling(server: Server) {
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
+            closeRouter(roomId); // Prevent Mediasoup Router memory leaks
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
@@ -753,7 +775,7 @@ export function initializeSignaling(server: Server) {
     actionType: string;
     roomId: string;
     senderParticipantId: string;
-    status: 'accepted' | 'failed' | 'REACTION_RATE_LIMITED';
+    status: 'accepted' | 'failed';
     acceptedAt?: string;
     failedAt?: string;
     errorCode?: string;
@@ -815,7 +837,7 @@ export function initializeSignaling(server: Server) {
     clientEventId: string,
     actionType: string,
     serverEventId: string,
-    status: 'accepted' | 'failed' | 'REACTION_RATE_LIMITED' = 'accepted',
+    status: 'accepted' | 'failed' = 'accepted',
     errorCode?: string,
     message?: string
   ) {
@@ -1045,9 +1067,50 @@ export function initializeSignaling(server: Server) {
 
       case 'update_room_settings':
         if (client.role === 'host' || client.role === 'co-host') {
-          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false };
-          const newSettings = { ...currentSettings, ...data.settings };
+          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false, bypassWaitingRoom: false };
+          const d = data.settings || {};
+          const newSettings = { ...currentSettings };
+          
+          if (d.micLocked !== undefined) newSettings.micLocked = d.micLocked;
+          if (d.videoLocked !== undefined) newSettings.videoLocked = d.videoLocked;
+          if (d.chatLocked !== undefined) newSettings.chatLocked = d.chatLocked;
+          if (d.bypassWaitingRoom !== undefined) newSettings.bypassWaitingRoom = d.bypassWaitingRoom;
+          
+          if (d.networkDetectionEnabled !== undefined) newSettings.networkDetectionEnabled = d.networkDetectionEnabled;
+          if (d.poorNetworkRttMs !== undefined) {
+             if (d.poorNetworkRttMs >= 100 && d.poorNetworkRttMs <= 3000) newSettings.poorNetworkRttMs = d.poorNetworkRttMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (RTT)");
+          }
+          if (d.poorNetworkLossPercent !== undefined) {
+             if (d.poorNetworkLossPercent >= 1 && d.poorNetworkLossPercent <= 50) newSettings.poorNetworkLossPercent = d.poorNetworkLossPercent;
+             else logger.warn("network_detection_settings_update_rejected_validation (Loss)");
+          }
+          if (d.poorNetworkJitterMs !== undefined) {
+             if (d.poorNetworkJitterMs >= 10 && d.poorNetworkJitterMs <= 1000) newSettings.poorNetworkJitterMs = d.poorNetworkJitterMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Jitter)");
+          }
+          if (d.networkWindowSize !== undefined) {
+             if (d.networkWindowSize >= 3 && d.networkWindowSize <= 20) newSettings.networkWindowSize = d.networkWindowSize;
+             else logger.warn("network_detection_settings_update_rejected_validation (WindowSize)");
+          }
+          if (d.networkMonitorIntervalMs !== undefined) {
+             if (d.networkMonitorIntervalMs >= 1000 && d.networkMonitorIntervalMs <= 10000) newSettings.networkMonitorIntervalMs = d.networkMonitorIntervalMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Interval)");
+          }
+          
           roomSettingsMap.set(roomId, newSettings);
+          
+          db.room.update({
+            where: { id: roomId },
+            data: {
+              networkDetectionEnabled: newSettings.networkDetectionEnabled,
+              poorNetworkRttMs: newSettings.poorNetworkRttMs,
+              poorNetworkLossPercent: newSettings.poorNetworkLossPercent,
+              poorNetworkJitterMs: newSettings.poorNetworkJitterMs,
+              networkWindowSize: newSettings.networkWindowSize,
+              networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
+            }
+          }).catch(e => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
@@ -1075,6 +1138,8 @@ export function initializeSignaling(server: Server) {
               }
             }
           }
+        } else {
+          logger.warn(`network_detection_settings_update_rejected_permission: User ${client.userId} (${client.role}) attempted to update room settings in ${roomId}`);
         }
         break;
 
@@ -1198,19 +1263,22 @@ export function initializeSignaling(server: Server) {
 
           asyncWithRetry(
             async () => {
+              const dbFormatMessage = {
+                id: serverEventId,
+                roomId,
+                userId,
+                senderName: client.name,
+                content: data.message,
+                fileUrl: data.fileUrl || null,
+                isPrivate: !!data.targetUserId,
+                targetUserId: data.targetUserId || null,
+                createdAt
+              };
               await db.chatMessage.create({
-                data: {
-                  id: serverEventId,
-                  roomId,
-                  userId,
-                  senderName: client.name,
-                  content: data.message,
-                  fileUrl: data.fileUrl || null,
-                  isPrivate: !!data.targetUserId,
-                  targetUserId: data.targetUserId || null,
-                  createdAt
-                }
+                data: dbFormatMessage
               });
+              // Write-through to cache after successful DB persist (Option A)
+              await appendChatToCache(roomId, dbFormatMessage);
             },
             (err) => {
               logger.error("Failed to persist chat message after retries", err);
@@ -1243,51 +1311,36 @@ export function initializeSignaling(server: Server) {
         break;
       }
 
-      case 'reaction': {
-        const now = Date.now();
-        const timestamps = reactionRateLimits.get(client.participantId) || [];
-        // Clean up old timestamps (older than 5 seconds)
-        const recentTimestamps = timestamps.filter(t => now - t < 5000);
-        
-        // Rate limit: max 1 per second
-        const lastReactionTime = recentTimestamps.length > 0 ? recentTimestamps[recentTimestamps.length - 1] : 0;
-        if (now - lastReactionTime < 1000) {
-          if (clientEventId) emitActionAck(client, clientEventId, 'reaction', '', 'REACTION_RATE_LIMITED');
-          logger.warn(`reaction_rate_limited for ${client.participantId} (1 per sec)`);
-          break;
-        }
-
-        // Rate limit: max 3 per 5 seconds
-        if (recentTimestamps.length >= 3) {
-          if (clientEventId) emitActionAck(client, clientEventId, 'reaction', '', 'REACTION_RATE_LIMITED');
-          logger.warn(`reaction_rate_limited for ${client.participantId} (burst 3 per 5 sec)`);
-          break;
-        }
-
-        recentTimestamps.push(now);
-        reactionRateLimits.set(client.participantId, recentTimestamps);
-
-        const serverEventId = crypto.randomUUID();
-        const payload = {
-          type: 'reaction',
-          actionType: 'reaction',
-          roomId,
-          reaction: data.reaction,
-          senderName: client.name,
-          senderUserId: userId,
-          senderParticipantId: client.participantId,
-          clientEventId: clientEventId || '',
-          serverEventId,
-          broadcastAt: new Date(now).toISOString()
-        };
-
+      case 'reaction':
         if (clientEventId) {
+          const serverEventId = crypto.randomUUID();
           emitActionAck(client, clientEventId, 'reaction', serverEventId, 'accepted');
+          // Exclude the sender — they already show the reaction locally via sendReaction()
+          broadcastToRoom(roomId, {
+            type: 'reaction',
+            actionType: 'reaction',
+            clientEventId,
+            serverEventId,
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            name: client.name, // Always include name so clients don't need to look it up
+            reaction: data.reaction,
+            broadcastAt: new Date().toISOString()
+          }, client.participantId); // <-- userId as excludeUserId prevents the double-animation
+        } else {
+          broadcastToRoom(roomId, {
+            type: 'reaction',
+            actionType: 'reaction',
+            roomId,
+            userId,
+            senderParticipantId: userId,
+            name: client.name,
+            reaction: data.reaction,
+            broadcastAt: new Date().toISOString()
+          }, client.participantId);
         }
-
-        broadcastToRoom(roomId, payload, client.participantId);
         break;
-      }
 
       case 'network_quality':
         broadcastToRoom(roomId, {
@@ -1363,6 +1416,7 @@ export function initializeSignaling(server: Server) {
             create: { roomId, content: data.content },
             update: { content: data.content }
           });
+          await refreshNoteCache(roomId, data.content);
           broadcastToRoom(roomId, {
             type: 'note_update',
             userId,
@@ -1385,6 +1439,7 @@ export function initializeSignaling(server: Server) {
                 createdBy: userId,
               }
             });
+            await refreshPollsCache(roomId);
             broadcastToRoom(roomId, {
               type: 'poll_create',
               pollId: newPoll.id,
@@ -1404,6 +1459,7 @@ export function initializeSignaling(server: Server) {
               where: { id: data.pollId },
               data: { isActive: false }
             });
+            await refreshPollsCache(roomId);
             broadcastToRoom(roomId, {
               type: 'poll_ended',
               pollId: data.pollId
@@ -1437,6 +1493,7 @@ export function initializeSignaling(server: Server) {
               where: { id: data.pollId },
               data: { options: updatedOptions }
             });
+            await refreshPollsCache(roomId);
           }
 
           broadcastToRoom(roomId, {
@@ -1678,6 +1735,7 @@ export function initializeSignaling(server: Server) {
               question: data.question,
             }
           });
+          await refreshQaCache(roomId);
           broadcastToRoom(roomId, {
             type: 'qa_updated',
             action: 'ask',
@@ -1701,6 +1759,7 @@ export function initializeSignaling(server: Server) {
                   voterIds: [...voterIds, userId]
                 }
               });
+              await refreshQaCache(roomId);
               broadcastToRoom(roomId, {
                 type: 'qa_updated',
                 action: 'upvote',
@@ -1724,6 +1783,7 @@ export function initializeSignaling(server: Server) {
                 answeredBy: client.name
               }
             });
+            await refreshQaCache(roomId);
             broadcastToRoom(roomId, {
               type: 'qa_updated',
               action: 'answer',
@@ -1739,6 +1799,7 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           try {
             await db.meetingQA.delete({ where: { id: data.questionId } });
+            await refreshQaCache(roomId);
             broadcastToRoom(roomId, {
               type: 'qa_updated',
               action: 'delete',
@@ -2084,6 +2145,13 @@ export function initializeSignaling(server: Server) {
         }
         client.transports = [];
         
+        // Clean up consumer owners to prevent invalid ownership spam on reconnect
+        for (const [consumerId, owner] of consumerOwners.entries()) {
+          if (owner === client) {
+            consumerOwners.delete(consumerId);
+          }
+        }
+        
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
@@ -2146,7 +2214,9 @@ export function initializeSignaling(server: Server) {
 
       case 'pause_consumer': {
         if (consumerOwners.get(data.consumerId) !== client) {
-          logger.warn(`User ${userId} tried to pause a consumer they don't own`);
+          logger.warn(`User ${userId} tried to pause a consumer they don't own (${data.consumerId})`);
+          // Send an error response so the client's await doesn't time out
+          client.ws.send(JSON.stringify({ type: 'error', errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
           return;
         }
         await pauseConsumer(data.consumerId);
