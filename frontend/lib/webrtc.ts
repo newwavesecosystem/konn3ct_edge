@@ -1104,10 +1104,18 @@ export class WebRTCClient {
           candidateLabel = 'device_performance_issue';
           diag = 'device';
         } else {
-          if (avgRtt > 300 || avgLoss > 8 || avgJitter > 60) {
+          const POOR_RTT = Number(process.env.NEXT_PUBLIC_POOR_NETWORK_RTT) || 300;
+          const POOR_LOSS = Number(process.env.NEXT_PUBLIC_POOR_NETWORK_LOSS) || 8;
+          const POOR_JITTER = Number(process.env.NEXT_PUBLIC_POOR_NETWORK_JITTER) || 60;
+
+          const UNSTABLE_RTT = Number(process.env.NEXT_PUBLIC_UNSTABLE_NETWORK_RTT) || 150;
+          const UNSTABLE_LOSS = Number(process.env.NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS) || 2;
+          const UNSTABLE_JITTER = Number(process.env.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER) || 30;
+
+          if (avgRtt > POOR_RTT || avgLoss > POOR_LOSS || avgJitter > POOR_JITTER) {
             candidateLabel = 'poor_network';
             diag = 'local_outbound';
-          } else if (avgRtt >= 150 || avgLoss >= 2 || avgJitter >= 30) {
+          } else if (avgRtt >= UNSTABLE_RTT || avgLoss >= UNSTABLE_LOSS || avgJitter >= UNSTABLE_JITTER) {
             candidateLabel = 'unstable_network';
             diag = 'local_outbound';
           }
