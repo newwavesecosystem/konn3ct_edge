@@ -57,6 +57,8 @@ jobs:
             --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_RTT }}" \
             --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS }}" \
             --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
+            --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
+            --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
