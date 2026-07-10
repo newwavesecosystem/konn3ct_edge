@@ -67,7 +67,7 @@ export const config = {
         }
       ],
       maxIncomingBitrate: 5000000,
-      initialAvailableOutgoingBitrate: 1000000
+      initialAvailableOutgoingBitrate: 5000000
     }
   }
 };
