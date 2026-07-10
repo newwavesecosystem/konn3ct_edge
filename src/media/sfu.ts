@@ -1,5 +1,5 @@
 import * as mediasoup from 'mediasoup';
-import { Worker, Router, Transport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
+import { Worker, Router, Transport, WebRtcTransport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
 import { config } from './config';
 import { logger } from '../logger';
 
@@ -415,6 +415,15 @@ export function closeTransport(transportId: string) {
     transport.close();
     transports.delete(transportId);
   }
+}
+
+export async function restartIce(transportId: string) {
+  const transport = transports.get(transportId) as WebRtcTransport;
+  if (!transport || transport.closed) {
+    throw new Error(`Transport ${transportId} not found or closed`);
+  }
+  const iceParameters = await transport.restartIce();
+  return iceParameters;
 }
 
 export async function pauseConsumer(consumerId: string) {

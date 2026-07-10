@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -2155,6 +2155,26 @@ export function initializeSignaling(server: Server) {
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
+        }
+        break;
+      }
+
+      case 'restart_ice': {
+        const { transportId } = data;
+        try {
+          logger.info(`User ${userId} requesting ICE Restart for transport ${transportId}`);
+          const iceParameters = await restartIce(transportId);
+          client.ws.send(JSON.stringify({
+            type: 'ice_restarted',
+            transportId,
+            iceParameters
+          }));
+        } catch (error) {
+          logger.error(`Failed to restart ICE for transport ${transportId}: ${error}`);
+          client.ws.send(JSON.stringify({
+            type: 'error',
+            message: 'Failed to restart ICE'
+          }));
         }
         break;
       }
