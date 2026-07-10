@@ -129,6 +129,13 @@ export async function setAccessCode(payload: AccessCodePayload): Promise<{ succe
  * Returns room name, owner, and whether an access code is required.
  */
 export async function validateMeetingKv4(roomSlug: string): Promise<any> {
-  const res = await apiClient.post('/kv4/validate-meeting', { name: roomSlug });
-  return res.data;
+  console.log('[API] validateMeetingKv4 → POST /kv4/validate-meeting, payload:', { name: roomSlug });
+  try {
+    const res = await apiClient.post('/kv4/validate-meeting', { name: roomSlug });
+    console.log('[API] validateMeetingKv4 ← status:', res.status, 'data:', JSON.stringify(res.data, null, 2));
+    return res.data;
+  } catch (err: any) {
+    console.error('[API] validateMeetingKv4 error:', err.response?.status, JSON.stringify(err.response?.data, null, 2));
+    throw err;
+  }
 }

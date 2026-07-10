@@ -622,9 +622,13 @@ export class MediasoupService {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack as any, 
         appData: { source: 'camera' },
+        encodings: [{ maxBitrate: 600000, maxFramerate: 30 }],
         codecOptions: { videoGoogleStartBitrate: 1000 }
       });
       console.log(`[enableCamera] Video producer created: id=${this.localVideoProducer.id}`);
+      // Notify all other participants that our camera is now on.
+      // The web frontend gates video tile display on this signal.
+      this.sendCameraState(true);
     } catch (err) {
       console.error('[enableCamera] FAILED to produce video:', err);
     }
@@ -633,6 +637,8 @@ export class MediasoupService {
   public disableCamera() {
     if (this.localVideoProducer) {
       console.log(`[disableCamera] Closing video producer id=${this.localVideoProducer.id}`);
+      // Notify all other participants that our camera is now off BEFORE closing.
+      this.sendCameraState(false);
       this.localVideoProducer.close();
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ 
@@ -679,6 +685,18 @@ export class MediasoupService {
         }));
       }
       this.localAudioProducer = undefined;
+    }
+  }
+
+  /**
+   * Broadcast the local camera on/off state to all other participants.
+   * The web frontend uses this signal to show or hide the video tile for
+   * this participant — without it, mobile video will never be displayed
+   * on the web even though the media stream is flowing.
+   */
+  public sendCameraState(isCameraOn: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn }));
     }
   }
 
@@ -817,6 +835,10 @@ export class MediasoupService {
         // Re-broadcast local stream if we had one
         if (this._lastLocalStream) {
           await this.broadcast(this._lastLocalStream);
+          // Also re-announce camera state after reconnect
+          if (this._lastLocalStream.getVideoTracks().some(t => t.enabled)) {
+            this.sendCameraState(true);
+          }
         }
 
         console.log('Reconnected successfully!');
@@ -833,6 +855,22 @@ export class MediasoupService {
     console.error('All reconnection attempts failed');
     this._isReconnecting = false;
     if (this.onReconnectFailed) this.onReconnectFailed();
+  }
+
+  /**
+   * Re-publish local audio and video tracks after a WebSocket reconnection.
+   * Called by attemptReconnect() once a new transport pair has been created.
+   * Previously missing — caused silent failure on every reconnect attempt.
+   */
+  public async broadcast(localStream: MediaStream) {
+    const videoTrack = localStream.getVideoTracks()[0];
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live') {
+      await this.enableCamera(videoTrack);
+    }
+    if (audioTrack && audioTrack.enabled && audioTrack.readyState === 'live') {
+      await this.enableMic(audioTrack);
+    }
   }
 
   // ── Transport Stats (for network quality monitoring) ───────────────────────
