@@ -934,10 +934,7 @@ export class WebRTCClient {
           console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
         } else if (state === 'failed') {
           console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-          }
-          this.republishMedia().catch(console.error);
+          this.restartTransportIce(this.sendTransport);
         }
       });
     }
@@ -971,10 +968,7 @@ export class WebRTCClient {
         console.warn('[WebRTC] Receive Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-        }
-        this.republishMedia().catch(console.error);
+        this.restartTransportIce(this.recvTransport);
       }
     });
 
@@ -1257,6 +1251,24 @@ export class WebRTCClient {
     }
   }
 
+  private async restartTransportIce(transport: any) {
+    if (!transport) return;
+    try {
+      console.log(`[WebRTC] Requesting ICE Restart for transport ${transport.id}`);
+      const res = await this.request('restart_ice', 'ice_restarted', { transportId: transport.id });
+      if (res.iceParameters) {
+        await transport.restartIce({ iceParameters: res.iceParameters });
+        console.log(`[WebRTC] ICE Restart successful for transport ${transport.id}`);
+      }
+    } catch (err) {
+      console.error(`[WebRTC] ICE Restart failed for transport ${transport.id}:`, err);
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+      }
+      this.republishMedia().catch(console.error);
+    }
+  }
+
   private async republishMedia() {
     if (!this.device || this.isRepublishing) return;
     
@@ -1317,10 +1329,7 @@ export class WebRTCClient {
         console.warn('[WebRTC] Republish Send Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Send Transport connection failed! Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-        }
-        this.republishMedia().catch(console.error);
+        this.restartTransportIce(this.sendTransport);
       }
     });
 
@@ -1345,10 +1354,7 @@ export class WebRTCClient {
         console.warn('[WebRTC] Republish Receive Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-        }
-        this.republishMedia().catch(console.error);
+        this.restartTransportIce(this.recvTransport);
       }
     });
 
