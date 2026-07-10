@@ -1370,10 +1370,17 @@ export class WebRTCClient {
               ];
 
         try {
+          const videoCodec = this.device.rtpCapabilities.codecs?.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+          ) || this.device.rtpCapabilities.codecs?.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+          );
+
           this.localVideoProducer = await this.sendTransport.produce({ 
             track: videoTrack,
             appData: { source: 'camera' },
             encodings,
+            codec: videoCodec,
             codecOptions: { videoGoogleStartBitrate: 1000 }
           });
           if (isVideoPaused) this.localVideoProducer.pause();
@@ -1690,10 +1697,17 @@ export class WebRTCClient {
       this.emitTelemetry('video_produce_started');
       console.log('camera_producer_creating');
       try {
+        const videoCodec = this.device.rtpCapabilities.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+        ) || this.device.rtpCapabilities.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+        );
+
         this.localVideoProducer = await this.sendTransport.produce({
           track: videoTrack,
           appData: { source: 'camera' },
           encodings,
+          codec: videoCodec,
           codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
         });
         this.emitTelemetry('video_producer_created');
@@ -2039,10 +2053,17 @@ export class WebRTCClient {
                 { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
               ];
           
+        const videoCodec = this.device.rtpCapabilities.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+        ) || this.device.rtpCapabilities.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+        );
+
         this.localVideoProducer = await this.sendTransport.produce({ 
           track: newTrack, 
           appData: { source: 'camera' },
           encodings,
+          codec: videoCodec,
           codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
         });
         this.cameraSwitchInProgress = false;
