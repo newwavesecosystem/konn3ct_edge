@@ -263,7 +263,9 @@ export default function DashboardScreen({ navigation }: Props) {
       // Step 1: Validate the room exists (case-insensitive on REST API)
       setJoinStatus('Validating room...');
       const validation = await validateMeetingKv4(roomId);
+      console.log('[JOIN] validateMeetingKv4 response:', JSON.stringify(validation, null, 2));
       if (!validation.success) {
+        console.warn('[JOIN] Room not found. Full response:', validation);
         Alert.alert('Room Not Found', 'No room found with that ID. Please check and try again.');
         setIsJoining(false);
         setJoinStatus('Join Room');
