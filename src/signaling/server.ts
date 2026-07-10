@@ -405,6 +405,7 @@ export function initializeSignaling(server: Server) {
       const roomSlug = url.searchParams.get('roomId');
       const isMobile = url.searchParams.get('isMobile') === 'true';
       const participantIdParam = url.searchParams.get('participantId');
+      const userAgent = request.headers['user-agent'] || 'unknown_agent';
 
       if (!token || !roomSlug) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -518,6 +519,7 @@ export function initializeSignaling(server: Server) {
           participantId: participantIdParam,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
+          userAgent,
           maxActiveCameras: room.maxActiveCameras ?? 15,
           maxParticipants: maxParticipants,
         });
@@ -530,7 +532,9 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId } = clientData;
+    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
+
+    logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;

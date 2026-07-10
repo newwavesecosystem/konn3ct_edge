@@ -49,6 +49,7 @@ vi.mock('../../src/media/sfu', () => ({
 
 import jwt from 'jsonwebtoken';
 import { initializeSignaling } from '../../src/signaling/server';
+import { logger } from '../../src/logger';
 
 describe('Signaling Server Integration', () => {
   let server: HttpServer;
@@ -92,6 +93,30 @@ describe('Signaling Server Integration', () => {
       ws.on('open', () => {
         reject(new Error('Connection should not have opened'));
       });
+    });
+  });
+
+  it('logs user-agent and device on connection', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const infoSpy = vi.spyOn(logger, 'info');
+
+      const validToken = jwt.sign({ userId: 'test-user-agent', email: 'ua@conn3ct', name: 'UA', role: 'audience' }, 'dummy_secret');
+      const ws = new WebSocket(`${wsUrl}/signal?token=${validToken}&roomId=test-slug&participantId=ua-1`, {
+        headers: {
+          'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'
+        }
+      });
+      
+      ws.on('open', () => {
+        setTimeout(() => {
+          const logCall = infoSpy.mock.calls.find((call: any) => call[0] && call[0].includes('agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"'));
+          expect(logCall).toBeDefined();
+          ws.close();
+          resolve();
+        }, 50);
+      });
+
+      ws.on('error', reject);
     });
   });
 
