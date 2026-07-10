@@ -2164,13 +2164,12 @@ export class WebRTCClient {
     const screenTrack = stream.getVideoTracks()[0];
     this.localScreenTrack = screenTrack;
     
-    // Force H264 for screen share to ensure iPhone Safari compatibility
-    let screenCodec;
-    if (this.device.rtpCapabilities.codecs) {
-      screenCodec = this.device.rtpCapabilities.codecs.find(
-        (c) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['packetization-mode'] === 1
-      );
-    }
+    // Prioritize VP8, fallback to H264 Baseline for Safari/iOS compatibility
+    const screenCodec = this.device.rtpCapabilities.codecs?.find(
+      (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+    ) || this.device.rtpCapabilities.codecs?.find(
+      (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+    );
     
     // Create a SEPARATE producer — camera producer stays untouched
     this.screenShareProducer = await this.sendTransport.produce({
