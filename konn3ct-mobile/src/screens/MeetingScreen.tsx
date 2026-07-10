@@ -550,7 +550,12 @@ export default function MeetingScreen({ route, navigation }: Props) {
         const videoTrack = p.stream?.getVideoTracks()?.[0];
         const hasVideo = !!videoTrack && videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
         
-        const isRemoteMicMuted = !p.stream || p.stream.getAudioTracks().length === 0 || !p.stream.getAudioTracks()[0].enabled;
+        // Prefer the server-signalled mute state (via mute_state WS message) stored in
+        // the Zustand store. Fall back to track-existence check only when no signal has
+        // been received yet (e.g. the participant joined before the handler was set up).
+        const isRemoteMicMuted = storeParticipant?.isMuted !== undefined
+          ? storeParticipant.isMuted
+          : (!p.stream || p.stream.getAudioTracks().length === 0);
         
         return (
           <View key={p.id} style={[

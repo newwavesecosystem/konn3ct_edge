@@ -64,6 +64,7 @@ export class MediasoupService {
   public onPollHistory?: (polls: any[]) => void;
   public onWaitingRoomRequest?: (user: any) => void;
   public onForceMute?: () => void;
+  public onMuteStateChange?: (userId: string, isMuted: boolean) => void;
   public onHandRaise?: (msg: any) => void;
   public onActiveSpeaker?: (userIds: string[]) => void;
   public onRecordingStarted?: () => void;
@@ -386,6 +387,13 @@ export class MediasoupService {
           case 'participants_list':
             if (this.onParticipantsList) {
               this.onParticipantsList(msg.participants || []);
+              // Seed isMuted for every participant already in the room
+              const store = useMeetingStore.getState();
+              (msg.participants || []).forEach((p: any) => {
+                if (p.userId) {
+                  store.updateParticipantMuteState(p.userId, p.isMuted ?? true);
+                }
+              });
               setTimeout(() => this.notifyStreamUpdate(), 100);
             } else {
               // Cache for replay when callback is set (lobby handoff)
@@ -393,9 +401,24 @@ export class MediasoupService {
             }
             break;
 
+          case 'mute_state':
+            // Broadcast from the server when any other participant toggles their mic
+            if (msg.userId && msg.userId !== this.currentUserId) {
+              useMeetingStore.getState().updateParticipantMuteState(msg.userId, msg.isMuted);
+              if (this.onMuteStateChange) this.onMuteStateChange(msg.userId, msg.isMuted);
+            }
+            break;
+
           case 'user_joined':
             if (this.onUserJoined) {
               this.onUserJoined(msg);
+              // Seed isMuted so the card shows the correct state on join
+              if (msg.userId) {
+                useMeetingStore.getState().updateParticipantMuteState(
+                  msg.userId,
+                  msg.isMuted ?? true // default to muted until they unmute
+                );
+              }
               setTimeout(() => this.notifyStreamUpdate(), 100);
             }
             break;
@@ -668,6 +691,9 @@ export class MediasoupService {
         appData: { source: 'mic' }
       });
       console.log(`[enableMic] Audio producer created: id=${this.localAudioProducer.id}`);
+      // Notify all other participants that we are now unmuted.
+      // The web frontend uses this signal to update the mic icon on participant cards.
+      this.sendMuteState(false);
     } catch (err) {
       console.error('[enableMic] FAILED to produce audio:', err);
     }
@@ -676,6 +702,8 @@ export class MediasoupService {
   public disableMic() {
     if (this.localAudioProducer) {
       console.log(`[disableMic] Closing audio producer id=${this.localAudioProducer.id}`);
+      // Notify all other participants that we are now muted BEFORE closing.
+      this.sendMuteState(true);
       this.localAudioProducer.close();
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
@@ -697,6 +725,17 @@ export class MediasoupService {
   public sendCameraState(isCameraOn: boolean) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn }));
+    }
+  }
+
+  /**
+   * Broadcast the local mic mute state to all other participants.
+   * The web frontend uses this signal to update the mic icon on participant
+   * cards — without it, all mobile users appear permanently unmuted.
+   */
+  public sendMuteState(isMuted: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted }));
     }
   }
 
