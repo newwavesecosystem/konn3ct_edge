@@ -25,7 +25,14 @@ import {
   mockMeetingInfo,
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
+import { useMeetingDevicePreferences } from "./meeting-device-preferences";
 
+let lastChatToastTime = 0;
+let lastChatSoundTime = 0;
+let joinLeaveBatchCount = 0;
+let joinLeaveBatchTimeout: ReturnType<typeof setTimeout> | null = null;
+let leaveBatchCount = 0;
+let leaveBatchTimeout: ReturnType<typeof setTimeout> | null = null;
 export const REACTION_DURATION = 10000;
 
 interface MeetingContextValue {
@@ -171,6 +178,7 @@ interface MeetingContextValue {
   // QA Diagnostics
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
   isRecorderMode: boolean;
+  playNotificationSound: (frequency: number, duration?: number, vol?: number) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -234,6 +242,65 @@ export function MeetingProvider({
   const initialLogoutUrl = storedJoinInfo?.logoutUrl || null;
 
   // ── State ────────────────────────────────────────────
+  const { preferences } = useMeetingDevicePreferences();
+  
+  const effectiveIsRecorderMode = isRecorderMode || 
+    (typeof window !== 'undefined' && window.location.pathname.startsWith('/recording/')) ||
+    storedJoinInfo?.isRecorder ||
+    queryRole === 'recorder' ||
+    queryRole === 'bot';
+
+  const prefs = effectiveIsRecorderMode ? {
+    ...preferences,
+    notifications: {
+      ...preferences.notifications,
+      enableAllToasts: false,
+      enableAllSounds: false,
+      showChatToasts: false,
+      showJoinLeaveToasts: false,
+      showMuteUnmuteToasts: false,
+      showSystemToasts: false,
+      playChatSound: false,
+      playJoinLeaveSound: false,
+      playMuteUnmuteSound: false,
+      playSystemSound: false
+    }
+  } : preferences;
+
+  const prefsRef = useRef(prefs);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
+
+  const playNotificationSound = useCallback((frequency: number, duration: number = 0.15, vol: number = 0.1) => {
+    if (!prefsRef.current.notifications.enableAllSounds) return;
+    if (webrtcClient.current?.userRole === 'bot' || webrtcClient.current?.userRole === 'recorder' || effectiveIsRecorderMode) return;
+    if (typeof window === 'undefined') return;
+    if ((window as any).disableAudioNotifications) return;
+    
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+        // fail silently if browser blocks sound
+        return;
+      }
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+      
+      gain.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + duration + 0.05);
+    } catch(e) {
+      console.log('meeting_notification_sound_blocked', e);
+    }
+  }, [prefsRef.current.notifications.enableAllSounds, effectiveIsRecorderMode]);
   const isMobileClient = typeof navigator !== 'undefined' ? 
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
@@ -658,28 +725,16 @@ export function MeetingProvider({
 
           if (quality === 'poor_network') {
             if (canToast) {
-              // Play Warning Sound
-              try {
-                if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
-                  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                  const oscillator = audioCtx.createOscillator();
-                  const gainNode = audioCtx.createGain();
-                  oscillator.connect(gainNode);
-                  gainNode.connect(audioCtx.destination);
-                  oscillator.type = 'triangle';
-                  oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
-                  oscillator.frequency.setValueAtTime(400, audioCtx.currentTime + 0.15);
-                  oscillator.frequency.setValueAtTime(300, audioCtx.currentTime + 0.3);
-                  gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                  gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-                  oscillator.start(audioCtx.currentTime);
-                  oscillator.stop(audioCtx.currentTime + 0.3);
-                }
-              } catch(e) {}
+              if (prefsRef.current.notifications.playSystemSound) {
+                // Play Warning Sound (triple beep)
+                playNotificationSound(300, 0.1, 0.1);
+                setTimeout(() => playNotificationSound(400, 0.1, 0.1), 150);
+                setTimeout(() => playNotificationSound(300, 0.1, 0.1), 300);
+              }
             }
 
             if (webrtcClient.current && !webrtcClient.current.isLowBandwidth) {
-              if (canToast) {
+              if (canToast && prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
                 toast.error("Network is extremely poor. Enabling Low Bandwidth mode to save bandwidth.", { duration: 6000 });
                 lastNetworkToastTime = now;
               }
@@ -692,7 +747,7 @@ export function MeetingProvider({
             }
           } else if (quality === 'good') {
             if (webrtcClient.current && webrtcClient.current.isLowBandwidth) {
-              if (canToast) {
+              if (canToast && prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
                 toast.success("Network connection stabilized. Disabling Low Bandwidth mode.", { duration: 5000 });
                 lastNetworkToastTime = now;
               }
@@ -707,20 +762,25 @@ export function MeetingProvider({
 
         client.onDonationStatusReceived = (active) => {
           setIsDonationActive(active);
-          if (active) {
-            toast.info("The host has enabled Donations/Offerings.");
-          } else {
-            toast.info("Donations/Offerings have been disabled.");
+          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+            if (active) {
+              toast.info("The host has enabled Donations/Offerings.");
+            } else {
+              toast.info("Donations/Offerings have been disabled.");
+            }
           }
         };
 
         client.onDonationSuccessReceived = (userId, name, amount, currency) => {
           setTotalDonations(prev => prev + amount);
-          if (client?.userRole === 'host' || client?.userRole === 'co-host') {
+          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
             toast.success(`${name} just donated ${currency} ${amount}!`, {
               icon: "🎁",
               duration: 5000,
             });
+          }
+          if (prefsRef.current.notifications.playSystemSound) {
+            playNotificationSound(800, 0.2, 0.1);
           }
         };
 
@@ -731,13 +791,17 @@ export function MeetingProvider({
         client.onRecordingStarted = () => {
           setIsRecording(true);
           setRecordingStatus('recording');
-          toast.info("This meeting is now being recorded.", { icon: "🔴" });
+          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+            toast.info("This meeting is now being recorded.", { icon: "🔴" });
+          }
         };
 
         client.onRecordingStopped = () => {
           setIsRecording(false);
           setRecordingStatus('idle');
-          toast.info("Recording has stopped.");
+          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+            toast.info("Recording has stopped.");
+          }
         };
 
         client.onSyncPanel = (panel: any) => {
@@ -856,30 +920,41 @@ export function MeetingProvider({
         };
 
         client.onChatMessage = (msg) => {
-          if (msg.userId !== webrtcClient.current?.userId) {
-            // Play a prominent "Ding-Ding" notification sound for chat
-            try {
-              if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                
-                const playBeep = (timeOffset: number) => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, audioCtx.currentTime + timeOffset);
-                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + timeOffset + 0.1);
-                gain.gain.setValueAtTime(0.2, audioCtx.currentTime + timeOffset);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + timeOffset + 0.1);
-                osc.start(audioCtx.currentTime + timeOffset);
-                osc.stop(audioCtx.currentTime + timeOffset + 0.15);
-              };
-
-              playBeep(0);
-              playBeep(0.2);
+          const isSelf = msg.userId === webrtcClient.current?.userId || 
+                         msg.participantId === (clientParticipantId || initialCurrentUser.id) ||
+                         msg.userId === currentUser.userId;
+          if (!isSelf) {
+            const now = Date.now();
+            if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showChatToasts) {
+              if (activePanelRef.current !== "chat") {
+                if (now - lastChatToastTime > 2000) {
+                  lastChatToastTime = now;
+                  const preview = msg.message.length > 80 ? msg.message.substring(0, 80) + "..." : msg.message;
+                  toast(`New message from ${msg.userName}`, {
+                    description: preview,
+                    action: {
+                      label: "View",
+                      onClick: () => setActivePanel("chat")
+                    }
+                  });
+                  console.log('meeting_notification_shown', 'chat');
+                } else {
+                  console.log('meeting_notification_suppressed', 'chat_toast_throttled');
+                }
+              }
             }
-            } catch (e) { }
+
+            if (prefsRef.current.notifications.playChatSound) {
+              if (now - lastChatSoundTime > 3000) {
+                lastChatSoundTime = now;
+                // Double soft beep for chat
+                playNotificationSound(800, 0.1, 0.1);
+                setTimeout(() => playNotificationSound(1200, 0.15, 0.1), 150);
+                console.log('meeting_notification_sound_played', 'chat');
+              } else {
+                console.log('meeting_notification_suppressed', 'chat_sound_throttled');
+              }
+            }
 
             if (activePanelRef.current !== "chat") {
               setHasUnreadChat(true);
@@ -1032,8 +1107,13 @@ export function MeetingProvider({
           const targetId = resolveUserId(msg.userId);
           setParticipants((prev) => {
             const user = prev.find(p => p.id === targetId || p.userId === msg.userId);
-            if (user && user.isMuted !== msg.isMuted) {
-              toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
+            if (user && user.isMuted !== msg.isMuted && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
+              if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showMuteUnmuteToasts) {
+                toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
+              }
+              if (prefsRef.current.notifications.playMuteUnmuteSound) {
+                playNotificationSound(msg.isMuted ? 300 : 500, 0.1, 0.05);
+              }
             }
             return prev.map(p =>
               (p.id === targetId || p.userId === msg.userId) ? { ...p, isMuted: msg.isMuted } : p
@@ -1055,22 +1135,15 @@ export function MeetingProvider({
         client.onHandRaise = (msg) => {
           const targetId = resolveUserId(msg.userId);
           if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
-            // Play Ding Sound
-            try {
-              if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.3);
+            if (prefsRef.current.notifications.playSystemSound) {
+              playNotificationSound(880, 0.3, 0.1);
+            }
+            if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+              const user = participants.find(p => p.id === targetId || p.userId === msg.userId);
+              if (user) {
+                toast.info(`${user.name} raised their hand`);
               }
-            } catch (e) { }
+            }
           }
           setParticipants((prev) => prev.map(p =>
             (p.id === targetId || p.userId === msg.userId) ? { ...p, isHandRaised: msg.isHandRaised } : p
@@ -1082,7 +1155,9 @@ export function MeetingProvider({
           setParticipants((prev) => prev.map(p =>
             (p.id === targetId || p.userId === userId) ? { ...p, isScreenSharing: true } : p
           ));
-          toast.info(`${participants.find(p => p.id === targetId || p.userId === userId)?.name || 'A participant'} started screen sharing`);
+          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+            toast.info(`${participants.find(p => p.id === targetId || p.userId === userId)?.name || 'A participant'} started screen sharing`);
+          }
         };
 
         client.onScreenShareStopped = (userId, producerId) => {
@@ -1090,7 +1165,9 @@ export function MeetingProvider({
           setParticipants((prev) => prev.map(p =>
             (p.id === targetId || p.userId === userId) ? { ...p, isScreenSharing: false, screenTrack: null } : p
           ));
-          toast.info(`Screen sharing ended`);
+          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+            toast.info(`Screen sharing ended`);
+          }
         };
 
         client.onConsumerClosed = (producerId, appData) => {
@@ -1422,7 +1499,21 @@ export function MeetingProvider({
           }, 4000);
 
           if (user.role !== 'bot') {
-            toast.info(`${user.name} joined the meeting`);
+            if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showJoinLeaveToasts) {
+              joinLeaveBatchCount++;
+              if (joinLeaveBatchTimeout) clearTimeout(joinLeaveBatchTimeout);
+              joinLeaveBatchTimeout = setTimeout(() => {
+                if (joinLeaveBatchCount > 1) {
+                  toast.info(`${joinLeaveBatchCount} participants joined`);
+                } else {
+                  toast.info(`${user.name} joined the meeting`);
+                }
+                joinLeaveBatchCount = 0;
+              }, 1000);
+            }
+            if (prefsRef.current.notifications.playJoinLeaveSound) {
+              playNotificationSound(600, 0.1, 0.05); // softer beep
+            }
           }
         };
 
@@ -1442,7 +1533,21 @@ export function MeetingProvider({
             const user = prev.find(p => p.id === userId);
             if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
                if (user.role !== 'bot') {
-                 toast.info(`${user.name} left the meeting`);
+                 if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showJoinLeaveToasts) {
+                   leaveBatchCount++;
+                   if (leaveBatchTimeout) clearTimeout(leaveBatchTimeout);
+                   leaveBatchTimeout = setTimeout(() => {
+                     if (leaveBatchCount > 1) {
+                       toast.info(`${leaveBatchCount} participants left`);
+                     } else {
+                       toast.info(`${user.name} left the meeting`);
+                     }
+                     leaveBatchCount = 0;
+                   }, 1000);
+                 }
+                 if (prefsRef.current.notifications.playJoinLeaveSound) {
+                   playNotificationSound(400, 0.15, 0.05); // slightly lower pitched beep for leaving
+                 }
                }
             }
             return prev.filter(p => p.id !== userId);
@@ -2327,6 +2432,7 @@ export function MeetingProvider({
         setMicError,
         webrtcClientRef: webrtcClient,
         isRecorderMode,
+        playNotificationSound,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
