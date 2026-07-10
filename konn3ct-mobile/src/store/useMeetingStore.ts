@@ -26,6 +26,8 @@ export interface Participant {
   status?: 'active' | 'waiting';
   isHandRaised?: boolean;
   isSpeaking?: boolean;
+  isMuted?: boolean;
+  isCameraOn?: boolean;
 }
 
 export interface Reaction {
@@ -78,6 +80,7 @@ interface MeetingState {
   removeParticipant: (userId: string) => void;
   updateParticipantHandRaise: (userId: string, isRaised: boolean) => void;
   updateParticipantSpeaking: (userIds: string[]) => void;
+  updateParticipantMuteState: (userId: string, isMuted: boolean) => void;
   setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
@@ -174,6 +177,12 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   updateParticipantHandRaise: (userId, isRaised) => set((state) => ({
     participants: state.participants.map(p => 
       p.userId === userId ? { ...p, isHandRaised: isRaised } : p
+    )
+  })),
+
+  updateParticipantMuteState: (userId, isMuted) => set((state) => ({
+    participants: state.participants.map(p =>
+      p.userId === userId ? { ...p, isMuted } : p
     )
   })),
 

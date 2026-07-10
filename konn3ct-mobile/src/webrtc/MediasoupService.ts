@@ -64,6 +64,7 @@ export class MediasoupService {
   public onPollHistory?: (polls: any[]) => void;
   public onWaitingRoomRequest?: (user: any) => void;
   public onForceMute?: () => void;
+  public onMuteStateChange?: (userId: string, isMuted: boolean) => void;
   public onHandRaise?: (msg: any) => void;
   public onActiveSpeaker?: (userIds: string[]) => void;
   public onRecordingStarted?: () => void;
@@ -386,6 +387,13 @@ export class MediasoupService {
           case 'participants_list':
             if (this.onParticipantsList) {
               this.onParticipantsList(msg.participants || []);
+              // Seed isMuted for every participant already in the room
+              const store = useMeetingStore.getState();
+              (msg.participants || []).forEach((p: any) => {
+                if (p.userId) {
+                  store.updateParticipantMuteState(p.userId, p.isMuted ?? true);
+                }
+              });
               setTimeout(() => this.notifyStreamUpdate(), 100);
             } else {
               // Cache for replay when callback is set (lobby handoff)
@@ -393,9 +401,24 @@ export class MediasoupService {
             }
             break;
 
+          case 'mute_state':
+            // Broadcast from the server when any other participant toggles their mic
+            if (msg.userId && msg.userId !== this.currentUserId) {
+              useMeetingStore.getState().updateParticipantMuteState(msg.userId, msg.isMuted);
+              if (this.onMuteStateChange) this.onMuteStateChange(msg.userId, msg.isMuted);
+            }
+            break;
+
           case 'user_joined':
             if (this.onUserJoined) {
               this.onUserJoined(msg);
+              // Seed isMuted so the card shows the correct state on join
+              if (msg.userId) {
+                useMeetingStore.getState().updateParticipantMuteState(
+                  msg.userId,
+                  msg.isMuted ?? true // default to muted until they unmute
+                );
+              }
               setTimeout(() => this.notifyStreamUpdate(), 100);
             }
             break;
@@ -622,9 +645,13 @@ export class MediasoupService {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack as any, 
         appData: { source: 'camera' },
+        encodings: [{ maxBitrate: 600000, maxFramerate: 30 }],
         codecOptions: { videoGoogleStartBitrate: 1000 }
       });
       console.log(`[enableCamera] Video producer created: id=${this.localVideoProducer.id}`);
+      // Notify all other participants that our camera is now on.
+      // The web frontend gates video tile display on this signal.
+      this.sendCameraState(true);
     } catch (err) {
       console.error('[enableCamera] FAILED to produce video:', err);
     }
@@ -633,6 +660,8 @@ export class MediasoupService {
   public disableCamera() {
     if (this.localVideoProducer) {
       console.log(`[disableCamera] Closing video producer id=${this.localVideoProducer.id}`);
+      // Notify all other participants that our camera is now off BEFORE closing.
+      this.sendCameraState(false);
       this.localVideoProducer.close();
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ 
@@ -662,6 +691,9 @@ export class MediasoupService {
         appData: { source: 'mic' }
       });
       console.log(`[enableMic] Audio producer created: id=${this.localAudioProducer.id}`);
+      // Notify all other participants that we are now unmuted.
+      // The web frontend uses this signal to update the mic icon on participant cards.
+      this.sendMuteState(false);
     } catch (err) {
       console.error('[enableMic] FAILED to produce audio:', err);
     }
@@ -670,6 +702,8 @@ export class MediasoupService {
   public disableMic() {
     if (this.localAudioProducer) {
       console.log(`[disableMic] Closing audio producer id=${this.localAudioProducer.id}`);
+      // Notify all other participants that we are now muted BEFORE closing.
+      this.sendMuteState(true);
       this.localAudioProducer.close();
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
@@ -679,6 +713,29 @@ export class MediasoupService {
         }));
       }
       this.localAudioProducer = undefined;
+    }
+  }
+
+  /**
+   * Broadcast the local camera on/off state to all other participants.
+   * The web frontend uses this signal to show or hide the video tile for
+   * this participant — without it, mobile video will never be displayed
+   * on the web even though the media stream is flowing.
+   */
+  public sendCameraState(isCameraOn: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'camera_state', isCameraOn }));
+    }
+  }
+
+  /**
+   * Broadcast the local mic mute state to all other participants.
+   * The web frontend uses this signal to update the mic icon on participant
+   * cards — without it, all mobile users appear permanently unmuted.
+   */
+  public sendMuteState(isMuted: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'mute_state', isMuted }));
     }
   }
 
@@ -817,6 +874,10 @@ export class MediasoupService {
         // Re-broadcast local stream if we had one
         if (this._lastLocalStream) {
           await this.broadcast(this._lastLocalStream);
+          // Also re-announce camera state after reconnect
+          if (this._lastLocalStream.getVideoTracks().some(t => t.enabled)) {
+            this.sendCameraState(true);
+          }
         }
 
         console.log('Reconnected successfully!');
@@ -833,6 +894,22 @@ export class MediasoupService {
     console.error('All reconnection attempts failed');
     this._isReconnecting = false;
     if (this.onReconnectFailed) this.onReconnectFailed();
+  }
+
+  /**
+   * Re-publish local audio and video tracks after a WebSocket reconnection.
+   * Called by attemptReconnect() once a new transport pair has been created.
+   * Previously missing — caused silent failure on every reconnect attempt.
+   */
+  public async broadcast(localStream: MediaStream) {
+    const videoTrack = localStream.getVideoTracks()[0];
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live') {
+      await this.enableCamera(videoTrack);
+    }
+    if (audioTrack && audioTrack.enabled && audioTrack.readyState === 'live') {
+      await this.enableMic(audioTrack);
+    }
   }
 
   // ── Transport Stats (for network quality monitoring) ───────────────────────
