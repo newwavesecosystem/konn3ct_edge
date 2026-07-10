@@ -1583,6 +1583,7 @@ export function MeetingProvider({
             if (isMuted) {
               client.pauseMic();
             }
+            client.sendMuteState(isMuted);
           } catch (e) {
             console.error("Failed to enable mic:", e);
           }
@@ -1607,6 +1608,7 @@ export function MeetingProvider({
                 }
               }
               localCameraTrackRef.current = videoTrack;
+              client.sendCameraState(true);
               
               setParticipants((prev) =>
                 prev.map((p) => {
