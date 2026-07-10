@@ -3,6 +3,7 @@
 import React from "react";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
 import { useMeeting } from "@/lib/meeting-context";
+import { useMeetingDevicePreferences } from "@/lib/meeting-device-preferences";
 import type { GridOverflowMode } from "@/lib/types/meeting";
 import {
   Speaker,
@@ -20,7 +21,8 @@ import {
   Image as ImageIcon,
   Ban,
   Droplet,
-  Info
+  Info,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,9 +56,13 @@ export function SettingsPanel() {
     roomFeatureFlags,
     roomSettings,
     updateRoomSettings,
-    currentUser
+    currentUser,
+    playNotificationSound
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
+  
+  const { preferences, setMeetingDevicePreferences } = useMeetingDevicePreferences();
+  const nPrefs = preferences.notifications;
 
   return (
     <div className="flex flex-col h-full">
@@ -230,6 +236,95 @@ export function SettingsPanel() {
             </div>
             </div>
           )}
+        </SettingsGroup>
+
+        {/* Notifications */}
+        <SettingsGroup label="Notifications">
+          <div className="mb-4">
+            <p className="text-xs mb-3" style={{ color: "var(--mt-text-muted)" }}>
+              These settings are saved on this browser/device and will apply to future meetings you join from this device.
+            </p>
+            
+            <div className="flex flex-col gap-2 p-3 rounded-md mb-4" style={{ backgroundColor: "var(--mt-bg-hover)" }}>
+              <SettingsToggle 
+                label="Enable all pop-up notifications" 
+                checked={nPrefs.enableAllToasts} 
+                onChange={(val) => setMeetingDevicePreferences({ notifications: { enableAllToasts: val } })}
+              />
+              <div className="flex items-center justify-between">
+                <SettingsToggle 
+                  label="Enable all notification sounds" 
+                  checked={nPrefs.enableAllSounds} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { enableAllSounds: val } })}
+                />
+                <button 
+                  onClick={() => playNotificationSound(800, 0.15, 0.1)} 
+                  disabled={!nPrefs.enableAllSounds}
+                  className="ml-2 px-2 py-1 text-[10px] uppercase font-bold rounded bg-brand-green/20 text-brand-green hover:bg-brand-green/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Test
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>Chat Messages</p>
+                <SettingsToggle 
+                  label="Show chat message popups" 
+                  checked={nPrefs.showChatToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showChatToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play chat message sound" 
+                  checked={nPrefs.playChatSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playChatSound: val } })}
+                />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>Participants</p>
+                <SettingsToggle 
+                  label="Show join/leave popups" 
+                  checked={nPrefs.showJoinLeaveToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showJoinLeaveToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play join/leave sound" 
+                  checked={nPrefs.playJoinLeaveSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playJoinLeaveSound: val } })}
+                />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>Mute / Unmute</p>
+                <SettingsToggle 
+                  label="Show mute/unmute popups" 
+                  checked={nPrefs.showMuteUnmuteToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showMuteUnmuteToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play mute/unmute sound" 
+                  checked={nPrefs.playMuteUnmuteSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playMuteUnmuteSound: val } })}
+                />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>System Notifications</p>
+                <SettingsToggle 
+                  label="Show system popups" 
+                  checked={nPrefs.showSystemToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showSystemToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play system sound" 
+                  checked={nPrefs.playSystemSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playSystemSound: val } })}
+                />
+              </div>
+            </div>
+          </div>
         </SettingsGroup>
 
         {/* General */}
