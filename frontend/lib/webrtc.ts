@@ -1370,9 +1370,9 @@ export class WebRTCClient {
               ];
 
         try {
-          const videoCodec = this.device.rtpCapabilities.codecs?.find(
+          const videoCodec = this.device?.rtpCapabilities?.codecs?.find(
             (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
-          ) || this.device.rtpCapabilities.codecs?.find(
+          ) || this.device?.rtpCapabilities?.codecs?.find(
             (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
           );
 
@@ -1397,9 +1397,13 @@ export class WebRTCClient {
     
     if (audioTrack) {
       if (audioTrack.readyState === 'live') {
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: audioTrack, 
-          appData: { source: 'mic' } 
+          appData: { source: 'mic' },
+          codec: opusCodec
         });
         this.onAudioTrackReplaced?.();
         if (isAudioPaused) this.localAudioProducer.pause();
@@ -1466,6 +1470,13 @@ export class WebRTCClient {
     }
     
     this.emitTelemetry('media_recovery_completed');
+    
+    // Cleanup old ghosts before re-fetching
+    this.consumers.forEach((consumer) => {
+      consumer.close();
+    });
+    this.consumers.clear();
+
     // Re-fetch consumers
     try {
       const res = await this.request('getProducers', 'producersList');
@@ -1697,9 +1708,9 @@ export class WebRTCClient {
       this.emitTelemetry('video_produce_started');
       console.log('camera_producer_creating');
       try {
-        const videoCodec = this.device.rtpCapabilities.codecs?.find(
+        const videoCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
-        ) || this.device.rtpCapabilities.codecs?.find(
+        ) || this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
         );
 
@@ -1867,9 +1878,13 @@ export class WebRTCClient {
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
         this.emitTelemetry('audio_produce_started');
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: activeTrack,
-          appData: { source: 'mic' }
+          appData: { source: 'mic' },
+          codec: opusCodec
         });
         this.emitTelemetry('audio_producer_created');
       } else {
@@ -1948,7 +1963,10 @@ export class WebRTCClient {
       if (!this.localAudioProducer.closed) {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       } else {
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
+        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
       }
       this.onAudioTrackReplaced?.();
       return activeTrack;
@@ -2034,7 +2052,10 @@ export class WebRTCClient {
           const denoisedStream = await this.purifyInstance.processStream(rawStream);
           activeTrack = denoisedStream.getAudioTracks()[0];
         }
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
+        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
         this.onAudioTrackReplaced?.();
       } else {
         this.rawCameraStream = stream;
@@ -2053,9 +2074,9 @@ export class WebRTCClient {
                 { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
               ];
           
-        const videoCodec = this.device.rtpCapabilities.codecs?.find(
+        const videoCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
-        ) || this.device.rtpCapabilities.codecs?.find(
+        ) || this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
         );
 
