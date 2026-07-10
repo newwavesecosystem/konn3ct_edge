@@ -144,6 +144,14 @@ export async function createWebRtcTransport(roomId: string) {
 
   transports.set(transport.id, transport);
 
+  if (config.mediasoup.webRtcTransport.maxIncomingBitrate) {
+    try {
+      await transport.setMaxIncomingBitrate(config.mediasoup.webRtcTransport.maxIncomingBitrate);
+    } catch (e) {
+      logger.error('Failed to set max incoming bitrate:', e);
+    }
+  }
+
   transport.on('dtlsstatechange', (dtlsState) => {
     if (dtlsState === 'closed' || dtlsState === 'failed') {
       transport.close();
