@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -405,6 +405,7 @@ export function initializeSignaling(server: Server) {
       const roomSlug = url.searchParams.get('roomId');
       const isMobile = url.searchParams.get('isMobile') === 'true';
       const participantIdParam = url.searchParams.get('participantId');
+      const userAgent = request.headers['user-agent'] || 'unknown_agent';
 
       if (!token || !roomSlug) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -518,6 +519,7 @@ export function initializeSignaling(server: Server) {
           participantId: participantIdParam,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
+          userAgent,
           maxActiveCameras: room.maxActiveCameras ?? 15,
           maxParticipants: maxParticipants,
         });
@@ -530,7 +532,9 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId } = clientData;
+    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
+
+    logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
@@ -1110,7 +1114,7 @@ export function initializeSignaling(server: Server) {
               networkWindowSize: newSettings.networkWindowSize,
               networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
             }
-          }).catch(e => logger.error("Failed to persist network settings", e));
+          }).catch((e: any) => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
@@ -2155,6 +2159,26 @@ export function initializeSignaling(server: Server) {
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
+        }
+        break;
+      }
+
+      case 'restart_ice': {
+        const { transportId } = data;
+        try {
+          logger.info(`User ${userId} requesting ICE Restart for transport ${transportId}`);
+          const iceParameters = await restartIce(transportId);
+          client.ws.send(JSON.stringify({
+            type: 'ice_restarted',
+            transportId,
+            iceParameters
+          }));
+        } catch (error) {
+          logger.error(`Failed to restart ICE for transport ${transportId}: ${error}`);
+          client.ws.send(JSON.stringify({
+            type: 'error',
+            message: 'Failed to restart ICE'
+          }));
         }
         break;
       }

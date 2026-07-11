@@ -1,6 +1,4 @@
-import { Plan } from '@prisma/client';
-
-export function calculateSubscriptionEndDate(currentEnd: Date | null, plan: Partial<Plan> | null): Date {
+export function calculateSubscriptionEndDate(currentEnd: Date | null, plan: any | null): Date {
   const baseDate = currentEnd && currentEnd > new Date() ? currentEnd : new Date();
   const endDate = new Date(baseDate);
   const durationDays = plan && 'durationDays' in plan && typeof plan.durationDays === 'number' ? plan.durationDays : 30;
