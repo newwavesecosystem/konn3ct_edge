@@ -266,7 +266,9 @@ async function processRecordingJob(job) {
         "--start-fullscreen",
         "--autoplay-policy=no-user-gesture-required",
         "--disable-dev-shm-usage",
-        `--app=${url}`
+        "--disable-gpu",
+        "--use-gl=angle",
+        "--use-angle=swiftshader"
       ],
       env: {
         ...process.env,
@@ -285,6 +287,9 @@ async function processRecordingJob(job) {
     // Grant permissions
     const context = browser.defaultBrowserContext();
     await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
+
+    // Navigate to the meeting URL
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }).catch(e => console.log('Goto error:', e));
 
     // Wait for route to load
     await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
