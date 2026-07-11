@@ -270,8 +270,6 @@ async function processRecordingJob(job) {
         "--use-angle=swiftshader",
         "--enable-unsafe-swiftshader",
         "--ignore-gpu-blocklist",
-        "--disable-gpu",
-        "--disable-gpu-compositing",
         "--disable-setuid-sandbox",
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
@@ -412,30 +410,40 @@ async function processRecordingJob(job) {
       });
     });
 
-    // Take diagnostic screenshot
-    const screenshotPath = path.join(recordingsDir, `${roomId}_diagnostic.png`);
-    await page.screenshot({ path: screenshotPath });
-    console.log(JSON.stringify({ event: "recorder_diagnostic_screenshot_saved", recordingId, path: screenshotPath }));
-
-    // Use Jimp to do a proper pixel analysis
+    let blackPercent = 100;
+    let screenshotPath = path.join(recordingsDir, `${roomId}_diagnostic.png`);
     const Jimp = require('jimp');
-    const image = await Jimp.read(screenshotPath);
-    let blackPixels = 0;
-    const totalPixels = image.bitmap.width * image.bitmap.height;
+
+    // Deterministic polling: Wait for the screen to become non-black (up to 15 seconds)
+    // This allows time for CSS fade-ins, keyframe decoding, and layout shifting.
+    for (let attempt = 1; attempt <= 15; attempt++) {
+      await page.screenshot({ path: screenshotPath });
+      const image = await Jimp.read(screenshotPath);
+      let blackPixels = 0;
+      const totalPixels = image.bitmap.width * image.bitmap.height;
+      
+      image.scan(0, 0, image.bitmap.width, image.bitmap.height, function(x, y, idx) {
+        const r = this.bitmap.data[idx + 0];
+        const g = this.bitmap.data[idx + 1];
+        const b = this.bitmap.data[idx + 2];
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if (lum < 10) blackPixels++; 
+      });
+      
+      blackPercent = (blackPixels / totalPixels) * 100;
+      
+      if (blackPercent <= 95) {
+        console.log(JSON.stringify({ event: "recorder_diagnostic_screenshot_saved", recordingId, path: screenshotPath, attempt, blackPercent }));
+        break; // Screen is visibly ready!
+      }
+      
+      // Wait 1 second before trying again
+      await new Promise(r => setTimeout(r, 1000));
+    }
     
-    image.scan(0, 0, image.bitmap.width, image.bitmap.height, function(x, y, idx) {
-      const r = this.bitmap.data[idx + 0];
-      const g = this.bitmap.data[idx + 1];
-      const b = this.bitmap.data[idx + 2];
-      // luminance
-      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      if (lum < 10) blackPixels++; // near black
-    });
-    
-    const blackPercent = (blackPixels / totalPixels) * 100;
     if (blackPercent > 95) {
       console.log(JSON.stringify({ event: "recorder_pre_capture_black_frame_detected", recordingId, blackPercent }));
-      throw new Error("Diagnostic screenshot indicates mostly black frame.");
+      throw new Error("Diagnostic screenshot indicates mostly black frame after 15 seconds of polling.");
     }
 
     // 5. Spawn FFmpeg
