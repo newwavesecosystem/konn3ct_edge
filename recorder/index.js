@@ -280,9 +280,10 @@ async function processRecordingJob(job) {
     const checkViewport = await browser.pages();
     const viewportPage = checkViewport[0];
     const innerHeight = await viewportPage.evaluate(() => window.innerHeight);
-    if (innerHeight < 1080) {
+    // Use 1050 instead of 1080 to allow for tiny 1px borders in Xvfb, while still catching 30px+ banners
+    if (innerHeight < 1050) {
       console.log(JSON.stringify({ event: "recorder_pre_capture_chrome_ui_detected", recordingId, innerHeight }));
-      throw new Error(`Chrome UI elements detected. Viewport height is ${innerHeight}, expected 1080.`);
+      throw new Error(`Chrome UI elements detected. Viewport height is ${innerHeight}, expected near 1080.`);
     }
 
     const pages = await browser.pages();
