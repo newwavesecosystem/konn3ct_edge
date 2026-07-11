@@ -2247,20 +2247,14 @@ export class WebRTCClient {
       this.consumers.set(consumer.id, consumer);
       
       // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
+      // We explicitly DO NOT update UI state (isCameraOn/isMuted) here because BWE can cause rapid oscillation.
+      // Intentional user camera/mic toggles are handled by the explicit WebSocket 'camera_state' and 'mute_state' events.
       consumer.on('pause', () => {
-        if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: false });
-        } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: true });
-        }
+        console.log(`[WebRTC] Consumer ${id} paused by SFU (likely bandwidth degradation or producer paused)`);
       });
 
       consumer.on('resume', () => {
-        if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: true });
-        } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: false });
-        }
+        console.log(`[WebRTC] Consumer ${id} resumed by SFU`);
       });
 
       this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);
