@@ -6,6 +6,7 @@ const { S3Client } = require('@aws-sdk/client-s3');
 const { Upload } = require('@aws-sdk/lib-storage');
 const ffmpeg = require('fluent-ffmpeg');
 const http = require('http');
+const { spawn, execSync } = require('child_process');
 
 require('dotenv').config();
 
