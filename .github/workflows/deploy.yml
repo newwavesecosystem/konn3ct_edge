@@ -42,35 +42,35 @@ jobs:
       #       docker push $IMAGE_NAME:prod-latest
       #     fi
 
-      - name: Build and Push Frontend Docker Image
-        run: |
-          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
-          docker build \
-            --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} \
-            --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
-            --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
-            --build-arg NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
-            --build-arg NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
-            --build-arg NEXT_PUBLIC_POOR_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_RTT }}" \
-            --build-arg NEXT_PUBLIC_POOR_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_LOSS }}" \
-            --build-arg NEXT_PUBLIC_POOR_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_JITTER }}" \
-            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_RTT }}" \
-            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS }}" \
-            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
-            --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
-            --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
-            -t $IMAGE_NAME:${{ github.sha }} ./frontend
-          docker push $IMAGE_NAME:${{ github.sha }}
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
-            docker push $IMAGE_NAME:staging-latest
-          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
-            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
-            docker push $IMAGE_NAME:prod-latest
-          elif [ "${{ github.ref }}" = "refs/heads/1gov_stag" ]; then
-            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:1gov_stag
-            docker push $IMAGE_NAME:1gov_stag
-          fi
+      # - name: Build and Push Frontend Docker Image
+      #   run: |
+      #     IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
+      #     docker build \
+      #       --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} \
+      #       --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
+      #       --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
+      #       --build-arg NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+      #       --build-arg NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
+      #       --build-arg NEXT_PUBLIC_POOR_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_RTT }}" \
+      #       --build-arg NEXT_PUBLIC_POOR_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_LOSS }}" \
+      #       --build-arg NEXT_PUBLIC_POOR_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_JITTER }}" \
+      #       --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_RTT }}" \
+      #       --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS }}" \
+      #       --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
+      #       --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
+      #       --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
+      #       -t $IMAGE_NAME:${{ github.sha }} ./frontend
+      #     docker push $IMAGE_NAME:${{ github.sha }}
+      #     if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+      #       docker push $IMAGE_NAME:staging-latest
+      #     elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+      #       docker push $IMAGE_NAME:prod-latest
+      #     elif [ "${{ github.ref }}" = "refs/heads/1gov_stag" ]; then
+      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:1gov_stag
+      #       docker push $IMAGE_NAME:1gov_stag
+      #     fi
 
       - name: Build and Push Recorder Docker Image
         if: github.ref != 'refs/heads/1gov_stag'
@@ -137,7 +137,7 @@ jobs:
           # In production, the image tag explicitly changes to the commit hash, so kubectl apply automatically rolls it out!
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             # kubectl rollout restart deployment conn3ct-backend
-            kubectl rollout restart deployment conn3ct-frontend
+            # kubectl rollout restart deployment conn3ct-frontend
             kubectl rollout restart deployment conn3ct-recorder
             # kubectl rollout restart deployment conn3ct-streaming-worker
           fi
