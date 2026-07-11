@@ -684,6 +684,10 @@ export function MeetingProvider({
                 virtualBackgroundEnabled: decoded.virtualBackgroundEnabled ?? true,
               });
               client.isVirtualBackgroundEnabled = decoded.virtualBackgroundEnabled ?? true;
+              
+              if (decoded.role && decoded.role !== initialCurrentUser.role) {
+                setParticipants(prev => prev.map(p => (p.id === clientParticipantId || p.id === 'pending') ? { ...p, role: decoded.role } : p));
+              }
             }
           } catch (e) {
             console.error("Failed to decode token for feature flags", e);
