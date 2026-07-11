@@ -270,6 +270,7 @@ async function processRecordingJob(job) {
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
         "--disable-gpu",
+        "--disable-gpu-compositing",
         "--use-gl=angle",
         "--use-angle=swiftshader",
         "--disable-accelerated-video-decode"
@@ -296,6 +297,7 @@ async function processRecordingJob(job) {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }).catch(e => console.log('Goto error:', e));
 
     // Wait for route to load
+    await page.bringToFront();
     await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
     console.log(JSON.stringify({ event: "recorder_route_loaded", recordingId }));
     console.log(JSON.stringify({ event: "recorder_joined_room", recordingId }));
