@@ -161,8 +161,6 @@ async function run() {
   };
 
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
-  const outputPathMp4 = path.join(path.dirname(outputPathRaw), `${roomId}.mp4`);
-
   try {
     console.log(`[${recordingId}] transcoder process started for ${outputPathRaw}`);
     
@@ -176,28 +174,7 @@ async function run() {
       recordingId, botToken,
       { status: 'transcoding' }
     );
-    console.log(`[${recordingId}] ffmpeg_transcode_started`);
-
-    await new Promise((resolve, reject) => {
-      ffmpeg(outputPathRaw)
-        .outputOptions([
-          '-y',
-          '-c copy',
-          '-max_muxing_queue_size 9999'
-        ])
-        .on('progress', (progress) => {
-          console.log(`[${recordingId}] ffmpeg_progress: ${progress.percent}% done`);
-        })
-        .save(outputPathMp4)
-        .on('error', (err, stdout, stderr) => {
-          console.error(`[${recordingId}] ffmpeg_transcode_failed`, err);
-          reject(err);
-        })
-        .on('end', () => {
-          console.log(`[${recordingId}] ffmpeg_transcode_completed`);
-          resolve();
-        });
-    });
+    const outputPathMp4 = outputPathRaw;
 
     let finalDuration = 0;
     try {
@@ -261,7 +238,6 @@ async function run() {
     );
 
     // Cleanup
-    try { fs.unlinkSync(outputPathRaw); } catch(e) {}
     try { fs.unlinkSync(outputPathMp4); } catch(e) {}
     
     const Redis = require('ioredis');

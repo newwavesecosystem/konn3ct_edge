@@ -48,6 +48,10 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     lsb-release \
     pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    dbus \
+    dbus-x11 \
     wget \
     xdg-utils \
     --no-install-recommends \
