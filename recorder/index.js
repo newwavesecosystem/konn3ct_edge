@@ -287,17 +287,6 @@ async function processRecordingJob(job) {
       },
     });
     console.log(JSON.stringify({ event: "recorder_chrome_launched_app_mode", recordingId }));
-    
-    // Check innerHeight to ensure no UI toolbars
-    const checkViewport = await browser.pages();
-    const viewportPage = checkViewport[0];
-    const innerHeight = await viewportPage.evaluate(() => window.innerHeight);
-    // Use 1050 instead of 1080 to allow for tiny 1px borders in Xvfb, while still catching 30px+ banners
-    if (innerHeight < 1050) {
-      console.log(JSON.stringify({ event: "recorder_pre_capture_chrome_ui_detected", recordingId, innerHeight }));
-      throw new Error(`Chrome UI elements detected. Viewport height is ${innerHeight}, expected near 1080.`);
-    }
-
     const pages = await browser.pages();
     const page = pages[0];
     
@@ -312,141 +301,12 @@ async function processRecordingJob(job) {
     // Wait for route to load
     await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
     console.log(JSON.stringify({ event: "recorder_route_loaded", recordingId }));
-
-    // Readiness checks
-    try {
-      await page.waitForFunction(
-        () => {
-           const state = (window).__KONN3CT_RECORDER_READY__;
-           return state?.joined === true || state?.failed === true;
-        },
-        { timeout: 60000 }
-      );
-      const readyState = await page.evaluate(() => (window).__KONN3CT_RECORDER_READY__);
-      if (readyState?.failed) throw new Error(readyState.reason || 'ready_failed');
-    } catch (e) {
-      console.log(JSON.stringify({ event: "recorder_pre_capture_route_not_ready", recordingId }));
-      throw e;
-    }
     console.log(JSON.stringify({ event: "recorder_joined_room", recordingId }));
 
-    // Video/Audio render readiness
-    await page.evaluate(() => {
-      return new Promise(async (resolve, reject) => {
-        try {
-          console.log("PAGE LOG: recorder_video_elements_detected");
-          await new Promise((resolveVideo) => {
-            let attempt = 0;
-            const checkVideo = () => {
-              const videos = document.querySelectorAll('video');
-              for (let i = 0; i < videos.length; i++) {
-                const v = videos[i];
-                if (v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0) {
-                  if (typeof v.requestVideoFrameCallback === 'function') {
-                    v.requestVideoFrameCallback(() => {
-                      console.log("PAGE LOG: recorder_first_video_frame_received");
-                      console.log("PAGE LOG: recorder_video_render_ready");
-                      resolveVideo();
-                    });
-                    return;
-                  } else {
-                    console.log("PAGE LOG: recorder_first_video_frame_received");
-                    console.log("PAGE LOG: recorder_video_render_ready");
-                    resolveVideo();
-                    return;
-                  }
-                }
-              }
-              attempt++;
-              if (attempt > 60) return resolveVideo();
-              setTimeout(checkVideo, 500);
-            };
-            checkVideo();
-          });
-
-          console.log("PAGE LOG: recorder_audio_context_running");
-          await new Promise((resolveAudio) => {
-            try {
-              const AudioContext = window.AudioContext || window.webkitAudioContext;
-              const ctx = new AudioContext();
-              const analyser = ctx.createAnalyser();
-              analyser.fftSize = 256;
-              const dataArray = new Uint8Array(analyser.frequencyBinCount);
-              const audios = document.querySelectorAll('audio, video');
-              for (let i = 0; i < audios.length; i++) {
-                try {
-                  let source;
-                  if (audios[i].srcObject) {
-                    source = ctx.createMediaStreamSource(audios[i].srcObject);
-                  } else {
-                    source = ctx.createMediaElementSource(audios[i]);
-                  }
-                  source.connect(analyser);
-                } catch(e) {}
-              }
-              let attempt = 0;
-              const checkAudio = () => {
-                analyser.getByteFrequencyData(dataArray);
-                const sum = dataArray.reduce((a, b) => a + b, 0);
-                if (sum > 0) {
-                  console.log("PAGE LOG: recorder_audio_level_detected", sum);
-                  console.log("PAGE LOG: recorder_audio_capture_ready");
-                  resolveAudio();
-                  return;
-                }
-                attempt++;
-                if (attempt > 60) return resolveAudio();
-                setTimeout(checkAudio, 500);
-              };
-              checkAudio();
-            } catch (e) {
-              resolveAudio();
-            }
-          });
-          resolve();
-        } catch (e) {
-          reject(e.toString());
-        }
-      });
-    });
-
-    let blackPercent = 100;
-    let screenshotPath = path.join(recordingsDir, `${roomId}_diagnostic.png`);
-    const Jimp = require('jimp');
-
-    // Deterministic polling: Wait for the screen to become non-black (up to 15 seconds)
-    // This allows time for CSS fade-ins, keyframe decoding, and layout shifting.
-    for (let attempt = 1; attempt <= 15; attempt++) {
-      await page.screenshot({ path: screenshotPath });
-      const image = await Jimp.read(screenshotPath);
-      let blackPixels = 0;
-      const totalPixels = image.bitmap.width * image.bitmap.height;
-      
-      image.scan(0, 0, image.bitmap.width, image.bitmap.height, function(x, y, idx) {
-        const r = this.bitmap.data[idx + 0];
-        const g = this.bitmap.data[idx + 1];
-        const b = this.bitmap.data[idx + 2];
-        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        if (lum < 10) blackPixels++; 
-      });
-      
-      blackPercent = (blackPixels / totalPixels) * 100;
-      
-      if (blackPercent <= 95) {
-        console.log(JSON.stringify({ event: "recorder_diagnostic_screenshot_saved", recordingId, path: screenshotPath, attempt, blackPercent }));
-        break; // Screen is visibly ready!
-      }
-      
-      // Wait 1 second before trying again
-      await new Promise(r => setTimeout(r, 1000));
-    }
+    // Wait 2 seconds just for initial React render/layout shift before recording
+    await new Promise(r => setTimeout(r, 2000));
     
-    if (blackPercent > 95) {
-      console.log(JSON.stringify({ event: "recorder_pre_capture_black_frame_detected", recordingId, blackPercent }));
-      throw new Error("Diagnostic screenshot indicates mostly black frame after 15 seconds of polling.");
-    }
-
-    // 5. Spawn FFmpeg
+// 5. Spawn FFmpeg
     const ffmpegArgs = [
       '-y',
       '-thread_queue_size', '1024',
