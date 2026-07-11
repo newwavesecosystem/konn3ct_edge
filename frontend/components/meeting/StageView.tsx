@@ -66,7 +66,7 @@ export function StageView() {
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
   const others = gridSorted; // Keep all participants in the strip to prevent swapping/rearranging
 
-  if (layoutMode === "grid" || currentUser.role === 'bot' || currentUser.role === 'recorder') {
+  if (layoutMode === "grid") {
     return <GridLayout participants={gridSorted} />;
   }
 
@@ -413,12 +413,9 @@ function GridInner({
 }) {
   const { currentUser } = useMeeting();
   const count = participants.length;
-  const isBotViewer = currentUser.role === 'bot' || currentUser.role === 'recorder';
-
-  // For bots, we want 0 padding and 0 gap to perfectly fill the screen
-  const paddingX = isBotViewer ? 0 : TILE_PADDING_X;
-  const paddingY = isBotViewer ? 0 : TILE_PADDING_Y;
-  const gap = isBotViewer ? 0 : TILE_GAP;
+  const paddingX = TILE_PADDING_X;
+  const paddingY = TILE_PADDING_Y;
+  const gap = TILE_GAP;
 
   const computeDynamicGrid = (c: number, w: number, h: number) => {
     const availW = Math.max(0, w - paddingX * 2);
@@ -454,7 +451,7 @@ function GridInner({
   // Hooks always run.
   const solution = useMemo(
     () => computeDynamicGrid(count, containerW, containerH),
-    [count, containerW, containerH, isBotViewer],
+    [count, containerW, containerH],
   );
 
   if (count === 0) {
@@ -465,15 +462,7 @@ function GridInner({
 
   // ── 1 participant: hero ─────────────────────────────────
   if (count === 1) {
-    if (isBotViewer) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-full h-full">
-            <ParticipantTile participant={participants[0]} isLarge fixedAspect={false} />
-          </div>
-        </div>
-      );
-    }
+
 
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
@@ -488,23 +477,18 @@ function GridInner({
   if (count === 2) {
     const isPortrait = containerW < containerH * 1.1;
     return (
-      <div className={cn("absolute inset-0 flex items-center justify-center", !isBotViewer && "p-3 sm:p-4")}>
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4">
         <div
           className={cn(
-            "w-full flex",
-            isBotViewer ? "gap-0 h-full" : "gap-2.5 sm:gap-3",
+            "w-full flex gap-2.5 sm:gap-3",
             isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
           <AnimatePresence>
             {participants.map((p) => (
               <div key={p.id} className="flex-1 min-w-0 min-h-0 w-full flex justify-center">
-                <div className={cn("w-full max-h-full", isBotViewer ? "h-full" : "aspect-video")}>
-                  {isBotViewer ? (
-                    <ParticipantTile participant={p} isLarge fixedAspect={false} />
-                  ) : (
-                    <MotionTile participant={p} isLarge />
-                  )}
+                <div className="w-full max-h-full aspect-video">
+                  <MotionTile participant={p} isLarge />
                 </div>
               </div>
             ))}
@@ -526,19 +510,11 @@ function GridInner({
           gridTemplateColumns: `repeat(${cols}, ${tileW}px)`,
           gridAutoRows: `${tileH}px`,
           gap: `${gap}px`,
-          width: isBotViewer ? "100%" : undefined,
-          height: isBotViewer ? "100%" : undefined,
         }}
       >
         <AnimatePresence>
           {participants.map((p) => (
-            isBotViewer ? (
-              <div key={p.id} className="w-full h-full min-h-0 min-w-0 overflow-hidden">
-                <ParticipantTile participant={p} fixedAspect={false} />
-              </div>
-            ) : (
-              <MotionTile key={p.id} participant={p} />
-            )
+            <MotionTile key={p.id} participant={p} />
           ))}
         </AnimatePresence>
       </motion.div>

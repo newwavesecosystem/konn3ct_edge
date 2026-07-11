@@ -397,7 +397,7 @@ export function ParticipantTile({
           className="absolute inset-0 flex items-center justify-center"
           style={
             isLarge
-              ? { backgroundColor: "black" }
+              ? { backgroundColor: "#111111" }
               : {
                   background:
                     "linear-gradient(135deg, var(--mt-bg-tile-camera), var(--mt-bg-tile), var(--mt-bg-tile-alt2))",
