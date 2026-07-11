@@ -155,8 +155,10 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
              if (health !== 'recovering' && !video.paused) {
                 stallCountRef.current++;
                 if (stallCountRef.current > 4) {
-                  console.log('participant_tile_video_stalled');
-                  triggerRecovery('currentTime stalled');
+                  if (health !== 'stalled') {
+                    console.log('participant_tile_video_stalled');
+                    setHealth('stalled');
+                  }
                   return;
                 }
              }
@@ -188,8 +190,9 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
          if (checkBlackFrame(video)) {
             if (health !== 'black') {
                setHealth('black');
+               console.log('participant_tile_video_black');
             }
-            triggerRecovery('black frame detected');
+            // intentionally NOT calling triggerRecovery here to prevent infinite destruction loops
          } else if (health === 'black') {
             // It recovered from black!
             setHealth('healthy');

@@ -1116,21 +1116,18 @@ function ScreenShareLayout({
       </div>
 
       {/* Participant filmstrip */}
-      <div className={cn("shrink-0 overflow-hidden no-scrollbar", isFullscreen && "hidden")}>
-        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
-          {participants.map((p) => (
-            <div key={p.id} className="w-24 sm:w-32 shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
-        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
-          {participants.map((p) => (
-            <div key={p.id} className="w-full shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
+      <div className={cn(
+        "shrink-0 overflow-auto no-scrollbar",
+        isFullscreen && "hidden",
+        "flex lg:flex-col gap-1.5 sm:gap-2",
+        "w-full lg:w-44 xl:w-52",
+        "py-1 lg:py-0 h-auto lg:h-full"
+      )}>
+        {participants.map((p) => (
+          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+            <ParticipantTile participant={p} fixedAspect />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1259,21 +1256,18 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         </div>
       </div>
 
-      <div className={cn("shrink-0 overflow-hidden no-scrollbar", isFullscreen && "hidden")}>
-        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
-          {participants.map((p) => (
-            <div key={p.id} className="w-24 sm:w-32 shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
-        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
-          {participants.map((p) => (
-            <div key={p.id} className="w-full shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
+      <div className={cn(
+        "shrink-0 overflow-auto no-scrollbar",
+        isFullscreen && "hidden",
+        "flex lg:flex-col gap-1.5 sm:gap-2",
+        "w-full lg:w-44 xl:w-52",
+        "py-1 lg:py-0 h-auto lg:h-full"
+      )}>
+        {participants.map((p) => (
+          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+            <ParticipantTile participant={p} fixedAspect />
+          </div>
+        ))}
       </div>
     </div>
   );
