@@ -255,7 +255,7 @@ async function processRecordingJob(job) {
     browser = await puppeteer.launch({
       executablePath: "/usr/bin/google-chrome",
       headless: false,
-      defaultViewport: null,
+      defaultViewport: { width: 1920, height: 1080 },
       ignoreDefaultArgs: ["--enable-automation"],
       args: [
         "--disable-infobars",
@@ -266,6 +266,9 @@ async function processRecordingJob(job) {
         "--start-fullscreen",
         "--autoplay-policy=no-user-gesture-required",
         "--disable-dev-shm-usage",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
         "--disable-gpu",
         "--use-gl=angle",
         "--use-angle=swiftshader",
