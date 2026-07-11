@@ -1114,7 +1114,7 @@ export function initializeSignaling(server: Server) {
               networkWindowSize: newSettings.networkWindowSize,
               networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
             }
-          }).catch(e => logger.error("Failed to persist network settings", e));
+          }).catch((e: any) => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
