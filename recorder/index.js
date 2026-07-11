@@ -266,6 +266,18 @@ async function processRecordingJob(job) {
         "--window-position=0,0",
         "--start-fullscreen",
         "--kiosk",
+        "--use-gl=angle",
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+        "--ignore-gpu-blocklist",
+        "--disable-setuid-sandbox",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--hide-scrollbars",
+        "--use-fake-ui-for-media-stream",
+        `--use-file-for-fake-audio-capture=${require('path').join(__dirname, 'silent.wav')}`,
+        "--disable-web-security",
         `--app=${url}`,
       ],
       env: {
@@ -288,6 +300,14 @@ async function processRecordingJob(job) {
 
     const pages = await browser.pages();
     const page = pages[0];
+    
+    // Wire up console logs
+    page.on('console', msg => console.log(msg.text()));
+    page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
+
+    // Grant permissions
+    const context = browser.defaultBrowserContext();
+    await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
 
     // Wait for route to load
     await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
