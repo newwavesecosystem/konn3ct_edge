@@ -270,6 +270,8 @@ async function processRecordingJob(job) {
         "--use-angle=swiftshader",
         "--enable-unsafe-swiftshader",
         "--ignore-gpu-blocklist",
+        "--disable-gpu",
+        "--disable-gpu-compositing",
         "--disable-setuid-sandbox",
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
@@ -375,9 +377,13 @@ async function processRecordingJob(job) {
               const audios = document.querySelectorAll('audio, video');
               for (let i = 0; i < audios.length; i++) {
                 try {
-                  const source = ctx.createMediaElementSource(audios[i]);
+                  let source;
+                  if (audios[i].srcObject) {
+                    source = ctx.createMediaStreamSource(audios[i].srcObject);
+                  } else {
+                    source = ctx.createMediaElementSource(audios[i]);
+                  }
                   source.connect(analyser);
-                  analyser.connect(ctx.destination);
                 } catch(e) {}
               }
               let attempt = 0;
