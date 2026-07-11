@@ -268,7 +268,8 @@ async function processRecordingJob(job) {
         "--disable-dev-shm-usage",
         "--disable-gpu",
         "--use-gl=angle",
-        "--use-angle=swiftshader"
+        "--use-angle=swiftshader",
+        "--disable-accelerated-video-decode"
       ],
       env: {
         ...process.env,
@@ -296,8 +297,23 @@ async function processRecordingJob(job) {
     console.log(JSON.stringify({ event: "recorder_route_loaded", recordingId }));
     console.log(JSON.stringify({ event: "recorder_joined_room", recordingId }));
 
-    // Wait 2 seconds just for initial React render/layout shift before recording
-    await new Promise(r => setTimeout(r, 2000));
+    // Wait for the React app to signal that media is ready and rendering
+    console.log(JSON.stringify({ event: "recorder_waiting_for_media", recordingId }));
+    try {
+      await page.waitForFunction(
+        () => {
+          const state = window.__KONN3CT_RECORDER_READY__;
+          return state && state.mediaReady === true;
+        },
+        { timeout: 45000, polling: 500 }
+      );
+      console.log(JSON.stringify({ event: "recorder_media_ready", recordingId }));
+    } catch (err) {
+      console.warn("Timeout waiting for mediaReady, forcing capture start anyway");
+    }
+    
+    // Extra 1s buffer for Framer Motion animations to finish
+    await new Promise(r => setTimeout(r, 1000));
     
 // 5. Spawn FFmpeg
     const ffmpegArgs = [
