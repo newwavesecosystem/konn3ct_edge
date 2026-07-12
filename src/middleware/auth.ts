@@ -42,6 +42,31 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  let headerToken: string | undefined;
+  if (authHeader) {
+    const [scheme, tok] = authHeader.split(' ');
+    if (scheme === 'Bearer' && tok) headerToken = tok;
+  }
+  const token = req.cookies?.token || headerToken;
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET;
+    if (secret) {
+      const decoded = jwt.verify(token, secret) as { userId: string; email: string };
+      req.user = decoded;
+    }
+  } catch (error) {
+    // Silently ignore invalid tokens in optional auth
+  }
+  next();
+};
+
 import { db } from '../db';
 
 export const requireActiveSubscription = async (req: Request, res: Response, next: NextFunction) => {
