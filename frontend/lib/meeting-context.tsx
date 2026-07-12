@@ -684,9 +684,10 @@ export function MeetingProvider({
                 virtualBackgroundEnabled: decoded.virtualBackgroundEnabled ?? true,
               });
               client.isVirtualBackgroundEnabled = decoded.virtualBackgroundEnabled ?? true;
-              
               if (decoded.role && decoded.role !== initialCurrentUser.role) {
-                setParticipants(prev => prev.map(p => (p.id === clientParticipantId || p.id === 'pending') ? { ...p, role: decoded.role } : p));
+                // DO NOT overwrite the role here! The JWT token defaults to 'attendee' and the signaling server 
+                // is responsible for dynamically upgrading the user to 'host' via the session_status websocket event.
+                // Overwriting it here causes the host to be incorrectly demoted.
               }
             }
           } catch (e) {

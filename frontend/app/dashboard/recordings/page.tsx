@@ -64,8 +64,13 @@ export default function RecordingsPage() {
   };
 
   const handleGenerateLink = () => {
-    const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
-    setGeneratedLink(link);
+    if (selectedRecording?.id) {
+      const link = `${window.location.origin}/recordings/${selectedRecording.id}`;
+      setGeneratedLink(link);
+    } else {
+      const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
+      setGeneratedLink(link);
+    }
   };
 
   return (
@@ -234,7 +239,11 @@ export default function RecordingsPage() {
             <div className="p-4 rounded-xl border border-brand-green/20 bg-brand-green/5 space-y-3">
               <p className="text-sm font-medium text-brand-green">Link generated successfully!</p>
               <div className="flex gap-2">
-                <Input value={generatedLink} readOnly className="h-10 bg-white" />
+                <input 
+                  value={generatedLink} 
+                  readOnly 
+                  className="flex-1 px-4 py-2 rounded-xl border outline-none bg-white text-slate-900 border-brand-green/20" 
+                />
                 <Button 
                   onClick={() => navigator.clipboard.writeText(generatedLink)}
                   className="h-10 bg-brand-green hover:bg-[#287854] shrink-0"
