@@ -935,7 +935,7 @@ export function MeetingProvider({
                 if (now - lastChatToastTime > 2000) {
                   lastChatToastTime = now;
                   const preview = msg.message.length > 80 ? msg.message.substring(0, 80) + "..." : msg.message;
-                  toast(`New message from ${msg.userName}`, {
+                  toast(`New message from ${msg.name || 'Someone'}`, {
                     description: preview,
                     action: {
                       label: "View",
