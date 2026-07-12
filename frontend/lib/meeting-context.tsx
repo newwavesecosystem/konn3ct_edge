@@ -969,16 +969,17 @@ export function MeetingProvider({
           setChatMessages((prev) => {
             // PRESENCE-002: Split-brain state recovery
             setParticipants((currentParticipants) => {
-              if (msg.userId && !currentParticipants.some(p => p.id === msg.userId)) {
+              const matchId = msg.senderParticipantId || msg.participantId || msg.userId;
+              if (matchId && !currentParticipants.some(p => p.id === matchId || p.userId === msg.userId)) {
                 client?.emitTelemetry('chat_alive_media_dead');
                 setTimeout(() => {
                   if (hasLeftMeetingRef.current) return;
-                  setParticipants(curr => curr.map(p => p.id === msg.userId ? { ...p, isConnecting: false } : p));
+                  setParticipants(curr => curr.map(p => p.id === matchId ? { ...p, isConnecting: false } : p));
                 }, 4000);
                 return [
                   ...currentParticipants,
                   {
-                    id: msg.userId,
+                    id: matchId,
                     userId: msg.userId,
                     name: msg.name || `Participant ${msg.userId.substring(5, 9)}`,
                     role: "attendee",
