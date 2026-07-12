@@ -1239,7 +1239,7 @@ export function initializeSignaling(server: Server) {
             serverEventId,
             roomId,
             userId,
-            senderParticipantId: userId,
+            senderParticipantId: client.participantId,
             name: client.name,
             message: data.message,
             timestamp: createdAt.toISOString(),
