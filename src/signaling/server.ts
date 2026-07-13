@@ -123,6 +123,7 @@ interface Client {
   audioOnlyMode?: boolean;
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
+  isMuted: boolean;
   maxActiveCameras?: number;
   preempted?: boolean;
   maxParticipants?: number;
@@ -163,7 +164,7 @@ async function asyncWithRetry<T>(
   }
 }
 export function getActiveRoomParticipants(roomId: string) {
-  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
+  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, isMuted: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
   if (roomClients) {
     for (const client of roomClients.values()) {
@@ -175,6 +176,7 @@ export function getActiveRoomParticipants(roomId: string) {
           role: client.role,
           isMobile: client.isMobile,
           isCameraOn: client.isCameraOn,
+          isMuted: client.isMuted,
           audioOnlyMode: client.audioOnlyMode,
           videoSuspendedReason: client.videoSuspendedReason
         });
@@ -543,7 +545,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isMuted: true, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -632,7 +634,8 @@ export function initializeSignaling(server: Server) {
           participantId,
           name: client.name,
           role: client.role,
-          isMobile: client.isMobile
+          isMobile: client.isMobile,
+          isMuted: client.isMuted
         });
         broadcastRoomState(roomId);
         
@@ -930,7 +933,7 @@ export function initializeSignaling(server: Server) {
               if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
               updatedAdmissions.add(targetClient.userId);
 
-              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.participantId);
+              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
               broadcastRoomState(roomId);
               sendRoomHistoryAndState(targetClient);
               syncRoomStateToRedis(roomId, client.roomSlug);
@@ -1542,6 +1545,7 @@ export function initializeSignaling(server: Server) {
       case 'mute_state': {
         const serverEventId = crypto.randomUUID();
         if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
+        client.isMuted = data.isMuted;
         broadcastToRoom(roomId, {
           type: 'mute_state',
           actionType: 'mute_state',
@@ -1699,7 +1703,8 @@ export function initializeSignaling(server: Server) {
                   participantId: c.participantId,
                   name: c.name,
                   role: c.role,
-                  isMobile: c.isMobile
+                  isMobile: c.isMobile,
+                  isMuted: c.isMuted
                 });
                 sendRoomHistoryAndState(c);
               }

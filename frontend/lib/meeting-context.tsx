@@ -1442,7 +1442,7 @@ export function MeetingProvider({
                   userId: p.userId,
                   name: p.name,
                   role: p.role as any,
-                  isMuted: true,
+                  isMuted: (p as any).isMuted ?? true,
                   isCameraOn: p.isCameraOn || false,
                   audioOnlyMode: p.audioOnlyMode,
                   videoSuspendedReason: p.videoSuspendedReason,
@@ -1485,7 +1485,7 @@ export function MeetingProvider({
               userId: user.userId,
               name: user.name,
               role: user.role as any,
-              isMuted: true,
+              isMuted: (user as any).isMuted ?? true,
               isCameraOn: user.isCameraOn || false,
               audioOnlyMode: user.audioOnlyMode,
               videoSuspendedReason: user.videoSuspendedReason,
@@ -1569,7 +1569,7 @@ export function MeetingProvider({
               return prev.map((p) => {
                 if (p.id === participantId) {
                   if (consumer.kind === 'audio') {
-                    return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
+                    return { ...p, audioTrack: consumer.track as MediaStreamTrack };
                   }
                   if (consumer.kind === 'video') {
                     if (source === 'screen') {
