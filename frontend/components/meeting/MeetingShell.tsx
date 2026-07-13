@@ -27,8 +27,11 @@ const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.Do
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWakeLock } from "@/hooks/useWakeLock";
 
 export function MeetingShell() {
+  useWakeLock();
+
   const {
     activePanel,
     setActivePanel,
