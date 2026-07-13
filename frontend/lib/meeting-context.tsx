@@ -168,6 +168,10 @@ interface MeetingContextValue {
   answerQuestion: (questionId: string, answerText: string) => void;
   deleteQuestion: (questionId: string) => void;
 
+  // AI Chat
+  aiMessages: { role: 'user' | 'ai'; content: string }[];
+  setAiMessages: React.Dispatch<React.SetStateAction<{ role: 'user' | 'ai'; content: string }[]>>;
+
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
@@ -428,6 +432,9 @@ export function MeetingProvider({
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'ai'; content: string }[]>([
+    { role: "ai", content: "Hi! I am Konn3ct AI. I am actively reading the live meeting transcript. Ask me anything about what has been discussed!" }
+  ]);
   const [micError, setMicError] = useState<{ name: string; message: string } | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
@@ -2295,6 +2302,8 @@ export function MeetingProvider({
         clearChat,
         isMuted,
         isCameraOn,
+        aiMessages,
+        setAiMessages,
         isScreenSharing,
         isRecording,
         recordingStatus,
