@@ -825,10 +825,18 @@ export function MeetingProvider({
               setCaptions(currCaptions => {
                 const newCaptions = [...currCaptions];
                 const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
+                const now = Date.now();
                 if (lastIdx >= 0) {
-                  newCaptions[lastIdx] = { userId, name, text: newText, isFinal, timestamp: Date.now() };
+                  // If the previous un-finalized caption is more than 5 seconds old, 
+                  // don't overwrite it. Push a new one instead.
+                  if (now - newCaptions[lastIdx].timestamp > 5000) {
+                    newCaptions[lastIdx].isFinal = true;
+                    newCaptions.push({ userId, name, text: newText, isFinal, timestamp: now });
+                  } else {
+                    newCaptions[lastIdx] = { userId, name, text: newText, isFinal, timestamp: now };
+                  }
                 } else {
-                  newCaptions.push({ userId, name, text: newText, isFinal, timestamp: Date.now() });
+                  newCaptions.push({ userId, name, text: newText, isFinal, timestamp: now });
                 }
                 if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
                 return newCaptions;
