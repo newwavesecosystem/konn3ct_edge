@@ -16,7 +16,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.konn3ct.mobile',
+      bundleIdentifier: 'com.onegov.govmeeting',
       buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: `Allow ${APP_NAME} to access your camera for video meetings.`,
@@ -25,7 +25,7 @@ module.exports = {
       },
     },
     android: {
-      package: 'com.konn3ct.mobile',
+      package: 'com.onegov.govmeeting',
       versionCode: 1,
       adaptiveIcon: {
         backgroundColor: '#0a5c36',
@@ -69,5 +69,10 @@ module.exports = {
       ],
       './plugins/withPiP',
     ],
+    extra: {
+          "eas": {
+            "projectId": "9a37c584-561d-4e54-a152-6b8a32218f2b"
+          }
+        }
   },
 };

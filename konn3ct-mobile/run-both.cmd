@@ -16,7 +16,7 @@
 :: ---- Device config (UPDATE PORTS IF NEEDED) ----
 set DEV_A10=192.168.43.68:5555
 set DEV_A14=192.168.43.110:34957
-set APP_ID=com.konn3ct.mobile
+set APP_ID=com.onegov.govmeeting
 set ACTIVITY=%APP_ID%/.MainActivity
 set APK_PATH=C:\rn\android\app\build\outputs\apk\debug\app-debug.apk
 
