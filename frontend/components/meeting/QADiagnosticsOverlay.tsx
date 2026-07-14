@@ -8,7 +8,7 @@ import { getEffectiveVideoState } from "./ParticipantTile";
 
 export function QADiagnosticsOverlay() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isQAEnabled, setIsQAEnabled] = useState(false);
+  const [isQAEnabled] = useState(() => process.env.NEXT_PUBLIC_QA_DIAGNOSTICS === "true");
   const [deviceInfo, setDeviceInfo] = useState<any>({});
   const [issueNote, setIssueNote] = useState("");
   const [snapshots, setSnapshots] = useState<any[]>([]);
@@ -16,14 +16,8 @@ export function QADiagnosticsOverlay() {
   const meeting = useMeeting();
 
   useEffect(() => {
-    // Only enable if environment variable is true
-    if (process.env.NEXT_PUBLIC_QA_DIAGNOSTICS === "true") {
-      setIsQAEnabled(true);
-    }
-  }, []);
-
-  useEffect(() => {
     if (typeof window !== "undefined") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDeviceInfo({
         userAgent: window.navigator.userAgent,
         viewportWidth: window.innerWidth,

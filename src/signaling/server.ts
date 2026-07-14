@@ -1985,7 +1985,9 @@ export function initializeSignaling(server: Server) {
           let canConsume = false;
           try {
             canConsume = router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
-          } catch (err) {} // catch if router or producer doesn't exist
+          } catch (err) {
+            logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
+          }
 
           // 1. Log structured attempt
           logger.info(JSON.stringify({

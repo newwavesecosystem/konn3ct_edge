@@ -49,8 +49,10 @@ describe('Secure Recording Playback (Step 7A)', () => {
 
   afterAll(async () => {
     await db.paymentTransaction.deleteMany({ where: { user: { email: { contains: 'playback' } } } });
-    await db.recording.deleteMany({ where: { roomId } });
-    await db.room.deleteMany({ where: { id: roomId } });
+    if (roomId) {
+      await db.recording.deleteMany({ where: { roomId } });
+      await db.room.deleteMany({ where: { id: roomId } });
+    }
     await db.user.deleteMany({ where: { email: { contains: 'playback' } } });
   });
 

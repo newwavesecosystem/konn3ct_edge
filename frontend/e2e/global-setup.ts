@@ -34,22 +34,29 @@ export default async function globalSetup(config: FullConfig) {
           create: {
             email: 'playwright-bot@konn3ct.test',
             name: 'Playwright Bot',
-            password: 'not-used',
+            passwordHash: 'not-used',
           },
         });
 
-        const room = await db.room.upsert({
-          where: { slug: '${TEST_ROOM_SLUG}' },
-          update: { name: '${TEST_ROOM_NAME}' },
-          create: {
-            slug: '${TEST_ROOM_SLUG}',
-            name: '${TEST_ROOM_NAME}',
-            ownerId: owner.id,
-            isWaitingRoomEnabled: false,
-          },
-        });
+        console.log('\\n🔧 [Global Setup] Creating test rooms in database...');
+    
+        for (const slug of ['playwright-prefs-room', 'playwright-health-room', 'playwright-webrtc-room']) {
+          await db.room.upsert({
+            where: { slug },
+            update: { guestJoinAllowed: true, isWaitingRoomEnabled: false },
+            create: {
+              name: slug.replace(/-/g, ' '),
+              slug,
+              ownerId: owner.id,
+              guestJoinAllowed: true,
+              isWaitingRoomEnabled: false,
+              aiFeaturesEnabled: false,
+            }
+          });
+          console.log(\`Room upserted: \${slug}\`);
+        }
 
-        console.log('Room upserted:', room.id, room.slug);
+        console.log('\\n✅ [Global Setup] Test rooms ready.\\n');
         await db.$disconnect();
       }
 

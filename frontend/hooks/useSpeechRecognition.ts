@@ -8,7 +8,12 @@ export function useSpeechRecognition({
   language?: string;
 } = {}) {
   const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(true);
+  const [isSupported, setIsSupported] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    }
+    return true;
+  });
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -16,7 +21,6 @@ export function useSpeechRecognition({
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       
       if (!SpeechRecognition) {
-        setIsSupported(false);
         return;
       }
 

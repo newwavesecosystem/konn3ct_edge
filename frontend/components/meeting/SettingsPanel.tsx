@@ -650,6 +650,7 @@ function SettingsToggle({
     <div className="flex items-center justify-between py-1">
       <span className="text-xs" style={{ color: "var(--mt-text-muted)" }}>{label}</span>
       <button
+        aria-label={label}
         onClick={handleClick}
         className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
           isOn ? "bg-brand-green" : ""
@@ -680,6 +681,7 @@ function SettingsSlider({
   const [val, setVal] = React.useState(value);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVal(value);
   }, [value]);
 

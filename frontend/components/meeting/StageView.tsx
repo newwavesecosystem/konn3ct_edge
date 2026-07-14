@@ -6,6 +6,7 @@ import { useMeeting } from "@/lib/meeting-context";
 import { ParticipantTile } from "./ParticipantTile";
 import { cn } from "@/lib/utils";
 import type { Participant } from "@/lib/types/meeting";
+import { computeDynamicGrid, type GridSolution } from "@/lib/grid-layout";
 import {
   MonitorOff,
   MonitorUp,
@@ -134,12 +135,7 @@ const TILE_PADDING_Y = 16;
 const IDEAL_TILE_WIDTH = 220;
 const IDEAL_TILE_HEIGHT = 160;
 
-interface GridSolution {
-  cols: number;
-  rows: number;
-  tileW: number;
-  tileH: number;
-}
+
 
 function computeBestGrid(
   count: number,
@@ -201,6 +197,18 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
   const [containerSize, setContainerSize] = useState({ w: 960, h: 540 });
+
+  // Hoist hooks for scroll mode to avoid conditional hook call errors
+  const { cols, tileH } = computeScrollableGrid(containerSize.w);
+  const rowCount = Math.ceil(count / cols);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => tileH + TILE_GAP,
+    overscan: 2,
+  });
 
   // Measure container
   useEffect(() => {
@@ -325,17 +333,7 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   // ═══════════════════════════════════════════════════════
   // ── SCROLL mode (default) ─────────────────────────────
   // ═══════════════════════════════════════════════════════
-  const { cols, tileH } = computeScrollableGrid(containerSize.w);
-  const rowCount = Math.ceil(count / cols);
-  
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  const virtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => tileH + TILE_GAP,
-    overscan: 2,
-  });
+  // (Hooks hoisted to top to avoid conditional call errors)
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={containerRef}>
@@ -417,41 +415,10 @@ function GridInner({
   const paddingY = TILE_PADDING_Y;
   const gap = TILE_GAP;
 
-  const computeDynamicGrid = (c: number, w: number, h: number) => {
-    const availW = Math.max(0, w - paddingX * 2);
-    const availH = Math.max(0, h - paddingY * 2);
-
-    let best: GridSolution = { cols: 1, rows: c, tileW: 0, tileH: 0 };
-    let bestScore = -Infinity;
-
-    const maxCols = Math.min(c, 6);
-
-    for (let cols = 1; cols <= maxCols; cols++) {
-      const rows = Math.ceil(c / cols);
-      const tileW = (availW - gap * (cols - 1)) / cols;
-      const tileH = (availH - gap * (rows - 1)) / rows;
-
-      if (tileW < 80 || tileH < 60) continue;
-
-      const area = tileW * tileH;
-      const aspect = tileW / tileH;
-      const targetAspect = 16 / 9;
-      const aspectPenalty = Math.abs(Math.log(aspect / targetAspect));
-      const score = area - aspectPenalty * 8000;
-
-      if (score > bestScore) {
-        bestScore = score;
-        best = { cols, rows, tileW, tileH };
-      }
-    }
-
-    return best;
-  };
-
   // Hooks always run.
   const solution = useMemo(
-    () => computeDynamicGrid(count, containerW, containerH),
-    [count, containerW, containerH],
+    () => computeDynamicGrid(count, containerW, containerH, paddingX, paddingY, gap),
+    [count, containerW, containerH, paddingX, paddingY, gap],
   );
 
   if (count === 0) {
@@ -891,6 +858,7 @@ function ScreenShareLayout({
   const [screenTimeoutState, setScreenTimeoutState] = useState<'normal' | 'recovering' | 'failed'>('normal');
   React.useEffect(() => {
     if (isMe || !screenSharer?.screenConsumerId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setScreenTimeoutState('normal');
       return;
     }
@@ -1039,7 +1007,7 @@ function ScreenShareLayout({
                     <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
                       <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
                       <span className="text-sm font-medium drop-shadow-md">
-                        {videoRef.current?.videoWidth === 0 ? "Waiting for screen share video..." : "Recovering screen share..."}
+                        Recovering screen share...
                       </span>
                     </div>
                   </div>
