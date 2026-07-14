@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +19,8 @@ import {
   CheckCircle2,
   Bell,
 } from 'lucide-react-native';
+
+import { paymentsApi } from '../api/payments';
 
 const { width } = Dimensions.get('window');
 
@@ -33,42 +36,66 @@ const COLORS = {
   border: '#e2e8f0',
 };
 
-const MOCK_ADDONS = [
-  {
-    id: 'ai_analytics',
-    name: 'Advanced AI Analytics',
-    description: 'Get deep insights into attendee engagement, drop-off rates, and sentiment analysis for all your meetings.',
-    price: 15000,
-    status: 'inactive',
-    icon: BarChart3,
-    colors: ['#3b82f6', '#2563eb'], // Blue gradient
-  },
-  {
-    id: 'storage_expansion',
-    name: 'Cloud Storage Expansion',
-    description: 'Add an extra 500GB of secure cloud storage for your meeting recordings and shared documents.',
-    price: 5000,
-    status: 'active',
-    icon: HardDrive,
-    colors: ['#8b5cf6', '#7c3aed'], // Purple gradient
-  },
-  {
-    id: 'premium_support',
-    name: '24/7 Premium Support',
-    description: 'Priority access to our technical support team with a guaranteed 1-hour response time.',
-    price: 25000,
-    status: 'inactive',
-    icon: Headset,
-    colors: ['#ec4899', '#db2777'], // Pink gradient
-  },
+const ICONS_POOL = [BarChart3, HardDrive, Headset, Layers];
+const COLORS_POOL = [
+  ['#3b82f6', '#2563eb'], // Blue
+  ['#8b5cf6', '#7c3aed'], // Purple
+  ['#ec4899', '#db2777'], // Pink
+  ['#f59e0b', '#d97706'], // Orange
 ];
+
+interface UIAddon {
+  id: string | number;
+  name: string;
+  description: string;
+  price: number;
+  status: 'active' | 'inactive';
+  icon: any;
+  colors: string[];
+}
 
 export default function AddonsScreen() {
   const insets = useSafeAreaInsets();
   
+  const [addons, setAddons] = useState<UIAddon[]>([]);
+  const [loading, setLoading] = useState(true);
+
   // Mock user data for the header
   const firstName = 'KAYODE';
   
+  useEffect(() => {
+    const fetchAddons = async () => {
+      try {
+        setLoading(true);
+        const res = await paymentsApi.getAddons();
+        if (res && res.success) {
+          const mappedAddons = res.data.map((item, index) => {
+            const statusKey = `addon${item.id}`;
+            const apiStatus = res.current_status?.[statusKey];
+            const isActive = apiStatus?.toLowerCase() === 'active';
+            
+            return {
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              price: item.price,
+              status: isActive ? 'active' : 'inactive',
+              icon: ICONS_POOL[index % ICONS_POOL.length],
+              colors: COLORS_POOL[index % COLORS_POOL.length],
+            };
+          });
+          setAddons(mappedAddons as UIAddon[]);
+        }
+      } catch (error) {
+        console.error('Error fetching addons:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAddons();
+  }, []);
+
   const handleAvatarPress = () => {
     console.log('Avatar pressed');
   };
@@ -81,7 +108,7 @@ export default function AddonsScreen() {
     return new Intl.NumberFormat('en-NG').format(amount);
   };
 
-  const renderAddonCard = (addon: typeof MOCK_ADDONS[0]) => {
+  const renderAddonCard = (addon: UIAddon) => {
     const isActive = addon.status === 'active';
     const Icon = addon.icon;
 
@@ -188,7 +215,11 @@ export default function AddonsScreen() {
         </LinearGradient>
 
         <View style={styles.grid}>
-          {MOCK_ADDONS.map(renderAddonCard)}
+          {loading ? (
+            <ActivityIndicator size="large" color={COLORS.brandBlue} style={{ marginTop: 40 }} />
+          ) : (
+            addons.map(renderAddonCard)
+          )}
         </View>
       </ScrollView>
     </View>

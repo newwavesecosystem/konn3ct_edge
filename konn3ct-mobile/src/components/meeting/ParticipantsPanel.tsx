@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
 import { useMeetingStore } from '../../store/useMeetingStore';
+import { meetingThemeTokens } from '../../theme/meetingTheme';
 import { MediasoupService } from '../../webrtc/MediasoupService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ParticipantsPanelProps {
   service: MediasoupService | null;
@@ -11,10 +13,15 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   const participants = useMeetingStore(state => state.participants);
   const waitingRoom = useMeetingStore(state => state.waitingRoom);
   const setActivePane = useMeetingStore(state => state.setActivePane);
-  const currentUserRole = useMeetingStore(state => state.currentUserRole);
+  const isHost = useMeetingStore(state => state.isHost);
   const currentUserId = useMeetingStore(state => state.currentUserId);
   
-  const isHost = currentUserRole === 'host';
+  const theme = useMeetingStore(state => state.theme);
+  const tokens = meetingThemeTokens[theme];
+  const styles = getStyles(tokens);
+
+  const insets = useSafeAreaInsets();
+  const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
 
   const handleAdmit = (userId: string) => {
     if (service) service.admitUser(userId);
@@ -43,7 +50,7 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.listContainer}>
+      <ScrollView style={styles.listContainer} contentContainerStyle={{ paddingBottom: safeBottom + 16 }}>
         {isHost && (
           <TouchableOpacity style={styles.muteAllBtn} onPress={handleMuteAll}>
             <Text style={styles.muteAllText}>Mute All</Text>
@@ -58,10 +65,10 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
                 <Text style={styles.userName}>{user.name}</Text>
                 <View style={styles.actions}>
                   <TouchableOpacity onPress={() => handleDeny(user.userId)} style={[styles.actionBtn, styles.denyBtn]}>
-                    <Text style={styles.btnText}>Deny</Text>
+                    <Text style={styles.denyText}>Deny</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => handleAdmit(user.userId)} style={[styles.actionBtn, styles.admitBtn]}>
-                    <Text style={styles.btnText}>Admit</Text>
+                    <Text style={styles.admitText}>Admit</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -79,7 +86,7 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
               </View>
               {isHost && user.userId !== currentUserId && (
                 <TouchableOpacity onPress={() => handleKick(user.userId)} style={[styles.actionBtn, styles.denyBtn]}>
-                  <Text style={styles.btnText}>Kick</Text>
+                  <Text style={styles.denyText}>Kick</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -90,15 +97,15 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (t: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
     height: '70%',
-    backgroundColor: '#1e293b',
+    backgroundColor: t.bgElevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: t.shadowOpacity, shadowRadius: 10, elevation: 10,
     zIndex: 100,
   },
   header: {
@@ -107,36 +114,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155'
+    borderBottomColor: t.border
   },
-  title: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  title: { color: t.textPrimary, fontSize: 18, fontWeight: 'bold' },
   closeBtn: { padding: 4 },
-  closeText: { color: '#94a3b8', fontSize: 20 },
+  closeText: { color: t.textMuted, fontSize: 20 },
   listContainer: { flex: 1, padding: 16 },
   muteAllBtn: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: t.primary,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 16,
   },
-  muteAllText: { color: 'white', fontWeight: 'bold' },
+  muteAllText: { color: t.textInverse, fontWeight: 'bold' },
   section: { marginBottom: 24 },
-  sectionTitle: { color: '#94a3b8', fontSize: 14, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase' },
+  sectionTitle: { color: t.textMuted, fontSize: 12, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase' },
   userRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#0f172a',
     padding: 12,
+    backgroundColor: t.bgElevated,
     borderRadius: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: t.border,
   },
-  userName: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  roleText: { color: '#64748b', fontSize: 12, marginTop: 2, textTransform: 'capitalize' },
+  userName: { color: t.textPrimary, fontSize: 16, fontWeight: 'bold' },
+  roleText: { color: t.textMuted, fontSize: 12, marginTop: 2, textTransform: 'capitalize' },
   actions: { flexDirection: 'row' },
   actionBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, marginLeft: 8 },
-  admitBtn: { backgroundColor: '#10b981' },
-  denyBtn: { backgroundColor: '#ef4444' },
-  btnText: { color: 'white', fontSize: 12, fontWeight: 'bold' }
+  admitBtn: { backgroundColor: t.success },
+  admitText: { color: t.textInverse, fontWeight: 'bold', fontSize: 12 },
+  denyBtn: { backgroundColor: t.danger },
+  denyText: { color: t.textInverse, fontWeight: 'bold', fontSize: 12 },
+  muteBtn: { backgroundColor: t.primary, paddingHorizontal: 8 },
+  lowerHandBtn: { backgroundColor: '#d97706', paddingHorizontal: 8 },
 });

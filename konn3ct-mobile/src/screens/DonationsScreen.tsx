@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +22,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { fetchDonationStats, fetchDonationsIn, DonationStats, DonationItem } from '../api/donations';
 
 const { width } = Dimensions.get('window');
 
@@ -36,22 +39,44 @@ const COLORS = {
   warning: '#f59e0b',
 };
 
-const MOCK_STATS = {
-  total: { amount: '1,250,000', count: 42 },
-  settlements: { amount: '950,000', count: 30 },
-  pending: { amount: '300,000', count: 12 },
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
 };
-
-const MOCK_DONATIONS = [
-  { id: 'don-1', ref: 'REF-1A2B3C', date: 'Oct 24, 2026', donor: 'Alice Smith', desc: 'Global Summit Support', provider: 'Paystack', amount: '50,000', status: 'successful' },
-  { id: 'don-2', ref: 'REF-4D5E6F', date: 'Oct 23, 2026', donor: 'Anonymous', desc: 'Appreciation Gift', provider: 'Stripe', amount: '25,000', status: 'pending' },
-  { id: 'don-3', ref: 'REF-7G8H9I', date: 'Oct 20, 2026', donor: 'Tech Corp', desc: 'Sponsorship', provider: 'Paystack', amount: '500,000', status: 'successful' },
-  { id: 'don-4', ref: 'REF-0J1K2L', date: 'Oct 15, 2026', donor: 'John Doe', desc: 'General Donation', provider: 'Flutterwave', amount: '10,000', status: 'failed' },
-];
 
 export default function DonationsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+
+  const [stats, setStats] = React.useState<DonationStats | null>(null);
+  const [donations, setDonations] = React.useState<DonationItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [statsData, listData] = await Promise.all([
+        fetchDonationStats(),
+        fetchDonationsIn()
+      ]);
+      setStats(statsData);
+      setDonations(listData);
+    } catch (error) {
+      console.error('Failed to fetch donation data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
 
   const renderStatusBadge = (status: string) => {
     switch(status) {
@@ -95,6 +120,7 @@ export default function DonationsScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadData} />}
       >
         {/* Stats Grid */}
         <ScrollView 
@@ -112,8 +138,8 @@ export default function DonationsScreen() {
               </View>
               <Text style={styles.statLabel}>Total Donations</Text>
             </View>
-            <Text style={styles.statAmount}>NGN {MOCK_STATS.total.amount}</Text>
-            <Text style={[styles.statCount, { color: COLORS.brandGreen }]}>{MOCK_STATS.total.count} Donations Received</Text>
+            <Text style={styles.statAmount}>NGN {stats?.donation_sum || '0'}</Text>
+            <Text style={[styles.statCount, { color: COLORS.brandGreen }]}>{stats?.donation_count || 0} Donations Received</Text>
           </View>
 
           {/* Settlements */}
@@ -124,8 +150,8 @@ export default function DonationsScreen() {
               </View>
               <Text style={styles.statLabel}>Settlements</Text>
             </View>
-            <Text style={styles.statAmount}>NGN {MOCK_STATS.settlements.amount}</Text>
-            <Text style={[styles.statCount, { color: COLORS.brandBlue }]}>{MOCK_STATS.settlements.count} Completed</Text>
+            <Text style={styles.statAmount}>NGN {stats?.settlement_sum || '0'}</Text>
+            <Text style={[styles.statCount, { color: COLORS.brandBlue }]}>{stats?.settlement_count || 0} Completed</Text>
           </View>
 
           {/* Pending */}
@@ -136,8 +162,8 @@ export default function DonationsScreen() {
               </View>
               <Text style={styles.statLabel}>Pending</Text>
             </View>
-            <Text style={styles.statAmount}>NGN {MOCK_STATS.pending.amount}</Text>
-            <Text style={[styles.statCount, { color: COLORS.warning }]}>{MOCK_STATS.pending.count} Transactions</Text>
+            <Text style={styles.statAmount}>NGN {stats?.pending_sum || '0'}</Text>
+            <Text style={[styles.statCount, { color: COLORS.warning }]}>{stats?.pending_count || 0} Transactions</Text>
           </View>
         </ScrollView>
 
@@ -155,24 +181,40 @@ export default function DonationsScreen() {
 
         {/* History List */}
         <View style={styles.historyList}>
-          {MOCK_DONATIONS.map((don, i) => (
-            <View key={don.id} style={[styles.historyItem, i === MOCK_DONATIONS.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={styles.historyRowTop}>
-                <Text style={styles.donorName}>{don.donor}</Text>
-                <Text style={styles.donationAmount}>NGN {don.amount}</Text>
-              </View>
-              
-              <View style={styles.historyRowMid}>
-                <Text style={styles.donationDesc} numberOfLines={1}>{don.desc}</Text>
-                {renderStatusBadge(don.status)}
-              </View>
-              
-              <View style={styles.historyRowBottom}>
-                <Text style={styles.donationMeta}>{don.date} • {don.provider}</Text>
-                <Text style={styles.donationRef}>{don.ref}</Text>
-              </View>
+          {donations.length === 0 && !isLoading ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ color: COLORS.textMuted }}>No incoming donations found.</Text>
             </View>
-          ))}
+          ) : (
+            donations.map((don, i) => {
+              const donor = don.donor || don.donor_name || 'Anonymous';
+              const amount = don.amount || '0';
+              const desc = don.desc || don.description || don.topic || 'Donation';
+              const provider = don.provider || don.payment_provider || 'N/A';
+              const status = (don.status || 'successful').toLowerCase();
+              const date = don.date ? formatDate(don.date) : don.created_at ? formatDate(don.created_at) : 'No date';
+              const ref = don.ref || don.reference || don.id || 'N/A';
+
+              return (
+                <View key={don.id || i} style={[styles.historyItem, i === donations.length - 1 && { borderBottomWidth: 0 }]}>
+                  <View style={styles.historyRowTop}>
+                    <Text style={styles.donorName}>{donor}</Text>
+                    <Text style={styles.donationAmount}>NGN {amount}</Text>
+                  </View>
+                  
+                  <View style={styles.historyRowMid}>
+                    <Text style={styles.donationDesc} numberOfLines={1}>{desc}</Text>
+                    {renderStatusBadge(status)}
+                  </View>
+                  
+                  <View style={styles.historyRowBottom}>
+                    <Text style={styles.donationMeta}>{date} • {provider}</Text>
+                    <Text style={styles.donationRef}>{ref}</Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </View>
