@@ -3,3 +3,4 @@ node_modules
 dist
 .tsbuildinfo
 konnect_dashboard/
+env_used_in_main_branch/

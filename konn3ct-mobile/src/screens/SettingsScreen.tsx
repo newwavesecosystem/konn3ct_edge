@@ -17,6 +17,7 @@ import {
   ChevronDown,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { APP_CONFIG } from '../config/appConfig';
 
 const COLORS = {
   pageBg: '#f4f6f9',
@@ -78,7 +79,8 @@ export default function SettingsScreen() {
           </View>
 
           {/* Appearance Selection */}
-          <View style={styles.card}>
+          {!APP_CONFIG.GOV_LOGIN && (
+            <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View>
                 <Text style={styles.cardTitle}>Appearance</Text>
@@ -115,6 +117,7 @@ export default function SettingsScreen() {
               })}
             </View>
           </View>
+          )}
         </View>
       </ScrollView>
     </View>

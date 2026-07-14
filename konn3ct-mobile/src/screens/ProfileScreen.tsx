@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,12 @@ import {
   TouchableOpacity,
   Dimensions,
   TextInput,
+  RefreshControl,
+  Modal,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -23,6 +29,12 @@ import {
   Smartphone,
 } from 'lucide-react-native';
 
+import { useNavigation } from '@react-navigation/native';
+import { fetchProfile, updateProfile, updatePassword, ProfileData } from '../api/profile';
+import { useAuthStore } from '../store/useAuthStore';
+import { APP_CONFIG } from '../config/appConfig';
+import * as Device from 'expo-device';
+
 const { width } = Dimensions.get('window');
 
 const COLORS = {
@@ -35,20 +47,95 @@ const COLORS = {
   border: '#e2e8f0',
   danger: '#ef4444',
   amber: '#f59e0b',
+  overlay: 'rgba(0,0,0,0.4)',
 };
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const { user, login } = useAuthStore();
   
-  // Mock user data
-  const firstName = 'KAYODE';
-  const email = 'kayode@example.com';
-  const plan = 'Pro Plan';
-  const referralCode = 'KONN3CT-2026';
-  const referralLink = 'https://konn3ct.com/r/KONN3CT-2026';
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
+  // Modal states
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [isPasswordModalVisible, setPasswordModalVisible] = useState(false);
+  
+  // Form states
+  const [formFirstname, setFormFirstname] = useState('');
+  const [formLastname, setFormLastname] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  
+  const [formCurrentPassword, setFormCurrentPassword] = useState('');
+  const [formNewPassword, setFormNewPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchProfile();
+      setProfile(data);
+    } catch (e) {
+      console.error('Failed to load profile', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Derived values from state or fallback
+  const firstName = profile?.user?.firstname || user?.name?.split(' ')[0] || 'User';
+  const lastName = profile?.user?.lastname || '';
+  const email = profile?.user?.email || user?.email || 'user@example.com';
+  const phone = profile?.user?.phone || '';
+  const plan = profile?.user_plan?.name || 'Basic Plan';
+  const referralCode = profile?.user?.referral_code || 'KONN3CT-2026';
+  const referralLink = `https://konn3ct.com/r/${referralCode}`;
+  
+  const handleEditProfilePress = () => {
+    setFormFirstname(firstName);
+    setFormLastname(lastName);
+    setFormPhone(phone);
+    setEditModalVisible(true);
+  };
+
+  const submitEditProfile = async () => {
+    if (!formFirstname) return Alert.alert('Error', 'First name is required');
+    setIsSubmitting(true);
+    try {
+      await updateProfile({ firstname: formFirstname, lastname: formLastname, phone: formPhone });
+      Alert.alert('Success', 'Profile updated successfully');
+      setEditModalVisible(false);
+      loadData();
+    } catch (e: any) {
+      Alert.alert('Error', e.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const submitUpdatePassword = async () => {
+    if (!formCurrentPassword || !formNewPassword) return Alert.alert('Error', 'Please fill all password fields');
+    setIsSubmitting(true);
+    try {
+      await updatePassword({ current_password: formCurrentPassword, new_password: formNewPassword });
+      Alert.alert('Success', 'Password updated successfully');
+      setPasswordModalVisible(false);
+      setFormCurrentPassword('');
+      setFormNewPassword('');
+    } catch (e: any) {
+      Alert.alert('Error', e.response?.data?.message || 'Failed to update password');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAvatarPress = () => {
-    console.log('Avatar pressed');
+    // optional avatar upload logic later
   };
 
   const handleCopy = (text: string) => {
@@ -76,26 +163,31 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.stickyHeaderRight}>
+          {APP_CONFIG.SHOW_HELP_ICON && (
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
             <Headset color={COLORS.textPrimary} size={24} />
           </TouchableOpacity>
+          )}
 
+          {APP_CONFIG.SHOW_NOTIFICATIONS && (
           <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => (navigation.navigate as any)('Notifications')}>
             <Bell color={COLORS.textPrimary} size={24} />
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>20</Text>
             </View>
           </TouchableOpacity>
+          )}
         </View>
       </View>
 
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 140 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadData} />}
       >
         {/* Page Header */}
         <View style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Settings</Text>
+          <Text style={styles.pageTitle}>Profile</Text>
           <Text style={styles.pageSubtitle}>Manage your account preferences and profile.</Text>
         </View>
 
@@ -117,59 +209,65 @@ export default function ProfileScreen() {
                 <Text style={styles.profileMetaInitial}>{firstName.charAt(0)}</Text>
               </View>
               <View style={styles.profileMetaText}>
-                <Text style={styles.profileName}>{firstName} User</Text>
+                <Text style={styles.profileName}>{lastName ? `${lastName} ` : ''}{firstName}</Text>
                 <Text style={styles.profileEmail}>{email}</Text>
               </View>
-              <TouchableOpacity style={styles.outlineBtnSmall}>
+              <TouchableOpacity style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>
                 <Text style={styles.outlineBtnSmallText}>Edit</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.divider} />
+            {!APP_CONFIG.GOV_LOGIN && (
+              <>
+                <View style={styles.divider} />
 
-            <View style={styles.planInfoBox}>
-              <View style={styles.planInfoLeft}>
-                <CreditCard color={COLORS.textPrimary} size={18} />
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.planName}>{plan}</Text>
-                  <Text style={styles.planDesc}>Current subscription plan</Text>
+                <View style={styles.planInfoBox}>
+                  <View style={styles.planInfoLeft}>
+                    <CreditCard color={COLORS.textPrimary} size={18} />
+                    <View style={{ marginLeft: 12 }}>
+                      <Text style={styles.planName}>{plan}</Text>
+                      <Text style={styles.planDesc}>Current subscription plan</Text>
+                    </View>
+                  </View>
+                  <View style={styles.planBadge}>
+                    <Text style={styles.planBadgeText}>ACTIVE</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.planBadge}>
-                <Text style={styles.planBadgeText}>ACTIVE</Text>
-              </View>
-            </View>
+              </>
+            )}
           </View>
         </View>
 
         {/* --- Referral Card --- */}
-        <View style={styles.card}>
-          <View style={styles.cardBody}>
-            <View style={styles.referralHeaderRow}>
-              <Text style={styles.cardTitle}>Referral Program</Text>
-              <View style={styles.referralCodeBox}>
-                <Text style={styles.referralCodeText}>{referralCode}</Text>
-                <TouchableOpacity onPress={() => handleCopy(referralCode)} style={styles.iconBtnSmall}>
-                  <Copy color={COLORS.textMuted} size={14} />
-                </TouchableOpacity>
+        {!APP_CONFIG.GOV_LOGIN && (
+          <View style={styles.card}>
+            <View style={styles.cardBody}>
+              <View style={styles.referralHeaderRow}>
+                <Text style={styles.cardTitle}>Referral Program</Text>
+                <View style={styles.referralCodeBox}>
+                  <Text style={styles.referralCodeText}>{referralCode}</Text>
+                  <TouchableOpacity onPress={() => handleCopy(referralCode)} style={styles.iconBtnSmall}>
+                    <Copy color={COLORS.textMuted} size={14} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-            
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.inputLabel}>Referral Link</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.textInput}
-                  value={referralLink}
-                  editable={false}
-                />
-                <TouchableOpacity onPress={() => handleCopy(referralLink)} style={styles.outlineBtnSquare}>
-                  <Copy color={COLORS.textPrimary} size={18} />
-                </TouchableOpacity>
+              
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.inputLabel}>Referral Link</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.textInput}
+                    value={referralLink}
+                    editable={false}
+                  />
+                  <TouchableOpacity onPress={() => handleCopy(referralLink)} style={styles.outlineBtnSquare}>
+                    <Copy color={COLORS.textPrimary} size={18} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* --- Security Card --- */}
         <View style={styles.card}>
@@ -184,7 +282,7 @@ export default function ProfileScreen() {
           </View>
           
           <View style={styles.cardBody}>
-            <TouchableOpacity style={styles.actionRowBtn} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.actionRowBtn} activeOpacity={0.7} onPress={() => setPasswordModalVisible(true)}>
               <View style={styles.actionRowLeft}>
                 <View style={styles.actionRowIconBox}>
                   <Lock color={COLORS.textMuted} size={18} />
@@ -220,7 +318,7 @@ export default function ProfileScreen() {
                   <Smartphone color={COLORS.textMuted} size={18} />
                 </View>
                 <View>
-                  <Text style={styles.actionRowTitle}>iPhone 14 Pro - App</Text>
+                  <Text style={styles.actionRowTitle}>{Device.modelName || Device.deviceName || (Platform.OS === 'ios' ? 'iOS Device' : 'Android Device')} - App</Text>
                   <Text style={styles.actionRowSubtitle}>Lagos, Nigeria • <Text style={{ color: COLORS.brandGreen }}>This device</Text></Text>
                 </View>
               </View>
@@ -232,6 +330,66 @@ export default function ProfileScreen() {
         </View>
 
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={isEditModalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Profile</Text>
+                <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                  <Text style={styles.closeModalText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ paddingHorizontal: 20, paddingTop: 10 }}>
+                <Text style={styles.inputLabel}>First Name</Text>
+                <TextInput style={styles.textInputFull} value={formFirstname} onChangeText={setFormFirstname} />
+
+                <Text style={styles.inputLabel}>Last Name</Text>
+                <TextInput style={styles.textInputFull} value={formLastname} onChangeText={setFormLastname} />
+
+                <Text style={styles.inputLabel}>Phone</Text>
+                <TextInput style={styles.textInputFull} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" />
+              </ScrollView>
+              <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 24) + 16 }]}>
+                <TouchableOpacity style={styles.primaryBtn} onPress={submitEditProfile} disabled={isSubmitting}>
+                  {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Save Changes</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal visible={isPasswordModalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Change Password</Text>
+                <TouchableOpacity onPress={() => setPasswordModalVisible(false)}>
+                  <Text style={styles.closeModalText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ paddingHorizontal: 20, paddingTop: 10 }}>
+                <Text style={styles.inputLabel}>Current Password</Text>
+                <TextInput style={styles.textInputFull} value={formCurrentPassword} onChangeText={setFormCurrentPassword} secureTextEntry />
+
+                <Text style={styles.inputLabel}>New Password</Text>
+                <TextInput style={styles.textInputFull} value={formNewPassword} onChangeText={setFormNewPassword} secureTextEntry />
+              </ScrollView>
+              <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 24) + 16 }]}>
+                <TouchableOpacity style={styles.primaryBtn} onPress={submitUpdatePassword} disabled={isSubmitting}>
+                  {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Update Password</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </View>
   );
 }
@@ -503,7 +661,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   iconBtnSmall: {
-    padding: 2,
+    padding: 6,
   },
   inputLabel: {
     fontSize: 12,
@@ -569,5 +727,66 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+
+  // Modals
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.pageBg,
+    height: '70%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  closeModalText: {
+    fontSize: 16,
+    color: COLORS.danger,
+    fontWeight: '600',
+  },
+  textInputFull: {
+    height: 48,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    color: COLORS.textPrimary,
+  },
+  modalFooter: {
+    padding: 20,
+    paddingBottom: 40,
+    borderTopWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  primaryBtn: {
+    backgroundColor: COLORS.brandBlue,
+    height: 52,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

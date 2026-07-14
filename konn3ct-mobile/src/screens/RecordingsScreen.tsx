@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  Linking,
+  RefreshControl,
+  Alert,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +30,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { fetchRecordings, deleteRecording, RecordingItem, DownloadLinks } from '../api/recordings';
 
 const { width } = Dimensions.get('window');
 
@@ -42,53 +47,120 @@ const COLORS = {
   purple: '#8b5cf6',
 };
 
-const MOCK_STATS = [
-  { id: 'total', label: 'Total Recordings', value: '24', icon: Film, color: COLORS.brandBlue },
-  { id: 'duration', label: 'Total Duration', value: '18h 30m', icon: Clock, color: COLORS.brandGreen },
-  { id: 'participants', label: 'Participants', value: '450', icon: Users, color: COLORS.purple },
-  { id: 'thisMonth', label: 'This Month', value: '8', icon: Calendar, color: COLORS.amber },
-];
+const formatBytes = (bytesStr?: string | number) => {
+  if (!bytesStr) return '0 MB';
+  const bytes = Number(bytesStr);
+  if (isNaN(bytes)) return '0 MB';
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
+};
 
-const MOCK_RECORDINGS = [
-  {
-    id: 'rec-1',
-    name: 'Q3 Global Townhall',
-    date: 'Oct 15, 2026',
-    duration: '1h 45m',
-    participants: 120,
-    size: '450 MB',
-    colors: ['#3b82f6', '#2563eb'], // Blue
-  },
-  {
-    id: 'rec-2',
-    name: 'Design Sync - Mobile App',
-    date: 'Oct 12, 2026',
-    duration: '45m',
-    participants: 8,
-    size: '120 MB',
-    colors: ['#ec4899', '#db2777'], // Pink
-  },
-  {
-    id: 'rec-3',
-    name: 'Investor Q&A Session',
-    date: 'Oct 10, 2026',
-    duration: '1h 10m',
-    participants: 45,
-    size: '280 MB',
-    colors: ['#10b981', '#059669'], // Green
-  },
+const formatDuration = (start?: string, end?: string) => {
+  if (!start || !end) return '---';
+  const s = Number(start);
+  const e = Number(end);
+  if (isNaN(s) || isNaN(e)) return '---';
+  const ms = e - s;
+  if (ms <= 0) return '0m';
+  const totalMins = Math.floor(ms / 60000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+};
+
+const formatDate = (timestamp?: string) => {
+  if (!timestamp) return '---';
+  const d = new Date(Number(timestamp));
+  if (isNaN(d.getTime())) return '---';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+// Cycle through colors
+const REC_PALETTES: [string, string][] = [
+  ['#3b82f6', '#2563eb'], // Blue
+  ['#10b981', '#059669'], // Green
+  ['#8b5cf6', '#7c3aed'], // Purple
+  ['#ec4899', '#db2777'], // Pink
+  ['#f59e0b', '#d97706'], // Amber
 ];
 
 export default function RecordingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const [recordings, setRecordings] = useState<RecordingItem[]>([]);
+  const [downloadLinks, setDownloadLinks] = useState<DownloadLinks | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleAction = (action: string, id: string) => {
-    console.log(`${action} recording:`, id);
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetchRecordings();
+      setRecordings(res.recordings);
+      if (res.downloadLinks) {
+        setDownloadLinks(res.downloadLinks);
+      }
+    } catch (e) {
+      console.error('Failed to load recordings', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const renderStatCard = (stat: typeof MOCK_STATS[0]) => {
+  React.useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleDelete = (id: string) => {
+    Alert.alert('Delete Recording', 'Are you sure you want to delete this recording?', [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Delete', 
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteRecording(id);
+            Alert.alert('Success', 'Recording deleted');
+            loadData();
+          } catch (e) {
+            Alert.alert('Error', 'Failed to delete recording');
+          }
+        }
+      }
+    ]);
+  };
+
+  const handlePlay = (rec: RecordingItem) => {
+    const url = rec.playback?.format?.url;
+    if (url) {
+      Linking.openURL(url).catch(() => Alert.alert('Error', 'Cannot open playback URL'));
+    } else {
+      Alert.alert('Notice', 'Playback URL not available yet.');
+    }
+  };
+
+  const handleDownload = (rec: RecordingItem) => {
+    if (!downloadLinks || !downloadLinks.video) {
+      Alert.alert('Error', 'Download links not available.');
+      return;
+    }
+    const url = downloadLinks.video.url.replace('replaceRecordID', rec.recordID);
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'Cannot open download URL'));
+  };
+
+  const handleShare = (rec: RecordingItem) => {
+    const url = rec.playback?.format?.url;
+    if (url) {
+      Share.share({ message: `Watch this recording: ${rec.name}\n${url}` });
+    } else {
+      Alert.alert('Notice', 'No URL to share.');
+    }
+  };
+
+  const renderStatCard = (stat: any) => {
     const Icon = stat.icon;
     return (
       <View key={stat.id} style={styles.statCard}>
@@ -103,25 +175,27 @@ export default function RecordingsScreen() {
     );
   };
 
-  const renderRecordingCard = (rec: typeof MOCK_RECORDINGS[0]) => {
+  const renderRecordingCard = (rec: RecordingItem, index: number) => {
+    const colors = REC_PALETTES[index % REC_PALETTES.length];
+    
     return (
-      <View key={rec.id} style={styles.recCard}>
+      <View key={rec.recordID} style={styles.recCard}>
         {/* Thumbnail Area */}
         <TouchableOpacity 
           activeOpacity={0.85}
-          onPress={() => handleAction('Play', rec.id)}
+          onPress={() => handlePlay(rec)}
         >
           <LinearGradient
-            colors={rec.colors as [string, string]}
+            colors={colors as [string, string]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.thumbnail}
           >
             <View style={styles.playIconContainer}>
-              <Play color={rec.colors[1]} size={24} fill={rec.colors[1]} style={{ marginLeft: 3 }} />
+              <Play color={colors[1]} size={24} fill={colors[1]} style={{ marginLeft: 3 }} />
             </View>
             <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{rec.duration}</Text>
+              <Text style={styles.durationText}>{formatDuration(rec.startTime, rec.endTime)}</Text>
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -130,7 +204,7 @@ export default function RecordingsScreen() {
           {/* Header Info */}
           <View style={styles.cardHeader}>
             <Text style={styles.recName} numberOfLines={1}>{rec.name}</Text>
-            <Text style={styles.recDate}>{rec.date}</Text>
+            <Text style={styles.recDate}>{formatDate(rec.startTime)}</Text>
           </View>
 
           {/* Footer Actions & Meta */}
@@ -138,20 +212,20 @@ export default function RecordingsScreen() {
             <View style={styles.metaGroup}>
               <View style={styles.metaItem}>
                 <Users color={COLORS.textMuted} size={12} />
-                <Text style={styles.metaText}>{rec.participants}</Text>
+                <Text style={styles.metaText}>{rec.participants || 0}</Text>
               </View>
               <View style={styles.dotSeparator} />
-              <Text style={styles.metaText}>{rec.size}</Text>
+              <Text style={styles.metaText}>{formatBytes(rec.size)}</Text>
             </View>
 
             <View style={styles.actionsGroup}>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => handleAction('Share', rec.id)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleShare(rec)}>
                 <Share2 color={COLORS.textMuted} size={16} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => handleAction('Download', rec.id)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleDownload(rec)}>
                 <Download color={COLORS.textMuted} size={16} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtnDanger} onPress={() => handleAction('Delete', rec.id)}>
+              <TouchableOpacity style={styles.actionBtnDanger} onPress={() => handleDelete(rec.recordID)}>
                 <Trash2 color={COLORS.danger} size={16} />
               </TouchableOpacity>
             </View>
@@ -160,6 +234,32 @@ export default function RecordingsScreen() {
       </View>
     );
   };
+
+  const totalRecs = recordings.length;
+  const totalDurationMs = recordings.reduce((acc, r) => {
+    const s = Number(r.startTime);
+    const e = Number(r.endTime);
+    if (!isNaN(s) && !isNaN(e) && e > s) {
+      return acc + (e - s);
+    }
+    return acc;
+  }, 0);
+  const totalDurationStr = formatDuration('0', String(totalDurationMs));
+  const totalParticipants = recordings.reduce((acc, r) => acc + Number(r.participants || 0), 0);
+  
+  const thisMonthCount = recordings.filter(r => {
+    if (!r.startTime) return false;
+    const d = new Date(Number(r.startTime));
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+
+  const dynamicStats = [
+    { id: 'total', label: 'Total Recordings', value: String(totalRecs), icon: Film, color: COLORS.brandBlue },
+    { id: 'duration', label: 'Total Duration', value: totalDurationStr, icon: Clock, color: COLORS.brandGreen },
+    { id: 'participants', label: 'Participants', value: String(totalParticipants), icon: Users, color: COLORS.purple },
+    { id: 'thisMonth', label: 'This Month', value: String(thisMonthCount), icon: Calendar, color: COLORS.amber },
+  ];
 
   return (
     <View style={styles.container}>
@@ -177,6 +277,7 @@ export default function RecordingsScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadData} />}
       >
 
         {/* Quick Stats */}
@@ -185,7 +286,7 @@ export default function RecordingsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.statsContainer}
         >
-          {MOCK_STATS.map(renderStatCard)}
+          {dynamicStats.map(renderStatCard)}
         </ScrollView>
 
         {/* Search Bar */}
@@ -204,7 +305,13 @@ export default function RecordingsScreen() {
 
         {/* Recordings List */}
         <View style={styles.recordingsList}>
-          {MOCK_RECORDINGS.map(renderRecordingCard)}
+          {recordings.length === 0 && !isLoading ? (
+             <View style={{ padding: 40, alignItems: 'center' }}>
+               <Text style={{ color: COLORS.textMuted }}>No recordings found.</Text>
+             </View>
+          ) : (
+             recordings.map((r, idx) => renderRecordingCard(r, idx))
+          )}
         </View>
       </ScrollView>
     </View>
