@@ -292,7 +292,6 @@ export function ParticipantTile({
   React.useEffect(() => {
     if (!participant.cameraStats) return;
 
-    // eslint-disable-next-line react-hooks/immutability
     if (effectiveVideoState === 'video-active') {
       participant.cameraStats.tileRenderMode = 'video';
     } else if (effectiveVideoState === 'audio-only') {
@@ -326,7 +325,6 @@ export function ParticipantTile({
   React.useEffect(() => {
     if (!participant.cameraStats) return;
 
-    // eslint-disable-next-line react-hooks/immutability
     if (health === 'healthy') {
       participant.cameraStats.diagnosisHint = 'video-healthy';
     } else if (health === 'stalled') {

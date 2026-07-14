@@ -203,6 +203,7 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   const rowCount = Math.ceil(count / cols);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollContainerRef.current,

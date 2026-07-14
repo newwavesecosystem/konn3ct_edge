@@ -279,6 +279,7 @@ export function ChatPanel() {
                     <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--mt-border)" }}>
                       {msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
                         <a href={msg.fileUrl} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={msg.fileUrl} alt="attachment" className="max-w-full rounded-lg max-h-48 object-cover" />
                         </a>
                       ) : (
