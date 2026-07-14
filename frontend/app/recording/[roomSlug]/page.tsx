@@ -33,6 +33,7 @@ export default function RecordingPage({
         const parsed = JSON.parse(jsonPayload);
         if (parsed.participantId) {
           console.log(`recorder_token_participant_id_decoded: ${parsed.participantId}`);
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setParticipantId(parsed.participantId);
         }
       } catch (e) {

@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
 export function useWakeLock() {
-  const [isSupported, setIsSupported] = useState(false);
+  const [isSupported, setIsSupported] = useState(() => {
+    if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
+      return true;
+    }
+    return false;
+  });
   const [isLocked, setIsLocked] = useState(false);
   const wakeLockRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
-      setIsSupported(true);
-    }
-  }, []);
 
   const requestWakeLock = async () => {
     if (!isSupported) return;
@@ -55,6 +54,7 @@ export function useWakeLock() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     
     // Request wake lock initially
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     requestWakeLock();
 
     return () => {

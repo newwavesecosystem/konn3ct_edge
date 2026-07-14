@@ -109,10 +109,14 @@ type DeepPartial<T> = T extends object ? {
 import { useState, useEffect } from 'react';
 
 export function useMeetingDevicePreferences() {
-  const [preferences, setPreferences] = useState<MeetingDevicePreferences>(DEFAULT_MEETING_DEVICE_PREFERENCES);
+  const [preferences, setPreferences] = useState<MeetingDevicePreferences>(() => {
+    if (typeof window !== 'undefined') {
+      return getMeetingDevicePreferences();
+    }
+    return DEFAULT_MEETING_DEVICE_PREFERENCES;
+  });
 
   useEffect(() => {
-    setPreferences(getMeetingDevicePreferences());
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === MEETING_DEVICE_PREFERENCES_KEY) {

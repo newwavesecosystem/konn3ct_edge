@@ -104,7 +104,7 @@ export default function DashboardPage() {
             Welcome back, {currentUser?.name || "Alex"} 👋
           </h1>
           <p className="text-text-muted mt-1 text-lg">
-            Here's what's happening with your meetings today.
+            Here&apos;s what&apos;s happening with your meetings today.
           </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
@@ -167,7 +167,7 @@ export default function DashboardPage() {
           className="lg:col-span-2 space-y-6"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-text-primary">Today's Schedule</h2>
+            <h2 className="text-xl font-bold text-text-primary">Today&apos;s Schedule</h2>
             <Button variant="ghost" className="text-brand-green hover:text-brand-green-soft hover:bg-brand-green/10 rounded-lg">
               View Calendar <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
@@ -307,7 +307,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-xl font-bold text-text-primary">Share Recording</h2>
             <p className="text-sm text-text-muted mt-1">
-              Configure access settings for "{selectedRecording?.title}"
+              Configure access settings for &quot;{selectedRecording?.title}&quot;
             </p>
           </div>
 

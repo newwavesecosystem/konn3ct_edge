@@ -23,7 +23,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   const recoveryCountRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
-  const healthyStartTimeRef = useRef<number>(Date.now());
+  const healthyStartTimeRef = useRef<number>(0);
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -81,6 +81,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
 
   useEffect(() => {
     if (!track) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHealth('healthy'); 
       return;
     }

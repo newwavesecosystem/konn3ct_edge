@@ -30,6 +30,7 @@ export default function RecordingPlaybackPage() {
         if (!resData.error) {
           setData(resData);
           if (resData.recording && resData.recording.status === 'completed') {
+            // eslint-disable-next-line react-hooks/immutability
             fetchPlaybackUrl();
           }
         } else {

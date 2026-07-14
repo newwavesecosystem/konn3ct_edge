@@ -193,16 +193,16 @@ const themeTokens: Record<MeetingTheme, Record<string, string>> = {
 };
 
 export function MeetingThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<MeetingTheme>("sage");
-
-  useEffect(() => {
-    const prefs = getMeetingDevicePreferences();
-    const savedTheme = prefs.theme?.selectedTheme as MeetingTheme;
-    if (savedTheme && ["sage", "midnight", "soft", "slate"].includes(savedTheme)) {
-      setThemeState(savedTheme);
-      console.log("meeting_theme_loaded", savedTheme);
+  const [theme, setThemeState] = useState<MeetingTheme>(() => {
+    if (typeof window !== 'undefined') {
+      const prefs = getMeetingDevicePreferences();
+      const savedTheme = prefs.theme?.selectedTheme as MeetingTheme;
+      if (savedTheme && ["sage", "midnight", "soft", "slate"].includes(savedTheme)) {
+        return savedTheme;
+      }
     }
-  }, []);
+    return "sage";
+  });
 
   const setTheme = useCallback((t: MeetingTheme) => {
     setThemeState(t);

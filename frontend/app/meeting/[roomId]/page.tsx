@@ -26,6 +26,7 @@ export default function MeetingPage({
     if (!name && !token && !storedToken && !botToken) {
       router.replace(`/join/${resolvedParams.roomId}`);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsReady(true);
     }
   }, [resolvedParams.roomId, router]);
