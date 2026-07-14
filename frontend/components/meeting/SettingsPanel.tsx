@@ -188,6 +188,7 @@ export function SettingsPanel() {
               >
                 <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
                 <Droplet className="relative z-10 w-5 h-5 mb-1 text-white/70" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/backgrounds/blur.png`} alt={`blur`} className="w-full h-full object-cover" />
               </button>
               
@@ -205,6 +206,7 @@ export function SettingsPanel() {
                     vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
                   )}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
