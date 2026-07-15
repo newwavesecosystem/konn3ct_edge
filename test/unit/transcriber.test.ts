@@ -121,5 +121,26 @@ describe('Transcriber', () => {
     expect(mockProducer.listenerCount('transportclose')).toBe(0);
     expect(mockProducer.listenerCount('@close')).toBe(0);
   });
+
+  it('prevents reconnect loop when stopTranscription is called (intentionalClose)', async () => {
+    const WebSocket = (await import('ws')).default;
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    
+    await startTranscription(mockProducer, mockRouter, 'room-1', 'user-1', 'User 1');
+    const wsInstance = vi.mocked(WebSocket).mock.results[0].value;
+    
+    setTimeoutSpy.mockClear();
+    
+    // User mutes -> stopTranscription is called
+    stopTranscription('prod-1');
+    
+    // Simulate deepgram websocket closing due to the cleanup terminating it, or just naturally closing
+    wsInstance.emit('close');
+    
+    await Promise.resolve();
+    
+    // The reconnect timeout should NOT be scheduled
+    expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 2000);
+  });
 });
 

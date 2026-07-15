@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce, handleTranscriptionMute } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -1546,6 +1546,16 @@ export function initializeSignaling(server: Server) {
         const serverEventId = crypto.randomUUID();
         if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
         client.isMuted = data.isMuted;
+        
+        // Pause or resume transcription based on mute state
+        const producersList = roomProducers.get(roomId);
+        if (producersList) {
+          const audioProducer = producersList.find(p => p.participantId === client.participantId && p.kind === 'audio');
+          if (audioProducer) {
+             handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
+          }
+        }
+        
         broadcastToRoom(roomId, {
           type: 'mute_state',
           actionType: 'mute_state',
