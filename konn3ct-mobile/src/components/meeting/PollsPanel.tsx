@@ -60,13 +60,26 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
 
   const handleCreate = () => {
     if (!question.trim() || options.filter(o => o.trim()).length < 2) return;
+    
+    const pollId = 'poll-' + Math.random().toString(36).substr(2, 9);
+    const pollOptions = options.filter(o => o.trim()).map((text, index) => ({ id: `o${index + 1}`, text, votes: 0 }));
+
     if (service) {
       service.createPoll(
-        'poll-' + Math.random().toString(36).substr(2, 9),
+        pollId,
         question.trim(),
-        options.filter(o => o.trim()).map((text, index) => ({ id: `o${index + 1}`, text, votes: 0 }))
+        pollOptions
       );
     }
+
+    // Automatically add it to the host's own local state so they see it
+    useMeetingStore.getState().addPoll({
+      id: pollId,
+      question: question.trim(),
+      options: pollOptions,
+      isActive: true
+    });
+
     setQuestion('');
     setOptions(['', '']);
     setIsCreating(false);
@@ -169,10 +182,24 @@ export const PollsPanel: React.FC<PollsPanelProps> = ({ service }) => {
                       <Text style={[styles.optionText, pollEnded && { opacity: 0.6 }]}>{opt.text}</Text>
                       <Text style={styles.optionVotes}>{percent}% ({optVotes})</Text>
                     </View>
-                    <View style={styles.progressTrack}>
-                      <View style={[styles.progressFill, { width: `${percent}%` }, pollEnded && styles.progressFillEnded]} />
-                    </View>
-                  </TouchableOpacity>
+                      <View style={styles.progressTrack}>
+                        <View style={[styles.progressFill, { width: `${percent}%` }, pollEnded && styles.progressFillEnded]} />
+                      </View>
+                      {isHost && (opt as any).votedBy && (opt as any).votedBy.length > 0 && (
+                        <View style={styles.votersContainer}>
+                          {(opt as any).votedBy.slice(0, 5).map((voter: any, vIdx: number) => (
+                            <View key={vIdx} style={styles.voterBadge}>
+                              <Text style={styles.voterText} numberOfLines={1}>{voter.name}</Text>
+                            </View>
+                          ))}
+                          {(opt as any).votedBy.length > 5 && (
+                            <View style={styles.voterBadge}>
+                              <Text style={styles.voterText}>+{(opt as any).votedBy.length - 5}</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </TouchableOpacity>
                 );
               })}
               <View style={styles.pollFooter}>
@@ -260,6 +287,9 @@ const getStyles = (t: any) => StyleSheet.create({
   progressTrack: { height: 6, backgroundColor: t.bg, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: t.primary, borderRadius: 3 },
   progressFillEnded: { backgroundColor: t.textMuted },
+  votersContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
+  voterBadge: { backgroundColor: t.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, maxWidth: 80 },
+  voterText: { color: t.textSecondary, fontSize: 10, opacity: 0.8 },
   pollFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
   pollVoteCount: { color: t.textMuted, fontSize: 11 },
   endPollBtn: { backgroundColor: t.danger + '20', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },

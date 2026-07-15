@@ -39,6 +39,7 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import {
   fetchMyRooms,
+  fetchMyRoomsData,
   createRoom,
   deleteRoom,
   startRoom,
@@ -137,6 +138,8 @@ export default function RoomsScreen() {
 
   // ── Data state ──
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [totalRooms, setTotalRooms] = useState(0);
+  const [maxRooms, setMaxRooms] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -181,8 +184,10 @@ export default function RoomsScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError('');
-      const data = await fetchMyRooms();
-      setRooms(data);
+      const data = await fetchMyRoomsData();
+      setRooms(data.rooms);
+      setTotalRooms(data.total_rooms);
+      setMaxRooms(data.max_rooms);
     } catch (err: any) {
       const msg =
         err.response?.data?.message ||
@@ -203,7 +208,7 @@ export default function RoomsScreen() {
   // ─── Stats derived from real data ─────────────────────────────────────────
 
   const stats = {
-    total: rooms.length,
+    total: totalRooms || rooms.length,
     active: rooms.filter((r) => r.status === 'active' || r.status === '1' || Number(r.status) === 1).length,
     inactive: rooms.filter((r) => r.status === 'inactive' || r.status === '0' || Number(r.status) === 0).length,
     scheduled: rooms.filter((r) => r.status === 'scheduled').length,
@@ -212,6 +217,15 @@ export default function RoomsScreen() {
   // ─── Create Room ──────────────────────────────────────────────────────────
 
   const handleCreateRoom = async () => {
+    if (maxRooms > 0 && totalRooms >= maxRooms) {
+      if (APP_CONFIG.GOV_LOGIN) {
+        setCreateError(`Room limit reached. You can only create up to ${maxRooms} rooms.`);
+      } else {
+        setCreateError(`Room limit reached. You can only create up to ${maxRooms} rooms on your current plan.`);
+      }
+      return;
+    }
+
     if (!createForm.name.trim()) {
       setCreateError('Room name is required.');
       return;
@@ -436,7 +450,7 @@ export default function RoomsScreen() {
 
           {/* Footer row */}
           <View style={styles.roomFooter}>
-            <Text style={styles.roomIdText}>ID: {room.id}</Text>
+            <View />
 
             <View style={styles.roomActionGroup}>
               {/* Copy URL */}

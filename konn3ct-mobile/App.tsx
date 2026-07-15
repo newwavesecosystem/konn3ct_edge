@@ -88,11 +88,15 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const token = useAuthStore((state) => state.token);
+  const token       = useAuthStore((state) => state.token);
+  const isHydrated  = useAuthStore((state) => state.isHydrated);
+  const hydrate     = useAuthStore((state) => state.hydrate);
 
   useEffect(() => {
-    // Hide the infinite white splash screen!
-    SplashScreen.hideAsync().catch(console.warn);
+    // Restore saved session from SecureStore, then hide the splash screen
+    hydrate().finally(() => {
+      SplashScreen.hideAsync().catch(console.warn);
+    });
   }, []);
 
   useEffect(() => {
@@ -100,6 +104,9 @@ export default function App() {
       registerForPushNotificationsAsync();
     }
   }, [token]);
+
+  // Keep splash visible until we know whether the user is logged in
+  if (!isHydrated) return null;
 
   return (
     <ErrorBoundary>

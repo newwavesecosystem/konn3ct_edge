@@ -77,10 +77,9 @@ const LIST_ITEMS = [
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const { logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
   
-  // Mock user data for the header
-  const firstName = 'KAYODE';
+  const firstName = user?.name?.split(' ')[0] || 'User';
   
   const handleAvatarPress = () => {
     console.log('Avatar pressed');

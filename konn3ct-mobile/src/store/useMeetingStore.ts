@@ -13,13 +13,14 @@ export interface ChatMessage {
 export interface Poll {
   id: string;
   question: string;
-  options: { id: string; text: string; votes: number }[];
+  options: { id: string; text: string; votes: number; votedBy?: { userId: string; name: string }[] }[];
   votedOptionId?: string;
   isActive: boolean;
 }
 
 export interface Participant {
   userId: string;
+  participantId?: string;  // session-level routing ID used by signal server for private messages
   name: string;
   role: string;
   isMobile?: boolean;
@@ -73,7 +74,7 @@ interface MeetingState {
   removeReaction: (id: string) => void;
   setPolls: (polls: Poll[]) => void;
   addPoll: (poll: Poll) => void;
-  updatePollVote: (pollId: string, optionId: string) => void;
+  updatePollVote: (pollId: string, optionId: string, voter?: { userId: string; name: string }) => void;
   endPoll: (pollId: string) => void;
   setParticipants: (participants: Participant[]) => void;
   addParticipant: (participant: Participant) => void;
@@ -143,13 +144,19 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     return { polls: [...state.polls, poll] };
   }),
 
-  updatePollVote: (pollId, optionId) => set((state) => ({
+  updatePollVote: (pollId, optionId, voter) => set((state) => ({
     polls: state.polls.map(p => {
       if (p.id === pollId) {
         return {
           ...p,
           options: p.options.map(opt => 
-            opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt
+            opt.id === optionId 
+              ? { 
+                  ...opt, 
+                  votes: opt.votes + 1,
+                  votedBy: voter ? [...(opt.votedBy || []), voter] : opt.votedBy
+                } 
+              : opt
           )
         };
       }

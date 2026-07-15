@@ -88,8 +88,13 @@ export default function ProfileScreen() {
   }, []);
 
   // Derived values from state or fallback
-  const firstName = profile?.user?.firstname || user?.name?.split(' ')[0] || 'User';
-  const lastName = profile?.user?.lastname || '';
+  const firstName = user?.name?.split(' ')[0] || 'User'; // For greeting
+  const actualFirstName = profile?.user?.firstname || '';
+  const actualLastName = profile?.user?.lastname || '';
+  const displayProfileName = (actualFirstName || actualLastName) 
+    ? `${actualLastName} ${actualFirstName}`.trim() 
+    : (user?.name || 'User');
+    
   const email = profile?.user?.email || user?.email || 'user@example.com';
   const phone = profile?.user?.phone || '';
   const plan = profile?.user_plan?.name || 'Basic Plan';
@@ -97,8 +102,8 @@ export default function ProfileScreen() {
   const referralLink = `https://konn3ct.com/r/${referralCode}`;
   
   const handleEditProfilePress = () => {
-    setFormFirstname(firstName);
-    setFormLastname(lastName);
+    setFormFirstname(actualFirstName || user?.name?.split(' ')[1] || '');
+    setFormLastname(actualLastName || user?.name?.split(' ')[0] || '');
     setFormPhone(phone);
     setEditModalVisible(true);
   };
@@ -209,7 +214,7 @@ export default function ProfileScreen() {
                 <Text style={styles.profileMetaInitial}>{firstName.charAt(0)}</Text>
               </View>
               <View style={styles.profileMetaText}>
-                <Text style={styles.profileName}>{lastName ? `${lastName} ` : ''}{firstName}</Text>
+                <Text style={styles.profileName}>{displayProfileName}</Text>
                 <Text style={styles.profileEmail}>{email}</Text>
               </View>
               <TouchableOpacity style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>

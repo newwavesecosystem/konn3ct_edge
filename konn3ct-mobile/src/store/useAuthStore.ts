@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { apiClient } from '../api/client';
 
 interface User {
@@ -15,16 +16,45 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  /** True once the startup SecureStore check has completed. */
+  isHydrated: boolean;
   login: (user: User, token: string) => void;
   logout: () => void;
+  /** Read persisted credentials from SecureStore and restore session. */
+  hydrate: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
   isLoading: false,
+  isHydrated: false,
   login: (user, token) => set({ user, token }),
-  logout: () => set({ user: null, token: null }),
+  logout: () => {
+    // Clear persisted credentials on explicit logout
+    SecureStore.deleteItemAsync('konn3ct_token').catch(() => {});
+    SecureStore.deleteItemAsync('konn3ct_user').catch(() => {});
+    set({ user: null, token: null });
+  },
+  hydrate: async () => {
+    try {
+      const savedToken = await SecureStore.getItemAsync('konn3ct_token');
+      const savedUserStr = await SecureStore.getItemAsync('konn3ct_user');
+      if (savedToken && savedUserStr) {
+        const parsed = JSON.parse(savedUserStr);
+        const safeUser: User = {
+          id: String(parsed?.id || 'unknown-id'),
+          email: parsed?.email || '',
+          name: parsed?.name || parsed?.email || 'User',
+        };
+        set({ user: safeUser, token: savedToken });
+      }
+    } catch (e) {
+      console.warn('[useAuthStore] hydrate failed:', e);
+    } finally {
+      set({ isHydrated: true });
+    }
+  },
 }));
 
 export async function registerForPushNotificationsAsync() {
