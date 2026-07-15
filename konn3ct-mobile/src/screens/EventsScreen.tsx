@@ -167,6 +167,7 @@ function ParticipantsModal({
         </View>
 
         {/* Send Reminder Button */}
+        {/*
         <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
           <TouchableOpacity
             style={[styles.reminderBtn, sendingReminder && { opacity: 0.6 }]}
@@ -179,6 +180,7 @@ function ParticipantsModal({
             <Text style={styles.reminderBtnText}>{sendingReminder ? 'Sending...' : 'Send Reminder'}</Text>
           </TouchableOpacity>
         </View>
+        */}
 
         {/* List */}
         {loading ? (
@@ -832,7 +834,9 @@ export default function EventsScreen() {
           {(evt.room_name || evt.room_id) ? (
             <View style={styles.metaItem}>
               <MapPin color={COLORS.textMuted} size={14} />
-              <Text style={styles.metaText}>{evt.room_name || `Room ${evt.room_id}`}</Text>
+              <Text style={styles.metaText}>
+                {evt.room_name || rooms.find(r => String(r.id) === String(evt.room_id))?.url || `Room ${evt.room_id}`}
+              </Text>
             </View>
           ) : null}
           <View style={styles.metaItem}>
@@ -872,11 +876,24 @@ export default function EventsScreen() {
             style={[styles.copyLinkBtn, { marginTop: 10 }]}
             activeOpacity={0.8}
             onPress={async () => {
-              // Fallback through common identifier keys if 'ref' isn't explicitly defined
-              const eventRef = evt.ref || evt.event_ref || evt.uuid || evt.id;
-              const url = `https://konn3ct.com/${eventRef}`;
+              // Debug — remove after confirming correct values
+              console.log('[COPY] evt.room_id:', evt.room_id, 'room_name:', evt.room_name);
+              console.log('[COPY] rooms:', JSON.stringify(rooms.map(r => ({ id: r.id, name: r.name, url: r.url })), null, 2));
+              const matched = rooms.find(r => String(r.id) === String(evt.room_id));
+              console.log('[COPY] matched room:', JSON.stringify(matched, null, 2));
+
+              // Resolve the room URL slug from the local rooms list
+              const roomSlug =
+                evt.room_name ||
+                matched?.url ||
+                matched?.name ||
+                String(evt.room_id);
+              const edgeFrontendUrl =
+                process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL ||
+                'https://meetingapp.konn3ct.net';
+              const url = `${edgeFrontendUrl}/join/${roomSlug}`;
               await Clipboard.setStringAsync(url);
-              Alert.alert('Link Copied', 'The registration link has been copied to your clipboard!');
+              Alert.alert('Link Copied', `Meeting link copied!\n\n${url}`);
             }}
           >
             <Copy color={COLORS.blue} size={16} />
@@ -937,7 +954,7 @@ export default function EventsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 80 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

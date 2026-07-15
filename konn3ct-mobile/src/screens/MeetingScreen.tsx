@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback, BackHandler } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { mediaDevices, RTCView, MediaStream } from 'react-native-webrtc';
@@ -42,6 +42,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const [isCameraOff, setIsCameraOff] = useState(!initialCameraOn);
   const [cameraKey, setCameraKey] = useState(0); // bumped on every toggle to force RTCView remount
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
   const [isPipMode, setIsPipMode] = useState(false);
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -50,6 +51,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const serviceRef = useRef<MediasoupService | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null); // Fix 10: ref for cleanup
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Zustand Store
   const { activePane, setActivePane, unreadChatCount, reset, currentUserRole, isHost, participants, waitingRoom, isHandRaisedLocally, setIsHandRaisedLocally, theme, setTheme } = useMeetingStore();
@@ -93,8 +95,17 @@ export default function MeetingScreen({ route, navigation }: Props) {
     // Setup PiP Listener for Android
     let pipListener: any = null;
     if (PipService.isAvailable()) {
+      // Tell native side a meeting is active — enables auto-PiP on Home press
+      PipService.setMeetingActive(true);
       pipListener = PipService.onModeChanged((isInPip: boolean) => {
-        if (isMounted) setIsPipMode(isInPip);
+        if (isMounted) {
+          setIsPipMode(isInPip);
+          // Close any open overlay when entering PiP
+          if (isInPip) {
+            setIsMoreMenuVisible(false);
+            setActivePane('none');
+          }
+        }
       });
     }
 
@@ -127,6 +138,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
         service.onSessionStatusChange = async (status) => {
           if (!isMounted) return;
+          const navigateAfterLeave = () => {
+            const isGuest = !useAuthStore.getState().token;
+            if (isGuest) {
+              navigation.reset({ index: 0, routes: [{ name: 'GuestJoin' as any }] });
+            } else {
+              navigation.replace('MainTabs');
+            }
+          };
           if (status === 'active') {
             setIsConnected(true);
             // Re-enable existing hardware tracks on reconnect
@@ -140,19 +159,19 @@ export default function MeetingScreen({ route, navigation }: Props) {
             Alert.alert(
               'Meeting Ended',
               'The host has ended this meeting for everyone.',
-              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+              [{ text: 'OK', onPress: navigateAfterLeave }]
             );
           } else if (status === 'kicked') {
             Alert.alert(
               'Removed from Meeting',
               'You have been removed from the meeting by the host.',
-              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+              [{ text: 'OK', onPress: navigateAfterLeave }]
             );
           } else if (status === 'denied') {
             Alert.alert(
               'Entry Denied',
               'Your request to join was denied by the host.',
-              [{ text: 'OK', onPress: () => navigation.replace('MainTabs') }]
+              [{ text: 'OK', onPress: navigateAfterLeave }]
             );
           }
         };
@@ -185,7 +204,15 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onChatMessage = (msg) => {
           const state = useMeetingStore.getState();
           if (msg.userId === state.currentUserId) return;
-          state.addChatMessage(msg);
+          state.addChatMessage({
+            id: msg.serverEventId || msg.id || `m-${Date.now()}`,
+            userId: msg.userId,
+            name: msg.name || msg.senderName || 'Someone',
+            message: msg.message || msg.content || '',
+            timestamp: msg.timestamp || new Date().toISOString(),
+            isPrivate: !!msg.isPrivate,
+            fileUrl: msg.fileUrl,
+          });
         };
         service.onChatHistory = (msgs) => useMeetingStore.getState().setChatHistory(msgs);
         service.onReaction = (msg) => {
@@ -203,15 +230,34 @@ export default function MeetingScreen({ route, navigation }: Props) {
           state.addReaction(reactionObj);
         };
         service.onParticipantsList = (list) => {
-          const inMeeting = list.filter(p => p.status !== 'waiting');
-          const waiting = list.filter(p => p.status === 'waiting');
-          useMeetingStore.getState().setParticipants(inMeeting);
-          useMeetingStore.getState().setWaitingRoom(waiting);
-        };
+            const mapP = (p: any) => ({
+              userId: p.userId,
+              participantId: p.participantId || p.userId, // session routing ID
+              name: p.name,
+              role: p.role,
+              isMobile: p.isMobile,
+              isMuted: p.isMuted,
+              isCameraOn: p.isCameraOn,
+              status: p.status,
+            });
+            const inMeeting = list.filter((p: any) => p.status !== 'waiting').map(mapP);
+            const waiting = list.filter((p: any) => p.status === 'waiting').map(mapP);
+            useMeetingStore.getState().setParticipants(inMeeting);
+            useMeetingStore.getState().setWaitingRoom(waiting);
+          };
         service.onUserJoined = (user) => {
-          useMeetingStore.getState().addParticipant(user);
-          useMeetingStore.getState().removeWaitingRoomUser(user.userId);
-        };
+            useMeetingStore.getState().addParticipant({
+              userId: user.userId,
+              participantId: user.participantId || user.userId,
+              name: user.name,
+              role: user.role,
+              isMobile: user.isMobile,
+              isMuted: true,
+              isCameraOn: false,
+              status: 'active',
+            });
+            useMeetingStore.getState().removeWaitingRoomUser(user.userId);
+          };
         service.onCaptionReceived = (userId, text, isFinal, lang) => {
           const sender = useMeetingStore.getState().participants.find((p) => p.userId === userId);
           const senderName = sender?.name || `Participant ${userId.substring(5, 9)}`;
@@ -233,7 +279,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
           useMeetingStore.getState().removeWaitingRoomUser(userId);
         };
         service.onPollCreate = (poll) => useMeetingStore.getState().addPoll({ ...poll, id: poll.pollId || poll.id, isActive: true });
-        service.onPollVote = (vote) => useMeetingStore.getState().updatePollVote(vote.pollId, vote.optionId);
+        service.onPollVote = (vote) => useMeetingStore.getState().updatePollVote(vote.pollId, vote.optionId, vote.userId ? { userId: vote.userId, name: vote.name || 'Someone' } : undefined);
         service.onPollEnd = (data) => useMeetingStore.getState().endPoll(data.pollId);
         service.onPollHistory = (polls) => useMeetingStore.getState().setPolls(
           polls.map((p: any) => ({ ...p, id: p.pollId || p.id, isActive: p.isActive !== false }))
@@ -355,20 +401,43 @@ export default function MeetingScreen({ route, navigation }: Props) {
       if (pipListener) {
         pipListener.remove();
       }
+      // Tell native side meeting is no longer active — disables auto-PiP on Home
+      PipService.setMeetingActive(false);
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
       reset();
     };
   }, []);
 
-  const handleLeave = () => {
+  const leavingRef = useRef(false);
+
+  const doLeave = useCallback(() => {
+    leavingRef.current = true; // signal the beforeRemove guard to allow this navigation
+    if (serviceRef.current) {
+      serviceRef.current.disconnect();
+      serviceRef.current = null;
+    }
+    // Guest users (no token) go back to the GuestJoin screen; logged-in users go to MainTabs
+    const isGuest = !useAuthStore.getState().token;
+    if (isGuest) {
+      navigation.reset({ index: 0, routes: [{ name: 'GuestJoin' as any }] });
+    } else {
+      navigation.replace('MainTabs');
+    }
+  }, [navigation]);
+
+
+  const handleLeave = useCallback(() => {
     if (isHost) {
       Alert.alert(
         'End or Leave Meeting?',
         'As the host, you can end the meeting for everyone or just leave the meeting.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Leave Meeting', 
-            onPress: () => navigation.replace('MainTabs'),
+          {
+            text: 'Leave Meeting',
+            onPress: doLeave,
           },
           {
             text: 'End Meeting for All',
@@ -377,7 +446,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
               if (serviceRef.current) {
                 serviceRef.current.endMeetingForAll();
               }
-              navigation.replace('MainTabs');
+              doLeave();
             },
           },
         ]
@@ -388,15 +457,37 @@ export default function MeetingScreen({ route, navigation }: Props) {
         'Are you sure you want to leave this meeting?',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Leave Meeting', 
+          {
+            text: 'Leave Meeting',
             style: 'destructive',
-            onPress: () => navigation.replace('MainTabs'),
+            onPress: doLeave,
           },
         ]
       );
     }
-  };
+  }, [isHost, doLeave]);
+
+
+  // Intercept hardware back (Android) and swipe-back gesture to show leave dialog
+  useEffect(() => {
+    // React Navigation: fires before the screen is removed by gesture or header back button
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (leavingRef.current) return; // doLeave set this — let the navigation through
+      e.preventDefault();
+      handleLeave();
+    });
+
+    // Android hardware back button
+    const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleLeave();
+      return true; // prevent default back behaviour
+    });
+
+    return () => {
+      unsubscribe();
+      backSub.remove();
+    };
+  }, [navigation, handleLeave]);
 
   const copyMeetingLink = async () => {
     const meetingUrl = `https://meetingapp.konn3ct.net/join/${roomId}`;
@@ -479,6 +570,18 @@ export default function MeetingScreen({ route, navigation }: Props) {
   };
 
   const toggleRecording = () => {
+    // For now just toggle the UI state since backend is not fully setup
+    if (!isRecording) {
+      setIsRecording(true);
+      setRecordingTime(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      setIsRecording(false);
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+    }
+    
     if (serviceRef.current) {
       if (!isRecording) {
         serviceRef.current.sendStartRecording();
@@ -512,6 +615,11 @@ export default function MeetingScreen({ route, navigation }: Props) {
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const totalItems = remoteStreams.length + (isPipMode ? 0 : 1);
   const isHorizontalLayout = !!activeScreenShare;
@@ -663,6 +771,34 @@ export default function MeetingScreen({ route, navigation }: Props) {
     </>
   );
 
+  /* ── PiP mode: show only the most relevant video ──────────────────────── */
+  if (isPipMode) {
+    // Priority: screen share → first remote with video → local camera
+    const pipScreenShare = activeScreenShare?.screenStream;
+    const firstRemoteWithVideo = remoteStreams.find(p => {
+      const vt = p.stream?.getVideoTracks()?.[0];
+      return vt && vt.enabled && !vt.muted && vt.readyState === 'live';
+    });
+    const pipStream = pipScreenShare || firstRemoteWithVideo?.stream || localStream;
+
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {pipStream ? (
+          <RTCView
+            streamURL={pipStream.toURL()}
+            style={{ flex: 1 }}
+            objectFit={pipScreenShare ? 'contain' : 'cover'}
+            zOrder={0}
+          />
+        ) : (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 14 }}>Meeting in progress</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       {!isPipMode && <ReactionsLayer />}
@@ -689,6 +825,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
                   <View style={styles.metaDivider} />
                   <Users size={10} color={tokens.textMuted} strokeWidth={2.5} />
                   <Text style={styles.headerMetaText}> {totalItems}</Text>
+                  
+                  {isRecording && (
+                    <>
+                      <View style={styles.metaDivider} />
+                      <View style={[styles.liveDot, { backgroundColor: tokens.danger, opacity: 0.8 }]} />
+                      <Text style={[styles.headerMetaText, { color: tokens.danger }]}> REC {formatTime(recordingTime)}</Text>
+                    </>
+                  )}
                 </View>
               </View>
             </View>

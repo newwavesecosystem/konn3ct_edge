@@ -25,7 +25,7 @@ import { RootStackParamList } from '../../App';
 import { apiClient } from '../api/client';
 import { fetchDashboardStats, fetchTodayMeetings, DashboardStats, TodayMeeting } from '../api/dashboard';
 import { fetchSchedules } from '../api/schedule';
-import { createRoom, fetchMyRooms, startRoom, joinRoomKv4, validateMeetingKv4 } from '../api/rooms';
+import { createRoom, fetchMyRooms, fetchMyRoomsData, startRoom, joinRoomKv4, validateMeetingKv4 } from '../api/rooms';
 import { getAttendeeToken } from '../api/edgeApi';
 import { SIGNAL_SERVER_DOMAIN as SIGNAL_DOMAIN } from '../webrtc/MediasoupService';
 import { useAuthStore } from '../store/useAuthStore';
@@ -206,7 +206,7 @@ export default function DashboardScreen({ navigation }: Props) {
         // === DEV ENDPOINTS (NEW) ===
         fetchDashboardStats(),
         fetchTodayMeetings(),
-        fetchMyRooms().catch(() => []),
+        fetchMyRoomsData().catch(() => ({ rooms: [], total_rooms: 0, max_rooms: 0 })),
       ]);
       setPastRooms(summariesRes.data.slice(0, 3));
       const schedulesArray = Array.isArray(schedRes) ? schedRes : schedRes?.data || [];
@@ -217,12 +217,19 @@ export default function DashboardScreen({ navigation }: Props) {
         return isNaN(meetingTime) || meetingTime >= now;
       });
       setUpcoming(futureSchedules);
-      setDashboardStats(statsRes);
+      
+      const adjustedStats = statsRes ? { ...statsRes } : { rooms: 0, upcoming_meetings: 0, streaming: 0, recordings: 0 };
+      if (roomsRes && typeof roomsRes === 'object' && 'total_rooms' in roomsRes) {
+        adjustedStats.rooms = roomsRes.total_rooms || 0;
+      }
+      setDashboardStats(adjustedStats as DashboardStats);
+      
       setTodayMeetings(todayRes);
 
       // Set personal room URL from user's default room (or first room)
-      if (Array.isArray(roomsRes) && roomsRes.length > 0) {
-        const defaultRoom = roomsRes.find((r: any) => r.default_room === 'yes') || roomsRes[0];
+      const roomsArray = roomsRes?.rooms || [];
+      if (Array.isArray(roomsArray) && roomsArray.length > 0) {
+        const defaultRoom = roomsArray.find((r: any) => r.default_room === 'yes') || roomsArray[0];
         setPersonalRoomUrl(defaultRoom.url || null);
       }
     } catch (e) {

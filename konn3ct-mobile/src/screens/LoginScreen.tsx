@@ -474,6 +474,17 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* ── Guest join link ── */}
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Just want to join a meeting? </Text>
+                <TouchableOpacity
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => navigation.navigate('GuestJoin')}
+                >
+                  <Text style={styles.signUpText}>Join as Guest</Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
         </Animated.View>

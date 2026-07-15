@@ -61,6 +61,30 @@ export async function fetchMyRooms(): Promise<Room[]> {
 }
 
 /**
+ * GET /myrooms (with metadata)
+ * Fetch all rooms and limits belonging to the authenticated user.
+ */
+export async function fetchMyRoomsData(): Promise<{ rooms: Room[]; total_rooms: number; max_rooms: number }> {
+  const res = await apiClient.get('/myrooms');
+  const data = res.data;
+  
+  const payload = data?.data || data;
+  
+  let rooms: Room[] = [];
+  if (payload?.rooms && Array.isArray(payload.rooms)) {
+    rooms = payload.rooms;
+  } else if (Array.isArray(payload)) {
+    rooms = payload;
+  }
+  
+  return {
+    rooms,
+    total_rooms: payload?.total_rooms || 0,
+    max_rooms: payload?.max_rooms || 0
+  };
+}
+
+/**
  * POST /createroom
  * Create a new room.
  */
@@ -129,10 +153,11 @@ export async function setAccessCode(payload: AccessCodePayload): Promise<{ succe
  * Returns room name, owner, and whether an access code is required.
  */
 export async function validateMeetingKv4(roomSlug: string): Promise<any> {
-  console.log('[API] validateMeetingKv4 → POST /kv4/validate-meeting, payload:', { name: roomSlug });
+  console.log(`[API] validateMeetingKv4 -> POST ${apiClient.defaults.baseURL}/kv4/validate-meeting`);
+  console.log('[API] payload:', { name: roomSlug });
   try {
     const res = await apiClient.post('/kv4/validate-meeting', { name: roomSlug });
-    console.log('[API] validateMeetingKv4 ← status:', res.status, 'data:', JSON.stringify(res.data, null, 2));
+    console.log('[API] validateMeetingKv4 <- status:', res.status, 'data:', JSON.stringify(res.data, null, 2));
     return res.data;
   } catch (err: any) {
     console.error('[API] validateMeetingKv4 error:', err.response?.status, JSON.stringify(err.response?.data, null, 2));
