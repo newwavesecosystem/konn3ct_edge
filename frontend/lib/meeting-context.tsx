@@ -168,6 +168,10 @@ interface MeetingContextValue {
   answerQuestion: (questionId: string, answerText: string) => void;
   deleteQuestion: (questionId: string) => void;
 
+  // AI Chat
+  aiMessages: { role: 'user' | 'ai'; content: string }[];
+  setAiMessages: React.Dispatch<React.SetStateAction<{ role: 'user' | 'ai'; content: string }[]>>;
+
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
@@ -428,6 +432,9 @@ export function MeetingProvider({
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'ai'; content: string }[]>([
+    { role: "ai", content: "Hi! I am Konn3ct AI. I am actively reading the live meeting transcript. Ask me anything about what has been discussed!" }
+  ]);
   const [micError, setMicError] = useState<{ name: string; message: string } | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
@@ -825,10 +832,18 @@ export function MeetingProvider({
               setCaptions(currCaptions => {
                 const newCaptions = [...currCaptions];
                 const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
+                const now = Date.now();
                 if (lastIdx >= 0) {
-                  newCaptions[lastIdx] = { userId, name, text: newText, isFinal, timestamp: Date.now() };
+                  // If the previous un-finalized caption is more than 5 seconds old, 
+                  // don't overwrite it. Push a new one instead.
+                  if (now - newCaptions[lastIdx].timestamp > 5000) {
+                    newCaptions[lastIdx].isFinal = true;
+                    newCaptions.push({ userId, name, text: newText, isFinal, timestamp: now });
+                  } else {
+                    newCaptions[lastIdx] = { userId, name, text: newText, isFinal, timestamp: now };
+                  }
                 } else {
-                  newCaptions.push({ userId, name, text: newText, isFinal, timestamp: Date.now() });
+                  newCaptions.push({ userId, name, text: newText, isFinal, timestamp: now });
                 }
                 if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
                 return newCaptions;
@@ -1442,7 +1457,7 @@ export function MeetingProvider({
                   userId: p.userId,
                   name: p.name,
                   role: p.role as any,
-                  isMuted: true,
+                  isMuted: (p as any).isMuted ?? true,
                   isCameraOn: p.isCameraOn || false,
                   audioOnlyMode: p.audioOnlyMode,
                   videoSuspendedReason: p.videoSuspendedReason,
@@ -1485,7 +1500,7 @@ export function MeetingProvider({
               userId: user.userId,
               name: user.name,
               role: user.role as any,
-              isMuted: true,
+              isMuted: (user as any).isMuted ?? true,
               isCameraOn: user.isCameraOn || false,
               audioOnlyMode: user.audioOnlyMode,
               videoSuspendedReason: user.videoSuspendedReason,
@@ -1569,7 +1584,7 @@ export function MeetingProvider({
               return prev.map((p) => {
                 if (p.id === participantId) {
                   if (consumer.kind === 'audio') {
-                    return { ...p, audioTrack: consumer.track as MediaStreamTrack, isMuted: false };
+                    return { ...p, audioTrack: consumer.track as MediaStreamTrack };
                   }
                   if (consumer.kind === 'video') {
                     if (source === 'screen') {
@@ -2287,6 +2302,8 @@ export function MeetingProvider({
         clearChat,
         isMuted,
         isCameraOn,
+        aiMessages,
+        setAiMessages,
         isScreenSharing,
         isRecording,
         recordingStatus,

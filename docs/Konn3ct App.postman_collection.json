@@ -1,0 +1,4676 @@
+{
+  "info": {
+    "_postman_id": "868cade2-455c-40cc-83cf-f1d3743d8283",
+    "name": "Konn3ct App",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "9781740",
+    "_collection_link": "https://go.postman.co/collection/9781740-868cade2-455c-40cc-83cf-f1d3743d8283?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);\r",
+                  "if(jsonData.success){\r",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);\r",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"username\": \"odejinmisamuel@gmail.com\",\r\n    \"password\": \"12345678\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/login",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": []
+        },
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"samjidiamnd@gmail.com\",\r\n    \"password\": \"123456789\",\r\n    \"firstname\": \"Samuel\",\r\n    \"lastname\": \"Odejinmi\",\r\n    \"phone\": \"08166390205\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/register",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "register"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"emailphone\": \"samjid0iamnd@gmail.com\",\r\n    \"type\": \"email\",\r\n    \"code\": \"1234\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/verify-code",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "verify-code"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": []
+        },
+        {
+          "name": "Request Forget Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);\r",
+                  "if(jsonData.success){\r",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);\r",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"emailphone\": \"samjidiamond@gmail.com\",\r\n    \"type\": \"email\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/forgot-password-request",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "forgot-password-request"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": []
+        },
+        {
+          "name": "Forget Password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"emailphone\": \"samjidiamond@gmail.com\",\r\n    \"type\": \"email\",\r\n    \"code\": \"1844\",\r\n    \"password\": \"123456789\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/forgot-password",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "forgot-password"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "item": [
+        {
+          "name": "Chats",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chats",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chats Messages",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chats/messages/83",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chats",
+                "messages",
+                "83"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chats Participants",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chats/participants/83",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chats",
+                "participants",
+                "83"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Message",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chats/message/delete/1",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chats",
+                "message",
+                "delete",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send message",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": 83,\r\n    \"message\": \"hello\",\r\n    \"type\": \"text\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chat",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chat"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reply a Message",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": 83,\r\n    \"message\": \"how are u today\",\r\n    \"type\": \"text\",\r\n    \"reply\": \"2\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chat",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chat"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enrol myself to chat",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": 82\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chat/enroll",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chat",
+                "enroll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enrol someone to chat",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": 82,\r\n    \"user_id\": 68\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chat/enroll",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chat",
+                "enroll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "unEnrol someone to chat",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": 83,\r\n    \"user_id\": 10\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/chat/unenroll",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "chat",
+                "unenroll"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Stats",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/dashboard/stats",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "dashboard",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "today-meeting",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/dashboard/today-meeting",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "dashboard",
+                "today-meeting"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rooms",
+      "item": [
+        {
+          "name": "Create Room",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"tesss\",\r\n    \"url\": \"testiti\",\r\n    \"mode\": \"meeting\", //meeting or webinar\r\n    \"privacy\": 1, // \r\n    \"color\": \"#fffff\",\r\n    \"access_code\": \"\" // empty means not set\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/createroom",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "createroom"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Rooms",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/myrooms",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "myrooms"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/deleteroom/114",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "deleteroom",
+                "114"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Instant Room",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/start-a-room/82",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "start-a-room",
+                "82"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Meeting Name Kv4",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"tesss\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/kv4/validate-meeting",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "kv4",
+                "validate-meeting"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"user\": \"9\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/validate-user",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "validate-user"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Join Room",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": 15,\r\n    \"name\": \"Sammy\",\r\n    \"email\": \"odejinmisamuel@gmail.com\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/join-room",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "join-room"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Join Room kv4",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"room\": \"tesss\",\r\n    \"name\": \"Sammy\",\r\n    \"email\": \"odejinmisamuel@gmail.com\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/kv4/join-room",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "kv4",
+                "join-room"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Manage Access Code",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id",
+                  "value": "15",
+                  "type": "text",
+                  "uuid": "5f27283c-6b3d-422c-b21a-4514597ea799"
+                },
+                {
+                  "key": "type",
+                  "value": "manual",
+                  "description": "auto, manual, remove",
+                  "type": "text",
+                  "uuid": "4389c61f-4c07-47db-aa7d-21fea4ecbd65"
+                },
+                {
+                  "key": "accesscode",
+                  "value": "45678",
+                  "description": "leave empty if not manual",
+                  "type": "text",
+                  "uuid": "1d3854a7-644d-4e13-8788-c0a7908f5f6d"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseurl}}/accesscode",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "accesscode"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Limit User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id",
+                  "value": "15",
+                  "type": "text",
+                  "uuid": "5f27283c-6b3d-422c-b21a-4514597ea799"
+                },
+                {
+                  "key": "users",
+                  "value": "55",
+                  "type": "text",
+                  "uuid": "4389c61f-4c07-47db-aa7d-21fea4ecbd65"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseurl}}/limituser",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "limituser"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Banner Upload",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id",
+                  "value": "15",
+                  "type": "text",
+                  "uuid": "5f27283c-6b3d-422c-b21a-4514597ea799"
+                },
+                {
+                  "key": "banner",
+                  "type": "file",
+                  "uuid": "4389c61f-4c07-47db-aa7d-21fea4ecbd65",
+                  "src": "/C:/Users/odeji/Downloads/Green Dark Green Real Estate Home For Sale Facebook Post (1).png"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseurl}}/bannerupload",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "bannerupload"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Transfer Room",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id",
+                  "value": "15",
+                  "type": "text",
+                  "uuid": "5f27283c-6b3d-422c-b21a-4514597ea799"
+                },
+                {
+                  "key": "email",
+                  "type": "text",
+                  "uuid": "4389c61f-4c07-47db-aa7d-21fea4ecbd65",
+                  "value": "odejinmisamuel@gmail.com"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseurl}}/transfer-room",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "transfer-room"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Meetings",
+      "item": [
+        {
+          "name": "Upcoming Meetings",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/upcoming-meetings",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "upcoming-meetings"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "User Profile",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/profile",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstname",
+                  "value": "Samji",
+                  "type": "text"
+                },
+                {
+                  "key": "lastname",
+                  "value": "Sammy",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "08166939205",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "/C:/Users/odeji/Downloads/download (9).jpg"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseurl}}/update-profile",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "update-profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Password",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"current_password\": \"12345678\",\r\n    \"new_password\": \"12345678\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/update-password",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "update-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sessions",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/user-sessions",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "user-sessions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout Other Session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/user-sessions-delete-others",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "user-sessions-delete-others"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Streaming",
+      "item": [
+        {
+          "name": "List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/streamings",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "streamings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Streaming",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"room_id\": \"21\",\r\n    \"type\": \"Youtube\",\r\n    \"key\": \"123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/start-streaming",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "start-streaming"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Combo Streaming",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"room_id\": \"21\",\r\n    \"youtube_key\": \"Yout2222ube\",\r\n    \"facebook_key\": \"12333333\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/start-streaming-combo",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "start-streaming-combo"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop Streaming",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/stop-streaming/5",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "stop-streaming",
+                "5"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/payments",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "payments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Plans & Pricing",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/pricing-plans",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "pricing-plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Addons",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/addons",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "addons"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/addons",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "addons"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 04 Feb 2025 00:14:33 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 04 Feb 2025 00:14:33 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.0.13"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Fetched successfully\",\n    \"data\": [\n        {\n            \"id\": 1,\n            \"name\": \"Whatsapp Invite\",\n            \"description\": \"A medium where you can invite your attendees using whatsapp\",\n            \"freetrial\": 8,\n            \"price\": 3000,\n            \"status\": 1,\n            \"created_at\": \"2021-06-21T11:36:35.000000Z\",\n            \"updated_at\": \"2021-12-06T09:26:27.000000Z\"\n        },\n        {\n            \"id\": 2,\n            \"name\": \"Room Bundles - 10\",\n            \"description\": \"Buy 10 addtional room\",\n            \"freetrial\": 0,\n            \"price\": 15000,\n            \"status\": 1,\n            \"created_at\": \"2021-07-02T04:49:39.000000Z\",\n            \"updated_at\": \"2021-12-06T09:26:27.000000Z\"\n        },\n        {\n            \"id\": 3,\n            \"name\": \"Streaming Service\",\n            \"description\": \"To stream meetings to Facebook, Youtube, ...\",\n            \"freetrial\": 0,\n            \"price\": 20000,\n            \"status\": 1,\n            \"created_at\": \"2021-07-02T04:49:39.000000Z\",\n            \"updated_at\": \"2021-12-06T09:26:27.000000Z\"\n        }\n    ],\n    \"current_status\": {\n        \"addon1\": \"Expired\",\n        \"addon3\": \"Expired\"\n    }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Recordings",
+      "item": [
+        {
+          "name": "List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/recording",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "recording"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/recording",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "recording"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 04 Feb 2025 00:11:04 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 04 Feb 2025 00:11:04 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.0.13"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Fetched successfully\",\n    \"data\": [\n        {\n            \"recordID\": \"bdb4ef8138bd46aa7f134cd4c2a1dd8fc2863f06-1669190001680\",\n            \"meetingID\": \"23\",\n            \"internalMeetingID\": \"d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383\",\n            \"name\": \"Sammy Server Record\",\n            \"isBreakout\": \"false\",\n            \"published\": \"true\",\n            \"state\": \"published\",\n            \"startTime\": \"1604321641383\",\n            \"endTime\": \"1604322318372\",\n            \"participants\": \"2\",\n            \"rawSize\": \"4549560\",\n            \"metadata\": {\n                \"endcallbackurl\": \"https://dev.konn3ct.net/leftsession\",\n                \"isBreakout\": \"false\",\n                \"meetingId\": \"23\",\n                \"meetingName\": \"Sammy\"\n            },\n            \"size\": \"4158906\",\n            \"playback\": {\n                \"format\": {\n                    \"type\": \"presentation\",\n                    \"url\": \"https://dev.konn3ct.net/playback/presentation/2.0/playback.html?meetingId=bdb4ef8138bd46aa7f134cd4c2a1dd8fc2863f06-1669190001680\",\n                    \"processingTime\": \"178453\",\n                    \"length\": \"10\",\n                    \"size\": \"4158906\",\n                    \"preview\": {\n                        \"images\": {\n                            \"image\": [\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604321641416/thumbnails/thumb-1.png\",\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604321641416/thumbnails/thumb-2.png\",\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604321641416/thumbnails/thumb-3.png\"\n                            ]\n                        }\n                    }\n                }\n            },\n            \"data\": []\n        },\n        {\n            \"recordID\": \"d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383\",\n            \"meetingID\": \"23\",\n            \"internalMeetingID\": \"d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383\",\n            \"name\": \"Sammy\",\n            \"isBreakout\": \"false\",\n            \"published\": \"true\",\n            \"state\": \"published\",\n            \"startTime\": \"1604321641383\",\n            \"endTime\": \"1604322318372\",\n            \"participants\": \"2\",\n            \"rawSize\": \"4549560\",\n            \"metadata\": {\n                \"endcallbackurl\": \"https://dev.konn3ct.net/leftsession\",\n                \"isBreakout\": \"false\",\n                \"meetingId\": \"23\",\n                \"meetingName\": \"Sammy\"\n            },\n            \"size\": \"4158906\",\n            \"playback\": {\n                \"format\": {\n                    \"type\": \"presentation\",\n                    \"url\": \"https://dev.konn3ct.net/playback/presentation/2.0/playback.html?meetingId=d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383\",\n                    \"processingTime\": \"178453\",\n                    \"length\": \"10\",\n                    \"size\": \"4158906\",\n                    \"preview\": {\n                        \"images\": {\n                            \"image\": [\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604321641416/thumbnails/thumb-1.png\",\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604321641416/thumbnails/thumb-2.png\",\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604321641383/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604321641416/thumbnails/thumb-3.png\"\n                            ]\n                        }\n                    }\n                }\n            },\n            \"data\": []\n        },\n        {\n            \"recordID\": \"d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604320993517\",\n            \"meetingID\": \"23\",\n            \"internalMeetingID\": \"d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604320993517\",\n            \"name\": \"Sammy\",\n            \"isBreakout\": \"false\",\n            \"published\": \"true\",\n            \"state\": \"published\",\n            \"startTime\": \"1604320993517\",\n            \"endTime\": \"1604321453617\",\n            \"participants\": \"2\",\n            \"rawSize\": \"3500466\",\n            \"metadata\": {\n                \"endcallbackurl\": \"https://dev.konn3ct.net/leftsession\",\n                \"isBreakout\": \"false\",\n                \"meetingId\": \"23\",\n                \"meetingName\": \"Sammy\"\n            },\n            \"size\": \"2074489\",\n            \"playback\": {\n                \"format\": {\n                    \"type\": \"presentation\",\n                    \"url\": \"https://dev.konn3ct.net/playback/presentation/2.0/playback.html?meetingId=d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604320993517\",\n                    \"processingTime\": \"80959\",\n                    \"length\": \"4\",\n                    \"size\": \"2074489\",\n                    \"preview\": {\n                        \"images\": {\n                            \"image\": [\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604320993517/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604320993542/thumbnails/thumb-1.png\",\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604320993517/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604320993542/thumbnails/thumb-2.png\",\n                                \"https://dev.konn3ct.net/presentation/d435a6cdd786300dff204ee7c2ef942d3e9034e2-1604320993517/presentation/d2d9a672040fbde2a47a10bf6c37b6a4b5ae187f-1604320993542/thumbnails/thumb-3.png\"\n                            ]\n                        }\n                    }\n                }\n            },\n            \"data\": []\n        }\n    ],\n    \"download_links\": {\n        \"video\": {\n            \"name\": \"Video & Audio (MP4)\",\n            \"url\": \"http://127.0.0.1:8000/recording/replaceRecordID/video\"\n        },\n        \"screenshare\": {\n            \"name\": \"Screenshare (MP4)\",\n            \"url\": \"http://127.0.0.1:8000/recording/replaceRecordID/screenshare\"\n        },\n        \"chats\": {\n            \"name\": \"Chat(s) (TXT)\",\n            \"url\": \"http://127.0.0.1:8000/recording/replaceRecordID/chats\"\n        }\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Recording",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/deleterecording/872a319ee7a24a0ea855777702e15aae09deb042-1733257703103",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "deleterecording",
+                "872a319ee7a24a0ea855777702e15aae09deb042-1733257703103"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Referees",
+      "item": [
+        {
+          "name": "List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/referee",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "referee"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Shedule",
+      "item": [
+        {
+          "name": "List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/schedule",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "schedule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Recent Emails",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/schedule-recent-emails",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "schedule-recent-emails"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send An Invite",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"room_id\":166,\r\n    \"title\": \"Meeting with Samji\",\r\n    \"description\": \"Kindly be available promptly\",\r\n    \"recurrence\":\"weekly\", //once,daily,weekly,monthly\r\n    \"date\": \"2026-06-15\",\r\n    \"fromtime\": \"15:35\",\r\n    \"totime\": \"15:40\",\r\n    \"timezone\": \"Africa/Lagos\",\r\n    \"guest\": \"odejinmisamuel@gmail.com,samjidiamond@gmail.com,sammy@gmail.com\"\r\n\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/schedule",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "schedule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit Invite",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"title\": \"Meeting with Samjixy\",\r\n    \"description\": \"Kindly be available promptly for the Meeting\",\r\n    \"recurrence\":\"daily\", //once,daily,weekly,monthly\r\n    \"date\": \"2026-06-16\",\r\n    \"fromtime\": \"15:35\",\r\n    \"totime\": \"15:40\",\r\n    \"timezone\": \"Africa/Lagos\",\r\n    \"guest\": \"odejinmisamuel@gmail.com,samjidiamond@gmail.com,sammy@gmail.com\"\r\n\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/schedule-edit/583",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "schedule-edit",
+                "583"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/schedule-cancel/581",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "schedule-cancel",
+                "581"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send An Invite (1gov)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"room_id\":15,\r\n    \"hostname\":\"Samji Community\",\r\n    \"title\": \"Meeting with Osun State Gov\",\r\n    \"date\": \"2025-01-22\",\r\n    \"fromtime\": \"15:05\",\r\n    \"totime\": \"15:30\",\r\n    \"timezone\": \"Africa/Lagos (UTC+01:00)\",\r\n    \"additional\": \"Agenda\\n 1. Introduction. 2. Opening prayer 3. Menu Menu\",\r\n    \"guest\": \"odejinmisamuel@gmail.com,samjidiamond@gmail.com,sammy@gmail.com\"\r\n\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/invite",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "invite"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Invite",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/resendinvites/122",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "resendinvites",
+                "122"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Call",
+      "item": [
+        {
+          "name": "Call A Friend",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"user\": \"1\",\r\n    \"type\": \"voice\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/call/initiate",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "call",
+                "initiate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Call Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"id\": \"6\",\r\n    \"status\": \"missed\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/call/update",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "call",
+                "update"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Call List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/call/list",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "call",
+                "list"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Kyc",
+      "item": [
+        {
+          "name": "Fetch",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/kyc/fetch",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "kyc",
+                "fetch"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Individual",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"type\": \"individual\",\r\n    \"bvn\": \"1234567890\",\r\n    \"first_name\":\"Samji\",\r\n    \"last_name\":\"Diamond\",\r\n    \"address\":\"12, Adeyemi street\",\r\n    \"bank_name\":\"GTB\",\r\n    \"bank_code\":\"058\",\r\n    \"bank_account_number\":\"0248215384\",\r\n    \"bank_account_name\":\"ODEJINMI SAMUEL ADEKUNLE\",\r\n    \"id_type\":\"Voters Card\",\r\n    \"id_document\":\"FILE\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/kyc/submit",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "kyc",
+                "submit"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Corporate",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"type\": \"corporate\",\r\n    \"company_name\":\"Newwaves\",\r\n    \"company_email\":\"newwaves@gmail.com\",\r\n    \"company_phone\":\"08166939205\",\r\n    \"company_address\":\"220b eti-osa\",\r\n    \"company_taxid\":\"124234546\",\r\n    \"bvn\": \"1234567890\",\r\n    \"first_name\":\"Samji\",\r\n    \"last_name\":\"Diamond\",\r\n    \"email\":\"samuel@gmail.com\",\r\n    \"phone\":\"08166939205\",\r\n    \"bank_name\":\"GTB\",\r\n    \"bank_code\":\"058\",\r\n    \"bank_account_number\":\"0248215384\",\r\n    \"bank_account_name\":\"ODEJINMI SAMUEL ADEKUNLE\",\r\n    \"id_type\":\"Voters Card\",\r\n    \"id_document\":\"FILE\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/kyc-corporate/submit",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "kyc-corporate",
+                "submit"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Bank List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/banks",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "banks"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Bank",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"account_number\": \"0248215384\",\r\n    \"bank_code\": \"058\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/verify-bank",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "verify-bank"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1Gov",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);\r",
+                  "if(jsonData.success){\r",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"tenantId\":\"konnectsandbox\",\r\n    \"username\": \"odejinmisa@newwavesecosystem.com\",\r\n    \"password\": \"827xazLF6TBfD7N!\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/1gov/login",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "1gov",
+                "login"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": [
+            {
+              "name": "No 2FA Enabled",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"tenantId\":\"konnectsandbox\",\r\n    \"username\": \"odejinmisa@newwavesecosystem.com\",\r\n    \"password\": \"827xazLF6TBfD7N!\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/1gov/login",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "1gov",
+                    "login"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 03 Feb 2026 13:54:11 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 03 Feb 2026 13:54:11 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.1.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Login successfully\",\n    \"token\": \"55|c8GTuY8qbKQWynCxzpvz4Ug729ifh8SkzXdcKxy1\",\n    \"role\": \"Normal User\",\n    \"permissions\": [\n        {\n            \"id\": 1,\n            \"name\": \"delete_room\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 1\n            }\n        },\n        {\n            \"id\": 2,\n            \"name\": \"start_room\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 2\n            }\n        },\n        {\n            \"id\": 3,\n            \"name\": \"brand_room\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 3\n            }\n        },\n        {\n            \"id\": 4,\n            \"name\": \"view_recording\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 4\n            }\n        },\n        {\n            \"id\": 5,\n            \"name\": \"delete_recording\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 5\n            }\n        },\n        {\n            \"id\": 6,\n            \"name\": \"view_streaming\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 6\n            }\n        },\n        {\n            \"id\": 7,\n            \"name\": \"stop_streaming\",\n            \"guard_name\": \"web\",\n            \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n            \"pivot\": {\n                \"role_id\": 5,\n                \"permission_id\": 7\n            }\n        }\n    ],\n    \"data\": {\n        \"id\": 67,\n        \"firstname\": \"Samuel\",\n        \"lastname\": \"Odejinmi\",\n        \"email\": \"odejinmisa@newwavesecosystem.com\",\n        \"phone\": \"08166939205\",\n        \"referral_code\": \"25240582\",\n        \"referral\": null,\n        \"plan\": 3,\n        \"subscription\": \"2026-06-28 04:40:41\",\n        \"freetrial\": 0,\n        \"status\": \"active\",\n        \"email_verified_at\": null,\n        \"current_team_id\": 2,\n        \"profile_photo_path\": null,\n        \"whatsapp_invite\": \"0\",\n        \"room_bundles\": 0,\n        \"streaming_service\": \"0\",\n        \"reseller_id\": 2,\n        \"created_at\": \"2024-05-28T02:25:57.000000Z\",\n        \"updated_at\": \"2025-02-21T07:02:03.000000Z\",\n        \"profile_photo_url\": \"https://ui-avatars.com/api/?name=&color=7F9CF5&background=EBF4FF\",\n        \"roles\": [\n            {\n                \"id\": 5,\n                \"name\": \"Normal User\",\n                \"guard_name\": \"web\",\n                \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                \"pivot\": {\n                    \"model_id\": 67,\n                    \"role_id\": 5,\n                    \"model_type\": \"App\\\\Models\\\\User\"\n                },\n                \"permissions\": [\n                    {\n                        \"id\": 1,\n                        \"name\": \"delete_room\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 1\n                        }\n                    },\n                    {\n                        \"id\": 2,\n                        \"name\": \"start_room\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 2\n                        }\n                    },\n                    {\n                        \"id\": 3,\n                        \"name\": \"brand_room\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 3\n                        }\n                    },\n                    {\n                        \"id\": 4,\n                        \"name\": \"view_recording\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 4\n                        }\n                    },\n                    {\n                        \"id\": 5,\n                        \"name\": \"delete_recording\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 5\n                        }\n                    },\n                    {\n                        \"id\": 6,\n                        \"name\": \"view_streaming\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 6\n                        }\n                    },\n                    {\n                        \"id\": 7,\n                        \"name\": \"stop_streaming\",\n                        \"guard_name\": \"web\",\n                        \"created_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"updated_at\": \"2024-06-04T11:23:31.000000Z\",\n                        \"pivot\": {\n                            \"role_id\": 5,\n                            \"permission_id\": 7\n                        }\n                    }\n                ]\n            }\n        ],\n        \"permissions\": []\n    }\n}"
+            },
+            {
+              "name": "No 2FA Enabled [OLD]",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"tenantId\":\"konnectsandbox\",\r\n    \"username\": \"odejinmisa@newwavesecosystem.com\",\r\n    \"password\": \"827xazLF6TBfD7N!\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/1gov/login",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "1gov",
+                    "login"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 10 Sep 2025 10:02:20 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 10 Sep 2025 10:02:19 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.0.13"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Login successfully\",\n    \"token\": \"32|bj3fbBzxCRBgqiouORpsFEg9OlgtL1dzfXsTLaDg\",\n    \"data\": {\n        \"id\": 67,\n        \"firstname\": \"Samuel\",\n        \"lastname\": \"Odejinmi\",\n        \"email\": \"odejinmisa@newwavesecosystem.com\",\n        \"phone\": \"08166939205\",\n        \"referral_code\": \"25240582\",\n        \"referral\": null,\n        \"plan\": 3,\n        \"subscription\": \"2026-06-28 04:40:41\",\n        \"freetrial\": 0,\n        \"status\": \"active\",\n        \"email_verified_at\": null,\n        \"current_team_id\": 2,\n        \"profile_photo_path\": null,\n        \"whatsapp_invite\": \"0\",\n        \"room_bundles\": 0,\n        \"streaming_service\": \"0\",\n        \"reseller_id\": 2,\n        \"created_at\": \"2024-05-28T02:25:57.000000Z\",\n        \"updated_at\": \"2025-02-21T07:02:03.000000Z\",\n        \"profile_photo_url\": \"https://ui-avatars.com/api/?name=&color=7F9CF5&background=EBF4FF\"\n    }\n}"
+            },
+            {
+              "name": "Wrong Credentials",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"tenantId\":\"testgov\",\r\n    \"username\": \"odejinmisa@newwavesecosystem.com\",\r\n    \"password\": \"827xazLF6TBfD7N!\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/1gov/login",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "1gov",
+                    "login"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 10 Sep 2025 10:08:55 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 10 Sep 2025 10:08:55 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.0.13"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": false,\n    \"message\": \"Incorrect credentials\"\n}"
+            },
+            {
+              "name": "2FA Enabled",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"tenantId\":\"testgov\",\r\n    \"username\": \"odejinmisa@newwavesecosystem.com\",\r\n    \"password\": \"@NDNwsXGP483@pr\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/1gov/login",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "1gov",
+                    "login"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 10 Sep 2025 10:31:26 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Wed, 10 Sep 2025 10:31:26 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.0.13"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Login successfully\",\n    \"twoFactorAuth\": true,\n    \"twoFactorMedium\": \"EMAIL\",\n    \"twoFactorMediums\": \"AUTHENTICATOR_APP,EMAIL\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login 2FA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);\r",
+                  "if(jsonData.success){\r",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"tenantId\":\"testgov\",\r\n    \"username\": \"isaac.adegunle@cicod.com\",\r\n    \"otpCode\": \"123456\",\r\n    \"authType\":\"EMAIL\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/1gov/login/2fa",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "1gov",
+                "login",
+                "2fa"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Internal Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/1gov/internal-users",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "1gov",
+                "internal-users"
+              ]
+            },
+            "description": "for login"
+          },
+          "response": [
+            {
+              "name": "Fetch Internal Users",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseurl}}/1gov/internal-users",
+                  "host": [
+                    "{{baseurl}}"
+                  ],
+                  "path": [
+                    "1gov",
+                    "internal-users"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "127.0.0.1:8000"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 03 Feb 2026 13:28:59 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Tue, 03 Feb 2026 13:28:59 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.1.0"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "Konn3ct Developer"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "97"
+                },
+                {
+                  "key": "Permissions-Policy",
+                  "value": "accelerometer=(self), ambient-light-sensor=(self), autoplay=(self), battery=(self), camera=(self), cross-origin-isolated=(self), display-capture=(self), document-domain=*, encrypted-media=(self), execution-while-not-rendered=*, execution-while-out-of-viewport=*, fullscreen=(self), geolocation=(self), gyroscope=(self), magnetometer=(self), microphone=(self), midi=(self), navigation-override=(self), payment=(self), picture-in-picture=*, publickey-credentials-get=(self), screen-wake-lock=(self), sync-xhr=*, usb=(self), web-share=(self), xr-spatial-tracking=(self)"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=31536000; includeSubDomains; preload"
+                },
+                {
+                  "key": "Expect-CT",
+                  "value": "max-age=2147483648, enforce"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "deny"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "1; mode=block"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Server",
+                  "value": "Samji Server"
+                },
+                {
+                  "key": "Cross-Origin-Embedder-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "unsafe-none"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "cross-origin"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Fetched successfully\",\n    \"data\": {\n        \"intUsers\": [\n            {\n                \"token\": \"zohrmYu2OJElWNIatCsrDTUPoSmAm2\",\n                \"email\": \"isaac.ade@gmail.com\",\n                \"firstname\": \"Isaac\",\n                \"lastname\": \"Adegunle\",\n                \"phone\": \"08101767458\",\n                \"createdTime\": \"2024-07-04T16:44:03.000+0000\",\n                \"updateTime\": null,\n                \"updatedBy\": null,\n                \"isActive\": true,\n                \"roles\": \"USER\",\n                \"tenantId\": \"konnectsandbox\",\n                \"visibility\": true,\n                \"twoFactorAuth\": \"NONE\",\n                \"designation\": \"Product Manager \",\n                \"created\": \"Isaac Adegunle\",\n                \"isAccountLocked\": false,\n                \"cicodNumber\": \"100048\",\n                \"userPlan\": \"STANDARD_USER\",\n                \"hasConfirmed\": false\n            },\n            {\n                \"token\": \"Zeu3yiyQfZsVjCVPXEt2X9cfZKFJYe\",\n                \"email\": \"isaac.adegunle@gmail.com\",\n                \"firstname\": \"Isaac\",\n                \"lastname\": \"Adegunle\",\n                \"phone\": \"08101767458\",\n                \"createdTime\": \"2024-07-04T12:30:37.000+0000\",\n                \"updateTime\": null,\n                \"updatedBy\": null,\n                \"isActive\": true,\n                \"roles\": \"USER\",\n                \"tenantId\": \"konnectsandbox\",\n                \"visibility\": true,\n                \"twoFactorAuth\": \"NONE\",\n                \"designation\": \"Product Manager \",\n                \"created\": \"Isaac Adegunle\",\n                \"isAccountLocked\": false,\n                \"cicodNumber\": \"100048\",\n                \"userPlan\": \"STANDARD_USER\",\n                \"hasConfirmed\": false\n            },\n            {\n                \"token\": \"ARK6sOMDYia1Q1WhbPFDeMgtUeYmD4\",\n                \"email\": \"odejinmisa@newwavesecosystem.com\",\n                \"firstname\": \"Samuel\",\n                \"lastname\": \"Odejinmi\",\n                \"phone\": \"08166939205\",\n                \"createdTime\": \"2024-05-03T11:50:25.000+0000\",\n                \"updateTime\": \"2024-06-04T09:35:10.000+0000\",\n                \"updatedBy\": 146,\n                \"isActive\": true,\n                \"roles\": \"USER\",\n                \"tenantId\": \"konnectsandbox\",\n                \"visibility\": true,\n                \"twoFactorAuth\": \"NONE\",\n                \"designation\": \"CTO\",\n                \"created\": \"Isaac Adegunle\",\n                \"isAccountLocked\": false,\n                \"cicodNumber\": \"100048\",\n                \"userPlan\": \"STANDARD_USER\",\n                \"hasConfirmed\": true\n            },\n            {\n                \"token\": \"kKVmwxDAyR94RVG23xgyA9VKsbWU3x\",\n                \"email\": \"williamsos@newwavesecosystem.com\",\n                \"firstname\": \"Femi\",\n                \"lastname\": \"Williams\",\n                \"phone\": \"08033046408\",\n                \"createdTime\": \"2024-04-25T09:53:01.000+0000\",\n                \"updateTime\": \"2024-05-11T20:47:36.000+0000\",\n                \"updatedBy\": 146,\n                \"isActive\": true,\n                \"roles\": \"USER\",\n                \"tenantId\": \"konnectsandbox\",\n                \"visibility\": true,\n                \"twoFactorAuth\": \"NONE\",\n                \"designation\": \"CEO\",\n                \"created\": \"Isaac Adegunle\",\n                \"isAccountLocked\": false,\n                \"cicodNumber\": \"100048\",\n                \"userPlan\": \"STANDARD_USER\",\n                \"hasConfirmed\": true\n            },\n            {\n                \"token\": \"nfP7LUEeg7CZTp6FwkmBktTxoqD6H1\",\n                \"email\": \"isaac.adegunle@cicod.com\",\n                \"firstname\": \"Isaac\",\n                \"lastname\": \"Adegunle\",\n                \"phone\": \"8101767458\",\n                \"createdTime\": \"2024-04-25T03:11:35.000+0000\",\n                \"updateTime\": \"2024-10-22T09:00:34.000+0000\",\n                \"updatedBy\": 146,\n                \"isActive\": true,\n                \"roles\": \"SUPERADMIN\",\n                \"tenantId\": \"konnectsandbox\",\n                \"visibility\": true,\n                \"twoFactorAuth\": \"AUTHENTICATOR_APP\",\n                \"designation\": \"Administrator\",\n                \"created\": null,\n                \"isAccountLocked\": false,\n                \"cicodNumber\": \"100048\",\n                \"userPlan\": \"STANDARD_USER\",\n                \"hasConfirmed\": true\n            }\n        ]\n    }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Donation",
+      "item": [
+        {
+          "name": "Fetch Stats",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/donation/stats",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "donation",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Donations In",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/donation/in",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "donation",
+                "in"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Meeting Attendance",
+      "item": [
+        {
+          "name": "list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/meeting-attendance",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "meeting-attendance"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "attendance details (classic)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/attendance-details/117/117202689988",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "attendance-details",
+                "117",
+                "117202689988"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {},
+            "exec": [
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {},
+            "exec": [
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Event",
+      "item": [
+        {
+          "name": "summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/event-summary",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "event-summary"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/event-list",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "event-list"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "recent registrations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/event-recent-registrations",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "event-recent-registrations"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Registered Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/event-participants/PSwlDR4Dz4t0Y8e6tmGW",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "event-participants",
+                "PSwlDR4Dz4t0Y8e6tmGW"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Prereg Reminder",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/sendPreregReminder/heW7vQVRFnv4XCzMZ4Bp",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "sendPreregReminder",
+                "heW7vQVRFnv4XCzMZ4Bp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Samji Games",
+                  "type": "text",
+                  "uuid": "3607b7a7-d810-4711-abbc-921d06e4e214"
+                },
+                {
+                  "key": "room_id",
+                  "value": "15",
+                  "type": "text",
+                  "uuid": "6940be01-7d3d-439a-a3ee-ff20aa0243fc"
+                },
+                {
+                  "key": "hostname",
+                  "value": "Samji Community",
+                  "type": "text",
+                  "uuid": "28510973-2a39-4c9b-8050-cf24c8ed0e79"
+                },
+                {
+                  "key": "date",
+                  "value": "2025-11-20",
+                  "description": "YYYY-MM-DD",
+                  "type": "text",
+                  "uuid": "3418c7f8-e115-4b6d-be31-4f4793c5bbbe"
+                },
+                {
+                  "key": "time",
+                  "value": "12:00",
+                  "description": "24hr time",
+                  "type": "text",
+                  "uuid": "9f68ac12-f408-4101-8f8e-d92ab6b9589d"
+                },
+                {
+                  "key": "timezone",
+                  "value": "Africa/Lagos (UTC+01:00)",
+                  "type": "text",
+                  "uuid": "dabb3f78-2e98-441d-ac14-427c4cb4c1ef"
+                },
+                {
+                  "key": "about",
+                  "value": "Come, let me show u how to make money with games",
+                  "type": "text",
+                  "uuid": "abffdf4e-8fa5-478c-a186-7e7a995fcc30"
+                },
+                {
+                  "key": "reminder",
+                  "value": "2",
+                  "description": "2 days before",
+                  "type": "text",
+                  "uuid": "6ba4a7dc-f993-48d2-acea-70efebd42867"
+                },
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "uuid": "49611c22-79b6-4b5b-9a10-ec319b671c8f",
+                  "src": "/C:/Users/odeji/Downloads/bgn.jpg"
+                },
+                {
+                  "key": "public",
+                  "value": "1",
+                  "description": "1 public; 0 private",
+                  "type": "text",
+                  "uuid": "87bf8d10-88f0-491e-ba97-bd2f3bacdf48"
+                },
+                {
+                  "key": "tags",
+                  "value": "lagos,gaming,money",
+                  "type": "text",
+                  "uuid": "9f1b0646-14ed-45a9-a898-cf7936808e9d"
+                },
+                {
+                  "key": "free",
+                  "value": "0",
+                  "description": "1 free; 0 paid",
+                  "type": "text",
+                  "uuid": "9c463e03-a20d-447e-acd8-c2e4e258c9a9"
+                },
+                {
+                  "key": "currency",
+                  "value": "NGN",
+                  "description": "NGN or USD",
+                  "type": "text",
+                  "uuid": "8e1a5f55-35c4-4732-9aa0-09532df729b8"
+                },
+                {
+                  "key": "amount",
+                  "value": "6000",
+                  "type": "text",
+                  "uuid": "fb96784a-5de8-4129-9413-4535651afd34"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseurl}}/pre-reg",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "pre-reg"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Fetch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseapi}}/pre-registration/XKK7ixWzDkWJJxFjMlJX",
+              "host": [
+                "{{baseapi}}"
+              ],
+              "path": [
+                "pre-registration",
+                "XKK7ixWzDkWJJxFjMlJX"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Fetch Search",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "search",
+                  "value": "Samji",
+                  "type": "text",
+                  "uuid": "3607b7a7-d810-4711-abbc-921d06e4e214"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseapi}}/pre-registration-search",
+              "host": [
+                "{{baseapi}}"
+              ],
+              "path": [
+                "pre-registration-search"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Register for Event",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "ref",
+                  "value": "heW7vQVRFnv4XCzMZ4Bp",
+                  "type": "text",
+                  "uuid": "3607b7a7-d810-4711-abbc-921d06e4e214"
+                },
+                {
+                  "key": "name",
+                  "value": "Samji",
+                  "type": "text",
+                  "uuid": "88f88fb7-42e9-4e54-a518-b50ce04df8d9"
+                },
+                {
+                  "key": "email",
+                  "value": "samjidiamond1@gmail.com",
+                  "type": "text",
+                  "uuid": "f06193a2-43ae-4b47-af2e-c572c9e3ab8d"
+                },
+                {
+                  "key": "phone",
+                  "value": "08166939205",
+                  "type": "text",
+                  "uuid": "35289b96-1d8f-47c6-b231-bb234e4d68c6"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseapi}}/pre-registration",
+              "host": [
+                "{{baseapi}}"
+              ],
+              "path": [
+                "pre-registration"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{token}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {},
+            "exec": [
+              ""
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {},
+            "exec": [
+              ""
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Token Management",
+      "item": [
+        {
+          "name": "Fetch Token",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/token",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Token",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"token_id\": \"1\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/token",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "CreateToken",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"LMS\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/token",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Team Management",
+      "item": [
+        {
+          "name": "Invite",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"odejinmisamuel+1@gmail.com\",\r\n    \"role\": \"Member\" //Owner,Admin,Member\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/invite",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "invite"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invite List",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/list",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "list"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"role\":\"Owner\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/update-role/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "update-role",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/teams/remove/3",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "remove",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Suspend",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/teams/suspend/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "suspend",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unsuspend",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseurl}}/teams/unsuspend/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "unsuspend",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Member Password",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"password\":\"12345678\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/reset-password/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "reset-password",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View Member Profile",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/profile/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "profile",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View Member Rooms",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/rooms/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "rooms",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View Member Recordings",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/recordings/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "recordings",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View Member Sessions",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/sessions/4",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "sessions",
+                "4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check Token(Unath)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/check-token/4KQ7JN4Z9rmVsZUsXCqVlBaw1aEQhbnEhLX8Ahdf",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "check-token",
+                "4KQ7JN4Z9rmVsZUsXCqVlBaw1aEQhbnEhLX8Ahdf"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Activate (Unath)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseurl}}/teams/activate/Z2QfP1fdOPGtVwU3zHoa1ps4mUKeR2vclNJRVNYJ",
+              "host": [
+                "{{baseurl}}"
+              ],
+              "path": [
+                "teams",
+                "activate",
+                "Z2QfP1fdOPGtVwU3zHoa1ps4mUKeR2vclNJRVNYJ"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authenticate WS",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "70|8rIjsRW0VK82fbYC5jBffLUEVIs6OLjryoDrypi6",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "auth-token",
+            "value": "1",
+            "type": "text",
+            "disabled": true
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"socket_id\": \"886437955.45157943\",\r\n    \"channel_name\": \"private-chat.82\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://dev.konn3ct.ng/broadcasting/auth",
+          "protocol": "https",
+          "host": [
+            "dev",
+            "konn3ct",
+            "ng"
+          ],
+          "path": [
+            "broadcasting",
+            "auth"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Validate Phones",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              ""
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Signature",
+            "value": "{{signature}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"phones\": [\r\n        \"08166939205\",\r\n        \"07064257276\",\r\n        \"08166939206\",\r\n        \"08166939250\",\r\n        \"09058863286\"\r\n    ]\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseurl}}/validate-phones",
+          "host": [
+            "{{baseurl}}"
+          ],
+          "path": [
+            "validate-phones"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseurl",
+      "value": "https://dev.konn3ct.ng/api/app"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "baseapi",
+      "value": "https://dev.konn3ct.ng/api"
+    }
+  ]
+}

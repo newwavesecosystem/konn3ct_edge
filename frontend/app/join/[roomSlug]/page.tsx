@@ -117,6 +117,7 @@ export default function JoinPage({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setVbMode(parsed.mode);
         setVbImageUrl(parsed.image);
         processorRef.current.setMode(parsed.mode, parsed.image);
@@ -198,6 +199,7 @@ export default function JoinPage({
     if (!isMuted) {
       startMic();
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVolumeLevel(0);
     }
 
@@ -495,6 +497,7 @@ export default function JoinPage({
                               vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
                             )}
                           >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
                           </button>
                         ))}

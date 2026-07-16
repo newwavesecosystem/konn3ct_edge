@@ -21,7 +21,7 @@ export function MicIssueDialog() {
         
         <h3 className="text-xl font-bold mb-2" style={{ color: "var(--mt-text)" }}>Microphone Issue</h3>
         <p className="text-sm mb-6" style={{ color: "var(--mt-text-alt)" }}>
-          We couldn't access your microphone. Please check your browser permissions, ensure it's plugged in, and not being used by another application.
+          We couldn&apos;t access your microphone. Please check your browser permissions, ensure it&apos;s plugged in, and not being used by another application.
           <br /><br />
           <span className="text-xs opacity-75 break-words block text-red-400 font-mono">
             {micError.name}: {micError.message}

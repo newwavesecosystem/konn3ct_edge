@@ -176,7 +176,7 @@ export default function RecordingsPage() {
           <div>
             <h2 className="text-xl font-bold text-text-primary">Share Recording</h2>
             <p className="text-sm text-text-muted mt-1">
-              Configure access settings for "{selectedRecording?.title}"
+              Configure access settings for &quot;{selectedRecording?.title}&quot;
             </p>
           </div>
 

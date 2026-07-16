@@ -21,6 +21,7 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
     // Read parameters passed from the exit logic
     const roleParam = searchParams.get("role");
     const logoutParam = searchParams.get("logoutUrl");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (roleParam) setRole(roleParam);
     if (logoutParam) setLogoutUrl(logoutParam);
   }, [searchParams]);

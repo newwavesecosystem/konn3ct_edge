@@ -229,7 +229,7 @@ export function cleanupAudioObserver(roomId: string) {
   }
 }
 
-import { startTranscription } from './transcriber';
+import { startTranscription, stopTranscription } from './transcriber';
 
 /**
  * Get a specific Producer by ID
@@ -443,11 +443,25 @@ export async function pauseConsumer(consumerId: string) {
 
 export async function requestConsumerKeyFrame(consumerId: string) {
   const consumer = consumers.get(consumerId);
-  if (consumer && consumer.kind === 'video') {
-    try {
-      await consumer.requestKeyFrame();
-    } catch (err) {
-      console.warn(`[SFU] Failed to request keyframe for consumer ${consumerId}:`, err);
+  if (!consumer) throw new Error(`Consumer ${consumerId} not found`);
+  
+  if (consumer.kind !== 'video') {
+    return;
+  }
+  
+  await consumer.requestKeyFrame();
+}
+
+export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {
+  if (isMuted) {
+    stopTranscription(producerId);
+  } else {
+    const producer = producers.get(producerId);
+    const router = routers.get(roomId);
+    if (producer && router && !producer.closed) {
+      startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
+        logger.error(`Failed to restart transcription for ${userId} on unmute:`, e);
+      });
     }
   }
 }

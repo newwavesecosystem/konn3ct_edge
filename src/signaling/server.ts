@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce, handleTranscriptionMute } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -123,6 +123,7 @@ interface Client {
   audioOnlyMode?: boolean;
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
+  isMuted: boolean;
   maxActiveCameras?: number;
   preempted?: boolean;
   maxParticipants?: number;
@@ -163,7 +164,7 @@ async function asyncWithRetry<T>(
   }
 }
 export function getActiveRoomParticipants(roomId: string) {
-  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
+  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, isMuted: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
   if (roomClients) {
     for (const client of roomClients.values()) {
@@ -175,6 +176,7 @@ export function getActiveRoomParticipants(roomId: string) {
           role: client.role,
           isMobile: client.isMobile,
           isCameraOn: client.isCameraOn,
+          isMuted: client.isMuted,
           audioOnlyMode: client.audioOnlyMode,
           videoSuspendedReason: client.videoSuspendedReason
         });
@@ -543,7 +545,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isMuted: true, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -632,7 +634,8 @@ export function initializeSignaling(server: Server) {
           participantId,
           name: client.name,
           role: client.role,
-          isMobile: client.isMobile
+          isMobile: client.isMobile,
+          isMuted: client.isMuted
         });
         broadcastRoomState(roomId);
         
@@ -930,7 +933,7 @@ export function initializeSignaling(server: Server) {
               if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
               updatedAdmissions.add(targetClient.userId);
 
-              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.participantId);
+              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
               broadcastRoomState(roomId);
               sendRoomHistoryAndState(targetClient);
               syncRoomStateToRedis(roomId, client.roomSlug);
@@ -1180,9 +1183,25 @@ export function initializeSignaling(server: Server) {
           logger.info(`Host ${userId} ended the meeting in room ${roomId}`);
           const roomClients = rooms.get(roomId);
           if (roomClients) {
+            // Immediately destroy the room to prevent 30s grace periods on close
+            rooms.delete(roomId);
+            roomProducers.delete(roomId);
+            roomAdmissions.delete(roomId);
+            cleanupAudioObserver(roomId);
+            redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            syncRoomStateToRedis(roomId, client.roomSlug);
+            
+            closeRouter(roomId);
+            roomSettingsMap.delete(roomId);
+
             for (const [id, c] of roomClients.entries()) {
               if (c.userId !== userId) { // Don't send 'ended' to the host that just ended it
                 c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended' }));
+              }
+              
+              if (disconnectTimeouts.has(`${c.userId}:${roomId}`)) {
+                clearTimeout(disconnectTimeouts.get(`${c.userId}:${roomId}`)!);
+                disconnectTimeouts.delete(`${c.userId}:${roomId}`);
               }
               c.ws.close();
             }
@@ -1542,6 +1561,17 @@ export function initializeSignaling(server: Server) {
       case 'mute_state': {
         const serverEventId = crypto.randomUUID();
         if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
+        client.isMuted = data.isMuted;
+        
+        // Pause or resume transcription based on mute state
+        const producersList = roomProducers.get(roomId);
+        if (producersList) {
+          const audioProducer = producersList.find(p => p.participantId === client.participantId && p.kind === 'audio');
+          if (audioProducer) {
+             handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
+          }
+        }
+        
         broadcastToRoom(roomId, {
           type: 'mute_state',
           actionType: 'mute_state',
@@ -1699,7 +1729,8 @@ export function initializeSignaling(server: Server) {
                   participantId: c.participantId,
                   name: c.name,
                   role: c.role,
-                  isMobile: c.isMobile
+                  isMobile: c.isMobile,
+                  isMuted: c.isMuted
                 });
                 sendRoomHistoryAndState(c);
               }
@@ -1980,7 +2011,9 @@ export function initializeSignaling(server: Server) {
           let canConsume = false;
           try {
             canConsume = router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
-          } catch (err) {} // catch if router or producer doesn't exist
+          } catch (err) {
+            logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
+          }
 
           // 1. Log structured attempt
           logger.info(JSON.stringify({

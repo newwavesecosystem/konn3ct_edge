@@ -4,6 +4,7 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import Svg, { Path } from 'react-native-svg';
 import { Home, Calendar, User, MoreHorizontal, Video, Layers } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { APP_CONFIG } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -18,11 +19,12 @@ const COLORS = {
 const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
   const center = width / 2;
   const insets = useSafeAreaInsets();
+  const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
   
   // Base height of the nav bar before safe area
   const BASE_HEIGHT = 90;
   // Total height including the bottom safe area
-  const barHeight = BASE_HEIGHT + insets.bottom;
+  const barHeight = BASE_HEIGHT + safeBottom;
 
   // Dynamic path that creates a perfect cutout in the center regardless of device width
   const getPath = () => {
@@ -53,6 +55,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
     const color = isFocused ? COLORS.brandGreen : COLORS.inactive;
     switch(routeName) {
       case 'Addons': return <Layers color={color} size={24} />;
+      case 'Events': return <Calendar color={color} size={24} />;
       case 'Rooms': return <Video color={color} size={24} />;
       case 'Profile': return <User color={color} size={24} />;
       case 'More': return <MoreHorizontal color={color} size={24} />;
@@ -63,6 +66,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
   const getLabel = (routeName: string) => {
     switch(routeName) {
       case 'Addons': return 'Add ons';
+      case 'Events': return 'Events';
       case 'Rooms': return 'Rooms';
       case 'Profile': return 'Profile';
       case 'More': return 'More';
@@ -105,10 +109,10 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
         </Svg>
       </View>
 
-      <View style={[styles.contentContainer, { height: barHeight, paddingBottom: insets.bottom + 10 }]}>
+      <View style={[styles.contentContainer, { height: barHeight, paddingBottom: safeBottom + 10 }]}>
         {/* Left Side Tabs */}
         <View style={styles.sideContainer}>
-          {renderTab('Addons')}
+          {renderTab(APP_CONFIG.SHOW_ADDONS_TAB ? 'Addons' : 'Events')}
           {renderTab('Rooms')}
         </View>
 

@@ -135,13 +135,14 @@ export function MeetingShell() {
     );
   }
 
-  if (['denied', 'kicked', 'failed', 'invalid-session'].includes(webrtcStatus)) {
+  if (['denied', 'kicked', 'failed', 'invalid-session', 'ended'].includes(webrtcStatus)) {
     const errorDetails = {
       denied: { title: "Entry Denied", desc: "The host has declined your request to join this meeting." },
       kicked: { title: "Removed from Meeting", desc: "You have been removed from this meeting by the host." },
       failed: { title: "Connection Failed", desc: "We couldn't connect you to the meeting. Please try again." },
       'invalid-session': { title: "Invalid Session", desc: "Your join session is invalid or expired. Please start over from the join page." },
-    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session'];
+      ended: { title: "Meeting Ended", desc: "The host has ended this meeting for everyone." },
+    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session' | 'ended'];
 
     return (
       <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>

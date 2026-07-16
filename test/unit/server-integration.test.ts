@@ -257,4 +257,40 @@ describe('Signaling Server Integration', () => {
       });
     });
   });
+
+  it('syncs isMuted state in participants_list and user_joined', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const viewerToken = jwt.sign({ userId: 'test-viewer', email: 'v@conn3ct', name: 'Viewer', role: 'attendee' }, 'dummy_secret');
+      const wsViewer = new WebSocket(`${wsUrl}/signal?roomId=test-room-1&token=${viewerToken}&participantId=part-viewer-mute`);
+
+      let participantsListReceived = false;
+
+      wsViewer.on('message', (data: any) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'participants_list') {
+          participantsListReceived = true;
+          const me = msg.participants.find((p: any) => p.participantId === 'part-viewer-mute');
+          if (me) {
+            console.log('me object:', me);
+            expect(me.isMuted).toBe(true); // Should default to true
+
+            // Send mute_state to false
+            wsViewer.send(JSON.stringify({
+              type: 'mute_state',
+              isMuted: false
+            }));
+          }
+        }
+
+        if (msg.type === 'mute_state' && msg.participantId === 'part-viewer-mute' || msg.senderParticipantId === 'test-viewer') {
+           if (msg.isMuted === false) {
+             wsViewer.close();
+             resolve();
+           }
+        }
+      });
+      
+      wsViewer.on('error', reject);
+    });
+  });
 });

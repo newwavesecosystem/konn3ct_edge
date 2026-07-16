@@ -21,12 +21,15 @@ export const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
         {...props}
       >
         {src && !imgError ? (
-          <img
-            src={src}
-            alt={alt || "Avatar"}
-            className="aspect-square h-full w-full object-cover"
-            onError={() => setImgError(true)}
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt={alt || "Avatar"}
+              className="aspect-square h-full w-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center rounded-full bg-muted text-muted-foreground font-medium text-sm">
             {fallback || alt?.charAt(0).toUpperCase() || "?"}
