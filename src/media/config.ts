@@ -7,8 +7,8 @@ export const config = {
   mediasoup: {
     numWorkers: Object.keys(os.cpus()).length,
     worker: {
-      rtcMinPort: 10000,
-      rtcMaxPort: 50000,
+      rtcMinPort: parseInt(process.env.RTC_MIN_PORT || '10000', 10),
+      rtcMaxPort: parseInt(process.env.RTC_MAX_PORT || '20000', 10),
       logLevel: 'warn' as const,
       logTags: ['info', 'ice', 'dtls', 'rtp', 'srtp', 'rtcp'] as any[]
     },
@@ -66,8 +66,8 @@ export const config = {
           announcedIp: process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1' // Update this in prod
         }
       ],
-      maxIncomingBitrate: 5000000,
-      initialAvailableOutgoingBitrate: 5000000
+      maxIncomingBitrate: parseInt(process.env.MAX_INCOMING_BITRATE || '5000000', 10),
+      initialAvailableOutgoingBitrate: parseInt(process.env.INITIAL_OUTGOING_BITRATE || '5000000', 10)
     }
   }
 };
