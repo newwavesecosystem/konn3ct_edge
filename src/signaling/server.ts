@@ -1183,9 +1183,25 @@ export function initializeSignaling(server: Server) {
           logger.info(`Host ${userId} ended the meeting in room ${roomId}`);
           const roomClients = rooms.get(roomId);
           if (roomClients) {
+            // Immediately destroy the room to prevent 30s grace periods on close
+            rooms.delete(roomId);
+            roomProducers.delete(roomId);
+            roomAdmissions.delete(roomId);
+            cleanupAudioObserver(roomId);
+            redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            syncRoomStateToRedis(roomId, client.roomSlug);
+            
+            closeRouter(roomId);
+            roomSettingsMap.delete(roomId);
+
             for (const [id, c] of roomClients.entries()) {
               if (c.userId !== userId) { // Don't send 'ended' to the host that just ended it
                 c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended' }));
+              }
+              
+              if (disconnectTimeouts.has(`${c.userId}:${roomId}`)) {
+                clearTimeout(disconnectTimeouts.get(`${c.userId}:${roomId}`)!);
+                disconnectTimeouts.delete(`${c.userId}:${roomId}`);
               }
               c.ws.close();
             }
