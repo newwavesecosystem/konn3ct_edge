@@ -35,6 +35,7 @@ import {
   AlertCircle,
   RefreshCw,
   Zap,
+  Calendar,
 } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import {
@@ -453,6 +454,15 @@ export default function RoomsScreen() {
             <View />
 
             <View style={styles.roomActionGroup}>
+              {/* Schedule Room */}
+              <TouchableOpacity
+                style={styles.roomActionBtn}
+                onPress={() => navigation.navigate('Schedule', { prefillRoomId: String(room.id) })}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Calendar color={COLORS.textMuted} size={14} />
+              </TouchableOpacity>
+
               {/* Copy URL */}
               <TouchableOpacity
                 style={styles.roomActionBtn}
