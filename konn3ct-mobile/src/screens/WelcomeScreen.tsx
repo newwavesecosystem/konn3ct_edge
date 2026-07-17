@@ -74,8 +74,9 @@ export default function WelcomeScreen() {
         {/* Sign In button */}
         <TouchableOpacity
           style={styles.signInBtn}
-          activeOpacity={0.85}
+          activeOpacity={0.8}
           onPress={() => navigation.navigate('Login')}
+          testID="welcome-signin-button"
         >
           <View style={styles.btnIconCircle}>
             <LogIn size={20} color={COLORS.white} strokeWidth={2.5} />
@@ -96,8 +97,9 @@ export default function WelcomeScreen() {
         {/* Join as Guest button */}
         <TouchableOpacity
           style={styles.guestBtn}
-          activeOpacity={0.85}
+          activeOpacity={0.8}
           onPress={() => navigation.navigate('GuestJoin')}
+          testID="welcome-guest-button"
         >
           <View style={[styles.btnIconCircle, styles.guestIconCircle]}>
             <Users size={20} color={COLORS.brandGreen} strokeWidth={2.5} />

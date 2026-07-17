@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { MediaStream } from 'react-native-webrtc';
+import type { MediaStream } from 'react-native-webrtc';
 
 // ---------------------------------------------------------------------------
 // Types

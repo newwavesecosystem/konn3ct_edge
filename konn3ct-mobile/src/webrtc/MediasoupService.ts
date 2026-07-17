@@ -1,5 +1,5 @@
 import { Device, types } from 'mediasoup-client';
-import { MediaStream } from 'react-native-webrtc';
+import type { MediaStream } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
 import { useMeetingStore } from '../store/useMeetingStore';
 

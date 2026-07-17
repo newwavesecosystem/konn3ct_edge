@@ -334,6 +334,7 @@ export default function LoginScreen() {
                 onPress={handleGovTwoFactor}
                 disabled={twoFALoading}
                 activeOpacity={0.85}
+                testID="verify-code-button"
               >
                 {twoFALoading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
                 <Text style={styles.loginButtonText}>
@@ -344,6 +345,7 @@ export default function LoginScreen() {
               <TouchableOpacity
                 style={styles.backToLoginBtn}
                 onPress={() => { setTwoFAPending(false); setOtpCode(''); setError(''); setSuccess(''); }}
+                testID="back-to-login-button"
               >
                 <Text style={styles.backToLoginText}>← Back to Login</Text>
               </TouchableOpacity>
@@ -393,6 +395,7 @@ export default function LoginScreen() {
                     keyboardType="email-address"
                     onFocus={() => setEmailFocused(true)}
                     onBlur={() => setEmailFocused(false)}
+                    testID="email-input"
                   />
                 </View>
               </View>
@@ -415,11 +418,13 @@ export default function LoginScreen() {
                     secureTextEntry={!showPassword}
                     onFocus={() => setPasswordFocused(true)}
                     onBlur={() => setPasswordFocused(false)}
+                    testID="password-input"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    testID="toggle-password-visibility"
                   >
                     {showPassword
                       ? <EyeOff color={COLORS.textMuted} size={18} />
@@ -431,7 +436,7 @@ export default function LoginScreen() {
               {/* ── Options Row (Forgot Password) ── */}
               <View style={[styles.optionsRow, { justifyContent: 'flex-end' }]}>
                 {APP_CONFIG.SHOW_FORGOT_PASSWORD && (
-                  <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} testID="forgot-password-link">
                     <Text style={styles.forgotText}>Forgot Password?</Text>
                   </TouchableOpacity>
                 )}
@@ -443,6 +448,7 @@ export default function LoginScreen() {
                 onPress={handleLogin}
                 disabled={loading}
                 activeOpacity={0.85}
+                testID="login-button"
               >
                 {loading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
                 <Text style={styles.loginButtonText}>
@@ -456,6 +462,7 @@ export default function LoginScreen() {
                   style={styles.biometricButton}
                   onPress={handleBiometricLogin}
                   activeOpacity={0.8}
+                  testID="biometric-login-button"
                 >
                   <Fingerprint color={COLORS.brandGreen} size={20} style={{ marginRight: 8 }} />
                   <Text style={styles.biometricButtonText}>Login with Biometrics</Text>
@@ -469,6 +476,7 @@ export default function LoginScreen() {
                   <TouchableOpacity
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     onPress={() => navigation.navigate('Signup')}
+                    testID="signup-link"
                   >
                     <Text style={styles.signUpText}>Sign up</Text>
                   </TouchableOpacity>
@@ -481,6 +489,7 @@ export default function LoginScreen() {
                 <TouchableOpacity
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   onPress={() => navigation.navigate('GuestJoin')}
+                  testID="guest-link"
                 >
                   <Text style={styles.signUpText}>Join as Guest</Text>
                 </TouchableOpacity>

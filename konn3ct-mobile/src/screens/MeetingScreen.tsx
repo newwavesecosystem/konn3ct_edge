@@ -2,11 +2,21 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback, BackHandler } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import { mediaDevices, RTCView, MediaStream } from 'react-native-webrtc';
+import type { MediaStream } from 'react-native-webrtc';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService';
 import { consumeActiveMeetingService } from '../webrtc/activeMeetingService';
-import InCallManager from 'react-native-incall-manager';
+
+let RTCView: any = View;
+let mediaDevices: any = null;
+let InCallManager: any = { start: () => {}, stop: () => {}, setKeepScreenOn: () => {}, setForceSpeakerphoneOn: () => {} };
+if (Platform.OS !== 'web') {
+  const webrtc = require('react-native-webrtc');
+  RTCView = webrtc.RTCView;
+  mediaDevices = webrtc.mediaDevices;
+  InCallManager = require('react-native-incall-manager').default;
+}
+
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
 import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, SwitchCamera, Sun, Moon, Lock } from 'lucide-react-native';
@@ -680,7 +690,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
               </View>
             ) : (
               <RTCView
-                streamURL={p.stream.toURL()}
+                streamURL={p.stream.toURL ? p.stream.toURL() : ''}
                 style={styles.rtcView}
                 objectFit="cover"
               />
@@ -726,7 +736,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
             // Without this, the GL surface freezes green and won't recover.
             <RTCView
               key={`local-cam-${cameraKey}`}
-              streamURL={localStream.toURL()}
+              streamURL={localStream.toURL ? localStream.toURL() : ''}
               style={styles.rtcView}
               objectFit="cover"
               mirror={true}
@@ -785,7 +795,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         {pipStream ? (
           <RTCView
-            streamURL={pipStream.toURL()}
+            streamURL={pipStream.toURL ? pipStream.toURL() : ''}
             style={{ flex: 1 }}
             objectFit={pipScreenShare ? 'contain' : 'cover'}
             zOrder={0}
@@ -886,7 +896,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {activeScreenShare && activeScreenShare.screenStream && (
         <View style={styles.screenShareContainer}>
           <RTCView
-            streamURL={activeScreenShare.screenStream.toURL()}
+            streamURL={activeScreenShare.screenStream.toURL ? activeScreenShare.screenStream.toURL() : ''}
             style={styles.screenShareView}
             objectFit="contain"
           />
@@ -932,11 +942,11 @@ export default function MeetingScreen({ route, navigation }: Props) {
           { bottom: safeBottom + 16 }
         ]}>
           <View style={[styles.floatingBar, { gap: 6 }]}>
-            <TouchableOpacity style={!isMicMuted ? styles.toolBtnActive : styles.toolBtnMuted} onPress={toggleMic}>
+            <TouchableOpacity style={!isMicMuted ? styles.toolBtnActive : styles.toolBtnMuted} onPress={toggleMic} testID="toggle-mic">
               {isMicMuted ? <MicOff size={20} color={tokens.danger} /> : <Mic size={20} color={tokens.textInverse} strokeWidth={2.2} />}
             </TouchableOpacity>
 
-            <TouchableOpacity style={!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted} onPress={toggleCamera}>
+            <TouchableOpacity style={!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted} onPress={toggleCamera} testID="toggle-camera">
               {isCameraOff ? <VideoOff size={20} color={tokens.danger} /> : <VideoIcon size={20} color={tokens.textPrimary} strokeWidth={2} />}
             </TouchableOpacity>
 
@@ -944,7 +954,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
               <Hand size={20} color={isHandRaisedLocally ? tokens.textInverse : tokens.textPrimary} fill={isHandRaisedLocally ? tokens.textInverse : "none"} strokeWidth={2} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.toolBtnNeutral} onPress={() => setIsMoreMenuVisible(true)}>
+            <TouchableOpacity style={styles.toolBtnNeutral} onPress={() => setIsMoreMenuVisible(true)} testID="more-button">
               <MoreVertical size={20} color={tokens.textPrimary} strokeWidth={2} />
               {unreadChatCount > 0 && (
                 <View style={styles.menuBadge} />
@@ -953,7 +963,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
             <View style={styles.toolbarDivider} />
 
-            <TouchableOpacity style={styles.endCallBtn} onPress={handleLeave}>
+            <TouchableOpacity style={styles.endCallBtn} onPress={handleLeave} testID="leave-button">
               <View style={{ transform: [{ rotate: '135deg' }] }}>
                 <Phone size={20} color={tokens.textInverse} strokeWidth={2.2} />
               </View>
@@ -1043,6 +1053,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
                       setIsMoreMenuVisible(false);
                       setActivePane(activePane === 'chat' ? 'none' : 'chat');
                     }}
+                    testID="chat-menu-button"
                   >
                     <View style={styles.optionIconContainer}>
                       <MessageSquare size={22} color={tokens.textSecondary} />
