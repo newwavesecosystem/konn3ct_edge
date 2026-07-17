@@ -156,6 +156,7 @@ export default function GuestJoinScreen() {
                 onBlur={() => setNameFocused(false)}
                 returnKeyType="next"
                 autoCorrect={false}
+                testID="guest-name-input"
               />
             </View>
           </View>
@@ -181,6 +182,7 @@ export default function GuestJoinScreen() {
                 onSubmitEditing={handleJoin}
                 autoCapitalize="none"
                 autoCorrect={false}
+                testID="room-id-input"
               />
             </View>
           </View>
@@ -233,6 +235,7 @@ export default function GuestJoinScreen() {
             onPress={handleJoin}
             disabled={loading}
             activeOpacity={0.85}
+            testID="guest-join-button"
           >
             {loading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
             <Text style={styles.loginButtonText}>

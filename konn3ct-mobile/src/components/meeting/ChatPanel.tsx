@@ -264,11 +264,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
             onChangeText={setMessage}
             onSubmitEditing={handleSend}
             editable={!isUploading}
+            testID="chat-input"
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!message.trim() || isUploading) && styles.sendBtnDisabled]}
             onPress={handleSend}
             disabled={!message.trim() || isUploading}
+            testID="send-chat-button"
           >
             {isUploading ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color="white" />}
           </TouchableOpacity>

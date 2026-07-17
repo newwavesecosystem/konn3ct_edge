@@ -1,7 +1,9 @@
-import { registerGlobals } from 'react-native-webrtc';
-// Polyfill WebRTC globals for mediasoup-client
-registerGlobals();
-// @ts-ignore
+import { Platform } from 'react-native';
+if (Platform.OS !== 'web') {
+  const { registerGlobals } = require('react-native-webrtc');
+  // Polyfill WebRTC globals for mediasoup-client
+  registerGlobals();
+}
 
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, Alert } from 'react-native';
