@@ -41,6 +41,11 @@ test.describe('Login Flow', () => {
     await signInButton.click();
 
     // Fill the inputs using testIDs
+    const mdaInput = page.getByTestId('mda-input');
+    if (await mdaInput.isVisible()) {
+      await mdaInput.fill('test-mda');
+    }
+    
     const emailInput = page.getByTestId('email-input');
     await emailInput.waitFor({ state: 'visible', timeout: 150000 });
     await emailInput.fill('test@example.com');

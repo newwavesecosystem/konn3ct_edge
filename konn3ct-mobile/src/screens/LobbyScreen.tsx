@@ -431,7 +431,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
       {/* ── Bottom leave button ── */}
       {(isConnecting || isWaiting) && (
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-          <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave} activeOpacity={0.85}>
+          <TouchableOpacity 
+            style={styles.leaveBtn} 
+            onPress={handleLeave} 
+            activeOpacity={0.85}
+            testID="leave-lobby-btn"
+          >
             <PhoneOff size={16} color={COLORS.danger} />
             <Text style={styles.leaveBtnText}>Leave Lobby</Text>
           </TouchableOpacity>

@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../store/secureStore';
 import { Fingerprint, Eye, EyeOff, Mail, Lock, Square, CheckSquare, Building2 } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { APP_CONFIG, APP_LOGO } from '../config/appConfig';
@@ -371,6 +371,7 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       onFocus={() => setMdaFocused(true)}
                       onBlur={() => setMdaFocused(false)}
+                      testID="mda-input"
                     />
                   </View>
                 </View>
