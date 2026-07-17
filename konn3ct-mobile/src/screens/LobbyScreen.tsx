@@ -222,7 +222,11 @@ export default function LobbyScreen({ route, navigation }: Props) {
       serviceRef.current.disconnect();
       serviceRef.current = null;
     }
-    navigation.replace('MainTabs');
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.replace('MainTabs');
+    }
   }, [navigation]);
 
   const handleRetry = useCallback(() => {

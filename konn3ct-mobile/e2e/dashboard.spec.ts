@@ -4,7 +4,7 @@ test.describe('Dashboard Flow', () => {
   test('should load dashboard, display upcoming meetings, and test quick actions', async ({ page }) => {
     // 1. Mock API Responses
     // Mock user profile/auth check
-    await page.route('**/kv4/user', route => {
+    await page.route(/.*profile.*/, route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -19,7 +19,7 @@ test.describe('Dashboard Flow', () => {
     });
 
     // Mock Dashboard stats
-    await page.route('**/kv4/dashboard', route => {
+    await page.route(/.*dashboard.*/, route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -33,7 +33,7 @@ test.describe('Dashboard Flow', () => {
     });
 
     // Mock today's schedules
-    await page.route('**/kv4/schedule/today', route => {
+    await page.route(/.*schedule\/today.*/, route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -42,7 +42,7 @@ test.describe('Dashboard Flow', () => {
     });
 
     // Mock upcoming schedules (should be shown in list)
-    await page.route('**/kv4/schedule', route => {
+    await page.route(/.*schedule.*/, route => {
       // Return one meeting in the future
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 1);
@@ -55,7 +55,11 @@ test.describe('Dashboard Flow', () => {
             {
               id: '1234',
               title: 'Project Kickoff',
+              topic: 'Project Kickoff',
               time: futureDate.toISOString(),
+              start_time: futureDate.toISOString(),
+              startTime: futureDate.toISOString(),
+              date: futureDate.toISOString(),
               duration: '60',
               room_id: 'proj-kickoff'
             }
@@ -79,7 +83,7 @@ test.describe('Dashboard Flow', () => {
         })
       });
     };
-    await page.route('**/*login*', loginMock);
+    await page.route(/.*login.*/, loginMock);
 
     await page.goto('/');
 

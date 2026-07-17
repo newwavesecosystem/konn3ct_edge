@@ -4,7 +4,7 @@ test.describe('Schedule Flow', () => {
   test('should schedule a meeting and submit successfully', async ({ page }) => {
     // 1. Mock API Responses
     // Auth
-    await page.route('**/kv4/user', route => {
+    await page.route(/.*profile.*/, route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -28,10 +28,10 @@ test.describe('Schedule Flow', () => {
         })
       });
     };
-    await page.route('**/*login*', loginMock);
+    await page.route(/.*login.*/, loginMock);
 
     // Mock initial schedule fetch (empty)
-    await page.route('**/kv4/schedule', route => {
+    await page.route(/.*schedule.*/, route => {
       // For POST requests (creation) vs GET
       if (route.request().method() === 'POST') {
         route.fulfill({
@@ -49,7 +49,7 @@ test.describe('Schedule Flow', () => {
     });
 
     // Mock rooms fetch
-    await page.route('**/kv4/myrooms', route => {
+    await page.route(/.*myrooms.*/, route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -101,8 +101,8 @@ test.describe('Schedule Flow', () => {
 
     // Select Room
     await page.getByTestId('schedule-room-select').click();
-    await expect(page.getByText('My Personal Room')).toBeVisible();
-    await page.getByText('My Personal Room').click();
+    await expect(page.getByText('My Personal Room').first()).toBeVisible();
+    await page.getByText('My Personal Room').last().click();
 
     // Submit
     const submitBtn = page.getByTestId('schedule-submit-btn');
