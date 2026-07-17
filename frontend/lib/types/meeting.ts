@@ -54,6 +54,7 @@ export interface Participant {
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
+  screenAudioTrack?: MediaStreamTrack | null; // Dedicated screen share audio track
   
   // Stream identifiers
   cameraProducerId?: string;
@@ -62,6 +63,9 @@ export interface Participant {
   screenProducerId?: string;
   screenConsumerId?: string;
   screenTrackId?: string;
+  screenAudioProducerId?: string;
+  screenAudioConsumerId?: string;
+  screenAudioTrackId?: string;
 
   isConnecting?: boolean;
   networkQuality?: import('../webrtc').NetworkQualityLabel;
