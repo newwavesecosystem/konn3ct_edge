@@ -97,6 +97,71 @@ describe('WebRTCClient Core', () => {
     expect(webrtc).toBeDefined();
   });
 
+  it('can enable screen share with audio', async () => {
+    // Setup
+    webrtc.sendTransport = mockSendTransport as any;
+    (webrtc as any).device = { rtpCapabilities: { codecs: [{ mimeType: 'video/vp8' }] } };
+    
+    // Mock getDisplayMedia to return a track for video and audio
+    const mockVideoTrack = { kind: 'video', stop: vi.fn(), onended: null };
+    const mockAudioTrack = { kind: 'audio', stop: vi.fn(), onended: null };
+    const mockStream = {
+      getVideoTracks: () => [mockVideoTrack],
+      getAudioTracks: () => [mockAudioTrack]
+    };
+    global.navigator.mediaDevices.getDisplayMedia = vi.fn().mockResolvedValue(mockStream);
+    
+    // Act
+    await webrtc.enableScreenShare();
+    
+    // Assert
+    expect(global.navigator.mediaDevices.getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({
+      video: expect.any(Object),
+      audio: true
+    }));
+    
+    // Should have created two producers: one for video, one for audio
+    expect(mockSendTransport.produce).toHaveBeenCalledTimes(2);
+    expect(webrtc.localScreenTrack).toBe(mockVideoTrack);
+    expect(webrtc.localScreenAudioTrack).toBe(mockAudioTrack);
+    expect(webrtc.screenShareProducer).toBeDefined();
+    expect(webrtc.screenAudioShareProducer).toBeDefined();
+  });
+
+  it('can disable screen share with audio', async () => {
+    // Setup
+    const mockVideoTrack = { stop: vi.fn() };
+    const mockAudioTrack = { stop: vi.fn() };
+    const mockVideoProducer = { id: 'vp1', track: mockVideoTrack, close: vi.fn() };
+    const mockAudioProducer = { id: 'ap1', track: mockAudioTrack, close: vi.fn() };
+    
+    webrtc.screenShareProducer = mockVideoProducer as any;
+    webrtc.screenAudioShareProducer = mockAudioProducer as any;
+    webrtc.localScreenTrack = mockVideoTrack as any;
+    webrtc.localScreenAudioTrack = mockAudioTrack as any;
+    
+    // Mock WebSocket to intercept stop_producer
+    const ws = new MockWebSocket();
+    (webrtc as any).ws = ws;
+    
+    // Act
+    await webrtc.disableScreenShare();
+    
+    // Assert
+    expect(mockVideoProducer.track.stop).toHaveBeenCalled();
+    expect(mockVideoProducer.close).toHaveBeenCalled();
+    expect(mockAudioProducer.track.stop).toHaveBeenCalled();
+    expect(mockAudioProducer.close).toHaveBeenCalled();
+    
+    expect(webrtc.screenShareProducer).toBeNull();
+    expect(webrtc.screenAudioShareProducer).toBeNull();
+    expect(webrtc.localScreenTrack).toBeNull();
+    expect(webrtc.localScreenAudioTrack).toBeNull();
+    
+    // Should have sent stop_producer messages to backend
+    expect(ws.send).toHaveBeenCalledTimes(2);
+  });
+
   it('can toggle mic', async () => {
     const ws = new MockWebSocket();
     (webrtc as any).ws = ws;

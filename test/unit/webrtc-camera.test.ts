@@ -22,7 +22,8 @@ vi.stubGlobal('navigator', {
       getVideoTracks: () => [{
         onended: vi.fn(),
         stop: vi.fn()
-      }]
+      }],
+      getAudioTracks: () => []
     })
   }
 });
@@ -254,6 +255,7 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
     (global.navigator as any).mediaDevices = {
       getDisplayMedia: vi.fn().mockResolvedValue({
         getVideoTracks: () => [mockTrack],
+        getAudioTracks: () => [],
         getTracks: () => [mockTrack]
       })
     };
