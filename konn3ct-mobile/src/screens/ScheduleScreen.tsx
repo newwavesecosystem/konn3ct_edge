@@ -20,9 +20,10 @@ import { useAuthStore } from '../store/useAuthStore';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
+  route?: any;
 };
 
-export default function ScheduleScreen({ navigation }: Props) {
+export default function ScheduleScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const user = useAuthStore(state => state.user);
   
@@ -71,7 +72,12 @@ export default function ScheduleScreen({ navigation }: Props) {
       const parsedRooms = Array.isArray(roomsRes) ? roomsRes : roomsRes?.data || [];
       setRooms(parsedRooms);
       
-      if (parsedRooms.length > 0 && !roomId) {
+      if (route?.params?.prefillRoomId) {
+        setRoomId(route.params.prefillRoomId);
+        setModalVisible(true);
+        // Clear param to prevent reopening on subsequent focuses
+        navigation.setParams({ prefillRoomId: undefined });
+      } else if (parsedRooms.length > 0 && !roomId) {
         setRoomId(parsedRooms[0].id);
       }
     } catch (e) {
@@ -179,12 +185,41 @@ export default function ScheduleScreen({ navigation }: Props) {
 
   const renderMeetingItem = ({ item }: { item: any }) => {
     const rawTime = item.start_time || item.startTime || item.date || new Date().toISOString();
-    const meetDate = new Date(rawTime);
+    
+    let meetDate = new Date();
+    if (rawTime) {
+      // Handle YYYY-MM-DD format correctly in local time avoiding timezone shift
+      const parsed = rawTime.includes('T') ? new Date(rawTime) : new Date(rawTime.replace(/-/g, '/'));
+      if (!isNaN(parsed.getTime())) {
+        meetDate = parsed;
+      }
+    }
+
+    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const dayName = DAYS[meetDate.getDay()];
+    const fullMonthName = MONTHS[meetDate.getMonth()];
+    const year = meetDate.getFullYear();
+    const dateOfM = meetDate.getDate();
+
+    const fullDateDisplay = `${dayName}, ${fullMonthName} ${dateOfM}, ${year}`;
     
     // Safely parse time if `time` or `fromtime` is provided natively by the endpoint
-    let timeDisplay = meetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    let timeDisplay = meetDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     if (item.time || item.fromtime) {
-      timeDisplay = item.time || item.fromtime;
+      const t = item.time || item.fromtime;
+      if (t && t.includes(':')) {
+        const parts = t.split(':');
+        let h = parseInt(parts[0], 10);
+        const m = parts[1];
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12; // the hour '0' should be '12'
+        timeDisplay = `${h}:${m} ${ampm}`;
+      } else if (t) {
+        timeDisplay = t;
+      }
     }
 
     const roomSlug = item.roomlink ? item.roomlink.split('/').pop() : (item.room?.slug || item.roomId || item.room_id);
@@ -192,40 +227,43 @@ export default function ScheduleScreen({ navigation }: Props) {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={styles.dateBadge}>
-            <Text style={styles.dateDay}>{meetDate.getDate() || '?'}</Text>
-            <Text style={styles.dateMonth}>{meetDate.toLocaleString('default', { month: 'short' }) || ''}</Text>
-          </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle}>{item.title || 'Untitled Session'}</Text>
-            <Text style={styles.cardSubtitle}>Room: {item.roomname || item.room?.name || 'Unknown'}</Text>
+            <Text style={styles.cardTitle} numberOfLines={1}>{item.title || 'Untitled Session'}</Text>
+            <Text style={styles.cardSubtitle} numberOfLines={1}>Room: {item.roomname || item.room?.name || 'Unknown'}</Text>
+            
+            <View style={[styles.timeRow, { marginTop: 12 }]}>
+              <Calendar size={14} color="#207450" />
+              <Text style={[styles.timeText, { color: '#207450', fontWeight: 'bold' }]}>{fullDateDisplay}</Text>
+            </View>
+            
+            <View style={[styles.timeRow, { marginTop: 6 }]}>
+              <Clock size={14} color="#64748b" />
+              <Text style={styles.timeText}>{timeDisplay}</Text>
+            </View>
+
             {item.recurrence && item.recurrence !== 'once' && (
-              <Text style={{ fontSize: 10, color: '#207450', marginTop: 2, fontWeight: '600' }}>
+              <Text style={{ fontSize: 10, color: '#207450', marginTop: 8, fontWeight: '600', textTransform: 'capitalize' }}>
                 Repeats: {item.recurrence}
               </Text>
             )}
           </View>
         </View>
         <View style={styles.cardFooter}>
-          <View style={styles.timeRow}>
-            <Clock size={16} color="#64748b" />
-            <Text style={styles.timeText}>{timeDisplay}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity 
-              style={[styles.joinBtn, { backgroundColor: '#ef4444' }]}
-              onPress={() => handleCancelSchedule(item.id)}
-            >
-              <Text style={styles.joinBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.joinBtn}
-              onPress={() => navigation.navigate('Meeting', { roomId: roomSlug })}
-            >
-              <Video size={16} color="white" />
-              <Text style={styles.joinBtnText}>Join</Text>
-            </TouchableOpacity>
-          </View>
+          {/* <TouchableOpacity 
+            style={[styles.actionBtn, styles.cancelActionBtn]}
+            onPress={() => handleCancelSchedule(item.id)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cancelActionText}>Cancel</Text>
+          </TouchableOpacity> */}
+          <TouchableOpacity 
+            style={[styles.actionBtn, styles.joinActionBtn]}
+            onPress={() => navigation.navigate('Lobby', { roomId: String(roomSlug) })}
+            activeOpacity={0.7}
+          >
+            <Video size={18} color="white" />
+            <Text style={styles.joinActionText}>Join</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -585,12 +623,16 @@ const styles = StyleSheet.create({
   dateDay: { color: '#207450', fontSize: 20, fontWeight: 'bold' },
   dateMonth: { color: '#10b981', fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },
   cardTitle: { color: '#0f172a', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  cardSubtitle: { color: '#64748b', fontSize: 14 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 16 },
+  cardSubtitle: { color: '#64748b', fontSize: 14, marginTop: 2 },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 16 },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
-  timeText: { color: '#64748b', fontWeight: '600', marginLeft: 6 },
-  joinBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10b981', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  joinBtnText: { color: 'white', fontWeight: 'bold', marginLeft: 6 },
+  timeText: { color: '#475569', fontWeight: '600', fontSize: 13, marginLeft: 6 },
+  
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, flex: 1 },
+  cancelActionBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
+  cancelActionText: { color: '#64748b', fontWeight: '700', fontSize: 15 },
+  joinActionBtn: { backgroundColor: '#207450' },
+  joinActionText: { color: 'white', fontWeight: '700', fontSize: 15, marginLeft: 8 },
   
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 80 },
   emptyTitle: { color: '#334155', fontSize: 20, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
