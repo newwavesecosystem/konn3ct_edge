@@ -281,6 +281,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
         <TouchableOpacity 
           style={styles.fab}
           onPress={() => setModalVisible(true)}
+          testID="schedule-fab"
         >
           <Plus color="white" size={24} />
         </TouchableOpacity>
@@ -378,6 +379,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
                   value={title}
                   onChangeText={setTitle}
                   placeholderTextColor="#94a3b8"
+                  testID="schedule-title-input"
                 />
               </View>
 
@@ -389,6 +391,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
                   value={hostname}
                   onChangeText={setHostname}
                   placeholderTextColor="#94a3b8"
+                  testID="schedule-hostname-input"
                 />
               </View>
 
@@ -415,6 +418,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
                   style={styles.selectBtn} 
                   activeOpacity={0.7}
                   onPress={() => setShowRoomSelect(!showRoomSelect)}
+                  testID="schedule-room-select"
                 >
                   <Text style={[styles.selectBtnText, !selectedRoom && {color: '#94a3b8'}]}>
                     {selectedRoom ? selectedRoom.name : 'Select an existing room...'}
@@ -572,6 +576,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
               style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
               onPress={handleSchedule}
               disabled={isSubmitting}
+              testID="schedule-submit-btn"
             >
               <Text style={styles.submitBtnText}>
                 {isSubmitting ? 'Scheduling...' : 'Schedule Session'}

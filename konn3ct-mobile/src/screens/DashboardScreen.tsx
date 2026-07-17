@@ -529,6 +529,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   style={styles.joinButton}
                   onPress={() => setShowJoinInput(true)}
                   activeOpacity={0.85}
+                  testID="join-meeting-btn"
                 >
                   <View style={styles.joinIconBox} />
                   <Text style={styles.joinButtonText}>
@@ -541,6 +542,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   onPress={handleCreate}
                   disabled={isCreating}
                   activeOpacity={0.85}
+                  testID="host-meeting-btn"
                 >
                   {isCreating ? (
                     <ActivityIndicator color={COLORS.white} size="small" />
@@ -557,6 +559,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 style={styles.scheduleButton}
                 onPress={() => (navigation.navigate as any)('Schedule')}
                 activeOpacity={0.85}
+                testID="schedule-meeting-btn"
               >
                 <Calendar color={COLORS.white} size={18} />
                 <Text style={styles.scheduleButtonText}>Schedule for later</Text>
@@ -651,6 +654,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   editable={!isJoining}
                   onSubmitEditing={handleJoin}
                   returnKeyType="go"
+                  testID="join-room-id-input"
                 />
 
                 <View style={styles.togglesContainer}>
@@ -682,6 +686,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   onPress={handleJoin}
                   activeOpacity={0.85}
                   disabled={isJoining}
+                  testID="join-room-submit-btn"
                 >
                   {isJoining ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
