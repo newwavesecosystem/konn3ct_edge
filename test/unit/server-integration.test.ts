@@ -19,7 +19,7 @@ vi.mock('ioredis', () => {
 vi.mock('../../src/db', () => ({
   db: {
     room: {
-      findUnique: vi.fn().mockResolvedValue({ id: 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {} }),
+      findUnique: vi.fn().mockImplementation(async ({ where }) => ({ id: where?.id || where?.slug || 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {} })),
     },
     chatMessage: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -291,6 +291,45 @@ describe('Signaling Server Integration', () => {
       });
       
       wsViewer.on('error', reject);
+    });
+  });
+
+  it('allows co-hosts to broadcast ecinema_update', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const hostToken = jwt.sign({ userId: 'ecinema-host', email: 'host@conn3ct', name: 'Host', role: 'host' }, 'dummy_secret');
+      const cohostToken = jwt.sign({ userId: 'ecinema-cohost', email: 'cohost@conn3ct', name: 'CoHost', role: 'co-host' }, 'dummy_secret');
+      
+      const wsHost = new WebSocket(`${wsUrl}/signal?roomId=test-room-ecinema&token=${hostToken}&participantId=part-ecinema-host`);
+      const wsCohost = new WebSocket(`${wsUrl}/signal?roomId=test-room-ecinema&token=${cohostToken}&participantId=part-ecinema-cohost`);
+
+      let hostConnected = false;
+      let cohostConnected = false;
+
+      const attemptAction = () => {
+        if (hostConnected && cohostConnected) {
+          // Cohost broadcasts an ecinema update
+          wsCohost.send(JSON.stringify({ 
+            type: 'ecinema_update', 
+            link: 'https://youtube.com/watch?v=123'
+          }));
+        }
+      };
+
+      wsHost.on('open', () => { hostConnected = true; attemptAction(); });
+      wsCohost.on('open', () => { cohostConnected = true; attemptAction(); });
+
+      // Host listens for the broadcast
+      wsHost.on('message', (data: any) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'ecinema_update' && msg.link === 'https://youtube.com/watch?v=123') {
+          wsHost.close();
+          wsCohost.close();
+          resolve();
+        }
+      });
+      
+      wsHost.on('error', reject);
+      wsCohost.on('error', reject);
     });
   });
 });
