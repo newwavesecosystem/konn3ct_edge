@@ -215,29 +215,6 @@ export function ParticipantTile({
     };
   }, [participant.videoTrack]);
 
-  // Dedicated screen share ref — completely independent from camera
-  const setScreenRef = React.useCallback(
-    (el: HTMLVideoElement | null) => {
-      if (el) {
-        if (participant.screenTrack) {
-          if (el.srcObject) {
-            const stream = el.srcObject as MediaStream;
-            if (stream.getVideoTracks()[0] === participant.screenTrack) return;
-          }
-          el.srcObject = new MediaStream([participant.screenTrack]);
-          el.muted = true;
-          el.playsInline = true;
-          el.play().catch((e) => {
-            if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
-          });
-        } else {
-          el.srcObject = null;
-        }
-      }
-    },
-    [participant.screenTrack]
-  );
-
   const effectiveVideoState = 
     (currentUser.audioOnlyMode && !isSelf) 
       ? 'audio-only' 
@@ -347,47 +324,6 @@ export function ParticipantTile({
         backgroundColor: "var(--mt-bg-tile)",
       }}
     >
-      {/* ── Screen Share Overlay ──────────────────────────────────────────────
-          Renders on TOP of the camera tile when screensharing is active.
-          Camera feed stays alive underneath and shows as a PiP corner bubble.
-      ──────────────────────────────────────────────────────────────────────── */}
-      {participant.screenTrack && participant.isScreenSharing && isVisible && (
-        <div className="absolute inset-0 z-20 bg-black flex items-center justify-center">
-          {/* Full screen content — object-contain preserves aspect ratio */}
-          <video
-            ref={setScreenRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-contain"
-          />
-
-          {/* Screen-share badge */}
-          <div className="absolute top-3 left-3 z-30 bg-blue-600/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium shadow-lg">
-            <MonitorUp className="w-3 h-3" />
-            Screen
-          </div>
-
-          {/* PiP camera bubble — bottom-right corner */}
-          {effectiveVideoState === 'video-active' && (
-            <div className="absolute bottom-3 right-3 z-30 w-24 h-16 rounded-xl overflow-hidden border-2 border-white/20 shadow-xl">
-              <video
-                key={`pip-video-${remountKey}`}
-                ref={setVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-                style={{
-                  transform:
-                    participant.id === currentUser.id ? "scaleX(-1)" : "none",
-                }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Speaking ring (inset, never clipped by overflow-hidden parents) ── */}
       {participant.isSpeaking && !participant.isMuted && (
         <div className="absolute inset-0 z-20 pointer-events-none rounded-2xl border-[3px] border-brand-green shadow-[inset_0_0_12px_rgba(34,197,94,0.4)]" />

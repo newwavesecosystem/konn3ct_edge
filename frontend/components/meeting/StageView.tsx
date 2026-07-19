@@ -28,7 +28,16 @@ export function StageView() {
   const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef } =
     useMeeting();
 
-  const screenSharer = participants.find((p) => p.isScreenSharing);
+  const screenSharers = participants.filter((p) => p.isScreenSharing);
+  const [activeScreenSharerId, setActiveScreenSharerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeScreenSharerId && !screenSharers.find((p) => p.id === activeScreenSharerId)) {
+      setActiveScreenSharerId(null);
+    }
+  }, [screenSharers, activeScreenSharerId]);
+
+  const screenSharer = screenSharers.find(p => p.id === activeScreenSharerId) || screenSharers[0];
   const isSomeoneSharing = !!screenSharer || isScreenSharing;
 
   // Grid view sorting (no active speaker rearranging)
@@ -57,6 +66,9 @@ export function StageView() {
       <ScreenShareLayout
         participants={gridSorted}
         screenSharer={screenSharer}
+        screenSharers={screenSharers}
+        activeScreenSharerId={activeScreenSharerId || screenSharer?.id}
+        setActiveScreenSharerId={setActiveScreenSharerId}
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
         currentUserId={currentUser.id}
@@ -749,12 +761,18 @@ function SpotlightLayout({ participants }: { participants: Participant[] }) {
 function ScreenShareLayout({
   participants,
   screenSharer,
+  screenSharers,
+  activeScreenSharerId,
+  setActiveScreenSharerId,
   isCurrentUserSharing,
   onStopSharing,
   currentUserId,
 }: {
   participants: Participant[];
   screenSharer: Participant | undefined;
+  screenSharers: Participant[];
+  activeScreenSharerId: string | undefined;
+  setActiveScreenSharerId: (id: string) => void;
   isCurrentUserSharing: boolean;
   onStopSharing: () => void;
   currentUserId: string;
@@ -905,6 +923,26 @@ function ScreenShareLayout({
           border: "1px solid var(--mt-border)",
         }}
       >
+        {screenSharers.length > 1 && (
+          <div className="absolute top-4 left-0 right-0 z-30 px-4 flex justify-center pointer-events-none">
+            <div className="flex items-center gap-2 p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-xl overflow-x-auto w-max max-w-full no-scrollbar pointer-events-auto snap-x">
+              {screenSharers.map((sharer) => (
+                <button
+                  key={sharer.id}
+                  onClick={() => setActiveScreenSharerId(sharer.id)}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
+                    activeScreenSharerId === sharer.id
+                      ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
+                      : "bg-white/10 text-white hover:bg-white/20"
+                  )}
+                >
+                  <span className="truncate block">{sharer.name}&apos;s Screen</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="absolute inset-0 flex flex-col">
           <div
             className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 backdrop-blur-sm shrink-0 z-10"
