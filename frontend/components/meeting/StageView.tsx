@@ -780,7 +780,7 @@ function ScreenShareLayout({
   const { webrtcClientRef } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const sharerName = screenSharer?.name ?? "You";
-  const isMe = isCurrentUserSharing || screenSharer?.id === currentUserId;
+  const isMe = screenSharer?.id === currentUserId;
 
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
