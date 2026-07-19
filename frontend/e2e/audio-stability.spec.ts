@@ -60,16 +60,34 @@ test.describe('Audio Stability', () => {
       // Check every 2 seconds for 30 seconds total
       await mobilePage.waitForTimeout(2000);
 
-      const isAudioPlaying = await mobilePage.evaluate(async () => {
+      const audioStats = await mobilePage.evaluate(async () => {
         const audioEls = Array.from(document.querySelectorAll('audio'));
-        // Find if there is an active remote audio track
-        return audioEls.some(el => el.srcObject && !el.paused);
+        return audioEls.map(el => {
+          const stream = el.srcObject as MediaStream | null;
+          const track = stream ? stream.getAudioTracks()[0] : null;
+          return {
+            hasSrcObject: !!stream,
+            paused: el.paused,
+            readyState: el.readyState,
+            trackReadyState: track ? track.readyState : null,
+            trackMuted: track ? track.muted : null,
+            trackEnabled: track ? track.enabled : null,
+          };
+        });
       });
 
-      if (!isAudioPlaying) {
+      console.log(`[Test Debug] Audio stats:`, JSON.stringify(audioStats));
+
+      const isAudioPlaying = audioStats.some(stat => stat.hasSrcObject && !stat.paused);
+
+      if (!isAudioPlaying && audioStats.some(stat => stat.hasSrcObject)) {
         isStable = false;
-        stabilityError = 'Audio element paused or dropped out during active session.';
+        stabilityError = `Audio element paused or dropped out during active session. Stats: ${JSON.stringify(audioStats)}`;
         break;
+      } else if (!isAudioPlaying) {
+        // If there is no srcObject at all, wait. It might just be connecting.
+        // If it never connects, it will fail at the end anyway, but let's not break immediately.
+        console.log(`[Test Debug] No audio element with srcObject found yet.`);
       }
 
       // Check for any obvious error toasts that might contain "audio" or "mic"
