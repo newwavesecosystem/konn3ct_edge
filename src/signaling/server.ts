@@ -1379,7 +1379,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_update':
-        if (client.role === 'host' || client.role === 'presenter') {
+        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
           if (data.link) {
             try {
               const url = new URL(data.link);
@@ -1403,7 +1403,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_action':
-        if (client.role === 'host' || client.role === 'presenter') {
+        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
           roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
