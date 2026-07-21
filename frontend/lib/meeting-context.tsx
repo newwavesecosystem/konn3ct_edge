@@ -276,6 +276,20 @@ export function MeetingProvider({
     prefsRef.current = prefs;
   }, [prefs]);
 
+  // Preload virtual backgrounds
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const backgrounds = [
+      '/backgrounds/modern_office.png',
+      '/backgrounds/cozy_cafe.png',
+      '/backgrounds/minimalist_gradient.png'
+    ];
+    backgrounds.forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, []);
+
   const playNotificationSound = useCallback((frequency: number, duration: number = 0.15, vol: number = 0.1) => {
     if (!prefsRef.current.notifications.enableAllSounds) return;
     if (webrtcClient.current?.userRole === 'bot' || webrtcClient.current?.userRole === 'recorder' || effectiveIsRecorderMode) return;
