@@ -5,7 +5,7 @@ import { useMeeting } from "@/lib/meeting-context";
 import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift } from "lucide-react";
 
 export function MeetingInfoPanel() {
-  const { meetingInfo, participants, meetingDuration, totalDonations, currentUser, roomFeatureFlags } = useMeeting();
+  const { meetingInfo, participants, meetingDuration, totalDonations, currentUser, roomFeatureFlags, roomSettings } = useMeeting();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -86,7 +86,7 @@ export function MeetingInfoPanel() {
           <InfoStat
             icon={<Shield className="w-4 h-4" />}
             label="Waiting Room"
-            value={meetingInfo.isWaitingRoomEnabled ? "Enabled" : "Disabled"}
+            value={(meetingInfo.isWaitingRoomEnabled && !roomSettings?.bypassWaitingRoom) ? "Enabled" : "Disabled"}
           />
           <InfoStat
             icon={<Radio className="w-4 h-4" />}
