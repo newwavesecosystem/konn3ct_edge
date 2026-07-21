@@ -26,14 +26,17 @@ export interface NetworkDebugSnapshot {
 export class WebRTCClient {
   private ws: WebSocket | null = null;
   private device: Device | null = null;
-  private sendTransport: Transport | null = null;
+  public sendTransport: Transport | null = null;
+  public receiveTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   
   public localVideoProducer: Producer | null = null;
   public localAudioProducer: Producer | null = null;
-  public screenShareProducer: Producer | null = null;
   public localScreenTrack: MediaStreamTrack | null = null;
+  public localScreenAudioTrack: MediaStreamTrack | null = null;
+  public screenShareProducer: Producer | null = null;
+  public screenAudioShareProducer: Producer | null = null;
   public consumers: Map<string, Consumer> = new Map();
   
   private pendingRequests: Map<string, { resolve: (val: any) => void, reject: (err: any) => void, timeoutId?: any, requestId?: string }[]> = new Map();
@@ -1239,6 +1242,14 @@ export class WebRTCClient {
           });
         }
 
+        if (this.localScreenAudioTrack) {
+          // Republish screen audio track
+          this.screenAudioShareProducer = await this.sendTransport.produce({
+            track: this.localScreenAudioTrack,
+            appData: { source: 'screen-audio' }
+          });
+        }
+
       } catch (e) {
       }
     }, this.networkConfig.networkMonitorIntervalMs);
@@ -1442,12 +1453,24 @@ export class WebRTCClient {
           );
         }
 
-        try {
-          if (this.screenShareProducer) {
-            this.emitTelemetry('screen_old_producer_closed');
+        // Clear screen share producer if exists
+        if (this.screenShareProducer) {
+          try {
             this.screenShareProducer.close();
+          } catch (e) {
+            console.warn('[WebRTC] Failed to close previous screen share producer', e);
           }
-          this.emitTelemetry('screen_republish_started');
+        }
+        if (this.screenAudioShareProducer) {
+          try {
+            this.screenAudioShareProducer.close();
+          } catch (e) {
+            console.warn('[WebRTC] Failed to close previous screen audio producer', e);
+          }
+        }
+
+        try {
+          // Republish screen track
           this.screenShareProducer = await this.sendTransport.produce({
             track: screenTrack,
             codec: screenCodec,
@@ -2159,7 +2182,8 @@ export class WebRTCClient {
     }
 
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: 15, max: 30 } } // Lower framerate = less CPU, still crisp
+      video: { frameRate: { ideal: 15, max: 30 } }, // Lower framerate = less CPU, still crisp
+      audio: true
     });
     const screenTrack = stream.getVideoTracks()[0];
     this.localScreenTrack = screenTrack;
@@ -2181,6 +2205,20 @@ export class WebRTCClient {
       ],
       codecOptions: { videoGoogleStartBitrate: 1000 }
     });
+
+    // Check for audio track and produce it
+    const screenAudioTrack = stream.getAudioTracks()[0];
+    if (screenAudioTrack) {
+      this.localScreenAudioTrack = screenAudioTrack;
+      this.screenAudioShareProducer = await this.sendTransport.produce({
+        track: screenAudioTrack,
+        appData: { source: 'screen-audio' }
+      });
+      // Optionally stop sharing when audio track ends (unlikely unless video track ends too)
+      screenAudioTrack.onended = () => {
+        this.stopScreenShareProducer();
+      };
+    }
 
     // Auto-stop when user clicks browser's native "Stop sharing" button
     screenTrack.onended = () => {
@@ -2211,6 +2249,21 @@ export class WebRTCClient {
       this.screenShareProducer.close();
       this.screenShareProducer = null;
       this.localScreenTrack = null;
+    }
+    
+    if (this.screenAudioShareProducer) {
+      const audioProducerId = this.screenAudioShareProducer.id;
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId: audioProducerId,
+          appData: { source: 'screen-audio' }
+        }));
+      }
+      this.screenAudioShareProducer.track?.stop();
+      this.screenAudioShareProducer.close();
+      this.screenAudioShareProducer = null;
+      this.localScreenAudioTrack = null;
     }
   }
 

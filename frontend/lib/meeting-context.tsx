@@ -1584,7 +1584,17 @@ export function MeetingProvider({
               return prev.map((p) => {
                 if (p.id === participantId) {
                   if (consumer.kind === 'audio') {
-                    return { ...p, audioTrack: consumer.track as MediaStreamTrack };
+                    if (source === 'screen-audio') {
+                      return { 
+                        ...p, 
+                        screenAudioTrack: consumer.track as MediaStreamTrack,
+                        screenAudioProducerId: consumer.producerId,
+                        screenAudioConsumerId: consumer.id,
+                        screenAudioTrackId: consumer.track.id
+                      };
+                    } else {
+                      return { ...p, audioTrack: consumer.track as MediaStreamTrack };
+                    }
                   }
                   if (consumer.kind === 'video') {
                     if (source === 'screen') {
@@ -1637,7 +1647,8 @@ export function MeetingProvider({
                 isMuted: consumer.kind !== "audio",
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
                 isScreenSharing: consumer.kind === "video" && source === 'screen',
-                audioTrack: consumer.kind === "audio" ? (consumer.track as MediaStreamTrack) : undefined,
+                audioTrack: consumer.kind === "audio" && source !== 'screen-audio' ? (consumer.track as MediaStreamTrack) : undefined,
+                screenAudioTrack: consumer.kind === "audio" && source === 'screen-audio' ? (consumer.track as MediaStreamTrack) : undefined,
                 videoTrack: consumer.kind === "video" && source !== 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
                 screenTrack: consumer.kind === "video" && source === 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
                 cameraProducerId: consumer.kind === "video" && source !== 'screen' ? consumer.producerId : undefined,
@@ -1646,6 +1657,9 @@ export function MeetingProvider({
                 screenProducerId: consumer.kind === "video" && source === 'screen' ? consumer.producerId : undefined,
                 screenConsumerId: consumer.kind === "video" && source === 'screen' ? consumer.id : undefined,
                 screenTrackId: consumer.kind === "video" && source === 'screen' ? consumer.track.id : undefined,
+                screenAudioProducerId: consumer.kind === "audio" && source === 'screen-audio' ? consumer.producerId : undefined,
+                screenAudioConsumerId: consumer.kind === "audio" && source === 'screen-audio' ? consumer.id : undefined,
+                screenAudioTrackId: consumer.kind === "audio" && source === 'screen-audio' ? consumer.track.id : undefined,
                 isHandRaised: false,
                 isSpeaking: false,
                 joinedAt: new Date().toISOString(),
@@ -2477,7 +2491,12 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
   return (
     <>
       {audioParticipants.map((p) => (
-        <AudioRenderer key={p.id} track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
+        <React.Fragment key={p.id}>
+          <AudioRenderer track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
+          {p.screenAudioTrack && (
+            <AudioRenderer track={p.screenAudioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
+          )}
+        </React.Fragment>
       ))}
     </>
   );
@@ -2527,14 +2546,46 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlay
       
       audioRef.current.volume = outputVolume / 100;
       applyAudioSink(audioRef.current, audioOutput);
-      audioRef.current.play().catch((e) => {
-        if (e.name === 'NotAllowedError') {
-          console.warn("Autoplay blocked for global audio:", e);
-          setAudioPlaybackError(true);
-        } else if (e.name !== 'AbortError') {
-          console.warn("Global audio play failed:", e);
+      
+      const attemptPlay = () => {
+        if (!audioRef.current || !track || isLocal) return;
+        audioRef.current.play().catch((e) => {
+          if (e.name === 'NotAllowedError') {
+            console.warn("Autoplay blocked for global audio:", e);
+            setAudioPlaybackError(true);
+          } else if (e.name !== 'AbortError') {
+            console.warn("Global audio play failed:", e);
+          }
+        });
+      };
+
+      attemptPlay();
+
+      // Ensure audio stays playing if the browser incorrectly pauses it
+      const onPause = () => {
+        if (audioRef.current && track && !isLocal && audioRef.current.srcObject) {
+          console.log("Audio paused unexpectedly, attempting to resume...");
+          attemptPlay();
         }
-      });
+      };
+
+      const handleVisibility = () => {
+        if (document.visibilityState === 'visible' && audioRef.current && track && !isLocal) {
+          console.log("App returned to foreground, resuming audio...");
+          attemptPlay();
+        }
+      };
+
+      audioRef.current.addEventListener('pause', onPause);
+      document.addEventListener('visibilitychange', handleVisibility);
+      window.addEventListener('pageshow', handleVisibility);
+
+      return () => {
+        if (audioRef.current) audioRef.current.removeEventListener('pause', onPause);
+        document.removeEventListener('visibilitychange', handleVisibility);
+        window.removeEventListener('pageshow', handleVisibility);
+      };
+
     } else if (audioRef.current && (!track || isLocal)) {
       audioRef.current.srcObject = null;
     }
