@@ -204,7 +204,7 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
     if (!hasAccess) return res.status(403).json({ error: 'Forbidden' });
 
     // Fetch live transcript from memory
-    const transcripts = roomTranscripts.get(roomId) || [];
+    const transcripts = roomTranscripts.get(roomId) || roomTranscripts.get(room.slug) || [];
     const transcriptText = transcripts
       .sort((a, b) => a.timestamp - b.timestamp)
       .map(t => `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.name}: ${t.text}`)
