@@ -19,16 +19,16 @@ describe('meeting-device-preferences', () => {
   });
 
   it('should set and merge preferences correctly', () => {
-    setMeetingDevicePreferences({ theme: 'slate' });
+    setMeetingDevicePreferences({ selectedTheme: 'slate' });
     let prefs = getMeetingDevicePreferences();
-    expect(prefs.theme).toBe('slate');
+    expect(prefs.selectedTheme).toBe('slate');
     expect(prefs.notifications.enableAllToasts).toBe(true);
 
     setMeetingDevicePreferences({ 
       notifications: { enableAllToasts: false, showChatToasts: false } 
     });
     prefs = getMeetingDevicePreferences();
-    expect(prefs.theme).toBe('slate');
+    expect(prefs.selectedTheme).toBe('slate');
     expect(prefs.notifications.enableAllToasts).toBe(false);
     expect(prefs.notifications.showChatToasts).toBe(false);
     expect(prefs.notifications.showJoinLeaveToasts).toBe(true); // default maintained
@@ -39,14 +39,14 @@ describe('meeting-device-preferences', () => {
     const prefs = getMeetingDevicePreferences();
     expect(prefs).toEqual(DEFAULT_MEETING_DEVICE_PREFERENCES);
     // It shouldn't crash, and subsequent sets will repair the storage
-    setMeetingDevicePreferences({ theme: 'sage' });
+    setMeetingDevicePreferences({ selectedTheme: 'sage' });
     const repaired = JSON.parse(localStorage.getItem('konn3ct_meeting_device_preferences_v1') || '{}');
-    expect(repaired.theme).toBe('sage');
+    expect(repaired.selectedTheme).toBe('sage');
   });
 
   it('should dispatch an event when preferences change', () => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-    setMeetingDevicePreferences({ theme: 'soft' });
+    setMeetingDevicePreferences({ selectedTheme: 'soft' });
     expect(dispatchSpy).toHaveBeenCalled();
     const eventArg = dispatchSpy.mock.calls[0][0] as CustomEvent;
     expect(eventArg.type).toBe('meeting_device_preferences_changed');

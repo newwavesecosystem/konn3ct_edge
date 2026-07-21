@@ -1298,7 +1298,7 @@ export function MeetingProvider({
             if (state === 'connected') {
               // Update local user's name and role based on server truth
               setParticipants(prev => prev.map(p => 
-                p.id === currentUser.id ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
+                p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
               ));
               if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
                 setMeetingInfo(prev => ({ 
