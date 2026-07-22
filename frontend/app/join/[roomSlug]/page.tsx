@@ -32,7 +32,7 @@ export default function JoinPage({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"host" | "attendee">("attendee");
   const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
@@ -82,7 +82,7 @@ export default function JoinPage({
   useEffect(() => {
     const getDevices = async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        await navigator.mediaDevices.getUserMedia({ audio: true });
         const dev = await navigator.mediaDevices.enumerateDevices();
         const audioInputs = dev.filter(d => d.kind === 'audioinput');
         const audioOutputs = dev.filter(d => d.kind === 'audiooutput');
@@ -240,6 +240,16 @@ export default function JoinPage({
         streamRef.current = stream;
         const processed = processorRef.current!.startProcessing(stream);
         if (videoRef.current) videoRef.current.srcObject = processed;
+
+        // Update the device list now that we have camera permission
+        navigator.mediaDevices.enumerateDevices().then(dev => {
+          const videoInputs = dev.filter(d => d.kind === 'videoinput');
+          setDevices(prev => ({ ...prev, videoInputs }));
+          
+          if (videoInputs.length > 0 && (!selectedDevices.videoInput || !videoInputs.find(d => d.deviceId === selectedDevices.videoInput))) {
+            setSelectedDevices(prev => ({ ...prev, videoInput: videoInputs[0].deviceId }));
+          }
+        }).catch(() => {});
       })
       .catch(() => {
         setIsCameraOn(false);
@@ -284,6 +294,25 @@ export default function JoinPage({
       console.error(e);
       alert(e.message || "Failed to join. Please try again.");
       setIsJoining(false);
+    }
+  };
+
+  const requestCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Stop immediately, we just needed the permission to populate devices
+      stream.getTracks().forEach(t => t.stop());
+      
+      const dev = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = dev.filter(d => d.kind === 'videoinput');
+      
+      setDevices(prev => ({ ...prev, videoInputs }));
+      
+      if (videoInputs.length > 0 && (!selectedDevices.videoInput || !videoInputs.find(d => d.deviceId === selectedDevices.videoInput))) {
+        setSelectedDevices(prev => ({ ...prev, videoInput: videoInputs[0].deviceId }));
+      }
+    } catch (err) {
+      console.warn("Failed to get camera permission", err);
     }
   };
 
@@ -427,6 +456,16 @@ export default function JoinPage({
                 >
                   <DeviceSelect 
                     label="Camera" 
+                    actionNode={
+                      devices.videoInputs.every(d => !d.label || d.label === 'Default Camera') ? (
+                        <button
+                          onClick={requestCameraPermission}
+                          className="text-brand-green hover:text-[#287854] text-[10px] font-medium transition-colors"
+                        >
+                          Allow Access
+                        </button>
+                      ) : null
+                    }
                     options={devices.videoInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Camera' }))} 
                     value={selectedDevices.videoInput}
                     onChange={(val) => {
@@ -530,7 +569,7 @@ export default function JoinPage({
                 </div>
 
                 {/* Server status */}
-                <div className={cn(
+                {/* <div className={cn(
                   "flex items-center gap-2 rounded-xl px-4 py-3 border text-xs font-medium",
                   serverStatus === "online"
                     ? "bg-brand-green/10 border-brand-green/20 text-brand-green"
@@ -546,7 +585,7 @@ export default function JoinPage({
                     {serverStatus === "online" && "Signal server reachable — WebRTC ready"}
                     {serverStatus === "offline" && "Signal server unreachable — check NEXT_PUBLIC_BACKEND_DOMAIN"}
                   </span>
-                </div>
+                </div> */}
 
                 {/* Name input */}
                 <div>
@@ -620,18 +659,23 @@ function DeviceSelect({
   label,
   options,
   value,
-  onChange
+  onChange,
+  actionNode
 }: {
   label: string;
   options: { label: string, value: string }[];
   value: string;
   onChange: (val: string) => void;
+  actionNode?: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="block text-[11px] text-white/30 mb-1 font-medium">
-        {label}
-      </label>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-[11px] text-white/30 font-medium">
+          {label}
+        </label>
+        {actionNode}
+      </div>
       <div className="relative">
         <select 
           value={value}
