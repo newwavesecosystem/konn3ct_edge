@@ -1297,7 +1297,6 @@ export class WebRTCClient {
     const videoTrack = this.localVideoProducer?.track;
     const audioTrack = this.localAudioProducer?.track;
     const isVideoPaused = this.localVideoProducer?.paused;
-    const isAudioPaused = this.localAudioProducer?.paused;
     
     // Check screen share track
     const screenTrack = this.localScreenTrack;
@@ -1423,7 +1422,7 @@ export class WebRTCClient {
           codec: opusCodec
         });
         this.onAudioTrackReplaced?.();
-        if (isAudioPaused) this.localAudioProducer.pause();
+        if (this.audioConnectionStatus === 'muted') this.localAudioProducer.pause();
       } else {
         console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
         this.emitTelemetry('mic_track_closed_detected');
@@ -1432,7 +1431,7 @@ export class WebRTCClient {
           // This creates a new producer internally
           await this.enableMic();
           this.emitTelemetry('mic_reacquire_success');
-          if (isAudioPaused) this.pauseMic();
+          if (this.audioConnectionStatus === 'muted') this.pauseMic();
         } catch (e) {
           console.error("Failed to reacquire mic during reconnect:", e);
           this.emitTelemetry('mic_reacquire_failed');
@@ -1518,10 +1517,22 @@ export class WebRTCClient {
       }
     } catch (e) {
       console.error("Failed to re-sync producers after republish", e);
+      throw e; // Throw so the main catch block can trigger a retry
     }
     
     } catch (err) {
       console.error("republishMedia failed", err);
+      this.isRepublishing = false;
+      
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        setTimeout(() => {
+          console.warn("[WebRTC] Retrying republishMedia after failure...");
+          this.republishMedia().catch(console.error);
+        }, 2000);
+      } else {
+        this.onConnectionStateChange?.('failed');
+      }
+      return;
     } finally {
       this.isRepublishing = false;
     }
