@@ -217,7 +217,7 @@ export default function ProfileScreen() {
                 <Text style={styles.profileName}>{displayProfileName}</Text>
                 <Text style={styles.profileEmail}>{email}</Text>
               </View>
-              <TouchableOpacity style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>
+              <TouchableOpacity testID="edit-profile-btn" style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>
                 <Text style={styles.outlineBtnSmallText}>Edit</Text>
               </TouchableOpacity>
             </View>
@@ -287,7 +287,7 @@ export default function ProfileScreen() {
           </View>
           
           <View style={styles.cardBody}>
-            <TouchableOpacity style={styles.actionRowBtn} activeOpacity={0.7} onPress={() => setPasswordModalVisible(true)}>
+            <TouchableOpacity testID="change-password-btn" style={styles.actionRowBtn} activeOpacity={0.7} onPress={() => setPasswordModalVisible(true)}>
               <View style={styles.actionRowLeft}>
                 <View style={styles.actionRowIconBox}>
                   <Lock color={COLORS.textMuted} size={18} />
@@ -349,16 +349,16 @@ export default function ProfileScreen() {
               </View>
               <ScrollView style={{ paddingHorizontal: 20, paddingTop: 10 }}>
                 <Text style={styles.inputLabel}>First Name</Text>
-                <TextInput style={styles.textInputFull} value={formFirstname} onChangeText={setFormFirstname} />
+                <TextInput testID="firstname-input" style={styles.textInputFull} value={formFirstname} onChangeText={setFormFirstname} />
 
                 <Text style={styles.inputLabel}>Last Name</Text>
-                <TextInput style={styles.textInputFull} value={formLastname} onChangeText={setFormLastname} />
+                <TextInput testID="lastname-input" style={styles.textInputFull} value={formLastname} onChangeText={setFormLastname} />
 
                 <Text style={styles.inputLabel}>Phone</Text>
-                <TextInput style={styles.textInputFull} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" />
+                <TextInput testID="phone-input" style={styles.textInputFull} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" />
               </ScrollView>
               <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 24) + 16 }]}>
-                <TouchableOpacity style={styles.primaryBtn} onPress={submitEditProfile} disabled={isSubmitting}>
+                <TouchableOpacity testID="save-profile-btn" style={styles.primaryBtn} onPress={submitEditProfile} disabled={isSubmitting}>
                   {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Save Changes</Text>}
                 </TouchableOpacity>
               </View>

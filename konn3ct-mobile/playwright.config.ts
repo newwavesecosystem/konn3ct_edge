@@ -9,7 +9,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1, // Limit to 1 worker to avoid hanging the Expo dev server on local machines
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:8081',
@@ -41,6 +41,6 @@ export default defineConfig({
     command: 'npm run web',
     url: 'http://localhost:8081',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    timeout: 300 * 1000,
   },
 });
