@@ -2,6 +2,7 @@
 
 /* eslint-disable react-hooks/immutability */
 import React from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Mic,
@@ -290,14 +291,27 @@ export function ParticipantTile({
       mediaConnectionState = "Connecting...";
     } else if (health === 'black') {
       mediaConnectionState = isSelf 
-        ? "Your camera hardware failed. Please toggle your video off and on." 
-        : "Participant's camera feed failed.";
+        ? "Your camera hardware failed." 
+        : null; // Remote viewers just see avatar
     } else if (health === 'stalled' || (!isSelf && effectiveVideoState === 'stalled')) {
-      mediaConnectionState = "Connection failed. Retrying...";
+      mediaConnectionState = null; // Remote viewers see avatar, local user gets toast
     } else if (health === 'recovering') {
-      mediaConnectionState = "Reconnecting to Video";
+      mediaConnectionState = null; // Remote viewers see avatar
     }
   }
+
+  // Toast notifications for the local user
+  React.useEffect(() => {
+    if (!isSelf) return;
+
+    if (health === 'black') {
+      toast.error("Your camera stopped responding. Do you have another meeting/app using your camera?", { id: 'cam-hardware-fail' });
+    } else if (health === 'stalled') {
+      toast.error("Your video feed seems stuck. Give it a moment to catch up!", { id: 'cam-stalled' });
+    } else if (participant.networkQuality === 'reconnecting') {
+      toast.error("Your camera connection dropped. We're trying to reconnect it behind the scenes!", { id: 'cam-network-drop' });
+    }
+  }, [health, participant.networkQuality, isSelf]);
 
   React.useEffect(() => {
     if (!participant.cameraStats) return;

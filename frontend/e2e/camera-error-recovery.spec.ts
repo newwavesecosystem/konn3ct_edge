@@ -50,7 +50,7 @@ test.describe('Camera Error Recovery', () => {
 
     // 2. Observe if camera video appears.
     // 3. If video fails, observe error message.
-    const errorText = page.locator('text=Connection failed. Retrying...');
+    const errorText = page.locator('text=Your video feed seems stuck. Give it a moment to catch up!');
     
     // 4. Wait for retry behaviour. 
     // The useVideoHealth hook waits 5s for readyState stalls or currentTime stalls, 
