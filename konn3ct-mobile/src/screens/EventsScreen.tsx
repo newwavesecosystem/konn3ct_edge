@@ -46,6 +46,7 @@ import {
   AlertCircle,
   Copy,
   Link,
+  Video,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
@@ -673,6 +674,7 @@ function CreateEventModal({
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            testID="submit-event-btn"
             style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
             onPress={handleCreate}
             disabled={isSubmitting}
@@ -872,33 +874,44 @@ export default function EventsScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.copyLinkBtn, { marginTop: 10 }]}
-            activeOpacity={0.8}
-            onPress={async () => {
-              // Debug — remove after confirming correct values
-              console.log('[COPY] evt.room_id:', evt.room_id, 'room_name:', evt.room_name);
-              console.log('[COPY] rooms:', JSON.stringify(rooms.map(r => ({ id: r.id, name: r.name, url: r.url })), null, 2));
-              const matched = rooms.find(r => String(r.id) === String(evt.room_id));
-              console.log('[COPY] matched room:', JSON.stringify(matched, null, 2));
+          <View style={styles.copyActionRow}>
+            <TouchableOpacity
+              style={styles.copyEventBtn}
+              activeOpacity={0.8}
+              onPress={async () => {
+                const eventUrl =
+                  evt.event_url ||
+                  `https://www.konn3ct.com/event/${evt.reference || evt.ref || evt.id}`;
+                await Clipboard.setStringAsync(eventUrl);
+                Alert.alert('Event Link Copied', `Event registration link copied!\n\n${eventUrl}`);
+              }}
+            >
+              <Copy color={COLORS.purple} size={15} />
+              <Text style={styles.copyEventBtnText}>Copy Event Link</Text>
+            </TouchableOpacity>
 
-              // Resolve the room URL slug from the local rooms list
-              const roomSlug =
-                evt.room_name ||
-                matched?.url ||
-                matched?.name ||
-                String(evt.room_id);
-              const edgeFrontendUrl =
-                process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL ||
-                'https://meetingapp.konn3ct.net';
-              const url = `${edgeFrontendUrl}/join/${roomSlug}`;
-              await Clipboard.setStringAsync(url);
-              Alert.alert('Link Copied', `Meeting link copied!\n\n${url}`);
-            }}
-          >
-            <Copy color={COLORS.blue} size={16} />
-            <Text style={styles.copyLinkBtnText}>Copy Link</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.copyMeetingBtn}
+              activeOpacity={0.8}
+              onPress={async () => {
+                const matched = rooms.find((r) => String(r.id) === String(evt.room_id));
+                const roomSlug =
+                  evt.room_name ||
+                  matched?.url ||
+                  matched?.name ||
+                  String(evt.room_id);
+                const edgeFrontendUrl =
+                  process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL ||
+                  'https://meetingapp.konn3ct.net';
+                const meetingUrl = `${edgeFrontendUrl}/join/${roomSlug}`;
+                await Clipboard.setStringAsync(meetingUrl);
+                Alert.alert('Meeting Link Copied', `Meeting link copied!\n\n${meetingUrl}`);
+              }}
+            >
+              <Video color={COLORS.blue} size={15} />
+              <Text style={styles.copyMeetingBtnText}>Copy Meeting Link</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -954,7 +967,7 @@ export default function EventsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 80 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 160 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -996,6 +1009,7 @@ export default function EventsScreen() {
           </View>
 
           <TouchableOpacity
+            testID="create-event-btn"
             style={styles.createBtn}
             activeOpacity={0.85}
             onPress={() => setCreateModalVisible(true)}
@@ -1194,20 +1208,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  copyLinkBtn: {
+  copyActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  copyEventBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 11,
+    backgroundColor: COLORS.purpleLight,
+    borderRadius: 12,
+  },
+  copyEventBtnText: {
+    color: COLORS.purple,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  copyMeetingBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
     backgroundColor: COLORS.blueLight,
     borderRadius: 12,
   },
-  copyLinkBtnText: {
+  copyMeetingBtnText: {
     color: COLORS.blue,
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
 
   // Recent Registrations

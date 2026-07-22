@@ -500,7 +500,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
   }, [navigation, handleLeave]);
 
   const copyMeetingLink = async () => {
-    const meetingUrl = `https://meetingapp.konn3ct.net/join/${roomId}`;
+    const edgeFrontendUrl =
+      process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL ||
+      'https://meetingapp.konn3ct.net';
+    const meetingUrl = `${edgeFrontendUrl}/join/${roomId}`;
     await Clipboard.setStringAsync(meetingUrl);
     Alert.alert(
       "Meeting Link Copied! 🎉",

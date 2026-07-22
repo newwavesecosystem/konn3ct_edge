@@ -411,6 +411,7 @@ export default function RoomsScreen() {
             </View>
 
             <TouchableOpacity
+              testID={`delete-room-${room.id}`}
               style={styles.menuButton}
               onPress={() => handleDeleteRoom(room)}
               disabled={isDeleting}
@@ -741,6 +742,7 @@ export default function RoomsScreen() {
         {/* Action buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity
+            testID="create-room-btn"
             style={styles.btnPrimary}
             activeOpacity={0.85}
             onPress={() => {
