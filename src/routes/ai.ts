@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
-import { roomTranscripts } from '../signaling/server';
+import { roomTranscripts, rooms } from '../signaling/server';
 
 export const aiRouter = Router();
 
@@ -160,7 +160,7 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
 // --- 4. Live Konn3ct AI Chat ---
 aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
   try {
-    const { question } = req.body;
+    const { question, userName } = req.body;
     const roomSlugOrId = req.params.roomSlug as string;
     const userId = req.user!.userId;
 
@@ -175,13 +175,19 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
     // Verify room access (try by ID first, then fallback to slug)
     let room = await db.room.findUnique({
       where: { id: roomSlugOrId },
-      include: { team: { include: { members: true } } }
+      include: { 
+        team: { include: { members: true } },
+        owner: { select: { name: true } }
+      }
     });
 
     if (!room) {
       room = await db.room.findUnique({
         where: { slug: roomSlugOrId },
-        include: { team: { include: { members: true } } }
+        include: { 
+          team: { include: { members: true } },
+          owner: { select: { name: true } }
+        }
       });
     }
 
@@ -210,6 +216,11 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
       .map(t => `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.name}: ${t.text}`)
       .join('\n');
 
+    const roomClients = rooms.get(roomId);
+    const activeAttendeesCount = roomClients ? roomClients.size : 0;
+    const hostName = (room.owner as any)?.name || 'Unknown Host';
+    const requesterName = userName || 'Unknown Participant';
+
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
@@ -220,11 +231,16 @@ aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
         {
           role: "system",
           content: `You are Konn3ct AI, a helpful, polite, and intelligent in-meeting assistant. 
-          Your job is to answer the user's question based strictly on the provided meeting transcript.
-          If the answer is not in the transcript, politely say that you don't have that information.
+          Your job is to answer the user's question based strictly on the provided meeting transcript and meeting metadata.
+          If the answer is not in the transcript or metadata, politely say that you don't have that information.
           If the transcript is completely empty, politely inform the user that nobody has spoken yet or transcription just started.
           Keep your answers concise, formatting them with markdown if helpful (bullet points, bold text).
           
+          Meeting Metadata:
+          - The Host (owner) of this meeting is: ${hostName}.
+          - Current active attendees in the room: ${activeAttendeesCount}.
+          - The user asking you this question is named: ${requesterName}. If the user asks about "me" or "my name", they are referring to ${requesterName}.
+
           Here is the meeting transcript so far:
           ---
           ${transcriptText || "[No transcript available yet. The meeting just started or nobody has spoken.]"}

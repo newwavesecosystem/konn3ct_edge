@@ -23,7 +23,16 @@ export async function generateMeetingSummaryData(fullText: string): Promise<{ su
         messages: [
           {
             role: "system",
-            content: "You are an AI Meeting Assistant. Read the following meeting transcript and provide a brief overall summary and a JSON array of string action items.\n\nPlease format your response strictly as a JSON object with two fields: 'summary' (string) and 'actionItems' (array of strings). Do not include markdown formatting.",
+            content: `You are an AI Meeting Assistant. Read the following meeting transcript and provide a structured summary and a JSON array of string action items.
+      
+      Please format your response STRICTLY as a JSON object with two fields: "summary" (string) and "actionItems" (array of strings).
+      
+      IMPORTANT: For the "summary" string, you MUST structure it using the following markdown headings:
+      ### Key Discussion Points
+      ### Decisions Made
+      ### Action Items (with Owners)
+
+      Ensure the summary is highly detailed and captures specific names, owners, and decisions.`,
           },
           {
             role: "user",
@@ -51,7 +60,19 @@ export async function generateMeetingSummaryData(fullText: string): Promise<{ su
   if (process.env.GEMINI_API_KEY) {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Analyze the following meeting transcript and provide a brief overall summary and a JSON array of string action items.\n\nTranscript:\n${truncatedText}\n\nPlease format your response strictly as a JSON object with two fields: "summary" (string) and "actionItems" (array of strings). Do not include markdown formatting.`;
+      const prompt = `Analyze the following meeting transcript and provide a structured summary and a JSON array of string action items.
+      
+      Please format your response STRICTLY as a JSON object with two fields: "summary" (string) and "actionItems" (array of strings).
+      
+      IMPORTANT: For the "summary" string, you MUST structure it using the following markdown headings:
+      ### Key Discussion Points
+      ### Decisions Made
+      ### Action Items (with Owners)
+
+      Ensure the summary is highly detailed and captures specific names, owners, and decisions.
+
+      Transcript:
+      ${truncatedText}`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
