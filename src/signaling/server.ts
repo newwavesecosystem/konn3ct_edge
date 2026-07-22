@@ -134,7 +134,7 @@ interface Client {
   micExemption?: boolean;
 }
 
-const rooms = new Map<string, Map<string, Client>>();
+export const rooms = new Map<string, Map<string, Client>>();
 const roomProducers = new Map<string, Array<{ producerId: string, userId: string, participantId: string, name: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();

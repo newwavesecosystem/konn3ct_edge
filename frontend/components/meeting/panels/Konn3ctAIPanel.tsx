@@ -47,7 +47,7 @@ export function Konn3ctAIPanel() {
           "Content-Type": "application/json",
           ...(sessionToken && { "Authorization": `Bearer ${sessionToken}` })
         },
-        body: JSON.stringify({ question: userMsg })
+        body: JSON.stringify({ question: userMsg, userName: currentUser?.name || 'Unknown' })
       });
 
       const data = await res.json();
