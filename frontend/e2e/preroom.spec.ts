@@ -9,9 +9,10 @@ test.describe('Pre-Room Flow', () => {
     const joinBtn = page.locator('#join-meeting-btn');
     await expect(joinBtn).toBeVisible({ timeout: 15000 });
 
-    // Verify video preview is initially visible (isCameraOn is true by default)
+    // Verify video preview is initially hidden (isCameraOn is false by default)
     const videoPreview = page.locator('video');
-    await expect(videoPreview).toHaveClass(/opacity-100/, { timeout: 10000 });
+    await expect(videoPreview).toHaveClass(/opacity-0/, { timeout: 10000 });
+    await expect(page.getByText('Camera is off')).toBeVisible();
 
     // 2. Enter required pre-room meeting details
     const nameInput = page.locator('#join-name');
@@ -40,16 +41,16 @@ test.describe('Pre-Room Flow', () => {
     // The camera button is the second button
     const camBtn = page.locator('.absolute.bottom-4 button').nth(1);
     
-    // Click to turn off camera
+    // Click to turn ON camera
     await camBtn.click();
     
-    // Verify video preview becomes hidden (opacity-0) and avatar fallback shows
+    // Verify video preview becomes visible (opacity-100)
+    await expect(videoPreview).toHaveClass(/opacity-100/);
+
+    // Turn camera back OFF
+    await camBtn.click();
     await expect(videoPreview).toHaveClass(/opacity-0/);
     await expect(page.getByText('Camera is off')).toBeVisible();
-
-    // Turn camera back on
-    await camBtn.click();
-    await expect(videoPreview).toHaveClass(/opacity-100/);
 
     // 5. Test speaker output
     const speakerBtn = page.locator('button[title="Test Speaker"]');
