@@ -144,6 +144,32 @@ export const roomTranscripts = new Map<string, Array<{ name: string, text: strin
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
 
+async function cleanupRoomData(roomId: string) {
+  try {
+    // 1. Close any active polls
+    await db.meetingPoll.updateMany({
+      where: { roomId, isActive: true },
+      data: { isActive: false }
+    });
+
+    // 2. Check if chat persistence is enabled
+    const room = await db.room.findUnique({
+      where: { id: roomId },
+      select: { persistChat: true }
+    });
+
+    // If persistChat is explicitly false, delete all chat messages
+    if (room && room.persistChat === false) {
+      const { count } = await db.chatMessage.deleteMany({
+        where: { roomId }
+      });
+      logger.info(`Cleared ${count} chat messages for room ${roomId} (persistChat=false).`);
+    }
+  } catch (error) {
+    logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
+  }
+}
+
 async function asyncWithRetry<T>(
   operation: () => Promise<T>,
   onFail: (err: any) => void,
@@ -747,6 +773,7 @@ export function initializeSignaling(server: Server) {
           roomClients.delete(participantId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
@@ -1157,6 +1184,7 @@ export function initializeSignaling(server: Server) {
           rc.delete(client.participantId);
           if (rc.size === 0) {
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId);
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId);
@@ -1185,6 +1213,7 @@ export function initializeSignaling(server: Server) {
           if (roomClients) {
             // Immediately destroy the room to prevent 30s grace periods on close
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId);
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId);
