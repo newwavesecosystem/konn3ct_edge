@@ -93,6 +93,7 @@ model Room {
   poorNetworkJitterMs Int @default(60)
   networkWindowSize Int @default(5)
   networkMonitorIntervalMs Int @default(2000)
+  persistChat Boolean @default(true)
 
   createdAt DateTime @default(now())
 

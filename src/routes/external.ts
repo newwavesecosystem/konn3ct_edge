@@ -218,6 +218,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
       aiFeaturesEnabled,
       captionsEnabled,
       donationsEnabled,
+      persistChat,
     } = req.body;
 
     if (!name || name.trim() === "") {
@@ -272,6 +273,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
           aiFeaturesEnabled: aiFeaturesEnabled !== undefined ? aiFeaturesEnabled : true,
           captionsEnabled: captionsEnabled !== undefined ? captionsEnabled : true,
           donationsEnabled: donationsEnabled !== undefined ? donationsEnabled : true,
+          persistChat: persistChat !== undefined ? persistChat : true,
         }
       });
     }
