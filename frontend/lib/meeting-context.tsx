@@ -1743,7 +1743,7 @@ export function MeetingProvider({
 
           // Audio pipeline (synchronous within the init flow, decoupled from video)
           try {
-            audioTrack = await client.enableMic();
+            audioTrack = await client.enableMic(false, isMuted);
             localAudioTrackRef.current = audioTrack;
             if (isMuted) {
               client.pauseMic();

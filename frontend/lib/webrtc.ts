@@ -1422,7 +1422,11 @@ export class WebRTCClient {
           codec: opusCodec
         });
         this.onAudioTrackReplaced?.();
-        if (this.audioConnectionStatus === 'muted') this.localAudioProducer.pause();
+        if (this.audioConnectionStatus === 'muted') {
+          this.localAudioProducer.pause();
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+          if (audioTrack) audioTrack.enabled = false;
+        }
       } else {
         console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
         this.emitTelemetry('mic_track_closed_detected');
@@ -1841,7 +1845,7 @@ export class WebRTCClient {
     }
   }
 
-  public async enableMic(isReconnect = false): Promise<MediaStreamTrack> {
+  public async enableMic(isReconnect = false, startMuted = false): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     // Clear any pending timeout
     if (this.audioConnectionTimeoutId) {
@@ -1889,6 +1893,9 @@ export class WebRTCClient {
       
       if (!stream) throw new Error("Failed to initialize mic");
       this.rawAudioTrack = stream.getAudioTracks()[0];
+      if (startMuted) {
+        this.rawAudioTrack.enabled = false;
+      }
       this.emitTelemetry('audio_track_ready');
       
       let activeTrack = this.rawAudioTrack;
@@ -1898,6 +1905,9 @@ export class WebRTCClient {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
         activeTrack = denoisedStream.getAudioTracks()[0];
+        if (startMuted) {
+          activeTrack.enabled = false;
+        }
       }
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
@@ -1992,6 +2002,10 @@ export class WebRTCClient {
         );
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
       }
+      if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+        activeTrack.enabled = false;
+      }
       this.onAudioTrackReplaced?.();
       return activeTrack;
     }
@@ -2062,6 +2076,10 @@ export class WebRTCClient {
         }
       } else {
         await producer.replaceTrack({ track: newTrack });
+        if (producer.paused || this.audioConnectionStatus === 'muted') {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+          newTrack.enabled = false;
+        }
         if (oldTrack) {
           oldTrack.stop();
         }
@@ -2080,6 +2098,10 @@ export class WebRTCClient {
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
         this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
+        if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+          activeTrack.enabled = false;
+        }
         this.onAudioTrackReplaced?.();
       } else {
         this.rawCameraStream = stream;
@@ -2124,6 +2146,12 @@ export class WebRTCClient {
     if (this.localAudioProducer && !this.localAudioProducer.paused) {
       this.localAudioProducer.pause();
     }
+    if (this.rawAudioTrack) {
+      this.rawAudioTrack.enabled = false;
+    }
+    if (this.localAudioProducer?.track) {
+      this.localAudioProducer.track.enabled = false;
+    }
     if (this.audioConnectionTimeoutId) {
       clearTimeout(this.audioConnectionTimeoutId);
       this.audioConnectionTimeoutId = undefined;
@@ -2143,6 +2171,12 @@ export class WebRTCClient {
     } else if (this.localAudioProducer.paused) {
       this.localAudioProducer.resume();
       this.setAudioConnectionStatus('connected');
+    }
+    if (this.rawAudioTrack) {
+      this.rawAudioTrack.enabled = true;
+    }
+    if (this.localAudioProducer?.track) {
+      this.localAudioProducer.track.enabled = true;
     }
   }
 
