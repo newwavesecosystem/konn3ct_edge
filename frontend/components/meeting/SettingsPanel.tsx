@@ -38,6 +38,8 @@ export function SettingsPanel() {
     setIsHDVideoEnabled,
     isMirrorVideoEnabled,
     setIsMirrorVideoEnabled,
+    isOriginalRatioEnabled,
+    setIsOriginalRatioEnabled,
     isLowBandwidthEnabled,
     setIsLowBandwidthEnabled,
     isAudioOnlyModeEnabled,
@@ -157,6 +159,11 @@ export function SettingsPanel() {
             label="Mirror my video" 
             checked={isMirrorVideoEnabled} 
             onChange={setIsMirrorVideoEnabled}
+          />
+          <SettingsToggle 
+            label="Original Ratio" 
+            checked={isOriginalRatioEnabled} 
+            onChange={setIsOriginalRatioEnabled}
           />
 
           {roomFeatureFlags.virtualBackgroundEnabled && (

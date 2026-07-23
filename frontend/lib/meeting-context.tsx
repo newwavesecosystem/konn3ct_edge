@@ -142,6 +142,8 @@ interface MeetingContextValue {
   setIsHDVideoEnabled: (enabled: boolean) => void;
   isMirrorVideoEnabled: boolean;
   setIsMirrorVideoEnabled: (enabled: boolean) => void;
+  isOriginalRatioEnabled: boolean;
+  setIsOriginalRatioEnabled: (enabled: boolean) => void;
   isLowBandwidthEnabled: boolean;
   setIsLowBandwidthEnabled: (enabled: boolean) => void;
   isAudioOnlyModeEnabled: boolean;
@@ -482,6 +484,7 @@ export function MeetingProvider({
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
   const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
+  const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAudioOnlyModeEnabled, setIsAudioOnlyModeEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
@@ -522,6 +525,9 @@ export function MeetingProvider({
 
       const mirror = localStorage.getItem("mtg_mirrorVideo");
       if (mirror !== null) setIsMirrorVideoEnabled(mirror === "true");
+
+      const originalRatio = localStorage.getItem("mtg_originalRatio");
+      if (originalRatio !== null) setIsOriginalRatioEnabled(originalRatio === "true");
 
       const lowBw = localStorage.getItem("mtg_lowBandwidth");
       if (lowBw !== null) setIsLowBandwidthEnabled(lowBw === "true");
@@ -576,6 +582,11 @@ export function MeetingProvider({
   const updateMirrorVideo = (val: boolean) => {
     setIsMirrorVideoEnabled(val);
     localStorage.setItem("mtg_mirrorVideo", String(val));
+  };
+
+  const updateOriginalRatio = (val: boolean) => {
+    setIsOriginalRatioEnabled(val);
+    localStorage.setItem("mtg_originalRatio", String(val));
   };
 
   const updateLowBandwidth = useCallback((val: boolean) => {
@@ -1320,6 +1331,9 @@ export function MeetingProvider({
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
+            if (['failed', 'kicked', 'denied'].includes(state)) {
+              client.disconnect();
+            }
             if (state === 'connected') {
               // Update local user's name and role based on server truth
               setParticipants(prev => prev.map(p => 
@@ -2441,6 +2455,8 @@ export function MeetingProvider({
         setIsHDVideoEnabled: updateHDVideo,
         isMirrorVideoEnabled,
         setIsMirrorVideoEnabled: updateMirrorVideo,
+        isOriginalRatioEnabled,
+        setIsOriginalRatioEnabled: updateOriginalRatio,
         isLowBandwidthEnabled,
         setIsLowBandwidthEnabled: updateLowBandwidth,
         isAudioOnlyModeEnabled,
