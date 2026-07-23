@@ -160,7 +160,11 @@ export function MeetingShell() {
               if (webrtcStatus === 'invalid-session' || webrtcStatus === 'failed') {
                 router.push(`/join/${slug}`);
               } else {
-                router.push('/dashboard');
+                if (logoutUrl) {
+                  window.location.href = logoutUrl;
+                } else {
+                  router.push('/dashboard');
+                }
               }
             }}
             className="w-full px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20"
