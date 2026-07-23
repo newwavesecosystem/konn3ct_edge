@@ -31,7 +31,8 @@ test.describe('Meeting Settings Toggles', () => {
       'Audio-only mode',
       'AI Noise Suppression (Premium)',
       'HD Video',
-      'Mirror my video'
+      'Mirror my video',
+      'Original Ratio'
     ];
 
     for (const toggleLabel of togglesToValidate) {
