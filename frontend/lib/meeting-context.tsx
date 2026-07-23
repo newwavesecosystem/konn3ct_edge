@@ -276,6 +276,20 @@ export function MeetingProvider({
     prefsRef.current = prefs;
   }, [prefs]);
 
+  // Preload virtual backgrounds
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const backgrounds = [
+      '/backgrounds/modern_office.png',
+      '/backgrounds/cozy_cafe.png',
+      '/backgrounds/minimalist_gradient.png'
+    ];
+    backgrounds.forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, []);
+
   const playNotificationSound = useCallback((frequency: number, duration: number = 0.15, vol: number = 0.1) => {
     if (!prefsRef.current.notifications.enableAllSounds) return;
     if (webrtcClient.current?.userRole === 'bot' || webrtcClient.current?.userRole === 'recorder' || effectiveIsRecorderMode) return;
@@ -527,6 +541,17 @@ export function MeetingProvider({
             )
           );
         }
+      }
+
+      const savedVb = localStorage.getItem("mtg_vb");
+      if (savedVb) {
+        try {
+          const parsedVb = JSON.parse(savedVb);
+          if (parsedVb && parsedVb.mode) {
+            setVbMode(parsedVb.mode);
+            setVbImageUrl(parsedVb.image);
+          }
+        } catch (e) {}
       }
     }
   }, [initialCurrentUser.id]);
@@ -1298,7 +1323,7 @@ export function MeetingProvider({
             if (state === 'connected') {
               // Update local user's name and role based on server truth
               setParticipants(prev => prev.map(p => 
-                p.id === currentUser.id ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
+                p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
               ));
               if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
                 setMeetingInfo(prev => ({ 
@@ -2430,7 +2455,14 @@ export function MeetingProvider({
         handleVbSelect: async function handleVbSelectFn(mode: 'none' | 'blur' | 'image', imageUrl?: string) {
           setVbMode(mode);
           setVbImageUrl(imageUrl);
-          sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: imageUrl }));
+          try {
+            localStorage.setItem("mtg_vb", JSON.stringify({ mode, image: imageUrl }));
+          } catch (e) {
+            console.error("Failed to save virtual background to localStorage", e);
+            if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+               toast.error("Image too large to save permanently. It will apply for this session only.");
+            }
+          }
           if (isCameraOn && webrtcClient.current) {
             webrtcClient.current.onVbDegraded = (severity) => {
               if (severity === 'warning' && mode === 'image') {
@@ -2440,7 +2472,7 @@ export function MeetingProvider({
                 toast.error("Virtual background may slow this device. We switched to normal video for better meeting quality.");
                 setVbMode('none');
                 setVbImageUrl(undefined);
-                sessionStorage.setItem("mtg_vb", JSON.stringify({ mode: 'none' }));
+                localStorage.setItem("mtg_vb", JSON.stringify({ mode: 'none' }));
                 webrtcClient.current?.setVirtualBackground('none').then(track => {
                   if (track) {
                     localCameraTrackRef.current = track;

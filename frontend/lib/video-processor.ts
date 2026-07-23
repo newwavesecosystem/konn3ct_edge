@@ -87,8 +87,11 @@ export class VideoProcessor {
     this.imageUrl = imageUrl || null;
     
     if (mode === 'image' && imageUrl) {
-      this.backgroundImage = new Image();
-      this.backgroundImage.src = imageUrl;
+      const img = new Image();
+      img.onload = () => {
+        this.backgroundImage = img;
+      };
+      img.src = imageUrl;
     } else {
       this.backgroundImage = null;
     }

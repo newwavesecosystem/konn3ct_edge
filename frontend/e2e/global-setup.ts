@@ -40,7 +40,7 @@ export default async function globalSetup(config: FullConfig) {
 
         console.log('\\n🔧 [Global Setup] Creating test rooms in database...');
     
-        for (const slug of ['playwright-prefs-room', 'playwright-health-room', 'playwright-webrtc-room', 'playwright-waiting-room']) {
+        for (const slug of ['playwright-prefs-room', 'playwright-health-room', 'playwright-webrtc-room', 'playwright-waiting-room', 'playwright-polls-room', 'playwright-roles-room']) {
           await db.room.upsert({
             where: { slug },
             update: { guestJoinAllowed: true, isWaitingRoomEnabled: slug === 'playwright-waiting-room' },

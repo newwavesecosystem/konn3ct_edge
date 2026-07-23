@@ -1297,7 +1297,6 @@ export class WebRTCClient {
     const videoTrack = this.localVideoProducer?.track;
     const audioTrack = this.localAudioProducer?.track;
     const isVideoPaused = this.localVideoProducer?.paused;
-    const isAudioPaused = this.localAudioProducer?.paused;
     
     // Check screen share track
     const screenTrack = this.localScreenTrack;
@@ -1423,7 +1422,7 @@ export class WebRTCClient {
           codec: opusCodec
         });
         this.onAudioTrackReplaced?.();
-        if (isAudioPaused) this.localAudioProducer.pause();
+        if (this.audioConnectionStatus === 'muted') this.localAudioProducer.pause();
       } else {
         console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
         this.emitTelemetry('mic_track_closed_detected');
@@ -1432,7 +1431,7 @@ export class WebRTCClient {
           // This creates a new producer internally
           await this.enableMic();
           this.emitTelemetry('mic_reacquire_success');
-          if (isAudioPaused) this.pauseMic();
+          if (this.audioConnectionStatus === 'muted') this.pauseMic();
         } catch (e) {
           console.error("Failed to reacquire mic during reconnect:", e);
           this.emitTelemetry('mic_reacquire_failed');
@@ -1518,10 +1517,22 @@ export class WebRTCClient {
       }
     } catch (e) {
       console.error("Failed to re-sync producers after republish", e);
+      throw e; // Throw so the main catch block can trigger a retry
     }
     
     } catch (err) {
       console.error("republishMedia failed", err);
+      this.isRepublishing = false;
+      
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        setTimeout(() => {
+          console.warn("[WebRTC] Retrying republishMedia after failure...");
+          this.republishMedia().catch(console.error);
+        }, 2000);
+      } else {
+        this.onConnectionStateChange?.('failed');
+      }
+      return;
     } finally {
       this.isRepublishing = false;
     }
@@ -1663,12 +1674,15 @@ export class WebRTCClient {
     console.log('camera_track_ready');
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
-    // Initialize VideoProcessor if not exists
+    // Initialize VideoProcessor
     let activeMode: VirtualBackgroundMode = 'none';
     if (this.isVirtualBackgroundEnabled) {
       if (!this.videoProcessor) {
         this.videoProcessor = new VideoProcessor();
-        const saved = sessionStorage.getItem("mtg_vb");
+        this.videoProcessor.onDegraded = (severity) => {
+          if (this.onVbDegraded) this.onVbDegraded(severity);
+        };
+        const saved = localStorage.getItem("mtg_vb");
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
@@ -1685,9 +1699,9 @@ export class WebRTCClient {
       }
     }
 
-    // Pass the stream through the VideoProcessor to apply Virtual Background only if needed
-    if (this.isVirtualBackgroundEnabled && activeMode !== 'none') {
-      const processedStream = this.videoProcessor!.startProcessing(this.rawCameraStream);
+    // Option 2: Always-On Interceptor. Always pass through VideoProcessor to prevent WebGL initialization crashes.
+    if (this.isVirtualBackgroundEnabled && this.videoProcessor) {
+      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
       videoTrack = processedStream.getVideoTracks()[0];
     } else {
       if (this.videoProcessor) {
@@ -1718,70 +1732,48 @@ export class WebRTCClient {
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
-      try {
-        console.log('camera_producer_replace_track_started');
-        await this.localVideoProducer.replaceTrack({ track: videoTrack });
-        this.localVideoProducer.resume();
-        console.log('camera_producer_replace_track_completed');
-      } catch (err) {
-        console.log('camera_producer_replace_track_failed');
-        console.error("Track replacement failed, will recreate producer:", err);
-        this.localVideoProducer.close();
+      this.emitTelemetry('video_producer_replacing_track');
+      await this.localVideoProducer.replaceTrack({ track: videoTrack }).catch(() => {});
+      console.log('camera_producer_track_replaced');
+    } else {
+      this.emitTelemetry('video_producer_creating');
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: videoTrack, 
+        encodings,
+        codecOptions: { videoGoogleStartBitrate: 1000 },
+        appData: { source: 'camera' } 
+      });
+
+      this.localVideoProducer.on('trackended', () => {
+        console.warn('camera_track_ended_unexpectedly');
+      });
+
+      this.localVideoProducer.on('transportclose', () => {
         this.localVideoProducer = null;
-        // Fall back to creating a new producer below
-      }
+      });
+      console.log('camera_producer_created_successfully');
     }
 
-    if (!this.localVideoProducer || this.localVideoProducer.closed) {
-      // First time or after producer was closed — create with full simulcast encodings
-      this.emitTelemetry('video_produce_started');
-      console.log('camera_producer_creating');
-      try {
-        const videoCodec = this.device?.rtpCapabilities?.codecs?.find(
-          (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
-        ) || this.device?.rtpCapabilities?.codecs?.find(
-          (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
-        );
-
-        this.localVideoProducer = await this.sendTransport.produce({
-          track: videoTrack,
-          appData: { source: 'camera' },
-          encodings,
-          codec: videoCodec,
-          codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
-        });
-        this.emitTelemetry('video_producer_created');
-        console.log('camera_producer_created');
-      } catch (err) {
-        console.log('camera_producer_failed');
-        throw err;
-      }
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('camera_producer_id_sent_to_server');
+      this.ws.send(JSON.stringify({ 
+        type: 'new_producer', 
+        producerId: this.localVideoProducer.id,
+        appData: { source: 'camera' }
+      }));
     }
-    
-    this.emitTelemetry('video_ready');
+
     return videoTrack;
     } catch (e) {
       this.cameraStartInProgress = false;
       throw e;
-    } finally {
-      this.cameraStartInProgress = false;
     }
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
-    if (mode === 'none' || !this.isVirtualBackgroundEnabled) {
-      if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
-        console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
-        console.warn("[webrtc] virtual_background_model_load_skipped");
-      }
-      if (this.videoProcessor) {
-        this.videoProcessor.stopProcessing();
-      }
-      if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
-        const nativeTrack = this.rawCameraStream.getVideoTracks()[0];
-        await this.localVideoProducer.replaceTrack({ track: nativeTrack });
-        return nativeTrack;
-      }
+    if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
+      console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
+      console.warn("[webrtc] virtual_background_model_load_skipped");
       return null;
     }
 
@@ -1793,13 +1785,16 @@ export class WebRTCClient {
     }
     this.videoProcessor.setMode(mode, imageUrl);
     
-    if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
-      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
-      const newTrack = processedStream.getVideoTracks()[0];
-      await this.localVideoProducer.replaceTrack({ track: newTrack });
-      return newTrack;
+    if (!this.rawCameraStream) return null;
+
+    // Option 2 Always-On Interceptor: We ALWAYS process the stream through the VideoProcessor
+    const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+    const newTrack = processedStream.getVideoTracks()[0];
+    
+    if (this.localVideoProducer && !this.localVideoProducer.closed) {
+      await this.localVideoProducer.replaceTrack({ track: newTrack }).catch(() => {});
     }
-    return null;
+    return newTrack;
   }
 
   public disableCamera() {
