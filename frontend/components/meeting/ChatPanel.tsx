@@ -306,9 +306,9 @@ export function ChatPanel() {
             className="text-[10px] outline-none px-2 py-1 rounded-lg appearance-none"
             style={{ color: "var(--mt-text-muted)", backgroundColor: "var(--mt-bg-control)", border: "1px solid var(--mt-border)" }}
           >
-            <option value="everyone" style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text-muted)" }}>To: Everyone</option>
+            <option value="everyone" style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: Everyone</option>
             {participants.filter(p => p.id !== currentUser.id).map(p => (
-              <option key={p.id} value={p.id} style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text-muted)" }}>To: {p.name}</option>
+              <option key={p.id} value={p.id} style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: {p.name}</option>
             ))}
           </select>
         </div>
