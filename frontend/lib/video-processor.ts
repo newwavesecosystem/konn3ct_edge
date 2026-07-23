@@ -267,6 +267,12 @@ export class VideoProcessor {
       });
     }
     
+    // Recreate the canvas to prevent Chrome "ended track" bug on subsequent captureStream calls
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 640;
+    this.canvas.height = 480;
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
+    
     this.rawStream = null;
     this.processedStream = null;
   }

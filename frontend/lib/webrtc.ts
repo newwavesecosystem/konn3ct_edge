@@ -1767,6 +1767,7 @@ export class WebRTCClient {
       }));
     }
 
+    this.cameraStartInProgress = false;
     return videoTrack;
     } catch (e) {
       this.cameraStartInProgress = false;
