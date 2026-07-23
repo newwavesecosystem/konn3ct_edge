@@ -177,6 +177,8 @@ interface MeetingContextValue {
   // Error Handling
   micError: { name: string; message: string } | null;
   setMicError: (error: { name: string; message: string } | null) => void;
+  camError: { name: string; message: string } | null;
+  setCamError: (error: { name: string; message: string } | null) => void;
   audioPlaybackError: boolean;
   setAudioPlaybackError: (error: boolean) => void;
   resumeAudioPlayback: () => void;
@@ -452,6 +454,7 @@ export function MeetingProvider({
     { role: "ai", content: "Hi! I am Konn3ct AI. I am actively reading the live meeting transcript. Ask me anything about what has been discussed!" }
   ]);
   const [micError, setMicError] = useState<{ name: string; message: string } | null>(null);
+  const [camError, setCamError] = useState<{ name: string; message: string } | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState(0);
@@ -2071,7 +2074,7 @@ export function MeetingProvider({
       }).catch(err => {
         console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
-        toast.error("Camera could not start. Please retry.");
+        setCamError({ name: err.name || 'Camera Error', message: err.message || 'Unable to access your camera.' });
         // Ensure UI stays off
         setIsCameraOn(false);
       }).finally(() => {
@@ -2518,6 +2521,8 @@ export function MeetingProvider({
         resumeRemoteVideo,
         micError,
         setMicError,
+        camError,
+        setCamError,
         webrtcClientRef: webrtcClient,
         isRecorderMode,
         playNotificationSound,
