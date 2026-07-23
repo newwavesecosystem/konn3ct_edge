@@ -3,9 +3,12 @@ import type { MediaStream } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
 import { useMeetingStore } from '../store/useMeetingStore';
 
-// Signal server domain — as specified by the team:
-// https://konn3ctedge.konn3ct.net/signal
-export const SIGNAL_SERVER_DOMAIN = process.env.EXPO_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
+// Signal server domain — read from EXPO_PUBLIC_BACKEND_DOMAIN.
+// Falls back to extracting the hostname from EXPO_PUBLIC_EDGE_FRONTEND_URL.
+const EDGE_URL = process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL || 'https://edge-test.konn3ct.net';
+export const SIGNAL_SERVER_DOMAIN =
+  process.env.EXPO_PUBLIC_BACKEND_DOMAIN ||
+  EDGE_URL.replace(/^https?:\/\//, '').split('/')[0];
 const BACKEND_DOMAIN = SIGNAL_SERVER_DOMAIN;
 
 export interface RemoteParticipant {
@@ -47,6 +50,7 @@ export class MediasoupService {
   private _cachedParticipantsList: any[] | null = null;
   private _cachedChatHistory: any[] | null = null;
   private _cachedPollHistory: any[] | null = null;
+  private _cachedUserJoined: any[] = [];
 
   // Connection State
   
@@ -182,6 +186,13 @@ export class MediasoupService {
     if (this._cachedPollHistory && this.onPollHistory) {
       this.onPollHistory(this._cachedPollHistory);
       this._cachedPollHistory = null;
+    }
+    // Replay any user_joined events that arrived before MeetingScreen registered callbacks
+    if (this._cachedUserJoined.length > 0 && this.onUserJoined) {
+      for (const user of this._cachedUserJoined) {
+        this.onUserJoined(user);
+      }
+      this._cachedUserJoined = [];
     }
   }
 
@@ -420,6 +431,9 @@ export class MediasoupService {
                 );
               }
               setTimeout(() => this.notifyStreamUpdate(), 100);
+            } else {
+              // Cache for replay when MeetingScreen registers the callback (lobby handoff)
+              this._cachedUserJoined.push(msg);
             }
             break;
 
