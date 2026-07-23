@@ -39,6 +39,7 @@ export default function JoinPage({
   const [vbMode, setVbMode] = useState<VirtualBackgroundMode>('none');
   const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
   const [volumeLevel, setVolumeLevel] = useState(0);
+  const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -58,6 +59,16 @@ export default function JoinPage({
   const roomName = resolvedParams.roomSlug
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  // Load original ratio setting from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("mtg_originalRatio");
+      if (stored !== null) {
+        setIsOriginalRatioEnabled(stored === "true");
+      }
+    }
+  }, []);
 
   // Check if the signalling server is reachable
   useEffect(() => {
@@ -360,7 +371,8 @@ export default function JoinPage({
                   muted
                   playsInline
                   className={cn(
-                    "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
+                    "absolute inset-0 w-full h-full transition-opacity duration-300",
+                    isOriginalRatioEnabled ? "object-contain" : "object-cover",
                     isCameraOn ? "opacity-100" : "opacity-0"
                   )}
                 />
@@ -498,6 +510,30 @@ export default function JoinPage({
                       sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
                     }}
                   />
+
+                  {/* Original Aspect Ratio toggle */}
+                  <div className="flex items-center justify-between py-2 border-t border-white/5">
+                    <span className="text-xs text-white/70 font-medium">Original Aspect Ratio</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isOriginalRatioEnabled;
+                        setIsOriginalRatioEnabled(next);
+                        localStorage.setItem("mtg_originalRatio", String(next));
+                      }}
+                      className={cn(
+                        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                        isOriginalRatioEnabled ? "bg-brand-green" : "bg-white/10"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                          isOriginalRatioEnabled ? "translate-x-4" : "translate-x-0"
+                        )}
+                      />
+                    </button>
+                  </div>
 
                   {/* Virtual Background Selection UI */}
                   {isCameraOn && (

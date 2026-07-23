@@ -59,7 +59,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode } = useMeeting();
+  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -364,7 +364,7 @@ export function ParticipantTile({
             muted
             className={cn(
               "w-full h-full",
-              "object-cover",
+              isOriginalRatioEnabled ? "object-contain" : "object-cover",
               health === 'recovering' && "opacity-50"
             )}
             style={{

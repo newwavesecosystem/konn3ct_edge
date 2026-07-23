@@ -142,6 +142,8 @@ interface MeetingContextValue {
   setIsHDVideoEnabled: (enabled: boolean) => void;
   isMirrorVideoEnabled: boolean;
   setIsMirrorVideoEnabled: (enabled: boolean) => void;
+  isOriginalRatioEnabled: boolean;
+  setIsOriginalRatioEnabled: (enabled: boolean) => void;
   isLowBandwidthEnabled: boolean;
   setIsLowBandwidthEnabled: (enabled: boolean) => void;
   isAudioOnlyModeEnabled: boolean;
@@ -243,7 +245,7 @@ export function MeetingProvider({
   const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
   const initialCameraOn = storedJoinInfo && storedJoinInfo.camera !== undefined ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
   const initialMuted = storedJoinInfo && storedJoinInfo.mic !== undefined ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
-  const initialLogoutUrl = storedJoinInfo?.logoutUrl || null;
+  const [logoutUrl, setLogoutUrl] = useState<string | null>(storedJoinInfo?.logoutUrl || null);
 
   // ── State ────────────────────────────────────────────
   const { preferences } = useMeetingDevicePreferences();
@@ -482,6 +484,7 @@ export function MeetingProvider({
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
   const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
+  const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
   const [isLowBandwidthEnabled, setIsLowBandwidthEnabled] = useState(false);
   const [isAudioOnlyModeEnabled, setIsAudioOnlyModeEnabled] = useState(false);
   const [isAlwaysMuteOnJoin, setIsAlwaysMuteOnJoin] = useState(false);
@@ -522,6 +525,9 @@ export function MeetingProvider({
 
       const mirror = localStorage.getItem("mtg_mirrorVideo");
       if (mirror !== null) setIsMirrorVideoEnabled(mirror === "true");
+
+      const originalRatio = localStorage.getItem("mtg_originalRatio");
+      if (originalRatio !== null) setIsOriginalRatioEnabled(originalRatio === "true");
 
       const lowBw = localStorage.getItem("mtg_lowBandwidth");
       if (lowBw !== null) setIsLowBandwidthEnabled(lowBw === "true");
@@ -576,6 +582,11 @@ export function MeetingProvider({
   const updateMirrorVideo = (val: boolean) => {
     setIsMirrorVideoEnabled(val);
     localStorage.setItem("mtg_mirrorVideo", String(val));
+  };
+
+  const updateOriginalRatio = (val: boolean) => {
+    setIsOriginalRatioEnabled(val);
+    localStorage.setItem("mtg_originalRatio", String(val));
   };
 
   const updateLowBandwidth = useCallback((val: boolean) => {
@@ -716,6 +727,9 @@ export function MeetingProvider({
                 virtualBackgroundEnabled: decoded.virtualBackgroundEnabled ?? true,
               });
               client.isVirtualBackgroundEnabled = decoded.virtualBackgroundEnabled ?? true;
+              if (decoded.logoutUrl) {
+                setLogoutUrl(decoded.logoutUrl);
+              }
               if (decoded.role && decoded.role !== initialCurrentUser.role) {
                 // DO NOT overwrite the role here! The JWT token defaults to 'attendee' and the signaling server 
                 // is responsible for dynamically upgrading the user to 'host' via the session_status websocket event.
@@ -1320,6 +1334,9 @@ export function MeetingProvider({
         client.onConnectionStateChange = (state) => {
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
+            if (['failed', 'kicked', 'denied'].includes(state)) {
+              client?.disconnect();
+            }
             if (state === 'connected') {
               // Update local user's name and role based on server truth
               setParticipants(prev => prev.map(p => 
@@ -1743,7 +1760,7 @@ export function MeetingProvider({
 
           // Audio pipeline (synchronous within the init flow, decoupled from video)
           try {
-            audioTrack = await client.enableMic();
+            audioTrack = await client.enableMic(false, isMuted);
             localAudioTrackRef.current = audioTrack;
             if (isMuted) {
               client.pauseMic();
@@ -2441,6 +2458,8 @@ export function MeetingProvider({
         setIsHDVideoEnabled: updateHDVideo,
         isMirrorVideoEnabled,
         setIsMirrorVideoEnabled: updateMirrorVideo,
+        isOriginalRatioEnabled,
+        setIsOriginalRatioEnabled: updateOriginalRatio,
         isLowBandwidthEnabled,
         setIsLowBandwidthEnabled: updateLowBandwidth,
         isAudioOnlyModeEnabled,
@@ -2494,7 +2513,7 @@ export function MeetingProvider({
         },
         outputVolume,
         setOutputVolume,
-        logoutUrl: initialLogoutUrl,
+        logoutUrl,
         pauseRemoteVideo,
         resumeRemoteVideo,
         micError,
