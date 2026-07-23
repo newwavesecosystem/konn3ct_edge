@@ -1679,7 +1679,7 @@ export class WebRTCClient {
     if (this.isVirtualBackgroundEnabled) {
       if (!this.videoProcessor) {
         this.videoProcessor = new VideoProcessor();
-        const saved = sessionStorage.getItem("mtg_vb");
+        const saved = localStorage.getItem("mtg_vb");
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
