@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
           captionsEnabled?: boolean;
           donationsEnabled?: boolean;
           virtualBackgroundEnabled?: boolean;
+          logoutUrl?: string | null;
         };
 
         fetchedRoomLimits = {
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
           captionsEnabled: room.captionsEnabled ?? true,
           donationsEnabled: room.donationsEnabled ?? true,
           virtualBackgroundEnabled: room.virtualBackgroundEnabled ?? true,
+          logoutUrl: room.logoutUrl ?? null,
         };
 
         // 1. Enforce access PIN (timing-safe comparison)
@@ -225,6 +227,7 @@ export async function POST(request: NextRequest) {
         if (sessionData.ownerEmail) payload.ownerEmail = sessionData.ownerEmail;
         if (sessionData.roomName) payload.roomName = sessionData.roomName;
         if (sessionData.isWaitingRoomEnabled !== undefined) payload.isWaitingRoomEnabled = sessionData.isWaitingRoomEnabled;
+        if (sessionData.logoutUrl) payload.logoutUrl = sessionData.logoutUrl;
       } catch (e) {
         // Already verified above — ignore
       }

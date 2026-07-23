@@ -245,7 +245,7 @@ export function MeetingProvider({
   const queryRole = storedJoinInfo?.role || (searchParams.get("role") as ParticipantRole) || "attendee";
   const initialCameraOn = storedJoinInfo && storedJoinInfo.camera !== undefined ? storedJoinInfo.camera : searchParams.get("camera") !== "false";
   const initialMuted = storedJoinInfo && storedJoinInfo.mic !== undefined ? !storedJoinInfo.mic : searchParams.get("mic") === "false";
-  const initialLogoutUrl = storedJoinInfo?.logoutUrl || null;
+  const [logoutUrl, setLogoutUrl] = useState<string | null>(storedJoinInfo?.logoutUrl || null);
 
   // ── State ────────────────────────────────────────────
   const { preferences } = useMeetingDevicePreferences();
@@ -727,6 +727,9 @@ export function MeetingProvider({
                 virtualBackgroundEnabled: decoded.virtualBackgroundEnabled ?? true,
               });
               client.isVirtualBackgroundEnabled = decoded.virtualBackgroundEnabled ?? true;
+              if (decoded.logoutUrl) {
+                setLogoutUrl(decoded.logoutUrl);
+              }
               if (decoded.role && decoded.role !== initialCurrentUser.role) {
                 // DO NOT overwrite the role here! The JWT token defaults to 'attendee' and the signaling server 
                 // is responsible for dynamically upgrading the user to 'host' via the session_status websocket event.
@@ -1332,7 +1335,7 @@ export function MeetingProvider({
           if (webrtcClient.current === client) {
             setWebrtcStatus(state);
             if (['failed', 'kicked', 'denied'].includes(state)) {
-              client.disconnect();
+              client?.disconnect();
             }
             if (state === 'connected') {
               // Update local user's name and role based on server truth
@@ -2510,7 +2513,7 @@ export function MeetingProvider({
         },
         outputVolume,
         setOutputVolume,
-        logoutUrl: initialLogoutUrl,
+        logoutUrl,
         pauseRemoteVideo,
         resumeRemoteVideo,
         micError,
