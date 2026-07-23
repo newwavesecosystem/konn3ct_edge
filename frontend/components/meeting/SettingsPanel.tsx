@@ -224,15 +224,17 @@ export function SettingsPanel() {
                   type="file" 
                   accept="image/*" 
                   className="hidden" 
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      handleVbSelect('image', ev.target?.result as string);
-                    };
-                    reader.readAsDataURL(file);
-                  }} 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const { compressImage } = await import('@/lib/utils');
+                        const compressedData = await compressImage(file);
+                        handleVbSelect('image', compressedData);
+                      } catch (err) {
+                        console.error("Failed to compress background image", err);
+                      }
+                    }}
                 />
               </label>
             </div>

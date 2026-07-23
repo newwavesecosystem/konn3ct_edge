@@ -113,7 +113,7 @@ export default function JoinPage({
     }
     
     // Load persisted VB setting
-    const saved = sessionStorage.getItem("mtg_vb");
+    const saved = localStorage.getItem("mtg_vb");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -133,7 +133,9 @@ export default function JoinPage({
     setVbMode(mode);
     setVbImageUrl(url);
     processorRef.current?.setMode(mode, url);
-    sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: url }));
+    try {
+      localStorage.setItem("mtg_vb", JSON.stringify({ mode, image: url }));
+    } catch (e) {}
     
     if (streamRef.current) {
       const processed = processorRef.current!.startProcessing(streamRef.current);
@@ -141,14 +143,16 @@ export default function JoinPage({
     }
   };
 
-  const handleCustomUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      handleVbSelect('image', ev.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { compressImage } = await import('@/lib/utils');
+      const compressedData = await compressImage(file);
+      handleVbSelect('image', compressedData);
+    } catch (err) {
+      console.error("Failed to compress background image", err);
+    }
   };
 
   // Audio meter logic
