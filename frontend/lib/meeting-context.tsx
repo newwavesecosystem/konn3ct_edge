@@ -447,7 +447,16 @@ export function MeetingProvider({
   useEffect(() => {
     const hasBot = participants.some((p) => p.role === "bot");
     setIsRecording(hasBot);
-    if (hasBot) setRecordingStatus('recording');
+    setRecordingStatus((prev) => {
+      if (hasBot) {
+        // Prevent aggressive override if the user already initiated a stop ('processing') or start ('starting')
+        if (prev !== 'processing' && prev !== 'starting') {
+          return 'recording';
+        }
+        return prev;
+      }
+      return prev === 'processing' ? 'processing' : 'idle';
+    });
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
@@ -2543,6 +2552,13 @@ export function MeetingProvider({
   );
 }
 
+interface AudioSlot {
+  participantId: string | null;
+  lastActive: number;
+}
+
+const MAX_AUDIO_SLOTS = process.env.NEXT_PUBLIC_MAX_AUDIO_SLOTS ? parseInt(process.env.NEXT_PUBLIC_MAX_AUDIO_SLOTS, 10) : 8;
+
 function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAudioPlaybackError }: { participants: Participant[]; currentUserId: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
   const { selectedDevices, meetingInfo } = useMeeting();
   
@@ -2553,15 +2569,130 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
     return participants;
   }, [participants, meetingInfo?.roomType]);
 
+  const [slots, setSlots] = useState<AudioSlot[]>(
+    Array(MAX_AUDIO_SLOTS).fill(null).map(() => ({ participantId: null, lastActive: 0 }))
+  );
+
+  useEffect(() => {
+    setSlots(prevSlots => {
+      let newSlots = [...prevSlots];
+      const now = Date.now();
+      let changed = false;
+
+      const currentParticipantIds = new Set(audioParticipants.filter(p => p.audioTrack && p.id !== currentUserId).map(p => p.id));
+      
+      // 1. Remove participants that left the room or don't have an audioTrack anymore
+      for (let i = 0; i < MAX_AUDIO_SLOTS; i++) {
+        if (newSlots[i].participantId && !currentParticipantIds.has(newSlots[i].participantId!)) {
+          newSlots[i] = { participantId: null, lastActive: 0 };
+          changed = true;
+        }
+      }
+
+      // 2. Update lastActive for anyone currently speaking
+      const speakingIds = new Set(audioParticipants.filter(p => p.audioTrack && p.id !== currentUserId && p.isSpeaking).map(p => p.id));
+      for (let i = 0; i < MAX_AUDIO_SLOTS; i++) {
+        if (newSlots[i].participantId && speakingIds.has(newSlots[i].participantId!)) {
+          if (newSlots[i].lastActive !== now) {
+             newSlots[i] = { ...newSlots[i], lastActive: now };
+             changed = true;
+          }
+        }
+      }
+
+      // 3. Assign tracks to empty slots or evict oldest silent participant
+      const allAudioParticipants = audioParticipants.filter(p => p.audioTrack && p.id !== currentUserId);
+      
+      // Sort candidates: Speakers first, then Hosts/Presenters, then others
+      const candidates = [...allAudioParticipants].sort((a, b) => {
+         if (a.isSpeaking && !b.isSpeaking) return -1;
+         if (!a.isSpeaking && b.isSpeaking) return 1;
+         
+         const aIsHost = a.role === 'host' || a.role === 'co-host' || a.role === 'presenter';
+         const bIsHost = b.role === 'host' || b.role === 'co-host' || b.role === 'presenter';
+         if (aIsHost && !bIsHost) return -1;
+         if (!aIsHost && bIsHost) return 1;
+         return 0;
+      });
+
+      for (const p of candidates) {
+        // Is p already in a slot?
+        if (newSlots.some(s => s.participantId === p.id)) {
+           continue; 
+        }
+
+        // Try to find an empty slot
+        const emptySlotIndex = newSlots.findIndex(s => s.participantId === null);
+        if (emptySlotIndex !== -1) {
+           newSlots[emptySlotIndex] = { participantId: p.id, lastActive: p.isSpeaking ? now : 0 };
+           changed = true;
+           continue;
+        }
+
+        // No empty slots. If p is NOT speaking, we don't force an eviction.
+        if (!p.isSpeaking) continue;
+
+        // p IS speaking, we must evict someone! Find the slot with the lowest "warmth" weight.
+        let victimIndex = -1;
+        let lowestWeight = Infinity;
+        
+        for (let i = 0; i < MAX_AUDIO_SLOTS; i++) {
+          const slot = newSlots[i];
+          const slotParticipant = allAudioParticipants.find(ap => ap.id === slot.participantId);
+          
+          let weight = slot.lastActive; 
+          
+          if (slotParticipant && (slotParticipant.role === 'host' || slotParticipant.role === 'co-host' || slotParticipant.role === 'presenter')) {
+             weight += 10000000; // High immunity for VIPs
+          }
+          if (slotParticipant?.isSpeaking) {
+             weight += 50000000; // Almost impossible to evict an active speaker
+          }
+          
+          if (weight < lowestWeight) {
+             lowestWeight = weight;
+             victimIndex = i;
+          }
+        }
+
+        // Only evict if the victim is not currently speaking (or if we strictly must, which means all 8 are speaking)
+        if (victimIndex !== -1) {
+           newSlots[victimIndex] = { participantId: p.id, lastActive: now };
+           changed = true;
+        }
+      }
+
+      return changed ? newSlots : prevSlots;
+    });
+  }, [audioParticipants, currentUserId]);
+
   return (
     <>
-      {audioParticipants.map((p) => (
-        <React.Fragment key={p.id}>
-          <AudioRenderer track={p.audioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
-          {p.screenAudioTrack && (
-            <AudioRenderer track={p.screenAudioTrack} isLocal={p.id === currentUserId} audioOutput={selectedDevices.audioOutput} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
-          )}
-        </React.Fragment>
+      {/* Render the 8 fixed warm pool slots */}
+      {slots.map((slot, index) => {
+        const participant = slot.participantId ? audioParticipants.find(p => p.id === slot.participantId) : null;
+        return (
+          <AudioRenderer 
+            key={`pool-slot-${index}`} 
+            track={participant?.audioTrack} 
+            isLocal={false} 
+            audioOutput={selectedDevices.audioOutput} 
+            outputVolume={outputVolume} 
+            setAudioPlaybackError={setAudioPlaybackError} 
+          />
+        );
+      })}
+      
+      {/* Screen share audio is rendered separately as there's usually only 1 */}
+      {audioParticipants.filter(p => p.screenAudioTrack && p.id !== currentUserId).map(p => (
+        <AudioRenderer 
+          key={`screen-audio-${p.id}`} 
+          track={p.screenAudioTrack} 
+          isLocal={false} 
+          audioOutput={selectedDevices.audioOutput} 
+          outputVolume={outputVolume} 
+          setAudioPlaybackError={setAudioPlaybackError} 
+        />
       ))}
     </>
   );
