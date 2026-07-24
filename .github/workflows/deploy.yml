@@ -59,6 +59,7 @@ jobs:
             --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
             --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
             --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
+            --build-arg NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -129,6 +130,7 @@ jobs:
             --from-literal=S3_FORCE_PATH_STYLE="${{ vars.S3_FORCE_PATH_STYLE }}" \
             --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
             --from-literal=NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
+            --from-literal=NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
           # Apply all our deployment, service, and redis yaml files
