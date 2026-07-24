@@ -79,11 +79,11 @@ export default function GuestJoinScreen() {
         `guest-${Date.now()}@konn3ct.guest`,
       );
 
-      // 3. Navigate with the user's chosen mic/camera preferences
-      navigation.navigate('GuestMeeting', {
+      // 3. Navigate to the lobby, which handles waiting-room admission
+      //    before forwarding to the meeting screen.
+      navigation.navigate('GuestLobby', {
         roomId: room,
         meetingToken,
-        guestName: name,
         micOn,
         cameraOn,
       });

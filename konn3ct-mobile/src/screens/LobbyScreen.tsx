@@ -129,6 +129,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
     ]).start();
   }, []);
 
+  // Detect guest vs authenticated user to pick the right route names.
+  // The AuthStackNavigator uses GuestMeeting / GuestLobby / GuestJoin,
+  // while the main stack uses Meeting / Lobby / MainTabs.
+  const isGuest = !useAuthStore(s => s.token);
+  const meetingRoute = isGuest ? 'GuestMeeting' : 'Meeting';
+  const lobbyRoute   = isGuest ? 'GuestLobby'   : 'Lobby';
+  const homeRoute    = isGuest ? 'GuestJoin'     : 'MainTabs';
+
   // ── Connection ─────────────────────────────────────────────────────────────
   useEffect(() => {
     isMountedRef.current = true;
@@ -150,7 +158,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
         setStatus('active');
         setTimeout(() => {
           if (isMountedRef.current) {
-            navigation.replace('Meeting', { roomId, meetingToken, micOn, cameraOn });
+            navigation.replace(meetingRoute as any, { roomId, meetingToken, micOn, cameraOn });
           }
         }, 400);
       } else if (newStatus === 'denied') {
@@ -189,7 +197,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
           // Bypass lobby — user is host or waiting room is disabled
           handedOffRef.current = true;
           setActiveMeetingService(service);
-          navigation.replace('Meeting', { roomId, meetingToken, micOn, cameraOn });
+          navigation.replace(meetingRoute as any, { roomId, meetingToken, micOn, cameraOn });
         } else if (initialStatus === 'waiting') {
           // Show lobby — wait for host to admit
           setStatus('waiting');
@@ -197,11 +205,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
       } catch (err: any) {
         if (!isMountedRef.current) return;
         const msg: string = err?.message || '';
+        console.error('[LobbyScreen] Connection failed:', msg, err);
         const is404 = msg.includes('404');
         setErrorMsg(
           is404
             ? `Room "${roomId}" was not found.\n\nRoom IDs are case-sensitive — double-check the capitalisation.`
-            : 'Could not connect to the meeting. Check your internet connection and try again.'
+            : `Could not connect to the meeting. Check your internet connection and try again.\n\nDetails: ${msg || 'Unknown error'}`
         );
         setStatus('failed');
       }
@@ -225,13 +234,13 @@ export default function LobbyScreen({ route, navigation }: Props) {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.replace('MainTabs');
+      navigation.replace(homeRoute as any);
     }
-  }, [navigation]);
+  }, [navigation, homeRoute]);
 
   const handleRetry = useCallback(() => {
-    navigation.replace('Lobby', { roomId, meetingToken, micOn, cameraOn });
-  }, [navigation, roomId, meetingToken, micOn, cameraOn]);
+    navigation.replace(lobbyRoute as any, { roomId, meetingToken, micOn, cameraOn });
+  }, [navigation, lobbyRoute, roomId, meetingToken, micOn, cameraOn]);
 
   // ── Status label helpers ────────────────────────────────────────────────────
   const isError = status === 'denied' || status === 'ended' || status === 'failed';
