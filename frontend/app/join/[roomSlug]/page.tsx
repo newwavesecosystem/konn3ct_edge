@@ -44,6 +44,7 @@ export default function JoinPage({
   const streamRef = useRef<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<VideoProcessor | null>(null);
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   const [devices, setDevices] = useState<{
     audioInputs: MediaDeviceInfo[];
@@ -536,7 +537,7 @@ export default function JoinPage({
                   </div>
 
                   {/* Virtual Background Selection UI */}
-                  {isCameraOn && (
+                  {isCameraOn && !isIOS && (
                     <div className="pt-4 mt-2 border-t border-white/10">
                       <label className="block text-[11px] text-white/30 mb-2 font-medium">
                         Virtual Background
