@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback, BackHandler } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import type { MediaStream } from 'react-native-webrtc';
+import { MediaStream } from 'react-native-webrtc';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService';
 import { consumeActiveMeetingService } from '../webrtc/activeMeetingService';
@@ -363,6 +363,17 @@ export default function MeetingScreen({ route, navigation }: Props) {
           // Already connected and admitted via LobbyScreen — start broadcasting immediately
           // Replay events (participants_list, chat_history, etc.) that fired
           // during the admit flow before these callbacks were registered.
+          //
+          // IMPORTANT: reset() above wiped currentUserId/currentUserRole from
+          // the Zustand store, but the service still has the values from the
+          // session_status message (which won't fire again). Restore them BEFORE
+          // replaying events so the participant filter can exclude the local user.
+          if (service.currentUserId) {
+            useMeetingStore.getState().setCurrentUser(
+              service.currentUserId,
+              service.currentUserRole || 'attendee'
+            );
+          }
           service.replayCachedEvents();
           if (isMounted) {
             await applyInitialMedia();
@@ -634,7 +645,31 @@ export default function MeetingScreen({ route, navigation }: Props) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const totalItems = remoteStreams.length + (isPipMode ? 0 : 1);
+  // Build a unified list of remote participants by merging the Zustand store
+  // (authoritative list of who is in the meeting) with remoteStreams (media tracks).
+  // This ensures participants with mic+camera OFF still get a visible card.
+  const mergedRemoteParticipants = useMemo(() => {
+    // Start with store participants, excluding the local user
+    const remoteParticipants = participants.filter(
+      (p) => p.userId !== currentUserId
+    );
+    return remoteParticipants.map((p) => {
+      const stream = remoteStreams.find((rs) => rs.id === p.userId);
+      return {
+        userId: p.userId,
+        name: p.name || stream?.name || `User ${p.userId?.substring(0, 4)}`,
+        stream: stream?.stream || null,
+        screenStream: stream?.screenStream || null,
+        isMuted: p.isMuted,
+        isCameraOn: p.isCameraOn,
+        isHandRaised: p.isHandRaised,
+        isSpeaking: p.isSpeaking,
+        role: p.role,
+      };
+    });
+  }, [participants, remoteStreams, currentUserId]);
+
+  const totalItems = mergedRemoteParticipants.length + (isPipMode ? 0 : 1);
   const isHorizontalLayout = !!activeScreenShare;
 
   const getCardStyle = () => {
@@ -665,10 +700,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
   const renderCards = () => (
     <>
-      {remoteStreams.map((p) => {
-        const storeParticipant = participants.find(up => up.userId === p.id);
-        const isRaised = storeParticipant?.isHandRaised;
-        const isSpeaking = storeParticipant?.isSpeaking;
+      {mergedRemoteParticipants.map((p) => {
         // Check if stream has an active, enabled, unmuted video track
         const videoTrack = p.stream?.getVideoTracks()?.[0];
         const hasVideo = !!videoTrack && videoTrack.enabled && !videoTrack.muted && videoTrack.readyState === 'live';
@@ -676,14 +708,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
         // Prefer the server-signalled mute state (via mute_state WS message) stored in
         // the Zustand store. Fall back to track-existence check only when no signal has
         // been received yet (e.g. the participant joined before the handler was set up).
-        const isRemoteMicMuted = storeParticipant?.isMuted !== undefined
-          ? storeParticipant.isMuted
+        const isRemoteMicMuted = p.isMuted !== undefined
+          ? p.isMuted
           : (!p.stream || p.stream.getAudioTracks().length === 0);
         
         return (
-          <View key={p.id} style={[
+          <View key={p.userId} style={[
             getCardStyle(), 
-            isSpeaking && styles.activeSpeakerBorder
+            p.isSpeaking && styles.activeSpeakerBorder
           ]}>
             {!hasVideo ? (
               <View style={styles.cameraOff}>
@@ -693,7 +725,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
               </View>
             ) : (
               <RTCView
-                streamURL={p.stream.toURL ? p.stream.toURL() : ''}
+                streamURL={p.stream!.toURL ? p.stream!.toURL() : ''}
                 style={styles.rtcView}
                 objectFit="cover"
               />
@@ -709,13 +741,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 )}
               </View>
             </View>
-            {isRaised && (
+            {p.isHandRaised && (
               <View style={styles.raisedHandBadge}>
                 <Hand size={12} color="#a83b00" fill="#a83b00" />
                 <Text style={styles.raisedHandText}>Raised</Text>
               </View>
             )}
-            {isSpeaking && (
+            {p.isSpeaking && (
               <View style={styles.activeSpeakerBadge}>
                 <Radio size={12} color="#0b57d0" />
               </View>
@@ -786,13 +818,16 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
   /* ── PiP mode: show only the most relevant video ──────────────────────── */
   if (isPipMode) {
-    // Priority: screen share → first remote with video → local camera
+    // Priority: screen share → first remote with video → local camera (only if on)
     const pipScreenShare = activeScreenShare?.screenStream;
     const firstRemoteWithVideo = remoteStreams.find(p => {
       const vt = p.stream?.getVideoTracks()?.[0];
       return vt && vt.enabled && !vt.muted && vt.readyState === 'live';
     });
-    const pipStream = pipScreenShare || firstRemoteWithVideo?.stream || localStream;
+    // Only use localStream if the camera is actually on and has a live video track
+    const localHasVideo = !isCameraOff && localStream?.getVideoTracks()?.[0]?.readyState === 'live';
+    const pipStream = pipScreenShare || firstRemoteWithVideo?.stream || (localHasVideo ? localStream : null);
+    const pipName = firstRemoteWithVideo?.name || localUserName;
 
     return (
       <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -804,8 +839,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
             zOrder={0}
           />
         ) : (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 14 }}>Meeting in progress</Text>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: tokens.bgTile }}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarText}>{getInitials(pipName)}</Text>
+            </View>
           </View>
         )}
       </View>
