@@ -163,6 +163,7 @@ export class WebRTCClient {
   public onNetworkQualityChange?: (quality: NetworkQualityLabel) => void;
   public onNetworkDebugSnapshot?: (snapshot: NetworkDebugSnapshot) => void;
   private networkInterval?: NodeJS.Timeout;
+  private joinedAtTime: number = performance.now();
   
   // Audio-only toggle mode
   public isAudioOnlyMode: boolean = false;
@@ -1065,6 +1066,7 @@ export class WebRTCClient {
     let reconnectCount = 0;
 
     this.networkInterval = setInterval(async () => {
+      if (performance.now() - this.joinedAtTime < 120000) return;
       if (!this.sendTransport && !this.recvTransport) return;
       
       try {

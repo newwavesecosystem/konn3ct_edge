@@ -371,6 +371,7 @@ export function MeetingProvider({
     isScreenSharing: false,
     isHandRaised: false,
     isSpeaking: false,
+    networkQuality: 'good',
     joinedAt: new Date().toISOString(),
     isMobile: isMobileClient,
   });
