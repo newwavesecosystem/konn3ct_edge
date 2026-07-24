@@ -51,6 +51,13 @@ export async function POST(req: NextRequest) {
       ? `https://${endpointUrl.hostname}/${bucket}/${key}`
       : `https://${bucket}.${endpointUrl.hostname}/${key}`;
 
+    console.log("=== S3_FORCE_PATH_STYLE DEBUG ===");
+    console.log("process.env.DO_SPACES_ENDPOINT:", process.env.DO_SPACES_ENDPOINT);
+    console.log("process.env.S3_FORCE_PATH_STYLE:", process.env.S3_FORCE_PATH_STYLE);
+    console.log("isForcePathStyle:", forcePathStyle);
+    console.log("Generated publicUrl:", publicUrl);
+    console.log("===================================");
+
     return NextResponse.json({ presignedUrl, publicUrl, key });
   } catch (error) {
     console.error("Presigned URL error:", error);
