@@ -58,7 +58,7 @@ const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEn
 const s3Client = new S3Client({
   endpoint,
   region: process.env.DO_SPACES_REGION || 'sfo3',
-  forcePathStyle: false, // DigitalOcean Spaces usually supports virtual-hosted style, but we let SDK handle it cleanly now
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true', // Respect MinIO env var
   credentials: {
     accessKeyId: process.env.DO_SPACES_KEY || '',
     secretAccessKey: process.env.DO_SPACES_SECRET || '',
