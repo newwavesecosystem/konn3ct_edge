@@ -1,5 +1,5 @@
 import { Device, types } from 'mediasoup-client';
-import type { MediaStream } from 'react-native-webrtc';
+import { MediaStream } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
 import { useMeetingStore } from '../store/useMeetingStore';
 
@@ -684,7 +684,7 @@ export class MediasoupService {
           appData: { source: 'camera' }
         }));
       }
-      this.localVideoProducer = undefined;
+      this.localVideoProducer = null;
     }
   }
 
@@ -726,7 +726,7 @@ export class MediasoupService {
           appData: { source: 'mic' }
         }));
       }
-      this.localAudioProducer = undefined;
+      this.localAudioProducer = null;
     }
   }
 
