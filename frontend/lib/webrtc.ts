@@ -1434,10 +1434,12 @@ export class WebRTCClient {
         this.emitTelemetry('mic_track_closed_detected');
         this.emitTelemetry('mic_reacquire_started');
         try {
-          // This creates a new producer internally
-          await this.enableMic();
+          // Preserve mute state and pass it into enableMic
+          const wasMuted = this.audioConnectionStatus === 'muted';
+          await this.enableMic(true, wasMuted);
           this.emitTelemetry('mic_reacquire_success');
-          if (this.audioConnectionStatus === 'muted') this.pauseMic();
+          if (wasMuted) this.pauseMic();
+
         } catch (e) {
           console.error("Failed to reacquire mic during reconnect:", e);
           this.emitTelemetry('mic_reacquire_failed');
@@ -1928,13 +1930,18 @@ export class WebRTCClient {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       }
 
+      // Enforce producer pause immediately to prevent state overwriting
+      if (startMuted) {
+        this.localAudioProducer.pause();
+      }
+
       // Handle unexpected track ends (e.g. mic unplugged)
       activeTrack.onended = async () => {
         console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
         try {
-          const wasPaused = this.localAudioProducer?.paused;
-          await this.enableMic();
-          if (wasPaused) {
+          const wasMuted = this.audioConnectionStatus === 'muted';
+          await this.enableMic(true, wasMuted);
+          if (wasMuted) {
             this.pauseMic();
           }
         } catch (err) {
