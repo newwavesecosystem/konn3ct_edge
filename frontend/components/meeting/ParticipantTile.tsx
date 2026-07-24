@@ -59,7 +59,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled } = useMeeting();
+  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -493,19 +493,19 @@ export function ParticipantTile({
           {!isCameraEffectivelyOn && (
             <VideoOff className="w-3.5 h-3.5 text-red-400 drop-shadow-md" />
           )}
-          {participant.networkQuality === 'unstable_network' && (
+          {roomSettings?.networkDetectionEnabled && participant.networkQuality === 'unstable_network' && (
             <span title="Unstable Network"><SignalMedium className="w-3.5 h-3.5 text-yellow-400 drop-shadow-md" /></span>
           )}
-          {participant.networkQuality === 'poor_network' && (
+          {roomSettings?.networkDetectionEnabled && participant.networkQuality === 'poor_network' && (
             <span title="Poor Network"><SignalLow className="w-3.5 h-3.5 text-red-500 drop-shadow-md" /></span>
           )}
-          {participant.networkQuality === 'device_performance_issue' && (
+          {roomSettings?.networkDetectionEnabled && participant.networkQuality === 'device_performance_issue' && (
             <span title="Device Performance Issue"><AlertTriangle className="w-3.5 h-3.5 text-purple-400 drop-shadow-md" /></span>
           )}
-          {participant.networkQuality === 'screen_share_performance_issue' && (
+          {roomSettings?.networkDetectionEnabled && participant.networkQuality === 'screen_share_performance_issue' && (
             <span title="Screen Share Lag"><MonitorUp className="w-3.5 h-3.5 text-orange-400 drop-shadow-md" /></span>
           )}
-          {participant.networkQuality === 'good' && (
+          {roomSettings?.networkDetectionEnabled && participant.networkQuality === 'good' && (
             <span title="Good Connection"><SignalHigh className="w-3.5 h-3.5 text-brand-green drop-shadow-md" /></span>
           )}
         </div>
