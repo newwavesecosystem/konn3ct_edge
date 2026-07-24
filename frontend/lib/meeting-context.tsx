@@ -399,11 +399,12 @@ export function MeetingProvider({
   
   const resumeAudioPlayback = useCallback(() => {
     setAudioPlaybackError(false);
-    // Trigger re-render of AudioRenderers to retry .play()
-    setOutputVolume(v => {
-      const current = v;
-      setTimeout(() => setOutputVolume(current), 50);
-      return Math.max(1, v - 1); // slight tweak to trigger effect, then restore
+    const audioElements = document.querySelectorAll('audio[data-participant-audio="true"]');
+    audioElements.forEach(audio => {
+      const el = audio as HTMLAudioElement;
+      if (el.srcObject) {
+        el.play().catch(e => console.warn("Resume play failed:", e));
+      }
     });
   }, []);
 
@@ -1197,20 +1198,28 @@ export function MeetingProvider({
 
         client.onHandRaise = (msg) => {
           const targetId = resolveUserId(msg.userId);
-          if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
-            if (prefsRef.current.notifications.playSystemSound) {
+          
+          setParticipants((prev) => {
+            const updated = prev.map(p =>
+              (p.id === targetId || p.userId === msg.userId) ? { ...p, isHandRaised: msg.isHandRaised } : p
+            );
+            
+            if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
+              // Always play sound (playNotificationSound respects enableAllSounds internally)
               playNotificationSound(880, 0.3, 0.1);
-            }
-            if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
-              const user = participants.find(p => p.id === targetId || p.userId === msg.userId);
-              if (user) {
-                toast.info(`${user.name} raised their hand`);
+              
+              if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+                // Must use latest state to find user to avoid stale closure
+                const user = updated.find(p => p.id === targetId || p.userId === msg.userId);
+                if (user) {
+                  // Use a small timeout to avoid React state update warnings in StrictMode for toasts
+                  setTimeout(() => toast.info(`${user.name} raised their hand`), 0);
+                }
               }
             }
-          }
-          setParticipants((prev) => prev.map(p =>
-            (p.id === targetId || p.userId === msg.userId) ? { ...p, isHandRaised: msg.isHandRaised } : p
-          ));
+            
+            return updated;
+          });
         };
 
         client.onScreenShareStarted = (userId, producerId) => {
@@ -2558,7 +2567,7 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
   );
 }
 
-function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlaybackError }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
+export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlaybackError }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
@@ -2584,12 +2593,16 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlay
   }, [outputVolume]);
 
   useEffect(() => {
+    if (audioRef.current) {
+      applyAudioSink(audioRef.current, audioOutput);
+    }
+  }, [audioOutput]);
+
+  useEffect(() => {
     if (audioRef.current && track && !isLocal) {
       if (audioRef.current.srcObject) {
         const stream = audioRef.current.srcObject as MediaStream;
         if (stream.getAudioTracks()[0] === track) {
-          applyAudioSink(audioRef.current, audioOutput);
-          audioRef.current.volume = outputVolume / 100;
           return;
         }
         // Update the existing MediaStream instead of replacing srcObject 
@@ -2599,9 +2612,6 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlay
       } else {
         audioRef.current.srcObject = new MediaStream([track]);
       }
-      
-      audioRef.current.volume = outputVolume / 100;
-      applyAudioSink(audioRef.current, audioOutput);
       
       const attemptPlay = () => {
         if (!audioRef.current || !track || isLocal) return;
@@ -2632,12 +2642,13 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlay
         }
       };
 
-      audioRef.current.addEventListener('pause', onPause);
+      const audioEl = audioRef.current;
+      audioEl.addEventListener('pause', onPause);
       document.addEventListener('visibilitychange', handleVisibility);
       window.addEventListener('pageshow', handleVisibility);
 
       return () => {
-        if (audioRef.current) audioRef.current.removeEventListener('pause', onPause);
+        if (audioEl) audioEl.removeEventListener('pause', onPause);
         document.removeEventListener('visibilitychange', handleVisibility);
         window.removeEventListener('pageshow', handleVisibility);
       };
@@ -2645,7 +2656,7 @@ function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlay
     } else if (audioRef.current && (!track || isLocal)) {
       audioRef.current.srcObject = null;
     }
-  }, [track, isLocal, audioOutput, outputVolume]);
+  }, [track, isLocal, setAudioPlaybackError]);
 
-  return <audio ref={audioRef} autoPlay playsInline muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
+  return <audio data-participant-audio="true" ref={audioRef} autoPlay playsInline muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
 }
