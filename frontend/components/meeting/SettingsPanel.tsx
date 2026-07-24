@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export function SettingsPanel() {
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { theme, setTheme } = useMeetingTheme();
   const { 
     devices, 
@@ -166,7 +167,7 @@ export function SettingsPanel() {
             onChange={setIsOriginalRatioEnabled}
           />
 
-          {roomFeatureFlags.virtualBackgroundEnabled && (
+          {roomFeatureFlags.virtualBackgroundEnabled && !isIOS && (
             <div className="pt-2 border-t" style={{ borderColor: "var(--mt-border)" }}>
               <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
                 <ImageIcon className="w-4 h-4" />
