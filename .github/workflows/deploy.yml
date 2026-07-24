@@ -59,6 +59,7 @@ jobs:
             --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
             --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
             --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
+            --build-arg NEXT_PUBLIC_HIDE_SIGNUP_BUTTON="${{ vars.NEXT_PUBLIC_HIDE_SIGNUP_BUTTON }}" \
             --build-arg NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}

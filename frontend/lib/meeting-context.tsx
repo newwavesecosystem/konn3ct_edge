@@ -2746,10 +2746,25 @@ export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAu
       
       const attemptPlay = () => {
         if (!audioRef.current || !track || isLocal) return;
-        audioRef.current.play().catch((e) => {
+        audioRef.current.play().then(() => {
+          // If playback succeeds, it means the browser allows autoplay!
+          // We safely clear the global error flag.
+          setAudioPlaybackError(false);
+        }).catch((e) => {
           if (e.name === 'NotAllowedError') {
             console.warn("Autoplay blocked for global audio:", e);
-            setAudioPlaybackError(true);
+            // iOS Safari quirk: It might block some tags but allow others if they fire simultaneously.
+            // Wait a tiny bit and check if ANY audio tag in the pool successfully started playing.
+            setTimeout(() => {
+              const anyPlaying = Array.from(document.querySelectorAll('audio[data-participant-audio="true"]'))
+                .some(a => !(a as HTMLAudioElement).paused);
+              
+              if (!anyPlaying) {
+                setAudioPlaybackError(true);
+              } else {
+                setAudioPlaybackError(false);
+              }
+            }, 300);
           } else if (e.name !== 'AbortError') {
             console.warn("Global audio play failed:", e);
           }
