@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Alert, Platform, NativeModules, DeviceEventEmitter, Modal, TouchableWithoutFeedback, BackHandler } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
-import type { MediaStream } from 'react-native-webrtc';
+import { MediaStream } from 'react-native-webrtc';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MediasoupService, RemoteParticipant } from '../webrtc/MediasoupService';
 import { consumeActiveMeetingService } from '../webrtc/activeMeetingService';
@@ -839,7 +839,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
             zOrder={0}
           />
         ) : (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: tokens.cardBg }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: tokens.bgTile }}>
             <View style={styles.avatarCircle}>
               <Text style={styles.avatarText}>{getInitials(pipName)}</Text>
             </View>
