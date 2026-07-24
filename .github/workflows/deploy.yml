@@ -126,6 +126,7 @@ jobs:
             --from-literal=DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
             --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
             --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
+            --from-literal=S3_FORCE_PATH_STYLE="${{ vars.S3_FORCE_PATH_STYLE }}" \
             --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
             --from-literal=NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
             --dry-run=client -o yaml | kubectl apply -f -

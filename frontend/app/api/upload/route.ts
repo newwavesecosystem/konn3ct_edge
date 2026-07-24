@@ -3,13 +3,16 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
 
+const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true";
+
 const s3Client = new S3Client({
   endpoint: process.env.DO_SPACES_ENDPOINT || "https://nyc3.digitaloceanspaces.com",
   region: process.env.DO_SPACES_REGION || "nyc3",
   credentials: {
     accessKeyId: process.env.DO_SPACES_KEY || "",
     secretAccessKey: process.env.DO_SPACES_SECRET || ""
-  }
+  },
+  ...(forcePathStyle ? { forcePathStyle: true } : {})
 });
 
 export async function POST(req: NextRequest) {
@@ -42,7 +45,11 @@ export async function POST(req: NextRequest) {
     const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
     const endpoint = process.env.DO_SPACES_ENDPOINT || "https://nyc3.digitaloceanspaces.com";
     const endpointUrl = new URL(endpoint);
-    const publicUrl = `https://${bucket}.${endpointUrl.hostname}/${key}`;
+    
+    // Support both MinIO (path-style) and DigitalOcean (virtual-hosted style)
+    const publicUrl = forcePathStyle 
+      ? `https://${endpointUrl.hostname}/${bucket}/${key}`
+      : `https://${bucket}.${endpointUrl.hostname}/${key}`;
 
     return NextResponse.json({ presignedUrl, publicUrl, key });
   } catch (error) {
