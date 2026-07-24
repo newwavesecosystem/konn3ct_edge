@@ -16,6 +16,7 @@ import StreamingPanel from "./StreamingPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { MicIssueDialog } from "./MicIssueDialog";
+import { CamIssueDialog } from "./CamIssueDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
 import { SecurityPanel } from "./SecurityPanel";
@@ -391,6 +392,7 @@ export function MeetingShell() {
       <ReactionsLayer />
       <LeaveDialog />
       <MicIssueDialog />
+      <CamIssueDialog />
       {showDonationModal && <DonationModal onClose={() => setShowDonationModal(false)} />}
     </div>
   );
