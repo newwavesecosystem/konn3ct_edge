@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -10,7 +10,7 @@ import Redis from 'ioredis';
 export const internalRecordingsRouter = Router();
 
 // Simple admin middleware
-const requireAdminSecret = (req: Request, res: Response, next: any) => {
+const requireAdminSecret = (req: Request, res: Response, next: NextFunction) => {
   const secret = req.headers['x-admin-secret'];
   if (!secret || secret !== (process.env.INTERNAL_ADMIN_SECRET || 'smoke-test-secret')) {
     return res.status(403).json({ error: 'Forbidden: Invalid Admin Secret' });
@@ -107,7 +107,7 @@ internalRecordingsRouter.post('/smoke-test', async (req: Request, res: Response)
           db.recording.update({
             where: { id: recording.id },
             data: { status: 'stopping', endedAt: new Date() }
-          }).catch(e => logger.error('Failed to update DB for smoke test stop', e));
+          }).catch((e: any) => logger.error('Failed to update DB for smoke test stop', e));
 
           // Publish stop command to worker
           redis.publish(`recorder:stop:${room.id}`, JSON.stringify({ reason: 'smoke_test_auto_stop' }))

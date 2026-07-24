@@ -6,6 +6,7 @@ import { useMeeting } from "@/lib/meeting-context";
 import { ParticipantTile } from "./ParticipantTile";
 import { cn } from "@/lib/utils";
 import type { Participant } from "@/lib/types/meeting";
+import { computeDynamicGrid, type GridSolution } from "@/lib/grid-layout";
 import {
   MonitorOff,
   MonitorUp,
@@ -27,7 +28,16 @@ export function StageView() {
   const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef } =
     useMeeting();
 
-  const screenSharer = participants.find((p) => p.isScreenSharing);
+  const screenSharers = participants.filter((p) => p.isScreenSharing);
+  const [activeScreenSharerId, setActiveScreenSharerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeScreenSharerId && !screenSharers.find((p) => p.id === activeScreenSharerId)) {
+      setActiveScreenSharerId(null);
+    }
+  }, [screenSharers, activeScreenSharerId]);
+
+  const screenSharer = screenSharers.find(p => p.id === activeScreenSharerId) || screenSharers[0];
   const isSomeoneSharing = !!screenSharer || isScreenSharing;
 
   // Grid view sorting (no active speaker rearranging)
@@ -56,6 +66,9 @@ export function StageView() {
       <ScreenShareLayout
         participants={gridSorted}
         screenSharer={screenSharer}
+        screenSharers={screenSharers}
+        activeScreenSharerId={activeScreenSharerId || screenSharer?.id}
+        setActiveScreenSharerId={setActiveScreenSharerId}
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
         currentUserId={currentUser.id}
@@ -66,7 +79,7 @@ export function StageView() {
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
   const others = gridSorted; // Keep all participants in the strip to prevent swapping/rearranging
 
-  if (layoutMode === "grid" || currentUser.role === 'bot' || currentUser.role === 'recorder') {
+  if (layoutMode === "grid") {
     return <GridLayout participants={gridSorted} />;
   }
 
@@ -134,12 +147,7 @@ const TILE_PADDING_Y = 16;
 const IDEAL_TILE_WIDTH = 220;
 const IDEAL_TILE_HEIGHT = 160;
 
-interface GridSolution {
-  cols: number;
-  rows: number;
-  tileW: number;
-  tileH: number;
-}
+
 
 function computeBestGrid(
   count: number,
@@ -201,6 +209,19 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
   const [containerSize, setContainerSize] = useState({ w: 960, h: 540 });
+
+  // Hoist hooks for scroll mode to avoid conditional hook call errors
+  const { cols, tileH } = computeScrollableGrid(containerSize.w);
+  const rowCount = Math.ceil(count / cols);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => tileH + TILE_GAP,
+    overscan: 2,
+  });
 
   // Measure container
   useEffect(() => {
@@ -325,17 +346,7 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   // ═══════════════════════════════════════════════════════
   // ── SCROLL mode (default) ─────────────────────────────
   // ═══════════════════════════════════════════════════════
-  const { cols, tileH } = computeScrollableGrid(containerSize.w);
-  const rowCount = Math.ceil(count / cols);
-  
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  const virtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => tileH + TILE_GAP,
-    overscan: 2,
-  });
+  // (Hooks hoisted to top to avoid conditional call errors)
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={containerRef}>
@@ -413,48 +424,14 @@ function GridInner({
 }) {
   const { currentUser } = useMeeting();
   const count = participants.length;
-  const isBotViewer = currentUser.role === 'bot' || currentUser.role === 'recorder';
-
-  // For bots, we want 0 padding and 0 gap to perfectly fill the screen
-  const paddingX = isBotViewer ? 0 : TILE_PADDING_X;
-  const paddingY = isBotViewer ? 0 : TILE_PADDING_Y;
-  const gap = isBotViewer ? 0 : TILE_GAP;
-
-  const computeDynamicGrid = (c: number, w: number, h: number) => {
-    const availW = Math.max(0, w - paddingX * 2);
-    const availH = Math.max(0, h - paddingY * 2);
-
-    let best: GridSolution = { cols: 1, rows: c, tileW: 0, tileH: 0 };
-    let bestScore = -Infinity;
-
-    const maxCols = Math.min(c, 6);
-
-    for (let cols = 1; cols <= maxCols; cols++) {
-      const rows = Math.ceil(c / cols);
-      const tileW = (availW - gap * (cols - 1)) / cols;
-      const tileH = (availH - gap * (rows - 1)) / rows;
-
-      if (tileW < 80 || tileH < 60) continue;
-
-      const area = tileW * tileH;
-      const aspect = tileW / tileH;
-      const targetAspect = 16 / 9;
-      const aspectPenalty = Math.abs(Math.log(aspect / targetAspect));
-      const score = area - aspectPenalty * 8000;
-
-      if (score > bestScore) {
-        bestScore = score;
-        best = { cols, rows, tileW, tileH };
-      }
-    }
-
-    return best;
-  };
+  const paddingX = TILE_PADDING_X;
+  const paddingY = TILE_PADDING_Y;
+  const gap = TILE_GAP;
 
   // Hooks always run.
   const solution = useMemo(
-    () => computeDynamicGrid(count, containerW, containerH),
-    [count, containerW, containerH, isBotViewer],
+    () => computeDynamicGrid(count, containerW, containerH, paddingX, paddingY, gap),
+    [count, containerW, containerH, paddingX, paddingY, gap],
   );
 
   if (count === 0) {
@@ -465,15 +442,7 @@ function GridInner({
 
   // ── 1 participant: hero ─────────────────────────────────
   if (count === 1) {
-    if (isBotViewer) {
-      return (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-full h-full">
-            <ParticipantTile participant={participants[0]} isLarge fixedAspect={false} />
-          </div>
-        </div>
-      );
-    }
+
 
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
@@ -488,23 +457,18 @@ function GridInner({
   if (count === 2) {
     const isPortrait = containerW < containerH * 1.1;
     return (
-      <div className={cn("absolute inset-0 flex items-center justify-center", !isBotViewer && "p-3 sm:p-4")}>
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4">
         <div
           className={cn(
-            "w-full flex",
-            isBotViewer ? "gap-0 h-full" : "gap-2.5 sm:gap-3",
+            "w-full flex gap-2.5 sm:gap-3",
             isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
           <AnimatePresence>
             {participants.map((p) => (
               <div key={p.id} className="flex-1 min-w-0 min-h-0 w-full flex justify-center">
-                <div className={cn("w-full max-h-full", isBotViewer ? "h-full" : "aspect-video")}>
-                  {isBotViewer ? (
-                    <ParticipantTile participant={p} isLarge fixedAspect={false} />
-                  ) : (
-                    <MotionTile participant={p} isLarge />
-                  )}
+                <div className="w-full max-h-full aspect-video">
+                  <MotionTile participant={p} isLarge />
                 </div>
               </div>
             ))}
@@ -526,19 +490,11 @@ function GridInner({
           gridTemplateColumns: `repeat(${cols}, ${tileW}px)`,
           gridAutoRows: `${tileH}px`,
           gap: `${gap}px`,
-          width: isBotViewer ? "100%" : undefined,
-          height: isBotViewer ? "100%" : undefined,
         }}
       >
         <AnimatePresence>
           {participants.map((p) => (
-            isBotViewer ? (
-              <div key={p.id} className="w-full h-full min-h-0 min-w-0 overflow-hidden">
-                <ParticipantTile participant={p} fixedAspect={false} />
-              </div>
-            ) : (
-              <MotionTile key={p.id} participant={p} />
-            )
+            <MotionTile key={p.id} participant={p} />
           ))}
         </AnimatePresence>
       </motion.div>
@@ -805,12 +761,18 @@ function SpotlightLayout({ participants }: { participants: Participant[] }) {
 function ScreenShareLayout({
   participants,
   screenSharer,
+  screenSharers,
+  activeScreenSharerId,
+  setActiveScreenSharerId,
   isCurrentUserSharing,
   onStopSharing,
   currentUserId,
 }: {
   participants: Participant[];
   screenSharer: Participant | undefined;
+  screenSharers: Participant[];
+  activeScreenSharerId: string | undefined;
+  setActiveScreenSharerId: (id: string) => void;
   isCurrentUserSharing: boolean;
   onStopSharing: () => void;
   currentUserId: string;
@@ -818,7 +780,7 @@ function ScreenShareLayout({
   const { webrtcClientRef } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const sharerName = screenSharer?.name ?? "You";
-  const isMe = isCurrentUserSharing || screenSharer?.id === currentUserId;
+  const isMe = screenSharer?.id === currentUserId;
 
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
@@ -915,6 +877,7 @@ function ScreenShareLayout({
   const [screenTimeoutState, setScreenTimeoutState] = useState<'normal' | 'recovering' | 'failed'>('normal');
   React.useEffect(() => {
     if (isMe || !screenSharer?.screenConsumerId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setScreenTimeoutState('normal');
       return;
     }
@@ -960,6 +923,26 @@ function ScreenShareLayout({
           border: "1px solid var(--mt-border)",
         }}
       >
+        {screenSharers.length > 1 && (
+          <div className="absolute top-4 left-0 right-0 z-30 px-4 flex justify-center pointer-events-none">
+            <div className="flex items-center gap-2 p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-xl overflow-x-auto w-max max-w-full no-scrollbar pointer-events-auto snap-x">
+              {screenSharers.map((sharer) => (
+                <button
+                  key={sharer.id}
+                  onClick={() => setActiveScreenSharerId(sharer.id)}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
+                    activeScreenSharerId === sharer.id
+                      ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
+                      : "bg-white/10 text-white hover:bg-white/20"
+                  )}
+                >
+                  <span className="truncate block">{sharer.name}&apos;s Screen</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="absolute inset-0 flex flex-col">
           <div
             className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 backdrop-blur-sm shrink-0 z-10"
@@ -1063,7 +1046,7 @@ function ScreenShareLayout({
                     <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
                       <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
                       <span className="text-sm font-medium drop-shadow-md">
-                        {videoRef.current?.videoWidth === 0 ? "Waiting for screen share video..." : "Recovering screen share..."}
+                        Recovering screen share...
                       </span>
                     </div>
                   </div>
@@ -1116,21 +1099,18 @@ function ScreenShareLayout({
       </div>
 
       {/* Participant filmstrip */}
-      <div className={cn("shrink-0 overflow-hidden no-scrollbar", isFullscreen && "hidden")}>
-        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
-          {participants.map((p) => (
-            <div key={p.id} className="w-24 sm:w-32 shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
-        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
-          {participants.map((p) => (
-            <div key={p.id} className="w-full shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
+      <div className={cn(
+        "shrink-0 overflow-auto no-scrollbar",
+        isFullscreen && "hidden",
+        "flex lg:flex-col gap-1.5 sm:gap-2",
+        "w-full lg:w-44 xl:w-52",
+        "py-1 lg:py-0 h-auto lg:h-full"
+      )}>
+        {participants.map((p) => (
+          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+            <ParticipantTile participant={p} fixedAspect />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1259,21 +1239,18 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         </div>
       </div>
 
-      <div className={cn("shrink-0 overflow-hidden no-scrollbar", isFullscreen && "hidden")}>
-        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
-          {participants.map((p) => (
-            <div key={p.id} className="w-24 sm:w-32 shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
-        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
-          {participants.map((p) => (
-            <div key={p.id} className="w-full shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
+      <div className={cn(
+        "shrink-0 overflow-auto no-scrollbar",
+        isFullscreen && "hidden",
+        "flex lg:flex-col gap-1.5 sm:gap-2",
+        "w-full lg:w-44 xl:w-52",
+        "py-1 lg:py-0 h-auto lg:h-full"
+      )}>
+        {participants.map((p) => (
+          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+            <ParticipantTile participant={p} fixedAspect />
+          </div>
+        ))}
       </div>
     </div>
   );

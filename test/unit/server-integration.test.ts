@@ -19,7 +19,7 @@ vi.mock('ioredis', () => {
 vi.mock('../../src/db', () => ({
   db: {
     room: {
-      findUnique: vi.fn().mockResolvedValue({ id: 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {} }),
+      findUnique: vi.fn().mockImplementation(async ({ where }) => ({ id: where?.id || where?.slug || 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {} })),
     },
     chatMessage: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -49,6 +49,7 @@ vi.mock('../../src/media/sfu', () => ({
 
 import jwt from 'jsonwebtoken';
 import { initializeSignaling } from '../../src/signaling/server';
+import { logger } from '../../src/logger';
 
 describe('Signaling Server Integration', () => {
   let server: HttpServer;
@@ -92,6 +93,30 @@ describe('Signaling Server Integration', () => {
       ws.on('open', () => {
         reject(new Error('Connection should not have opened'));
       });
+    });
+  });
+
+  it('logs user-agent and device on connection', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const infoSpy = vi.spyOn(logger, 'info');
+
+      const validToken = jwt.sign({ userId: 'test-user-agent', email: 'ua@conn3ct', name: 'UA', role: 'audience' }, 'dummy_secret');
+      const ws = new WebSocket(`${wsUrl}/signal?token=${validToken}&roomId=test-slug&participantId=ua-1`, {
+        headers: {
+          'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'
+        }
+      });
+      
+      ws.on('open', () => {
+        setTimeout(() => {
+          const logCall = infoSpy.mock.calls.find((call: any) => call[0] && call[0].includes('agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"'));
+          expect(logCall).toBeDefined();
+          ws.close();
+          resolve();
+        }, 50);
+      });
+
+      ws.on('error', reject);
     });
   });
 
@@ -230,6 +255,81 @@ describe('Signaling Server Integration', () => {
           }));
         });
       });
+    });
+  });
+
+  it('syncs isMuted state in participants_list and user_joined', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const viewerToken = jwt.sign({ userId: 'test-viewer', email: 'v@conn3ct', name: 'Viewer', role: 'attendee' }, 'dummy_secret');
+      const wsViewer = new WebSocket(`${wsUrl}/signal?roomId=test-room-1&token=${viewerToken}&participantId=part-viewer-mute`);
+
+      let participantsListReceived = false;
+
+      wsViewer.on('message', (data: any) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'participants_list') {
+          participantsListReceived = true;
+          const me = msg.participants.find((p: any) => p.participantId === 'part-viewer-mute');
+          if (me) {
+            console.log('me object:', me);
+            expect(me.isMuted).toBe(true); // Should default to true
+
+            // Send mute_state to false
+            wsViewer.send(JSON.stringify({
+              type: 'mute_state',
+              isMuted: false
+            }));
+          }
+        }
+
+        if (msg.type === 'mute_state' && msg.participantId === 'part-viewer-mute' || msg.senderParticipantId === 'test-viewer') {
+           if (msg.isMuted === false) {
+             wsViewer.close();
+             resolve();
+           }
+        }
+      });
+      
+      wsViewer.on('error', reject);
+    });
+  });
+
+  it('allows co-hosts to broadcast ecinema_update', async () => {
+    return new Promise<void>((resolve, reject) => {
+      const hostToken = jwt.sign({ userId: 'ecinema-host', email: 'host@conn3ct', name: 'Host', role: 'host' }, 'dummy_secret');
+      const cohostToken = jwt.sign({ userId: 'ecinema-cohost', email: 'cohost@conn3ct', name: 'CoHost', role: 'co-host' }, 'dummy_secret');
+      
+      const wsHost = new WebSocket(`${wsUrl}/signal?roomId=test-room-ecinema&token=${hostToken}&participantId=part-ecinema-host`);
+      const wsCohost = new WebSocket(`${wsUrl}/signal?roomId=test-room-ecinema&token=${cohostToken}&participantId=part-ecinema-cohost`);
+
+      let hostConnected = false;
+      let cohostConnected = false;
+
+      const attemptAction = () => {
+        if (hostConnected && cohostConnected) {
+          // Cohost broadcasts an ecinema update
+          wsCohost.send(JSON.stringify({ 
+            type: 'ecinema_update', 
+            link: 'https://youtube.com/watch?v=123'
+          }));
+        }
+      };
+
+      wsHost.on('open', () => { hostConnected = true; attemptAction(); });
+      wsCohost.on('open', () => { cohostConnected = true; attemptAction(); });
+
+      // Host listens for the broadcast
+      wsHost.on('message', (data: any) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'ecinema_update' && msg.link === 'https://youtube.com/watch?v=123') {
+          wsHost.close();
+          wsCohost.close();
+          resolve();
+        }
+      });
+      
+      wsHost.on('error', reject);
+      wsCohost.on('error', reject);
     });
   });
 });

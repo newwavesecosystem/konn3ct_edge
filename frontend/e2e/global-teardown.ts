@@ -16,7 +16,9 @@ export default async function globalTeardown() {
       const db = new PrismaClient();
 
       async function main() {
-        await db.room.deleteMany({ where: { slug: '${TEST_ROOM_SLUG}' } });
+        await db.meetingPoll.deleteMany({ where: { room: { slug: { startsWith: 'playwright-' } } } });
+        await db.chatMessage.deleteMany({ where: { room: { slug: { startsWith: 'playwright-' } } } });
+        await db.room.deleteMany({ where: { slug: { startsWith: 'playwright-' } } });
         await db.user.deleteMany({ where: { email: 'playwright-bot@konn3ct.test' } });
         console.log('Test data cleaned up.');
         await db.$disconnect();

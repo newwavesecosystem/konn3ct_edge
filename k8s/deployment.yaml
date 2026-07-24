@@ -146,6 +146,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: NEXT_PUBLIC_FRONTEND_DOMAIN
+            - name: S3_FORCE_PATH_STYLE
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: S3_FORCE_PATH_STYLE
             - name: NODE_OPTIONS
               value: "--max-old-space-size=5120"
           resources:

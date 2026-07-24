@@ -97,6 +97,71 @@ describe('WebRTCClient Core', () => {
     expect(webrtc).toBeDefined();
   });
 
+  it('can enable screen share with audio', async () => {
+    // Setup
+    webrtc.sendTransport = mockSendTransport as any;
+    (webrtc as any).device = { rtpCapabilities: { codecs: [{ mimeType: 'video/vp8' }] } };
+    
+    // Mock getDisplayMedia to return a track for video and audio
+    const mockVideoTrack = { kind: 'video', stop: vi.fn(), onended: null };
+    const mockAudioTrack = { kind: 'audio', stop: vi.fn(), onended: null };
+    const mockStream = {
+      getVideoTracks: () => [mockVideoTrack],
+      getAudioTracks: () => [mockAudioTrack]
+    };
+    global.navigator.mediaDevices.getDisplayMedia = vi.fn().mockResolvedValue(mockStream);
+    
+    // Act
+    await webrtc.enableScreenShare();
+    
+    // Assert
+    expect(global.navigator.mediaDevices.getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({
+      video: expect.any(Object),
+      audio: true
+    }));
+    
+    // Should have created two producers: one for video, one for audio
+    expect(mockSendTransport.produce).toHaveBeenCalledTimes(2);
+    expect(webrtc.localScreenTrack).toBe(mockVideoTrack);
+    expect(webrtc.localScreenAudioTrack).toBe(mockAudioTrack);
+    expect(webrtc.screenShareProducer).toBeDefined();
+    expect(webrtc.screenAudioShareProducer).toBeDefined();
+  });
+
+  it('can disable screen share with audio', async () => {
+    // Setup
+    const mockVideoTrack = { stop: vi.fn() };
+    const mockAudioTrack = { stop: vi.fn() };
+    const mockVideoProducer = { id: 'vp1', track: mockVideoTrack, close: vi.fn() };
+    const mockAudioProducer = { id: 'ap1', track: mockAudioTrack, close: vi.fn() };
+    
+    webrtc.screenShareProducer = mockVideoProducer as any;
+    webrtc.screenAudioShareProducer = mockAudioProducer as any;
+    webrtc.localScreenTrack = mockVideoTrack as any;
+    webrtc.localScreenAudioTrack = mockAudioTrack as any;
+    
+    // Mock WebSocket to intercept stop_producer
+    const ws = new MockWebSocket();
+    (webrtc as any).ws = ws;
+    
+    // Act
+    await webrtc.disableScreenShare();
+    
+    // Assert
+    expect(mockVideoProducer.track.stop).toHaveBeenCalled();
+    expect(mockVideoProducer.close).toHaveBeenCalled();
+    expect(mockAudioProducer.track.stop).toHaveBeenCalled();
+    expect(mockAudioProducer.close).toHaveBeenCalled();
+    
+    expect(webrtc.screenShareProducer).toBeNull();
+    expect(webrtc.screenAudioShareProducer).toBeNull();
+    expect(webrtc.localScreenTrack).toBeNull();
+    expect(webrtc.localScreenAudioTrack).toBeNull();
+    
+    // Should have sent stop_producer messages to backend
+    expect(ws.send).toHaveBeenCalledTimes(2);
+  });
+
   it('can toggle mic', async () => {
     const ws = new MockWebSocket();
     (webrtc as any).ws = ws;
@@ -320,5 +385,101 @@ describe('WebRTCClient Core', () => {
 
     // Should NOT call request('consume')
     expect(consumeSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('WebRTC Edge Cases & Fixes', () => {
+  let webrtc: WebRTCClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    webrtc = new WebRTCClient('test-room', 'test-token');
+    (webrtc as any).device = {
+      rtpCapabilities: {
+        codecs: [
+          { kind: 'audio', mimeType: 'audio/opus' },
+          { kind: 'audio', mimeType: 'audio/PCMU' },
+          { kind: 'video', mimeType: 'video/vp8' },
+          { kind: 'video', mimeType: 'video/h264', parameters: { 'profile-level-id': '42e01f' } },
+          { kind: 'video', mimeType: 'video/VP9' }
+        ]
+      },
+      createSendTransport: vi.fn().mockReturnValue({ id: 'send-1', on: vi.fn(), produce: vi.fn().mockResolvedValue({ id: 'prod-1', closed: false }), close: vi.fn() }),
+      createRecvTransport: vi.fn().mockReturnValue({ id: 'recv-1', on: vi.fn(), consume: vi.fn().mockResolvedValue({ id: 'cons-1' }), restartIce: vi.fn().mockResolvedValue(true), close: vi.fn() })
+    };
+    (webrtc as any).sendTransport = { produce: vi.fn().mockResolvedValue({ id: 'prod-1', closed: false }), id: 'send-1', close: vi.fn(), on: vi.fn() };
+    (webrtc as any).recvTransport = { consume: vi.fn().mockResolvedValue({ id: 'cons-1' }), restartIce: vi.fn().mockResolvedValue(true), id: 'recv-1', close: vi.fn(), on: vi.fn() };
+  });
+
+  it('forces VP8 or H264 Baseline for video production to ensure Safari/iOS compatibility', async () => {
+    const dummyTrack = { kind: 'video', readyState: 'live', stop: vi.fn(), clone: vi.fn().mockReturnThis() } as any;
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getTracks: () => [dummyTrack],
+          getVideoTracks: () => [dummyTrack],
+          getAudioTracks: () => [],
+          clone: vi.fn().mockReturnThis()
+        })
+      }
+    });
+
+    // Mock device loading to prevent error
+    (webrtc as any).isProducingCamera = false;
+    
+    await webrtc.enableCamera();
+    
+    expect((webrtc as any).sendTransport.produce).toHaveBeenCalled();
+    const produceArgs = (webrtc as any).sendTransport.produce.mock.calls[0][0];
+    expect(produceArgs.codec).toBeDefined();
+    expect(produceArgs.codec.mimeType).toBe('video/vp8');
+  });
+
+  it('forces Opus for audio production to prevent Capability Mismatch', async () => {
+    const dummyTrack = { kind: 'audio', readyState: 'live', stop: vi.fn(), clone: vi.fn().mockReturnThis() } as any;
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getTracks: () => [dummyTrack],
+          getVideoTracks: () => [],
+          getAudioTracks: () => [dummyTrack],
+          clone: vi.fn().mockReturnThis()
+        })
+      }
+    });
+    
+    (webrtc as any).isProducingMic = false;
+    await webrtc.enableMic();
+    
+    expect((webrtc as any).sendTransport.produce).toHaveBeenCalled();
+    const produceArgs = (webrtc as any).sendTransport.produce.mock.calls[0][0];
+    expect(produceArgs.codec).toBeDefined();
+    expect(produceArgs.codec.mimeType).toBe('audio/opus');
+  });
+
+  it('clears ghost consumers on republishMedia to fix the Resume Spam Bug', async () => {
+    const mockConsumer1 = { close: vi.fn() };
+    const mockConsumer2 = { close: vi.fn() };
+    (webrtc as any).consumers.set('ghost-1', mockConsumer1);
+    (webrtc as any).consumers.set('ghost-2', mockConsumer2);
+    
+    const requestSpy = vi.spyOn(webrtc as any, 'request').mockResolvedValue({ producers: [] });
+
+    await (webrtc as any).republishMedia();
+    
+    expect(mockConsumer1.close).toHaveBeenCalled();
+    expect(mockConsumer2.close).toHaveBeenCalled();
+    expect((webrtc as any).consumers.size).toBe(0);
+    expect(requestSpy).toHaveBeenCalledWith('getProducers', 'producersList');
+  });
+
+  it('uses restartTransportIce when network drops instead of reset_webrtc_state (ICE Restart Alternative)', async () => {
+    const requestSpy = vi.spyOn(webrtc as any, 'request').mockResolvedValue({ iceParameters: { iceKey: '123' } });
+    const restartIceSpy = (webrtc as any).recvTransport.restartIce;
+    
+    await (webrtc as any).restartTransportIce((webrtc as any).recvTransport);
+    
+    expect(requestSpy).toHaveBeenCalledWith('restart_ice', 'ice_restarted', { transportId: 'recv-1' });
+    expect(restartIceSpy).toHaveBeenCalledWith({ iceParameters: { iceKey: '123' } });
   });
 });

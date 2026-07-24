@@ -23,7 +23,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   const recoveryCountRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
-  const healthyStartTimeRef = useRef<number>(Date.now());
+  const healthyStartTimeRef = useRef<number>(0);
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -81,6 +81,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
 
   useEffect(() => {
     if (!track) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHealth('healthy'); 
       return;
     }
@@ -155,8 +156,10 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
              if (health !== 'recovering' && !video.paused) {
                 stallCountRef.current++;
                 if (stallCountRef.current > 4) {
-                  console.log('participant_tile_video_stalled');
-                  triggerRecovery('currentTime stalled');
+                  if (health !== 'stalled') {
+                    console.log('participant_tile_video_stalled');
+                    setHealth('stalled');
+                  }
                   return;
                 }
              }
@@ -188,8 +191,9 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
          if (checkBlackFrame(video)) {
             if (health !== 'black') {
                setHealth('black');
+               console.log('participant_tile_video_black');
             }
-            triggerRecovery('black frame detected');
+            // intentionally NOT calling triggerRecovery here to prevent infinite destruction loops
          } else if (health === 'black') {
             // It recovered from black!
             setHealth('healthy');

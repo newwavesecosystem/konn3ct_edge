@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -17,6 +18,7 @@ import {
   User2,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { fetchReferees, RefereeItem } from '../api/referees';
 
 const COLORS = {
   pageBg: '#f4f6f9',
@@ -37,27 +39,37 @@ const AVATAR_COLORS = [
   { bg: '#cffafe', text: '#0891b2' }, // Cyan
 ];
 
-const MOCK_REFEREES = [
-  { id: '1', firstname: 'John', lastname: 'Doe', email: 'john.doe@example.com', plan: 'Basic', created_at: 'Oct 24, 2026' },
-  { id: '2', firstname: 'Jane', lastname: 'Smith', email: 'jane.smith@example.com', plan: 'Pro', created_at: 'Oct 22, 2026' },
-  { id: '3', firstname: 'Michael', lastname: 'Johnson', email: 'mike.j@company.com', plan: 'Enterprise', created_at: 'Oct 15, 2026' },
-  { id: '4', firstname: 'Sarah', lastname: 'Williams', email: 'sarah.w@startup.io', plan: 'Pro', created_at: 'Oct 10, 2026' },
-  { id: '5', firstname: 'David', lastname: 'Brown', email: 'dbrown@domain.com', plan: 'Basic', created_at: 'Sep 28, 2026' },
-];
-
 export default function RefereesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [searchTerm, setSearchTerm] = useState('');
+  const [referees, setReferees] = useState<RefereeItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchReferees();
+      setReferees(data);
+    } catch (e) {
+      console.error('Error fetching referees', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
 
   const filteredReferees = useMemo(() => {
-    return MOCK_REFEREES.filter(ref => {
-      const fullName = `${ref.firstname} ${ref.lastname}`.toLowerCase();
-      const email = ref.email.toLowerCase();
+    return referees.filter(ref => {
+      const fullName = `${ref.firstname || ''} ${ref.lastname || ''}`.toLowerCase();
+      const email = (ref.email || '').toLowerCase();
       const term = searchTerm.toLowerCase();
       return fullName.includes(term) || email.includes(term);
     });
-  }, [searchTerm]);
+  }, [searchTerm, referees]);
 
   const getInitials = (first: string, last: string) => {
     return `${first?.[0] || ''}${last?.[0] || ''}`.toUpperCase() || 'U';
@@ -107,36 +119,47 @@ export default function RefereesScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadData} />}
       >
         <View style={styles.listContainer}>
           {filteredReferees.map((ref, index) => {
-            const fullName = `${ref.lastname} ${ref.firstname}`.trim();
+            const first = ref.firstname || '';
+            const last = ref.lastname || '';
+            const fullName = `${last} ${first}`.trim() || 'Unknown User';
             const avatarColor = getAvatarColor(index);
 
+            // Basic fallback date parsing
+            let displayDate = ref.created_at || 'Recently';
+            if (displayDate.includes('T')) {
+              displayDate = new Date(displayDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+
             return (
-              <View key={ref.id} style={styles.card}>
+              <View key={ref.id || index} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <View style={[styles.avatarBox, { backgroundColor: avatarColor.bg }]}>
                     <Text style={[styles.avatarText, { color: avatarColor.text }]}>
-                      {getInitials(ref.firstname, ref.lastname)}
+                      {getInitials(first, last)}
                     </Text>
                   </View>
-                  <View style={styles.planBadge}>
-                    <Text style={styles.planBadgeText}>{ref.plan}</Text>
-                  </View>
+                  {ref.plan && (
+                    <View style={styles.planBadge}>
+                      <Text style={styles.planBadgeText}>{ref.plan}</Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.userInfo}>
                   <Text style={styles.userName} numberOfLines={1}>{fullName}</Text>
                   <View style={styles.emailRow}>
                     <Mail size={14} color={COLORS.textMuted} />
-                    <Text style={styles.userEmail} numberOfLines={1}>{ref.email}</Text>
+                    <Text style={styles.userEmail} numberOfLines={1}>{ref.email || 'No email'}</Text>
                   </View>
                 </View>
 
                 <View style={styles.cardFooter}>
                   <CalendarDays size={14} color={COLORS.textMuted} />
-                  <Text style={styles.joinDate}>Joined {ref.created_at}</Text>
+                  <Text style={styles.joinDate}>Joined {displayDate}</Text>
                 </View>
               </View>
             );

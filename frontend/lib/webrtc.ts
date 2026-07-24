@@ -26,14 +26,17 @@ export interface NetworkDebugSnapshot {
 export class WebRTCClient {
   private ws: WebSocket | null = null;
   private device: Device | null = null;
-  private sendTransport: Transport | null = null;
+  public sendTransport: Transport | null = null;
+  public receiveTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   
   public localVideoProducer: Producer | null = null;
   public localAudioProducer: Producer | null = null;
-  public screenShareProducer: Producer | null = null;
   public localScreenTrack: MediaStreamTrack | null = null;
+  public localScreenAudioTrack: MediaStreamTrack | null = null;
+  public screenShareProducer: Producer | null = null;
+  public screenAudioShareProducer: Producer | null = null;
   public consumers: Map<string, Consumer> = new Map();
   
   private pendingRequests: Map<string, { resolve: (val: any) => void, reject: (err: any) => void, timeoutId?: any, requestId?: string }[]> = new Map();
@@ -160,6 +163,7 @@ export class WebRTCClient {
   public onNetworkQualityChange?: (quality: NetworkQualityLabel) => void;
   public onNetworkDebugSnapshot?: (snapshot: NetworkDebugSnapshot) => void;
   private networkInterval?: NodeJS.Timeout;
+  private joinedAtTime: number = performance.now();
   
   // Audio-only toggle mode
   public isAudioOnlyMode: boolean = false;
@@ -934,10 +938,7 @@ export class WebRTCClient {
           console.warn('[WebRTC] Send Transport ICE State disconnected. Waiting for auto-recovery...');
         } else if (state === 'failed') {
           console.error('[WebRTC] Send Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-          }
-          this.republishMedia().catch(console.error);
+          this.restartTransportIce(this.sendTransport);
         }
       });
     }
@@ -971,10 +972,7 @@ export class WebRTCClient {
         console.warn('[WebRTC] Receive Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! (Possible firewall/UDP port issue). Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-        }
-        this.republishMedia().catch(console.error);
+        this.restartTransportIce(this.recvTransport);
       }
     });
 
@@ -1068,6 +1066,7 @@ export class WebRTCClient {
     let reconnectCount = 0;
 
     this.networkInterval = setInterval(async () => {
+      if (performance.now() - this.joinedAtTime < 120000) return;
       if (!this.sendTransport && !this.recvTransport) return;
       
       try {
@@ -1245,6 +1244,14 @@ export class WebRTCClient {
           });
         }
 
+        if (this.localScreenAudioTrack) {
+          // Republish screen audio track
+          this.screenAudioShareProducer = await this.sendTransport.produce({
+            track: this.localScreenAudioTrack,
+            appData: { source: 'screen-audio' }
+          });
+        }
+
       } catch (e) {
       }
     }, this.networkConfig.networkMonitorIntervalMs);
@@ -1254,6 +1261,24 @@ export class WebRTCClient {
     this.onNetworkQualityChange?.(label);
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'network_quality', quality: label }));
+    }
+  }
+
+  private async restartTransportIce(transport: any) {
+    if (!transport) return;
+    try {
+      console.log(`[WebRTC] Requesting ICE Restart for transport ${transport.id}`);
+      const res = await this.request('restart_ice', 'ice_restarted', { transportId: transport.id });
+      if (res.iceParameters) {
+        await transport.restartIce({ iceParameters: res.iceParameters });
+        console.log(`[WebRTC] ICE Restart successful for transport ${transport.id}`);
+      }
+    } catch (err) {
+      console.error(`[WebRTC] ICE Restart failed for transport ${transport.id}:`, err);
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+      }
+      this.republishMedia().catch(console.error);
     }
   }
 
@@ -1274,7 +1299,6 @@ export class WebRTCClient {
     const videoTrack = this.localVideoProducer?.track;
     const audioTrack = this.localAudioProducer?.track;
     const isVideoPaused = this.localVideoProducer?.paused;
-    const isAudioPaused = this.localAudioProducer?.paused;
     
     // Check screen share track
     const screenTrack = this.localScreenTrack;
@@ -1317,10 +1341,7 @@ export class WebRTCClient {
         console.warn('[WebRTC] Republish Send Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Send Transport connection failed! Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-        }
-        this.republishMedia().catch(console.error);
+        this.restartTransportIce(this.sendTransport);
       }
     });
 
@@ -1345,10 +1366,7 @@ export class WebRTCClient {
         console.warn('[WebRTC] Republish Receive Transport ICE State disconnected. Waiting for auto-recovery...');
       } else if (state === 'failed') {
         console.error('[WebRTC] Receive Transport connection failed! Forcing republish...');
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-        }
-        this.republishMedia().catch(console.error);
+        this.restartTransportIce(this.recvTransport);
       }
     });
 
@@ -1370,10 +1388,17 @@ export class WebRTCClient {
               ];
 
         try {
+          const videoCodec = this.device?.rtpCapabilities?.codecs?.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+          ) || this.device?.rtpCapabilities?.codecs?.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+          );
+
           this.localVideoProducer = await this.sendTransport.produce({ 
             track: videoTrack,
             appData: { source: 'camera' },
             encodings,
+            codec: videoCodec,
             codecOptions: { videoGoogleStartBitrate: 1000 }
           });
           if (isVideoPaused) this.localVideoProducer.pause();
@@ -1390,21 +1415,31 @@ export class WebRTCClient {
     
     if (audioTrack) {
       if (audioTrack.readyState === 'live') {
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: audioTrack, 
-          appData: { source: 'mic' } 
+          appData: { source: 'mic' },
+          codec: opusCodec
         });
         this.onAudioTrackReplaced?.();
-        if (isAudioPaused) this.localAudioProducer.pause();
+        if (this.audioConnectionStatus === 'muted') {
+          this.localAudioProducer.pause();
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+          if (audioTrack) audioTrack.enabled = false;
+        }
       } else {
         console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
         this.emitTelemetry('mic_track_closed_detected');
         this.emitTelemetry('mic_reacquire_started');
         try {
-          // This creates a new producer internally
-          await this.enableMic();
+          // Preserve mute state and pass it into enableMic
+          const wasMuted = this.audioConnectionStatus === 'muted';
+          await this.enableMic(true, wasMuted);
           this.emitTelemetry('mic_reacquire_success');
-          if (isAudioPaused) this.pauseMic();
+          if (wasMuted) this.pauseMic();
+
         } catch (e) {
           console.error("Failed to reacquire mic during reconnect:", e);
           this.emitTelemetry('mic_reacquire_failed');
@@ -1425,12 +1460,24 @@ export class WebRTCClient {
           );
         }
 
-        try {
-          if (this.screenShareProducer) {
-            this.emitTelemetry('screen_old_producer_closed');
+        // Clear screen share producer if exists
+        if (this.screenShareProducer) {
+          try {
             this.screenShareProducer.close();
+          } catch (e) {
+            console.warn('[WebRTC] Failed to close previous screen share producer', e);
           }
-          this.emitTelemetry('screen_republish_started');
+        }
+        if (this.screenAudioShareProducer) {
+          try {
+            this.screenAudioShareProducer.close();
+          } catch (e) {
+            console.warn('[WebRTC] Failed to close previous screen audio producer', e);
+          }
+        }
+
+        try {
+          // Republish screen track
           this.screenShareProducer = await this.sendTransport.produce({
             track: screenTrack,
             codec: screenCodec,
@@ -1459,6 +1506,13 @@ export class WebRTCClient {
     }
     
     this.emitTelemetry('media_recovery_completed');
+    
+    // Cleanup old ghosts before re-fetching
+    this.consumers.forEach((consumer) => {
+      consumer.close();
+    });
+    this.consumers.clear();
+
     // Re-fetch consumers
     try {
       const res = await this.request('getProducers', 'producersList');
@@ -1471,10 +1525,22 @@ export class WebRTCClient {
       }
     } catch (e) {
       console.error("Failed to re-sync producers after republish", e);
+      throw e; // Throw so the main catch block can trigger a retry
     }
     
     } catch (err) {
       console.error("republishMedia failed", err);
+      this.isRepublishing = false;
+      
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        setTimeout(() => {
+          console.warn("[WebRTC] Retrying republishMedia after failure...");
+          this.republishMedia().catch(console.error);
+        }, 2000);
+      } else {
+        this.onConnectionStateChange?.('failed');
+      }
+      return;
     } finally {
       this.isRepublishing = false;
     }
@@ -1616,12 +1682,15 @@ export class WebRTCClient {
     console.log('camera_track_ready');
     let videoTrack = this.rawCameraStream.getVideoTracks()[0];
 
-    // Initialize VideoProcessor if not exists
+    // Initialize VideoProcessor
     let activeMode: VirtualBackgroundMode = 'none';
     if (this.isVirtualBackgroundEnabled) {
       if (!this.videoProcessor) {
         this.videoProcessor = new VideoProcessor();
-        const saved = sessionStorage.getItem("mtg_vb");
+        this.videoProcessor.onDegraded = (severity) => {
+          if (this.onVbDegraded) this.onVbDegraded(severity);
+        };
+        const saved = localStorage.getItem("mtg_vb");
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
@@ -1638,9 +1707,9 @@ export class WebRTCClient {
       }
     }
 
-    // Pass the stream through the VideoProcessor to apply Virtual Background only if needed
-    if (this.isVirtualBackgroundEnabled && activeMode !== 'none') {
-      const processedStream = this.videoProcessor!.startProcessing(this.rawCameraStream);
+    // Option 2: Always-On Interceptor. Always pass through VideoProcessor to prevent WebGL initialization crashes.
+    if (this.isVirtualBackgroundEnabled && this.videoProcessor) {
+      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
       videoTrack = processedStream.getVideoTracks()[0];
     } else {
       if (this.videoProcessor) {
@@ -1671,63 +1740,49 @@ export class WebRTCClient {
 
     // If a live producer already exists, just swap the track — no second produce()
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
-      try {
-        console.log('camera_producer_replace_track_started');
-        await this.localVideoProducer.replaceTrack({ track: videoTrack });
-        this.localVideoProducer.resume();
-        console.log('camera_producer_replace_track_completed');
-      } catch (err) {
-        console.log('camera_producer_replace_track_failed');
-        console.error("Track replacement failed, will recreate producer:", err);
-        this.localVideoProducer.close();
+      this.emitTelemetry('video_producer_replacing_track');
+      await this.localVideoProducer.replaceTrack({ track: videoTrack }).catch(() => {});
+      console.log('camera_producer_track_replaced');
+    } else {
+      this.emitTelemetry('video_producer_creating');
+      this.localVideoProducer = await this.sendTransport.produce({ 
+        track: videoTrack, 
+        encodings,
+        codecOptions: { videoGoogleStartBitrate: 1000 },
+        appData: { source: 'camera' } 
+      });
+
+      this.localVideoProducer.on('trackended', () => {
+        console.warn('camera_track_ended_unexpectedly');
+      });
+
+      this.localVideoProducer.on('transportclose', () => {
         this.localVideoProducer = null;
-        // Fall back to creating a new producer below
-      }
+      });
+      console.log('camera_producer_created_successfully');
     }
 
-    if (!this.localVideoProducer || this.localVideoProducer.closed) {
-      // First time or after producer was closed — create with full simulcast encodings
-      this.emitTelemetry('video_produce_started');
-      console.log('camera_producer_creating');
-      try {
-        this.localVideoProducer = await this.sendTransport.produce({
-          track: videoTrack,
-          appData: { source: 'camera' },
-          encodings,
-          codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 },
-        });
-        this.emitTelemetry('video_producer_created');
-        console.log('camera_producer_created');
-      } catch (err) {
-        console.log('camera_producer_failed');
-        throw err;
-      }
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('camera_producer_id_sent_to_server');
+      this.ws.send(JSON.stringify({ 
+        type: 'new_producer', 
+        producerId: this.localVideoProducer.id,
+        appData: { source: 'camera' }
+      }));
     }
-    
-    this.emitTelemetry('video_ready');
+
+    this.cameraStartInProgress = false;
     return videoTrack;
     } catch (e) {
       this.cameraStartInProgress = false;
       throw e;
-    } finally {
-      this.cameraStartInProgress = false;
     }
   }
 
   public async setVirtualBackground(mode: VirtualBackgroundMode, imageUrl?: string): Promise<MediaStreamTrack | null> {
-    if (mode === 'none' || !this.isVirtualBackgroundEnabled) {
-      if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
-        console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
-        console.warn("[webrtc] virtual_background_model_load_skipped");
-      }
-      if (this.videoProcessor) {
-        this.videoProcessor.stopProcessing();
-      }
-      if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
-        const nativeTrack = this.rawCameraStream.getVideoTracks()[0];
-        await this.localVideoProducer.replaceTrack({ track: nativeTrack });
-        return nativeTrack;
-      }
+    if (!this.isVirtualBackgroundEnabled && mode !== 'none') {
+      console.warn("[webrtc] virtual_background_disabled_for_room: skipping model load");
+      console.warn("[webrtc] virtual_background_model_load_skipped");
       return null;
     }
 
@@ -1739,13 +1794,16 @@ export class WebRTCClient {
     }
     this.videoProcessor.setMode(mode, imageUrl);
     
-    if (this.rawCameraStream && this.localVideoProducer && !this.localVideoProducer.closed) {
-      const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
-      const newTrack = processedStream.getVideoTracks()[0];
-      await this.localVideoProducer.replaceTrack({ track: newTrack });
-      return newTrack;
+    if (!this.rawCameraStream) return null;
+
+    // Option 2 Always-On Interceptor: We ALWAYS process the stream through the VideoProcessor
+    const processedStream = this.videoProcessor.startProcessing(this.rawCameraStream);
+    const newTrack = processedStream.getVideoTracks()[0];
+    
+    if (this.localVideoProducer && !this.localVideoProducer.closed) {
+      await this.localVideoProducer.replaceTrack({ track: newTrack }).catch(() => {});
     }
-    return null;
+    return newTrack;
   }
 
   public disableCamera() {
@@ -1792,7 +1850,7 @@ export class WebRTCClient {
     }
   }
 
-  public async enableMic(isReconnect = false): Promise<MediaStreamTrack> {
+  public async enableMic(isReconnect = false, startMuted = false): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
     // Clear any pending timeout
     if (this.audioConnectionTimeoutId) {
@@ -1840,6 +1898,9 @@ export class WebRTCClient {
       
       if (!stream) throw new Error("Failed to initialize mic");
       this.rawAudioTrack = stream.getAudioTracks()[0];
+      if (startMuted) {
+        this.rawAudioTrack.enabled = false;
+      }
       this.emitTelemetry('audio_track_ready');
       
       let activeTrack = this.rawAudioTrack;
@@ -1849,26 +1910,38 @@ export class WebRTCClient {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
         activeTrack = denoisedStream.getAudioTracks()[0];
+        if (startMuted) {
+          activeTrack.enabled = false;
+        }
       }
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
         this.emitTelemetry('audio_produce_started');
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: activeTrack,
-          appData: { source: 'mic' }
+          appData: { source: 'mic' },
+          codec: opusCodec
         });
         this.emitTelemetry('audio_producer_created');
       } else {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       }
 
+      // Enforce producer pause immediately to prevent state overwriting
+      if (startMuted) {
+        this.localAudioProducer.pause();
+      }
+
       // Handle unexpected track ends (e.g. mic unplugged)
       activeTrack.onended = async () => {
         console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
         try {
-          const wasPaused = this.localAudioProducer?.paused;
-          await this.enableMic();
-          if (wasPaused) {
+          const wasMuted = this.audioConnectionStatus === 'muted';
+          await this.enableMic(true, wasMuted);
+          if (wasMuted) {
             this.pauseMic();
           }
         } catch (err) {
@@ -1934,7 +2007,14 @@ export class WebRTCClient {
       if (!this.localAudioProducer.closed) {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       } else {
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
+        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
+      }
+      if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+        activeTrack.enabled = false;
       }
       this.onAudioTrackReplaced?.();
       return activeTrack;
@@ -2006,6 +2086,10 @@ export class WebRTCClient {
         }
       } else {
         await producer.replaceTrack({ track: newTrack });
+        if (producer.paused || this.audioConnectionStatus === 'muted') {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+          newTrack.enabled = false;
+        }
         if (oldTrack) {
           oldTrack.stop();
         }
@@ -2020,7 +2104,14 @@ export class WebRTCClient {
           const denoisedStream = await this.purifyInstance.processStream(rawStream);
           activeTrack = denoisedStream.getAudioTracks()[0];
         }
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' } });
+        const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
+        );
+        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
+        if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+          activeTrack.enabled = false;
+        }
         this.onAudioTrackReplaced?.();
       } else {
         this.rawCameraStream = stream;
@@ -2039,10 +2130,17 @@ export class WebRTCClient {
                 { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 }
               ];
           
+        const videoCodec = this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+        ) || this.device?.rtpCapabilities?.codecs?.find(
+          (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+        );
+
         this.localVideoProducer = await this.sendTransport.produce({ 
           track: newTrack, 
           appData: { source: 'camera' },
           encodings,
+          codec: videoCodec,
           codecOptions: { videoGoogleStartBitrate: this.isLowBandwidth ? 50 : 1000 }
         });
         this.cameraSwitchInProgress = false;
@@ -2057,6 +2155,12 @@ export class WebRTCClient {
   public pauseMic() {
     if (this.localAudioProducer && !this.localAudioProducer.paused) {
       this.localAudioProducer.pause();
+    }
+    if (this.rawAudioTrack) {
+      this.rawAudioTrack.enabled = false;
+    }
+    if (this.localAudioProducer?.track) {
+      this.localAudioProducer.track.enabled = false;
     }
     if (this.audioConnectionTimeoutId) {
       clearTimeout(this.audioConnectionTimeoutId);
@@ -2077,6 +2181,12 @@ export class WebRTCClient {
     } else if (this.localAudioProducer.paused) {
       this.localAudioProducer.resume();
       this.setAudioConnectionStatus('connected');
+    }
+    if (this.rawAudioTrack) {
+      this.rawAudioTrack.enabled = true;
+    }
+    if (this.localAudioProducer?.track) {
+      this.localAudioProducer.track.enabled = true;
     }
   }
 
@@ -2111,18 +2221,18 @@ export class WebRTCClient {
     }
 
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: 15, max: 30 } } // Lower framerate = less CPU, still crisp
+      video: { frameRate: { ideal: 15, max: 30 } }, // Lower framerate = less CPU, still crisp
+      audio: true
     });
     const screenTrack = stream.getVideoTracks()[0];
     this.localScreenTrack = screenTrack;
     
-    // Force H264 for screen share to ensure iPhone Safari compatibility
-    let screenCodec;
-    if (this.device.rtpCapabilities.codecs) {
-      screenCodec = this.device.rtpCapabilities.codecs.find(
-        (c) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['packetization-mode'] === 1
-      );
-    }
+    // Prioritize VP8, fallback to H264 Baseline for Safari/iOS compatibility
+    const screenCodec = this.device.rtpCapabilities.codecs?.find(
+      (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+    ) || this.device.rtpCapabilities.codecs?.find(
+      (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+    );
     
     // Create a SEPARATE producer — camera producer stays untouched
     this.screenShareProducer = await this.sendTransport.produce({
@@ -2134,6 +2244,20 @@ export class WebRTCClient {
       ],
       codecOptions: { videoGoogleStartBitrate: 1000 }
     });
+
+    // Check for audio track and produce it
+    const screenAudioTrack = stream.getAudioTracks()[0];
+    if (screenAudioTrack) {
+      this.localScreenAudioTrack = screenAudioTrack;
+      this.screenAudioShareProducer = await this.sendTransport.produce({
+        track: screenAudioTrack,
+        appData: { source: 'screen-audio' }
+      });
+      // Optionally stop sharing when audio track ends (unlikely unless video track ends too)
+      screenAudioTrack.onended = () => {
+        this.stopScreenShareProducer();
+      };
+    }
 
     // Auto-stop when user clicks browser's native "Stop sharing" button
     screenTrack.onended = () => {
@@ -2164,6 +2288,21 @@ export class WebRTCClient {
       this.screenShareProducer.close();
       this.screenShareProducer = null;
       this.localScreenTrack = null;
+    }
+    
+    if (this.screenAudioShareProducer) {
+      const audioProducerId = this.screenAudioShareProducer.id;
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId: audioProducerId,
+          appData: { source: 'screen-audio' }
+        }));
+      }
+      this.screenAudioShareProducer.track?.stop();
+      this.screenAudioShareProducer.close();
+      this.screenAudioShareProducer = null;
+      this.localScreenAudioTrack = null;
     }
   }
 
@@ -2200,20 +2339,14 @@ export class WebRTCClient {
       this.consumers.set(consumer.id, consumer);
       
       // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
+      // We explicitly DO NOT update UI state (isCameraOn/isMuted) here because BWE can cause rapid oscillation.
+      // Intentional user camera/mic toggles are handled by the explicit WebSocket 'camera_state' and 'mute_state' events.
       consumer.on('pause', () => {
-        if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: false });
-        } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: true });
-        }
+        console.log(`[WebRTC] Consumer ${id} paused by SFU (likely bandwidth degradation or producer paused)`);
       });
 
       consumer.on('resume', () => {
-        if (consumerKind === 'video' && source !== 'screen') {
-          this.onCameraState?.({ userId: producerParticipantId || producerUserId, isCameraOn: true });
-        } else if (consumerKind === 'audio') {
-          this.onMuteState?.({ userId: producerParticipantId || producerUserId, isMuted: false });
-        }
+        console.log(`[WebRTC] Consumer ${id} resumed by SFU`);
       });
 
       this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);

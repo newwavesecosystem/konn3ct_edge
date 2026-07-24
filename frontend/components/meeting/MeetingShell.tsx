@@ -16,6 +16,7 @@ import StreamingPanel from "./StreamingPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
 import { MicIssueDialog } from "./MicIssueDialog";
+import { CamIssueDialog } from "./CamIssueDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { QAPanel } from "./QAPanel";
 import { SecurityPanel } from "./SecurityPanel";
@@ -27,8 +28,11 @@ const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.Do
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWakeLock } from "@/hooks/useWakeLock";
 
 export function MeetingShell() {
+  useWakeLock();
+
   const {
     activePanel,
     setActivePanel,
@@ -132,13 +136,14 @@ export function MeetingShell() {
     );
   }
 
-  if (['denied', 'kicked', 'failed', 'invalid-session'].includes(webrtcStatus)) {
+  if (['denied', 'kicked', 'failed', 'invalid-session', 'ended'].includes(webrtcStatus)) {
     const errorDetails = {
       denied: { title: "Entry Denied", desc: "The host has declined your request to join this meeting." },
       kicked: { title: "Removed from Meeting", desc: "You have been removed from this meeting by the host." },
       failed: { title: "Connection Failed", desc: "We couldn't connect you to the meeting. Please try again." },
       'invalid-session': { title: "Invalid Session", desc: "Your join session is invalid or expired. Please start over from the join page." },
-    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session'];
+      ended: { title: "Meeting Ended", desc: "The host has ended this meeting for everyone." },
+    }[webrtcStatus as 'denied' | 'kicked' | 'failed' | 'invalid-session' | 'ended'];
 
     return (
       <div className="flex flex-col items-center justify-center h-[100dvh]" style={{ backgroundColor: "var(--mt-bg)", color: "var(--mt-text)" }}>
@@ -152,16 +157,20 @@ export function MeetingShell() {
           </p>
           <button
             onClick={() => {
-              if (webrtcStatus === 'invalid-session') {
-                const slug = window.location.pathname.split('/').pop();
+              const slug = window.location.pathname.split('/').pop();
+              if (webrtcStatus === 'invalid-session' || webrtcStatus === 'failed') {
                 router.push(`/join/${slug}`);
               } else {
-                router.push('/dashboard');
+                if (logoutUrl) {
+                  window.location.href = logoutUrl;
+                } else {
+                  router.push('/dashboard');
+                }
               }
             }}
             className="w-full px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20"
           >
-            {webrtcStatus === 'invalid-session' ? 'Return to Join Page' : 'Return to Dashboard'}
+            {webrtcStatus === 'invalid-session' || webrtcStatus === 'failed' ? 'Rejoin Meeting' : 'Return to Dashboard'}
           </button>
         </div>
       </div>
@@ -383,6 +392,7 @@ export function MeetingShell() {
       <ReactionsLayer />
       <LeaveDialog />
       <MicIssueDialog />
+      <CamIssueDialog />
       {showDonationModal && <DonationModal onClose={() => setShowDonationModal(false)} />}
     </div>
   );

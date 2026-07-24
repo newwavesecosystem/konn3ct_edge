@@ -87,8 +87,11 @@ export class VideoProcessor {
     this.imageUrl = imageUrl || null;
     
     if (mode === 'image' && imageUrl) {
-      this.backgroundImage = new Image();
-      this.backgroundImage.src = imageUrl;
+      const img = new Image();
+      img.onload = () => {
+        this.backgroundImage = img;
+      };
+      img.src = imageUrl;
     } else {
       this.backgroundImage = null;
     }
@@ -263,6 +266,12 @@ export class VideoProcessor {
         this.processedStream?.removeTrack(t);
       });
     }
+    
+    // Recreate the canvas to prevent Chrome "ended track" bug on subsequent captureStream calls
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 640;
+    this.canvas.height = 480;
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
     
     this.rawStream = null;
     this.processedStream = null;

@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +22,8 @@ import {
   CreditCard,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { fetchPricingPlans, fetchPayments, PricingPlan, PaymentItem } from '../api/payments';
+import { useAuthStore } from '../store/useAuthStore';
 
 const { width } = Dimensions.get('window');
 
@@ -35,63 +39,112 @@ const COLORS = {
   danger: '#ef4444',
 };
 
-const MOCK_PLANS = {
-  monthly: [
-    { name: 'Basic', price: 'Free', target: 'For individuals', features: ['Recordings (No)', '40 mins duration', '100 Participants', '1 Room'], cta: 'Current Plan', popular: false, icon: Zap, color: '#94a3b8' },
-    { name: 'Pro', price: 'NGN 15,000', target: 'For professionals', features: ['Recordings (Yes)', 'Unlimited duration', '500 Participants', '5 Rooms'], cta: 'Upgrade Now', popular: true, icon: Crown, color: COLORS.brandGreen },
-    { name: 'Enterprise', price: 'Custom', target: 'For large organizations', features: ['Custom features', 'Dedicated support', 'Unlimited Participants', 'Unlimited Rooms'], cta: 'Contact Sales', popular: false, icon: Shield, color: COLORS.brandBlue },
-  ],
-  yearly: [
-    { name: 'Basic', price: 'Free', target: 'For individuals', features: ['Recordings (No)', '40 mins duration', '100 Participants', '1 Room'], cta: 'Current Plan', popular: false, icon: Zap, color: '#94a3b8' },
-    { name: 'Pro', price: 'NGN 150,000', target: 'For professionals', features: ['Recordings (Yes)', 'Unlimited duration', '500 Participants', '5 Rooms'], cta: 'Upgrade Now', popular: true, icon: Crown, color: COLORS.brandGreen },
-    { name: 'Enterprise', price: 'Custom', target: 'For large organizations', features: ['Custom features', 'Dedicated support', 'Unlimited Participants', 'Unlimited Rooms'], cta: 'Contact Sales', popular: false, icon: Shield, color: COLORS.brandBlue },
-  ]
+const formatNumber = (numStr: string | number) => {
+  if (!numStr) return '0';
+  const num = Number(numStr);
+  if (isNaN(num)) return String(numStr);
+  return new Intl.NumberFormat('en-NG').format(num);
 };
 
-const MOCK_INVOICES = [
-  { id: 'inv-1', date: 'Oct 01, 2026', plan: 'PRO', ref: 'REF-837492A', amount: '15,000' },
-  { id: 'inv-2', date: 'Sep 01, 2026', plan: 'PRO', ref: 'REF-392019B', amount: '15,000' },
-  { id: 'inv-3', date: 'Aug 01, 2026', plan: 'PRO', ref: 'REF-119283C', amount: '15,000' },
-];
+const formatPriceStr = (costStr: string) => {
+  if (!costStr || costStr === '0') return 'Free';
+  const parts = costStr.split('/');
+  if (parts.length > 1) {
+    const ngn = formatNumber(parts[0]);
+    const usd = formatNumber(parts[1]);
+    return `NGN ${ngn} / $${usd}`;
+  }
+  return formatNumber(costStr);
+};
 
 export default function PaymentsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { user } = useAuthStore();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [plans, setPlans] = useState<PricingPlan[]>([]);
+  const [payments, setPayments] = useState<PaymentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const renderPlanCard = (plan: any) => {
-    const Icon = plan.icon;
-    const isCurrent = plan.name === 'Basic';
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [plansData, payData] = await Promise.all([
+        fetchPricingPlans(),
+        fetchPayments(),
+      ]);
+      setPlans(plansData);
+      setPayments(payData);
+    } catch (e) {
+      console.error('Failed to load payments data', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
+
+  const renderPlanCard = (plan: PricingPlan) => {
+    let Icon = Zap;
+    let color = '#94a3b8';
+    let target = 'For individuals';
+    let popular = false;
+    
+    const lowerName = plan.name?.toLowerCase() || '';
+    if (lowerName === 'lite') {
+      Icon = Crown;
+      color = COLORS.brandGreen;
+      target = 'For professionals';
+      popular = true;
+    } else if (lowerName === 'pro' || lowerName === 'enterprise') {
+      Icon = Shield;
+      color = COLORS.brandBlue;
+      target = 'For large organizations';
+    }
+
+    const isCurrent = lowerName === 'basic';
+    const cta = isCurrent ? 'Current Plan' : (popular ? 'Upgrade Now' : 'Contact Sales');
+    const priceText = billingCycle === 'monthly' ? formatPriceStr(plan.monthly_cost) : formatPriceStr(plan.yearly_cost);
+
+    const features = [
+      `Recordings (${plan.recording ? 'Yes' : 'No'})`,
+      `${plan.duration} mins duration`,
+      `${plan.participant} Participants`,
+      `${plan.rooms} Rooms`,
+      ...(plan.breakout_rooms ? ['Breakout rooms'] : []),
+    ];
 
     return (
-      <View key={plan.name} style={[styles.planCard, plan.popular && styles.planCardPopular]}>
-        {plan.popular && (
+      <View key={plan.id || plan.name} style={[styles.planCard, popular && styles.planCardPopular]}>
+        {popular && (
           <View style={styles.popularBadge}>
             <Text style={styles.popularBadgeText}>POPULAR</Text>
           </View>
         )}
         <View style={styles.planHeader}>
-          <View style={[styles.planIconBox, { backgroundColor: `${plan.color}15` }]}>
-            <Icon color={plan.color} size={24} />
+          <View style={[styles.planIconBox, { backgroundColor: `${color}15` }]}>
+            <Icon color={color} size={24} />
           </View>
           <View>
-            <Text style={styles.planName}>{plan.name}</Text>
-            <Text style={styles.planTarget}>{plan.target}</Text>
+            <Text style={styles.planName} style={{textTransform: 'capitalize'}}>{plan.name}</Text>
+            <Text style={styles.planTarget}>{target}</Text>
           </View>
         </View>
 
         <View style={styles.priceContainer}>
-          <Text style={styles.planPrice}>{plan.price}</Text>
-          {plan.price !== 'Free' && plan.price !== 'Custom' && (
+          <Text style={styles.planPrice}>{priceText}</Text>
+          {priceText !== 'Free' && priceText !== '0' && priceText !== 'Custom' && (
             <Text style={styles.planDuration}> / {billingCycle === 'monthly' ? 'mo' : 'yr'}</Text>
           )}
         </View>
 
         <View style={styles.featuresList}>
-          {plan.features.map((feat: string, index: number) => (
+          {features.map((feat: string, index: number) => (
             <View key={index} style={styles.featureItem}>
-              <View style={[styles.checkCircle, { backgroundColor: plan.popular ? `${COLORS.brandGreen}15` : 'rgba(0,0,0,0.04)' }]}>
-                <Check size={12} color={plan.popular ? COLORS.brandGreen : COLORS.textMuted} strokeWidth={3} />
+              <View style={[styles.checkCircle, { backgroundColor: popular ? `${COLORS.brandGreen}15` : 'rgba(0,0,0,0.04)' }]}>
+                <Check size={12} color={popular ? COLORS.brandGreen : COLORS.textMuted} strokeWidth={3} />
               </View>
               <Text style={styles.featureText}>{feat}</Text>
             </View>
@@ -99,14 +152,14 @@ export default function PaymentsScreen() {
         </View>
 
         <TouchableOpacity 
-          style={[styles.planBtn, isCurrent ? styles.planBtnCurrent : plan.popular ? styles.planBtnPopular : styles.planBtnNormal]}
+          style={[styles.planBtn, isCurrent ? styles.planBtnCurrent : popular ? styles.planBtnPopular : styles.planBtnNormal]}
           activeOpacity={0.8}
           disabled={isCurrent}
         >
-          <Text style={[styles.planBtnText, isCurrent ? styles.planBtnTextCurrent : plan.popular ? styles.planBtnTextPopular : styles.planBtnTextNormal]}>
-            {plan.cta}
+          <Text style={[styles.planBtnText, isCurrent ? styles.planBtnTextCurrent : popular ? styles.planBtnTextPopular : styles.planBtnTextNormal]}>
+            {cta}
           </Text>
-          {!isCurrent && <ArrowRight size={16} color={plan.popular ? '#fff' : '#fff'} style={{marginLeft: 8}} />}
+          {!isCurrent && <ArrowRight size={16} color={popular ? '#fff' : '#fff'} style={{marginLeft: 8}} />}
         </TouchableOpacity>
       </View>
     );
@@ -128,6 +181,7 @@ export default function PaymentsScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={loadData} />}
       >
         {/* Active Plan Banner */}
         <View style={styles.activePlanCard}>
@@ -150,7 +204,7 @@ export default function PaymentsScreen() {
                     <Text style={styles.activeBadgeText}>ACTIVE</Text>
                   </View>
                 </View>
-                <Text style={styles.activePlanEmail}>user@example.com</Text>
+                <Text style={styles.activePlanEmail}>{user?.email || 'guest@example.com'}</Text>
               </View>
             </View>
           </View>
@@ -183,7 +237,7 @@ export default function PaymentsScreen() {
           decelerationRate="fast"
           snapToInterval={width * 0.85 + 16}
         >
-          {MOCK_PLANS[billingCycle].map(renderPlanCard)}
+          {plans.map(renderPlanCard)}
         </ScrollView>
 
         {/* Invoice History */}
@@ -192,23 +246,29 @@ export default function PaymentsScreen() {
         </View>
 
         <View style={styles.invoiceList}>
-          {MOCK_INVOICES.map((inv, i) => (
-            <View key={inv.id} style={[styles.invoiceItem, i === MOCK_INVOICES.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={styles.invoiceLeft}>
-                <View style={styles.invoiceIcon}>
-                  <CreditCard color={COLORS.textMuted} size={20} />
+          {payments.length === 0 && !isLoading ? (
+             <View style={{ padding: 40, alignItems: 'center' }}>
+               <Text style={{ color: COLORS.textMuted }}>No payment history found.</Text>
+             </View>
+          ) : (
+            payments.map((inv, i) => (
+              <View key={inv.id} style={[styles.invoiceItem, i === payments.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={styles.invoiceLeft}>
+                  <View style={styles.invoiceIcon}>
+                    <CreditCard color={COLORS.textMuted} size={20} />
+                  </View>
+                  <View>
+                    <Text style={styles.invoicePlan}>{inv.plan || 'Payment'} • NGN {formatNumber(inv.amount)}</Text>
+                    <Text style={styles.invoiceMeta}>{inv.created_at || inv.date} • {inv.reference || inv.ref}</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.invoicePlan}>{inv.plan} • NGN {inv.amount}</Text>
-                  <Text style={styles.invoiceMeta}>{inv.date} • {inv.ref}</Text>
-                </View>
+                <TouchableOpacity style={styles.receiptBtn}>
+                  <FileText color={COLORS.brandBlue} size={14} />
+                  <Text style={styles.receiptBtnText}>Receipt</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.receiptBtn}>
-                <FileText color={COLORS.brandBlue} size={14} />
-                <Text style={styles.receiptBtnText}>Receipt</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -402,10 +462,11 @@ const styles = StyleSheet.create({
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexWrap: 'wrap',
     marginBottom: 24,
   },
   planPrice: {
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: '900',
     color: COLORS.textPrimary,
   },

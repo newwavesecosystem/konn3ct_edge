@@ -4,7 +4,7 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce, handleTranscriptionMute } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -123,6 +123,7 @@ interface Client {
   audioOnlyMode?: boolean;
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
+  isMuted: boolean;
   maxActiveCameras?: number;
   preempted?: boolean;
   maxParticipants?: number;
@@ -133,7 +134,7 @@ interface Client {
   micExemption?: boolean;
 }
 
-const rooms = new Map<string, Map<string, Client>>();
+export const rooms = new Map<string, Map<string, Client>>();
 const roomProducers = new Map<string, Array<{ producerId: string, userId: string, participantId: string, name: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
@@ -142,6 +143,32 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
+
+async function cleanupRoomData(roomId: string) {
+  try {
+    // 1. Close any active polls
+    await db.meetingPoll.updateMany({
+      where: { roomId, isActive: true },
+      data: { isActive: false }
+    });
+
+    // 2. Check if chat persistence is enabled
+    const room = await db.room.findUnique({
+      where: { id: roomId },
+      select: { persistChat: true }
+    });
+
+    // If persistChat is explicitly false, delete all chat messages
+    if (room && room.persistChat === false) {
+      const { count } = await db.chatMessage.deleteMany({
+        where: { roomId }
+      });
+      logger.info(`Cleared ${count} chat messages for room ${roomId} (persistChat=false).`);
+    }
+  } catch (error) {
+    logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
+  }
+}
 
 async function asyncWithRetry<T>(
   operation: () => Promise<T>,
@@ -163,7 +190,7 @@ async function asyncWithRetry<T>(
   }
 }
 export function getActiveRoomParticipants(roomId: string) {
-  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
+  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, isMuted: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
   if (roomClients) {
     for (const client of roomClients.values()) {
@@ -175,6 +202,7 @@ export function getActiveRoomParticipants(roomId: string) {
           role: client.role,
           isMobile: client.isMobile,
           isCameraOn: client.isCameraOn,
+          isMuted: client.isMuted,
           audioOnlyMode: client.audioOnlyMode,
           videoSuspendedReason: client.videoSuspendedReason
         });
@@ -405,6 +433,7 @@ export function initializeSignaling(server: Server) {
       const roomSlug = url.searchParams.get('roomId');
       const isMobile = url.searchParams.get('isMobile') === 'true';
       const participantIdParam = url.searchParams.get('participantId');
+      const userAgent = request.headers['user-agent'] || 'unknown_agent';
 
       if (!token || !roomSlug) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -518,6 +547,7 @@ export function initializeSignaling(server: Server) {
           participantId: participantIdParam,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
+          userAgent,
           maxActiveCameras: room.maxActiveCameras ?? 15,
           maxParticipants: maxParticipants,
         });
@@ -530,7 +560,9 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId } = clientData;
+    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
+
+    logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
@@ -539,7 +571,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isMuted: true, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -628,7 +660,8 @@ export function initializeSignaling(server: Server) {
           participantId,
           name: client.name,
           role: client.role,
-          isMobile: client.isMobile
+          isMobile: client.isMobile,
+          isMuted: client.isMuted
         });
         broadcastRoomState(roomId);
         
@@ -740,6 +773,7 @@ export function initializeSignaling(server: Server) {
           roomClients.delete(participantId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
@@ -926,7 +960,7 @@ export function initializeSignaling(server: Server) {
               if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
               updatedAdmissions.add(targetClient.userId);
 
-              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.participantId);
+              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
               broadcastRoomState(roomId);
               sendRoomHistoryAndState(targetClient);
               syncRoomStateToRedis(roomId, client.roomSlug);
@@ -1110,7 +1144,7 @@ export function initializeSignaling(server: Server) {
               networkWindowSize: newSettings.networkWindowSize,
               networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
             }
-          }).catch(e => logger.error("Failed to persist network settings", e));
+          }).catch((e: any) => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
@@ -1150,6 +1184,7 @@ export function initializeSignaling(server: Server) {
           rc.delete(client.participantId);
           if (rc.size === 0) {
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId);
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId);
@@ -1176,9 +1211,26 @@ export function initializeSignaling(server: Server) {
           logger.info(`Host ${userId} ended the meeting in room ${roomId}`);
           const roomClients = rooms.get(roomId);
           if (roomClients) {
+            // Immediately destroy the room to prevent 30s grace periods on close
+            rooms.delete(roomId);
+            cleanupRoomData(roomId);
+            roomProducers.delete(roomId);
+            roomAdmissions.delete(roomId);
+            cleanupAudioObserver(roomId);
+            redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            syncRoomStateToRedis(roomId, client.roomSlug);
+            
+            closeRouter(roomId);
+            roomSettingsMap.delete(roomId);
+
             for (const [id, c] of roomClients.entries()) {
               if (c.userId !== userId) { // Don't send 'ended' to the host that just ended it
                 c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended' }));
+              }
+              
+              if (disconnectTimeouts.has(`${c.userId}:${roomId}`)) {
+                clearTimeout(disconnectTimeouts.get(`${c.userId}:${roomId}`)!);
+                disconnectTimeouts.delete(`${c.userId}:${roomId}`);
               }
               c.ws.close();
             }
@@ -1235,7 +1287,7 @@ export function initializeSignaling(server: Server) {
             serverEventId,
             roomId,
             userId,
-            senderParticipantId: userId,
+            senderParticipantId: client.participantId,
             name: client.name,
             message: data.message,
             timestamp: createdAt.toISOString(),
@@ -1356,7 +1408,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_update':
-        if (client.role === 'host' || client.role === 'presenter') {
+        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
           if (data.link) {
             try {
               const url = new URL(data.link);
@@ -1380,7 +1432,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_action':
-        if (client.role === 'host' || client.role === 'presenter') {
+        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
           roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
@@ -1538,6 +1590,17 @@ export function initializeSignaling(server: Server) {
       case 'mute_state': {
         const serverEventId = crypto.randomUUID();
         if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
+        client.isMuted = data.isMuted;
+        
+        // Pause or resume transcription based on mute state
+        const producersList = roomProducers.get(roomId);
+        if (producersList) {
+          const audioProducer = producersList.find(p => p.participantId === client.participantId && p.kind === 'audio');
+          if (audioProducer) {
+             handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
+          }
+        }
+        
         broadcastToRoom(roomId, {
           type: 'mute_state',
           actionType: 'mute_state',
@@ -1695,7 +1758,8 @@ export function initializeSignaling(server: Server) {
                   participantId: c.participantId,
                   name: c.name,
                   role: c.role,
-                  isMobile: c.isMobile
+                  isMobile: c.isMobile,
+                  isMuted: c.isMuted
                 });
                 sendRoomHistoryAndState(c);
               }
@@ -1976,7 +2040,9 @@ export function initializeSignaling(server: Server) {
           let canConsume = false;
           try {
             canConsume = router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
-          } catch (err) {} // catch if router or producer doesn't exist
+          } catch (err) {
+            logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
+          }
 
           // 1. Log structured attempt
           logger.info(JSON.stringify({
@@ -2155,6 +2221,26 @@ export function initializeSignaling(server: Server) {
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
+        }
+        break;
+      }
+
+      case 'restart_ice': {
+        const { transportId } = data;
+        try {
+          logger.info(`User ${userId} requesting ICE Restart for transport ${transportId}`);
+          const iceParameters = await restartIce(transportId);
+          client.ws.send(JSON.stringify({
+            type: 'ice_restarted',
+            transportId,
+            iceParameters
+          }));
+        } catch (error) {
+          logger.error(`Failed to restart ICE for transport ${transportId}: ${error}`);
+          client.ws.send(JSON.stringify({
+            type: 'error',
+            message: 'Failed to restart ICE'
+          }));
         }
         break;
       }

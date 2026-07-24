@@ -17,7 +17,7 @@ test.describe('Layout Tests @layout', () => {
       
       // Navigate to a mocked meeting room. In a real environment we'd use a specific fixture.
       // We assume the page loads the meeting UI.
-      await page.goto('/meeting/test-room?bot=true'); 
+      await page.goto('/meeting/test-room?bot=true', { waitUntil: 'domcontentloaded' });
       
       // Wait for layout to settle
       await page.waitForTimeout(1000);

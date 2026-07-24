@@ -21,6 +21,7 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
     // Read parameters passed from the exit logic
     const roleParam = searchParams.get("role");
     const logoutParam = searchParams.get("logoutUrl");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (roleParam) setRole(roleParam);
     if (logoutParam) setLogoutUrl(logoutParam);
   }, [searchParams]);
@@ -122,12 +123,14 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
             </button>
 
             {isGuest ? (
-              <button
-                onClick={() => router.push('/register')}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/20"
-              >
-                <LogIn className="w-4 h-4" /> Sign Up Free
-              </button>
+              process.env.NEXT_PUBLIC_HIDE_SIGNUP_BUTTON === 'true' ? null : (
+                <button
+                  onClick={() => router.push('/register')}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/20"
+                >
+                  <LogIn className="w-4 h-4" /> Sign Up Free
+                </button>
+              )
             ) : (
               <button
                 onClick={handleReturnToDashboard}

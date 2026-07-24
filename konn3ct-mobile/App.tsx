@@ -4,15 +4,29 @@ registerGlobals();
 // @ts-ignore
 
 import React, { useEffect } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
+import { useAlertStore } from './src/store/useAlertStore';
+import { CustomAlert } from './src/components/CustomAlert';
+
+// Override React Native's default Alert.alert globally with modern custom modal dialogs
+Alert.alert = (title, message, buttons) => {
+  const formattedButtons = buttons?.map(btn => ({
+    text: btn.text || 'OK',
+    onPress: btn.onPress,
+    style: btn.style,
+  })) || [{ text: 'OK' }];
+
+  useAlertStore.getState().showAlert(title || '', message || '', formattedButtons);
+};
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import AuthStackNavigator from './src/navigation/AuthStackNavigator';
 import MeetingScreen from './src/screens/MeetingScreen';
+import LobbyScreen from './src/screens/LobbyScreen';
 import { MeetingSummaryScreen } from './src/screens/MeetingSummaryScreen';
 import StreamingScreen from './src/screens/StreamingScreen';
 import RecordingsScreen from './src/screens/RecordingsScreen';
@@ -21,6 +35,7 @@ import AttendanceScreen from './src/screens/AttendanceScreen';
 import PaymentsScreen from './src/screens/PaymentsScreen';
 import DonationsScreen from './src/screens/DonationsScreen';
 import RefereesScreen from './src/screens/RefereesScreen';
+import PastMeetingsScreen from './src/screens/PastMeetingsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -37,7 +52,8 @@ Notifications.setNotificationHandler({
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  Meeting: { roomId: string };
+  Lobby: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
+  Meeting: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
   MeetingSummary: { roomId: string };
   Streaming: undefined;
   Recordings: undefined;
@@ -46,6 +62,7 @@ export type RootStackParamList = {
   Payments: undefined;
   Donations: undefined;
   Referees: undefined;
+  PastMeetings: undefined;
   Notifications: undefined;
   History: undefined;
   Settings: undefined;
@@ -95,6 +112,11 @@ export default function App() {
                 component={MainTabNavigator} 
                 options={{ headerShown: false }} 
               />
+              <Stack.Screen
+                name="Lobby"
+                component={LobbyScreen}
+                options={{ headerShown: false }}
+              />
               <Stack.Screen 
                 name="Meeting" 
                 component={MeetingScreen} 
@@ -141,6 +163,11 @@ export default function App() {
                 options={{ headerShown: false }} 
               />
               <Stack.Screen 
+                name="PastMeetings" 
+                component={PastMeetingsScreen} 
+                options={{ headerShown: false }} 
+              />
+              <Stack.Screen 
                 name="Notifications" 
                 component={NotificationsScreen} 
                 options={{ headerShown: false }} 
@@ -160,6 +187,7 @@ export default function App() {
             <AuthStackNavigator />
           )}
         </NavigationContainer>
+        <CustomAlert />
       </SafeAreaProvider>
     </ErrorBoundary>
   );

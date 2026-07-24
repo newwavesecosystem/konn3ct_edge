@@ -196,7 +196,7 @@ export function RecorderShell() {
         position: "relative"
       }}
     >
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 flex flex-col">
         <StageView />
       </div>
     </div>

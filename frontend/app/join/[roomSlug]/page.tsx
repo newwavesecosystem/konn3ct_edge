@@ -32,17 +32,19 @@ export default function JoinPage({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"host" | "attendee">("attendee");
   const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [serverStatus, setServerStatus] = useState<"checking" | "online" | "offline">("checking");
   const [vbMode, setVbMode] = useState<VirtualBackgroundMode>('none');
   const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
   const [volumeLevel, setVolumeLevel] = useState(0);
+  const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<VideoProcessor | null>(null);
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   const [devices, setDevices] = useState<{
     audioInputs: MediaDeviceInfo[];
@@ -58,6 +60,16 @@ export default function JoinPage({
   const roomName = resolvedParams.roomSlug
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+  // Load original ratio setting from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("mtg_originalRatio");
+      if (stored !== null) {
+        setIsOriginalRatioEnabled(stored === "true");
+      }
+    }
+  }, []);
 
   // Check if the signalling server is reachable
   useEffect(() => {
@@ -82,7 +94,7 @@ export default function JoinPage({
   useEffect(() => {
     const getDevices = async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        await navigator.mediaDevices.getUserMedia({ audio: true });
         const dev = await navigator.mediaDevices.enumerateDevices();
         const audioInputs = dev.filter(d => d.kind === 'audioinput');
         const audioOutputs = dev.filter(d => d.kind === 'audiooutput');
@@ -113,10 +125,11 @@ export default function JoinPage({
     }
     
     // Load persisted VB setting
-    const saved = sessionStorage.getItem("mtg_vb");
+    const saved = localStorage.getItem("mtg_vb");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setVbMode(parsed.mode);
         setVbImageUrl(parsed.image);
         processorRef.current.setMode(parsed.mode, parsed.image);
@@ -132,7 +145,9 @@ export default function JoinPage({
     setVbMode(mode);
     setVbImageUrl(url);
     processorRef.current?.setMode(mode, url);
-    sessionStorage.setItem("mtg_vb", JSON.stringify({ mode, image: url }));
+    try {
+      localStorage.setItem("mtg_vb", JSON.stringify({ mode, image: url }));
+    } catch (e) {}
     
     if (streamRef.current) {
       const processed = processorRef.current!.startProcessing(streamRef.current);
@@ -140,14 +155,16 @@ export default function JoinPage({
     }
   };
 
-  const handleCustomUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      handleVbSelect('image', ev.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { compressImage } = await import('@/lib/utils');
+      const compressedData = await compressImage(file);
+      handleVbSelect('image', compressedData);
+    } catch (err) {
+      console.error("Failed to compress background image", err);
+    }
   };
 
   // Audio meter logic
@@ -198,6 +215,7 @@ export default function JoinPage({
     if (!isMuted) {
       startMic();
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVolumeLevel(0);
     }
 
@@ -238,6 +256,16 @@ export default function JoinPage({
         streamRef.current = stream;
         const processed = processorRef.current!.startProcessing(stream);
         if (videoRef.current) videoRef.current.srcObject = processed;
+
+        // Update the device list now that we have camera permission
+        navigator.mediaDevices.enumerateDevices().then(dev => {
+          const videoInputs = dev.filter(d => d.kind === 'videoinput');
+          setDevices(prev => ({ ...prev, videoInputs }));
+          
+          if (videoInputs.length > 0 && (!selectedDevices.videoInput || !videoInputs.find(d => d.deviceId === selectedDevices.videoInput))) {
+            setSelectedDevices(prev => ({ ...prev, videoInput: videoInputs[0].deviceId }));
+          }
+        }).catch(() => {});
       })
       .catch(() => {
         setIsCameraOn(false);
@@ -285,6 +313,25 @@ export default function JoinPage({
     }
   };
 
+  const requestCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Stop immediately, we just needed the permission to populate devices
+      stream.getTracks().forEach(t => t.stop());
+      
+      const dev = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = dev.filter(d => d.kind === 'videoinput');
+      
+      setDevices(prev => ({ ...prev, videoInputs }));
+      
+      if (videoInputs.length > 0 && (!selectedDevices.videoInput || !videoInputs.find(d => d.deviceId === selectedDevices.videoInput))) {
+        setSelectedDevices(prev => ({ ...prev, videoInput: videoInputs[0].deviceId }));
+      }
+    } catch (err) {
+      console.warn("Failed to get camera permission", err);
+    }
+  };
+
   const appName = process.env.NEXT_PUBLIC_APP_NAME || "Konn3ct";
   const appInitial = appName.charAt(0).toUpperCase();
 
@@ -325,7 +372,8 @@ export default function JoinPage({
                   muted
                   playsInline
                   className={cn(
-                    "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
+                    "absolute inset-0 w-full h-full transition-opacity duration-300",
+                    isOriginalRatioEnabled ? "object-contain" : "object-cover",
                     isCameraOn ? "opacity-100" : "opacity-0"
                   )}
                 />
@@ -425,6 +473,16 @@ export default function JoinPage({
                 >
                   <DeviceSelect 
                     label="Camera" 
+                    actionNode={
+                      devices.videoInputs.every(d => !d.label || d.label === 'Default Camera') ? (
+                        <button
+                          onClick={requestCameraPermission}
+                          className="text-brand-green hover:text-[#287854] text-[10px] font-medium transition-colors"
+                        >
+                          Allow Access
+                        </button>
+                      ) : null
+                    }
                     options={devices.videoInputs.map(d => ({ value: d.deviceId, label: d.label || 'Default Camera' }))} 
                     value={selectedDevices.videoInput}
                     onChange={(val) => {
@@ -454,8 +512,32 @@ export default function JoinPage({
                     }}
                   />
 
+                  {/* Original Aspect Ratio toggle */}
+                  <div className="flex items-center justify-between py-2 border-t border-white/5">
+                    <span className="text-xs text-white/70 font-medium">Original Aspect Ratio</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isOriginalRatioEnabled;
+                        setIsOriginalRatioEnabled(next);
+                        localStorage.setItem("mtg_originalRatio", String(next));
+                      }}
+                      className={cn(
+                        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                        isOriginalRatioEnabled ? "bg-brand-green" : "bg-white/10"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                          isOriginalRatioEnabled ? "translate-x-4" : "translate-x-0"
+                        )}
+                      />
+                    </button>
+                  </div>
+
                   {/* Virtual Background Selection UI */}
-                  {isCameraOn && (
+                  {isCameraOn && !isIOS && (
                     <div className="pt-4 mt-2 border-t border-white/10">
                       <label className="block text-[11px] text-white/30 mb-2 font-medium">
                         Virtual Background
@@ -495,6 +577,7 @@ export default function JoinPage({
                               vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
                             )}
                           >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
                           </button>
                         ))}
@@ -527,7 +610,7 @@ export default function JoinPage({
                 </div>
 
                 {/* Server status */}
-                <div className={cn(
+                {/* <div className={cn(
                   "flex items-center gap-2 rounded-xl px-4 py-3 border text-xs font-medium",
                   serverStatus === "online"
                     ? "bg-brand-green/10 border-brand-green/20 text-brand-green"
@@ -543,7 +626,7 @@ export default function JoinPage({
                     {serverStatus === "online" && "Signal server reachable — WebRTC ready"}
                     {serverStatus === "offline" && "Signal server unreachable — check NEXT_PUBLIC_BACKEND_DOMAIN"}
                   </span>
-                </div>
+                </div> */}
 
                 {/* Name input */}
                 <div>
@@ -617,18 +700,23 @@ function DeviceSelect({
   label,
   options,
   value,
-  onChange
+  onChange,
+  actionNode
 }: {
   label: string;
   options: { label: string, value: string }[];
   value: string;
   onChange: (val: string) => void;
+  actionNode?: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="block text-[11px] text-white/30 mb-1 font-medium">
-        {label}
-      </label>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-[11px] text-white/30 font-medium">
+          {label}
+        </label>
+        {actionNode}
+      </div>
       <div className="relative">
         <select 
           value={value}

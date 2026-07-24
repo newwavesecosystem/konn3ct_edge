@@ -279,6 +279,7 @@ export function ChatPanel() {
                     <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--mt-border)" }}>
                       {msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
                         <a href={msg.fileUrl} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={msg.fileUrl} alt="attachment" className="max-w-full rounded-lg max-h-48 object-cover" />
                         </a>
                       ) : (
@@ -305,9 +306,9 @@ export function ChatPanel() {
             className="text-[10px] outline-none px-2 py-1 rounded-lg appearance-none"
             style={{ color: "var(--mt-text-muted)", backgroundColor: "var(--mt-bg-control)", border: "1px solid var(--mt-border)" }}
           >
-            <option value="everyone">To: Everyone</option>
+            <option value="everyone" style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: Everyone</option>
             {participants.filter(p => p.id !== currentUser.id).map(p => (
-              <option key={p.id} value={p.id}>To: {p.name}</option>
+              <option key={p.id} value={p.id} style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: {p.name}</option>
             ))}
           </select>
         </div>

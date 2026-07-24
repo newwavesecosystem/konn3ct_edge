@@ -1,5 +1,5 @@
 import * as mediasoup from 'mediasoup';
-import { Worker, Router, Transport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
+import { Worker, Router, Transport, WebRtcTransport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
 import { config } from './config';
 import { logger } from '../logger';
 
@@ -144,6 +144,14 @@ export async function createWebRtcTransport(roomId: string) {
 
   transports.set(transport.id, transport);
 
+  if (config.mediasoup.webRtcTransport.maxIncomingBitrate) {
+    try {
+      await transport.setMaxIncomingBitrate(config.mediasoup.webRtcTransport.maxIncomingBitrate);
+    } catch (e) {
+      logger.error('Failed to set max incoming bitrate:', e);
+    }
+  }
+
   transport.on('dtlsstatechange', (dtlsState) => {
     if (dtlsState === 'closed' || dtlsState === 'failed') {
       transport.close();
@@ -221,7 +229,7 @@ export function cleanupAudioObserver(roomId: string) {
   }
 }
 
-import { startTranscription } from './transcriber';
+import { startTranscription, stopTranscription } from './transcriber';
 
 /**
  * Get a specific Producer by ID
@@ -417,6 +425,15 @@ export function closeTransport(transportId: string) {
   }
 }
 
+export async function restartIce(transportId: string) {
+  const transport = transports.get(transportId) as WebRtcTransport;
+  if (!transport || transport.closed) {
+    throw new Error(`Transport ${transportId} not found or closed`);
+  }
+  const iceParameters = await transport.restartIce();
+  return iceParameters;
+}
+
 export async function pauseConsumer(consumerId: string) {
   const consumer = consumers.get(consumerId);
   if (consumer) {
@@ -426,11 +443,25 @@ export async function pauseConsumer(consumerId: string) {
 
 export async function requestConsumerKeyFrame(consumerId: string) {
   const consumer = consumers.get(consumerId);
-  if (consumer && consumer.kind === 'video') {
-    try {
-      await consumer.requestKeyFrame();
-    } catch (err) {
-      console.warn(`[SFU] Failed to request keyframe for consumer ${consumerId}:`, err);
+  if (!consumer) throw new Error(`Consumer ${consumerId} not found`);
+  
+  if (consumer.kind !== 'video') {
+    return;
+  }
+  
+  await consumer.requestKeyFrame();
+}
+
+export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {
+  if (isMuted) {
+    stopTranscription(producerId);
+  } else {
+    const producer = producers.get(producerId);
+    const router = routers.get(roomId);
+    if (producer && router && !producer.closed) {
+      startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
+        logger.error(`Failed to restart transcription for ${userId} on unmute:`, e);
+      });
     }
   }
 }

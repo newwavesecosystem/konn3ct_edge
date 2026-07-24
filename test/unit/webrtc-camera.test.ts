@@ -22,7 +22,8 @@ vi.stubGlobal('navigator', {
       getVideoTracks: () => [{
         onended: vi.fn(),
         stop: vi.fn()
-      }]
+      }],
+      getAudioTracks: () => []
     })
   }
 });
@@ -248,16 +249,26 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
     client = new WebRTCClient('test-room', 'test-user', 'Test User', 'attendee');
   });
 
-  it('should prefer H.264 packetization-mode=1 if available in device capabilities', async () => {
+  it('should prefer VP8, then H.264 Baseline if available in device capabilities', async () => {
+    // Mock navigator.mediaDevices.getDisplayMedia
+    const mockTrack = { stop: vi.fn(), kind: 'video' };
+    (global.navigator as any).mediaDevices = {
+      getDisplayMedia: vi.fn().mockResolvedValue({
+        getVideoTracks: () => [mockTrack],
+        getAudioTracks: () => [],
+        getTracks: () => [mockTrack]
+      })
+    };
+
     const mockProduce = vi.fn().mockResolvedValue({
-      id: 'screen-prod',
-      track: { stop: vi.fn(), onended: vi.fn() },
+      id: 'screen-1',
       close: vi.fn(),
       paused: false,
       closed: false,
-      rtpParameters: { codecs: [{ mimeType: 'video/H264' }] }
+      rtpParameters: { codecs: [{ mimeType: 'video/VP8' }] }
     });
 
+    const mockVP8Codec = { mimeType: 'video/vp8' };
     const mockH264Codec = {
       mimeType: 'video/h264',
       parameters: { 'packetization-mode': 1, 'profile-level-id': '42e01f' }
@@ -267,7 +278,7 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
     (client as any).device = {
       rtpCapabilities: {
         codecs: [
-          { mimeType: 'video/vp8' },
+          mockVP8Codec,
           { mimeType: 'video/vp9' },
           mockH264Codec
         ]
@@ -278,7 +289,7 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
 
     expect(mockProduce).toHaveBeenCalledWith(
       expect.objectContaining({
-        codec: mockH264Codec,
+        codec: mockVP8Codec,
         appData: { source: 'screen' }
       })
     );

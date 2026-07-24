@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, optionalAuth } from '../middleware/auth';
 import { launchRecorderBot } from '../services/recorderLauncher';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -43,9 +43,6 @@ recordingsRouter.get('/:id/public', async (req: Request, res: Response) => {
   }
 });
 
-// All following routes require authentication
-recordingsRouter.use(requireAuth);
-
 const createRecordingSchema = z.object({
   title: z.string().min(1),
   url: z.string().url(),
@@ -58,7 +55,7 @@ const updateRecordingSchema = z.object({
   priceKobo: z.number().min(0).optional()
 });
 
-recordingsRouter.post('/', async (req: Request, res: Response) => {
+recordingsRouter.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const { title, url, roomId } = createRecordingSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -90,7 +87,7 @@ const startRecordingSchema = z.object({
 });
 
 
-recordingsRouter.post('/start', async (req: Request, res: Response) => {
+recordingsRouter.post('/start', requireAuth, async (req: Request, res: Response) => {
   try {
     const { title, roomSlug, durationMinutes } = startRecordingSchema.parse(req.body);
     const userId = req.user!.userId;
@@ -101,7 +98,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
     let recordingId: string;
     
     // Race-safe transaction
-    const result = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx: any) => {
       const active = await tx.recording.findFirst({
         where: { roomId: room.id, status: { in: ['starting', 'recording', 'stopping'] } }
       });
@@ -165,7 +162,7 @@ recordingsRouter.post('/start', async (req: Request, res: Response) => {
   }
 });
 
-recordingsRouter.post('/:id/stop', async (req: Request, res: Response) => {
+recordingsRouter.post('/:id/stop', requireAuth, async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const userId = req.user!.userId;
@@ -286,7 +283,7 @@ recordingsRouter.post('/:id/callback/status', async (req: Request, res: Response
   }
 });
 
-recordingsRouter.get('/', async (req: Request, res: Response) => {
+recordingsRouter.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const recordings = await db.recording.findMany({
@@ -300,7 +297,7 @@ recordingsRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-recordingsRouter.patch('/:id', async (req: Request, res: Response) => {
+recordingsRouter.patch('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const updates = updateRecordingSchema.parse(req.body);
@@ -332,10 +329,10 @@ import { generateSignedPlaybackUrl } from '../services/s3SignedUrl';
 import { determineRecordingAccess } from '../utils/helpers';
 
 // Secure endpoint to get the actual media URL (Paywall Logic)
-recordingsRouter.get('/:id/play', async (req: Request, res: Response) => {
+recordingsRouter.get('/:id/play', optionalAuth, async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const userId = req.user!.userId;
+    const userId = req.user?.userId;
 
     const recording = await db.recording.findUnique({ where: { id } });
     if (!recording) return res.status(404).json({ error: 'Recording not found' });
@@ -356,7 +353,7 @@ recordingsRouter.get('/:id/play', async (req: Request, res: Response) => {
 
     // Use our helper to check access
     let hasPaid = false;
-    if (recording.priceKobo > 0) {
+    if (recording.priceKobo > 0 && userId) {
       const payment = await db.paymentTransaction.findFirst({
         where: { userId, recordingId: id, status: 'success' }
       });
@@ -365,7 +362,7 @@ recordingsRouter.get('/:id/play', async (req: Request, res: Response) => {
 
     const hasAccess = determineRecordingAccess(
       { ownerId: recording.ownerId, isPrivate: recording.accessType === 'private', priceKobo: recording.priceKobo },
-      userId,
+      userId || null,
       hasPaid
     );
 
@@ -400,10 +397,10 @@ recordingsRouter.get('/:id/play', async (req: Request, res: Response) => {
 });
 
 // Comprehensive endpoint for the Playback Page
-recordingsRouter.get('/:id/details', async (req: Request, res: Response) => {
+recordingsRouter.get('/:id/details', optionalAuth, async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const userId = req.user!.userId;
+    const userId = req.user?.userId;
 
     const recording = await db.recording.findUnique({ 
       where: { id },
@@ -416,19 +413,21 @@ recordingsRouter.get('/:id/details', async (req: Request, res: Response) => {
 
     // Permissions check
     let hasAccess = false;
-    if (recording.ownerId === userId) {
+    if (userId && recording.ownerId === userId) {
       hasAccess = true;
     } else if (!recording.isPaid) {
       hasAccess = true;
     } else {
-      const hasPaid = await db.paymentTransaction.findFirst({
-        where: {
-          userId,
-          recordingId: id,
-          status: 'success'
-        }
-      });
-      if (hasPaid) hasAccess = true;
+      if (userId) {
+        const hasPaid = await db.paymentTransaction.findFirst({
+          where: {
+            userId,
+            recordingId: id,
+            status: 'success'
+          }
+        });
+        if (hasPaid) hasAccess = true;
+      }
     }
 
     if (!hasAccess) {
@@ -451,6 +450,16 @@ recordingsRouter.get('/:id/details', async (req: Request, res: Response) => {
       summary = await db.meetingSummary.findUnique({
         where: { roomId: recording.roomId }
       });
+    }
+
+    const ttl = parseInt(process.env.SIGNED_RECORDING_URL_TTL_SECONDS || '3600', 10);
+    if (recording.storageKey) {
+      console.log('storageKey', recording.storageKey);
+      const playbackUrl = await generateSignedPlaybackUrl(recording.storageKey, ttl);
+      console.log('storageKey generateSignedPlaybackUrl', playbackUrl);
+      (recording as any).url = playbackUrl;
+    }else{
+      console.log('storageKey not found', recording.storageKey);
     }
 
     res.status(200).json({
