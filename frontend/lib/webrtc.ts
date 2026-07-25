@@ -30,6 +30,7 @@ export class WebRTCClient {
   public receiveTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
+  private statsInterval: NodeJS.Timeout | null = null;
   
   public localVideoProducer: Producer | null = null;
   public localAudioProducer: Producer | null = null;
@@ -57,6 +58,14 @@ export class WebRTCClient {
   private maxIceReconnectAttempts = 3;
   private isRepublishing = false;
   private pendingConsumes: any[] = [];
+  
+  // Event-Driven Consume Queue Telemetry & State
+  private consumeQueue: any[] = [];
+  private consumeQueueProcessing = false;
+  private readonly MAX_CONSUMES_PER_BATCH = 4;
+  private readonly BATCH_INTERVAL_MS = 10;
+  private consumeQueueMaxDepth = 0;
+  private consumeWaitTimes: number[] = [];
 
   // Camera state tracking
   public lastCameraErrorName: string | null = null;
@@ -305,6 +314,9 @@ export class WebRTCClient {
             this.ws.send(JSON.stringify({ type: 'ping' }));
           }
         }, 25000);
+
+        // WebRTC Client Stats Collection (Every 30s)
+        this.statsInterval = setInterval(() => this.collectAndSendStats(), 30000);
       } catch (err) {
         console.error("Connection failed:", err);
         this.onConnectionStateChange?.('failed');
@@ -454,7 +466,7 @@ export class WebRTCClient {
           }
           break;
         case 'newProducer':
-          await this.consumeRemoteStream(msg.producerId, msg.participantId, msg.userId, msg.name, msg.kind, msg.appData);
+          this.enqueueConsume(msg);
           break;
         case 'user_joined':
           this.onUserJoined?.(msg);
@@ -2306,6 +2318,60 @@ export class WebRTCClient {
     }
   }
 
+  private enqueueConsume(msg: any) {
+    // Priority: Audio (1) > Screenshare (2) > Camera (3) > Other (4)
+    let priority = 4;
+    if (msg.kind === 'audio') priority = 1;
+    else if (msg.kind === 'video' && msg.appData?.source === 'screen') priority = 2;
+    else if (msg.kind === 'video') priority = 3;
+
+    this.consumeQueue.push({ ...msg, priority, enqueuedAt: Date.now() });
+    if (this.consumeQueue.length > this.consumeQueueMaxDepth) {
+      this.consumeQueueMaxDepth = this.consumeQueue.length;
+    }
+
+    // Sort by priority (lower number first)
+    this.consumeQueue.sort((a, b) => a.priority - b.priority);
+
+    if (!this.consumeQueueProcessing) {
+      this.processConsumeQueue();
+    }
+  }
+
+  private async processConsumeQueue() {
+    this.consumeQueueProcessing = true;
+    
+    while (this.consumeQueue.length > 0) {
+      const batch = this.consumeQueue.splice(0, this.MAX_CONSUMES_PER_BATCH);
+      const promises = batch.map(async (msg) => {
+        const waitTime = Date.now() - msg.enqueuedAt;
+        this.consumeWaitTimes.push(waitTime);
+        if (this.consumeWaitTimes.length > 100) this.consumeWaitTimes.shift(); // Keep recent 100
+        
+        try {
+          await this.consumeRemoteStream(msg.producerId, msg.participantId, msg.userId, msg.name, msg.kind, msg.appData);
+        } catch (error) {
+          console.error(`[WebRTC] Error consuming queued stream for ${msg.producerId}:`, error);
+        }
+      });
+      
+      await Promise.allSettled(promises);
+      
+      // Log telemetry periodically
+      if (this.consumeWaitTimes.length >= 10 && this.consumeWaitTimes.length % 10 === 0) {
+        const avg = this.consumeWaitTimes.reduce((a, b) => a + b, 0) / this.consumeWaitTimes.length;
+        const max = Math.max(...this.consumeWaitTimes);
+        console.log(`[WebRTC] Consume Queue Stats: Size=${this.consumeQueue.length}, MaxDepth=${this.consumeQueueMaxDepth}, AvgWait=${avg.toFixed(1)}ms, MaxWait=${max}ms`);
+      }
+      
+      if (this.consumeQueue.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, this.BATCH_INTERVAL_MS));
+      }
+    }
+    
+    this.consumeQueueProcessing = false;
+  }
+
   private async consumeRemoteStream(producerId: string, producerParticipantId: string | undefined, producerUserId: string, userName: string | undefined, kind: string, appData?: Record<string, any>) {
     if (this.participantId && producerParticipantId === this.participantId) {
       console.log(`[WebRTC] consume_request_skipped_self_producer for ${kind} (producer: ${producerId})`);
@@ -2414,6 +2480,7 @@ export class WebRTCClient {
     this.isIntentionalDisconnect = true;
     if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.networkInterval) clearInterval(this.networkInterval);
+    if (this.statsInterval) clearInterval(this.statsInterval);
     this.ws?.close();
     
     // Clear all pending requests and timeouts
@@ -2435,6 +2502,48 @@ export class WebRTCClient {
     this.recvTransport = null;
     this.ws = null;
     this.device = null;
+  }
+
+  private async collectAndSendStats() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    for (const [consumerId, consumer] of this.consumers.entries()) {
+      try {
+        const stats = await consumer.getStats();
+        let jitter = 0, packetsLost = 0, concealedSamples = 0, roundTripTime = 0, jitterBufferDelay = 0;
+        
+        stats.forEach((report: any) => {
+          if (report.type === 'inbound-rtp') {
+            jitter = report.jitter || 0;
+            packetsLost = report.packetsLost || 0;
+            concealedSamples = report.concealedSamples || 0;
+            jitterBufferDelay = report.jitterBufferDelay || 0;
+          }
+          if (report.type === 'remote-inbound-rtp') {
+            roundTripTime = report.roundTripTime || 0;
+          }
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            if (!roundTripTime) roundTripTime = report.currentRoundTripTime || 0;
+          }
+        });
+        
+        const payload = {
+          type: 'webrtc_client_stats',
+          roomId: this.roomId,
+          participantId: this.participantId,
+          consumerId,
+          timestamp: Date.now(),
+          jitter,
+          packetsLost,
+          concealedSamples,
+          roundTripTime,
+          jitterBufferDelay
+        };
+        
+        this.ws.send(JSON.stringify(payload));
+      } catch (err) {
+        console.warn(`[WebRTC] Failed to collect stats for consumer ${consumerId}`, err);
+      }
+    }
   }
 
   // --- Host Controls ---
