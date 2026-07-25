@@ -252,7 +252,7 @@ export class MediasoupService {
     });
   }
 
-  public async connect(meetingToken?: string) {
+  public async connect(meetingToken?: string, customSignalUrl?: string) {
     if (!meetingToken) {
       throw new Error(
         'No meeting JWT provided – the signal server requires a JWT, not a Sanctum token. '
@@ -262,17 +262,28 @@ export class MediasoupService {
     const token = meetingToken;
     this._lastMeetingToken = meetingToken;
 
-    // Only URL-encode the name (may contain spaces). The token must be passed
-    // raw — the signal server validates it as-is before the WebSocket upgrade,
-    // and encoding the pipe character (| → %7C) causes a 401 Unauthorized.
+    let wsUrl = '';
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
+
+    if (customSignalUrl && customSignalUrl.trim()) {
+      // Connect directly to signalUrl as provided by the backend response
+      let formattedUrl = customSignalUrl.trim();
+
+      if (!formattedUrl.startsWith('ws://') && !formattedUrl.startsWith('wss://')) {
+        formattedUrl = `wss://${formattedUrl.replace(/^https?:\/\//, '')}`;
+      }
+
+      const separator = formattedUrl.includes('?') ? '&' : '?';
+      wsUrl = `${formattedUrl}${separator}roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
+    } else {
+      wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
+    }
     
     console.log('--- WEBSOCKET CONNECTION INFO ---');
-    console.log('Connecting to Domain:', BACKEND_DOMAIN);
+    console.log('Signal URL Source:', customSignalUrl || BACKEND_DOMAIN);
     console.log('Room ID:', this.roomId);
     console.log('Token Length:', token ? token.length : 'NO TOKEN');
-    console.log('Full WS URL (first 100 chars):', wsUrl.substring(0, 100) + '...');
+    console.log('Full WS URL:', wsUrl);
     console.log('---------------------------------');
     
     this.ws = new WebSocket(wsUrl);

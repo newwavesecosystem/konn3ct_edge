@@ -100,7 +100,7 @@ function useElapsed(active: boolean) {
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 export default function LobbyScreen({ route, navigation }: Props) {
-  const { roomId, meetingToken, micOn = true, cameraOn = true } = route.params;
+  const { roomId, meetingToken, signalUrl: initialSignalUrl, micOn = true, cameraOn = true } = route.params as any;
   const insets = useSafeAreaInsets();
   const user = useAuthStore(s => s.user);
   const initials = user?.name
@@ -175,19 +175,21 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
     (async () => {
       try {
-        // If no meetingToken was passed, obtain one via the Edge frontend API.
-        // This covers navigations (e.g. meeting cards, schedules) that don't
-        // pre-fetch a token.
         let tokenToUse = meetingToken;
+        let signalUrlToUse = initialSignalUrl;
         if (!tokenToUse) {
           const authUser = useAuthStore.getState().user;
-          tokenToUse = await getAttendeeToken(
+          const tokenRes = await getAttendeeToken(
             roomId,
             authUser?.name || 'Guest',
-            authUser?.email || 'guest@conn3ct.com'
+            authUser?.email || 'guest@conn3ct.com',
+            cameraOn,
+            micOn
           );
+          tokenToUse = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
+          signalUrlToUse = typeof tokenRes === 'string' ? initialSignalUrl : (tokenRes.signalUrl || initialSignalUrl);
         }
-        const initialStatus = await service.connect(tokenToUse);
+        const initialStatus = await service.connect(tokenToUse, signalUrlToUse);
         if (!isMountedRef.current) return;
 
         // Try to get room name from the service after connect

@@ -11,6 +11,7 @@ import { User, Hash, Mic, MicOff, Video, VideoOff } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { validateMeetingKv4 } from '../api/rooms';
 import { getAttendeeToken } from '../api/edgeApi';
+import { useAuthStore } from '../store/useAuthStore';
 import { APP_CONFIG, APP_LOGO } from '../config/appConfig';
 
 const { width } = Dimensions.get('window');
@@ -34,12 +35,13 @@ export default function GuestJoinScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
 
-  const [guestName, setGuestName] = useState('');
+  const authUser = useAuthStore(s => s.user);
+  const [guestName, setGuestName] = useState(authUser?.name || '');
   const [roomId, setRoomId]       = useState('');
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
-  const [micOn, setMicOn]         = useState(true);
-  const [cameraOn, setCameraOn]   = useState(true);
+  const [micOn, setMicOn]         = useState(false);
+  const [cameraOn, setCameraOn]   = useState(false);
 
   const [nameFocused, setNameFocused] = useState(false);
   const [roomFocused, setRoomFocused] = useState(false);
@@ -48,15 +50,18 @@ export default function GuestJoinScreen() {
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
+    if (authUser?.name && !guestName) {
+      setGuestName(authUser.name);
+    }
     Animated.parallel([
       Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [authUser]);
 
   const handleJoin = async () => {
     setError('');
-    const name = guestName.trim();
+    const name = guestName.trim() || authUser?.name || '';
     const room = roomId.trim();
 
     if (!name) { setError('Please enter your display name.'); return; }
@@ -73,17 +78,24 @@ export default function GuestJoinScreen() {
       }
 
       // 2. Obtain a WebSocket meeting token via the guest pre-join flow
-      const meetingToken = await getAttendeeToken(
+      const userEmail = authUser?.email || `guest-${Date.now()}@konn3ct.guest`;
+      const tokenRes = await getAttendeeToken(
         room,
         name,
-        `guest-${Date.now()}@konn3ct.guest`,
+        userEmail,
+        cameraOn,
+        micOn,
       );
+
+      const meetingToken = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
+      const signalUrl = typeof tokenRes === 'string' ? undefined : tokenRes.signalUrl;
 
       // 3. Navigate to the lobby, which handles waiting-room admission
       //    before forwarding to the meeting screen.
       navigation.navigate('GuestLobby', {
         roomId: room,
         meetingToken,
+        signalUrl,
         micOn,
         cameraOn,
       });

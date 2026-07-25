@@ -54,8 +54,8 @@ Notifications.setNotificationHandler({
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  Lobby: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
-  Meeting: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
+  Lobby: { roomId: string; meetingToken?: string; signalUrl?: string; micOn?: boolean; cameraOn?: boolean };
+  Meeting: { roomId: string; meetingToken?: string; signalUrl?: string; micOn?: boolean; cameraOn?: boolean };
   MeetingSummary: { roomId: string };
   Streaming: undefined;
   Recordings: undefined;
