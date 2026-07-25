@@ -283,11 +283,14 @@ export default function DashboardScreen({ navigation }: Props) {
       // This calls /api/prejoin → /api/join which force-locks role to "attendee",
       // ensuring the signal server puts the user in the waiting room.
       setJoinStatus('Connecting...');
-      const meetingToken = await getAttendeeToken(
+      const tokenRes = await getAttendeeToken(
         roomId,
         user?.name || 'Guest',
         user?.email || 'guest@conn3ct.com'
       );
+
+      const meetingToken = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
+      const signalUrl = typeof tokenRes === 'string' ? undefined : tokenRes.signalUrl;
 
       // Step 3: Navigate to lobby — LobbyScreen handles the WebSocket
       // connection and waiting room UI, including error states (404, host not ready).
@@ -295,7 +298,7 @@ export default function DashboardScreen({ navigation }: Props) {
       setJoinRoomId('');
       setJoinStatus('Join Room');
       setIsJoining(false);
-      navigation.navigate('Lobby', { roomId, meetingToken, micOn: joinMicOn, cameraOn: joinCameraOn });
+      navigation.navigate('Lobby', { roomId, meetingToken, signalUrl, micOn: joinMicOn, cameraOn: joinCameraOn });
       return;
     } catch (e: any) {
       console.error('Join failed:', e.response?.data || e.message);

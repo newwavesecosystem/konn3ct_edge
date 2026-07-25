@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { useAuthStore } from '../store/useAuthStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -123,9 +124,28 @@ export async function joinRoom(id: number, name: string, email: string): Promise
 /**
  * POST /kv4/join-room
  * Join an existing room as a participant using room slug.
+ * Auto populates name and email if user is logged in.
  */
-export async function joinRoomKv4(room: string, name: string, email: string): Promise<any> {
-  const res = await apiClient.post('/kv4/join-room', { room, name, email });
+export async function joinRoomKv4(
+  room: string,
+  name?: string,
+  email?: string,
+  cam: boolean = false,
+  mic: boolean = false
+): Promise<any> {
+  const user = useAuthStore.getState().user;
+  const finalName = (name && name.trim()) ? name.trim() : (user?.name || 'Guest');
+  const finalEmail = (email && email.trim()) ? email.trim() : (user?.email || 'guest@conn3ct.com');
+
+  const payload = {
+    room,
+    name: finalName,
+    email: finalEmail,
+    cam,
+    mic,
+  };
+
+  const res = await apiClient.post('/kv4/join-room', payload);
   return res.data;
 }
 

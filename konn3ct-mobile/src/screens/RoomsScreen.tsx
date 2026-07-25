@@ -250,7 +250,7 @@ export default function RoomsScreen() {
         mode: createForm.mode,
         privacy: createForm.privacy,
         color: createForm.color || undefined,
-        access_code: createForm.access_code || undefined,
+        access_code: createForm.access_code ? createForm.access_code.trim() : '',
       };
       const res = await createRoom(payload);
       if (res.success) {
