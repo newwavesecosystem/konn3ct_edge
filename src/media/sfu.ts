@@ -13,6 +13,57 @@ const producers = new Map<string, Producer>();
 const consumers = new Map<string, Consumer>();
 const audioObservers = new Map<string, AudioLevelObserver>();
 
+// --- Telemetry Data Structures ---
+const consumerLatencies: { canConsume: number, consume: number, total: number }[] = [];
+
+setInterval(async () => {
+  // Worker Resource Usage
+  for (const worker of workers) {
+    try {
+      const usage = await worker.getResourceUsage();
+      let routerCount = 0;
+      let transportCount = 0;
+      let producerCount = 0;
+      let consumerCount = 0;
+      
+      // Correlate with worker
+      for (const router of routers.values()) {
+        if ((router as any).appData?.workerPid === worker.pid) {
+          routerCount++;
+        }
+      }
+      
+      // Global counts as fallback
+      transportCount = transports.size;
+      producerCount = producers.size;
+      consumerCount = consumers.size;
+
+      logger.info(`[Telemetry] Worker ${worker.pid} CPU: user=${usage.ru_utime}ms, sys=${usage.ru_stime}ms, RSS=${usage.ru_maxrss}kb. Globals: Transports=${transportCount}, Producers=${producerCount}, Consumers=${consumerCount}, Routers=${routerCount}`);
+    } catch (e) {
+      logger.warn('Failed to get worker resource usage', e);
+    }
+  }
+  
+  // Latency Percentiles
+  if (consumerLatencies.length > 0) {
+    const latencies = consumerLatencies.splice(0, consumerLatencies.length); // clear and grab
+    latencies.sort((a, b) => a.total - b.total);
+    const getP = (p: number) => latencies[Math.floor((latencies.length - 1) * p)].total.toFixed(1);
+    const fastest = latencies[0].total.toFixed(1);
+    const slowest = latencies[latencies.length - 1].total.toFixed(1);
+    const p50 = getP(0.5);
+    const p95 = getP(0.95);
+    const p99 = getP(0.99);
+    
+    // Average sub-stages
+    const avgCanConsume = (latencies.reduce((sum, l) => sum + l.canConsume, 0) / latencies.length).toFixed(1);
+    const avgConsume = (latencies.reduce((sum, l) => sum + l.consume, 0) / latencies.length).toFixed(1);
+    
+    logger.info(`[Telemetry] Consumer Latency (${latencies.length} samples): Fastest=${fastest}ms, P50=${p50}ms, P95=${p95}ms, P99=${p99}ms, Slowest=${slowest}ms. Sub-stages Avg: canConsume=${avgCanConsume}ms, consume=${avgConsume}ms`);
+  }
+}, 5000);
+// ----------------------------------
+
 /**
  * Initialize mediasoup workers based on CPU cores
  */
@@ -100,6 +151,7 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   const promise = (async () => {
     const worker = getWorker();
     const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+    router.appData.workerPid = worker.pid;
     
     routers.set(roomId, router);
     logger.info(`Router created for room ${roomId}`);
@@ -371,17 +423,29 @@ export async function createConsumerWithCallback(
   onProducerClose: (consumerId: string) => void,
   onScore?: (score: number) => void
 ) {
+  const startTotal = performance.now();
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
+  const startCanConsume = performance.now();
   if (!router.canConsume({ producerId, rtpCapabilities })) {
     throw new Error('Client cannot consume this producer');
   }
+  const endCanConsume = performance.now();
 
+  const startConsume = performance.now();
   const consumer = await transport.consume({
     producerId,
     rtpCapabilities,
     paused: true
+  });
+  const endConsume = performance.now();
+  
+  const endTotal = performance.now();
+  consumerLatencies.push({
+    canConsume: endCanConsume - startCanConsume,
+    consume: endConsume - startConsume,
+    total: endTotal - startTotal
   });
 
   consumers.set(consumer.id, consumer);
