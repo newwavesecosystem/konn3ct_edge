@@ -12,7 +12,54 @@ import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
 import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache } from './historyCache';
+import { monitorEventLoopDelay, PerformanceObserver } from 'perf_hooks';
 
+// --- Event Loop & GC Telemetry ---
+const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
+eventLoopMonitor.enable();
+
+setInterval(() => {
+  logger.info(`[Telemetry] Event Loop Delay: Mean=${(eventLoopMonitor.mean / 1e6).toFixed(2)}ms, P50=${(eventLoopMonitor.percentile(50) / 1e6).toFixed(2)}ms, P95=${(eventLoopMonitor.percentile(95) / 1e6).toFixed(2)}ms, P99=${(eventLoopMonitor.percentile(99) / 1e6).toFixed(2)}ms, Max=${(eventLoopMonitor.max / 1e6).toFixed(2)}ms`);
+  eventLoopMonitor.reset();
+}, 5000);
+
+const gcObserver = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    logger.info(`[Telemetry] GC Pause: ${entry.duration.toFixed(2)}ms`);
+  }
+});
+try {
+  gcObserver.observe({ entryTypes: ['gc'] });
+} catch (e) {
+  // Ignore if gc is not supported
+}
+
+const consumeBursts = new Map<string, number[]>();
+
+setInterval(() => {
+  for (const [burstRoomId, timestamps] of consumeBursts.entries()) {
+    if (timestamps.length === 0) continue;
+    
+    // Sort timestamps to ensure chronologial order
+    timestamps.sort((a, b) => a - b);
+    
+    const firstTime = timestamps[0];
+    const distribution = { '0-10ms': 0, '10-20ms': 0, '20-30ms': 0, '30-40ms': 0, '40-50ms': 0, '50ms+': 0 };
+    for (const t of timestamps) {
+      const diff = t - firstTime;
+      if (diff <= 10) distribution['0-10ms']++;
+      else if (diff <= 20) distribution['10-20ms']++;
+      else if (diff <= 30) distribution['20-30ms']++;
+      else if (diff <= 40) distribution['30-40ms']++;
+      else if (diff <= 50) distribution['40-50ms']++;
+      else distribution['50ms+']++;
+    }
+    
+    logger.info(`[Telemetry] WebSocket Burst for room ${burstRoomId}: Total consumes=${timestamps.length}, Distribution=${JSON.stringify(distribution)}`);
+  }
+  consumeBursts.clear();
+}, 5000);
+// ----------------------------------
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
 }
@@ -2029,6 +2076,10 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'consume': {
+        const now = Date.now();
+        if (!consumeBursts.has(roomId)) consumeBursts.set(roomId, []);
+        consumeBursts.get(roomId)!.push(now);
+        
         try {
           const router = await getOrCreateRouter(roomId);
           const allProducers = Array.from(roomProducers.values()).flat();
