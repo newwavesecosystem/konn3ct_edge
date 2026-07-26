@@ -18,7 +18,11 @@ export const config = {
           kind: 'audio' as const,
           mimeType: 'audio/opus',
           clockRate: 48000,
-          channels: 2
+          channels: 2,
+          parameters: {
+            useinbandfec: 1,
+            usedtx: 1
+          }
         },
         {
           kind: 'video' as const,
