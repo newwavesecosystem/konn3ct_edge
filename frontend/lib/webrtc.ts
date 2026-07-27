@@ -67,6 +67,10 @@ export class WebRTCClient {
   private consumeQueueMaxDepth = 0;
   private consumeWaitTimes: number[] = [];
 
+  // Telemetry state
+  private firstAudioEmitted = false;
+  private firstVideoEmitted = false;
+
   // Camera state tracking
   public lastCameraErrorName: string | null = null;
   public lastCameraErrorMessage: string | null = null;
@@ -2414,6 +2418,15 @@ export class WebRTCClient {
       consumer.on('resume', () => {
         console.log(`[WebRTC] Consumer ${id} resumed by SFU`);
       });
+
+      if (consumerKind === 'audio' && !this.firstAudioEmitted) {
+        this.firstAudioEmitted = true;
+        this.emitTelemetry('time_to_first_audio');
+      }
+      if (consumerKind === 'video' && !this.firstVideoEmitted) {
+        this.firstVideoEmitted = true;
+        this.emitTelemetry('time_to_first_video');
+      }
 
       this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);
       

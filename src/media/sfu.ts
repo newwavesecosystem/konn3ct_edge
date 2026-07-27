@@ -2,6 +2,26 @@ import * as mediasoup from 'mediasoup';
 import { Worker, Router, Transport, WebRtcTransport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
 import { config } from './config';
 import { logger } from '../logger';
+import * as promClient from 'prom-client';
+
+const workerGauge = new promClient.Gauge({ name: 'konn3ct_active_workers', help: 'Number of active Mediasoup workers' });
+const routerGauge = new promClient.Gauge({ name: 'konn3ct_active_routers', help: 'Number of active routers' });
+const transportGauge = new promClient.Gauge({ name: 'konn3ct_active_transports', help: 'Number of active transports' });
+const producerGauge = new promClient.Gauge({ name: 'konn3ct_active_producers', help: 'Number of active producers' });
+const consumerGauge = new promClient.Gauge({ name: 'konn3ct_active_consumers', help: 'Number of active consumers' });
+
+// Phase 0 Deep Metrics
+const inboundBitrateGauge = new promClient.Gauge({ name: 'konn3ct_inbound_bitrate', help: 'Total inbound WebRTC bitrate' });
+const outboundBitrateGauge = new promClient.Gauge({ name: 'konn3ct_outbound_bitrate', help: 'Total outbound WebRTC bitrate' });
+const packetLossGauge = new promClient.Gauge({ name: 'konn3ct_packet_loss_total', help: 'Total packet loss count' });
+const nackCountGauge = new promClient.Gauge({ name: 'konn3ct_nack_total', help: 'Total NACK count' });
+const pliCountGauge = new promClient.Gauge({ name: 'konn3ct_pli_total', help: 'Total PLI count' });
+const firCountGauge = new promClient.Gauge({ name: 'konn3ct_fir_total', help: 'Total FIR count' });
+const roomCreationLatencyGauge = new promClient.Gauge({ name: 'konn3ct_room_creation_latency_ms', help: 'Time to create a mediasoup router' });
+const iceFailureGauge = new promClient.Gauge({ name: 'konn3ct_ice_failure_total', help: 'Total ICE failures' });
+
+
+
 
 // Store workers, and map roomId -> Router
 const workers: Worker[] = [];
@@ -39,6 +59,12 @@ setInterval(async () => {
       consumerCount = consumers.size;
 
       logger.info(`[Telemetry] Worker ${worker.pid} CPU: user=${usage.ru_utime}ms, sys=${usage.ru_stime}ms, RSS=${usage.ru_maxrss}kb. Globals: Transports=${transportCount}, Producers=${producerCount}, Consumers=${consumerCount}, Routers=${routerCount}`);
+      
+      workerGauge.set(workers.length);
+      routerGauge.set(routers.size);
+      transportGauge.set(transportCount);
+      producerGauge.set(producerCount);
+      consumerGauge.set(consumerCount);
     } catch (e) {
       logger.warn('Failed to get worker resource usage', e);
     }
@@ -62,7 +88,44 @@ setInterval(async () => {
     logger.info(`[Telemetry] Consumer Latency (${latencies.length} samples): Fastest=${fastest}ms, P50=${p50}ms, P95=${p95}ms, P99=${p99}ms, Slowest=${slowest}ms. Sub-stages Avg: canConsume=${avgCanConsume}ms, consume=${avgConsume}ms`);
   }
 }, 5000);
+
+// --- Phase 0 Deep WebRTC Stats Polling ---
+setInterval(async () => {
+  let inBitrate = 0;
+  let outBitrate = 0;
+  let packetLoss = 0;
+  let nackCount = 0;
+  let pliCount = 0;
+  let firCount = 0;
+
+  for (const transport of transports.values()) {
+    try {
+      const stats = await transport.getStats();
+      for (const stat of stats as any[]) {
+        if (stat.type === 'inbound-rtp') {
+          inBitrate += stat.bitrate || 0;
+          packetLoss += stat.packetsLost || 0;
+          nackCount += stat.nackCount || 0;
+          pliCount += stat.pliCount || 0;
+          firCount += stat.firCount || 0;
+        } else if (stat.type === 'outbound-rtp') {
+          outBitrate += stat.bitrate || 0;
+        }
+      }
+    } catch (e) {
+      // transport may be closed, ignore
+    }
+  }
+
+  inboundBitrateGauge.set(inBitrate);
+  outboundBitrateGauge.set(outBitrate);
+  packetLossGauge.set(packetLoss);
+  nackCountGauge.set(nackCount);
+  pliCountGauge.set(pliCount);
+  firCountGauge.set(firCount);
+}, 15000);
 // ----------------------------------
+
 
 /**
  * Initialize mediasoup workers based on CPU cores
@@ -149,12 +212,14 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   }
 
   const promise = (async () => {
+    const startMs = performance.now();
     const worker = getWorker();
     const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
     router.appData.workerPid = worker.pid;
     
     routers.set(roomId, router);
     logger.info(`Router created for room ${roomId}`);
+    roomCreationLatencyGauge.set(performance.now() - startMs);
     return router;
   })();
 
@@ -203,6 +268,13 @@ export async function createWebRtcTransport(roomId: string) {
       logger.error('Failed to set max incoming bitrate:', e);
     }
   }
+
+  transport.on('icestatechange', (iceState) => {
+    logger.info(`Transport ${transport.id} icestatechange: ${iceState}`);
+    if (iceState === 'disconnected' || iceState === 'closed') {
+      iceFailureGauge.inc();
+    }
+  });
 
   transport.on('dtlsstatechange', (dtlsState) => {
     if (dtlsState === 'closed' || dtlsState === 'failed') {
