@@ -13,8 +13,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const appName = process.env.NEXT_PUBLIC_APP_NAME || "konn3ct";
+
 export const metadata: Metadata = {
-  title: "konn3ct - Premium Video Conferencing",
+  title: `${appName} - Premium Video Conferencing`,
   description: "Modern video conferencing, webinars, and recording platform.",
 };
 
