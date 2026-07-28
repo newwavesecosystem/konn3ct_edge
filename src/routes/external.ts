@@ -156,21 +156,19 @@ router.post('/meetings/join', async (req, res) => {
     const finalEmail = email?.trim() || "guest@conn3ct.com";
 
     // Lookup or create joining user to assign them a proper DB userId
-    let user = await db.user.findUnique({ where: { email: finalEmail } });
-    if (!user) {
-      const randomPassword = crypto.randomUUID();
-      const passwordHash = await bcrypt.hash(randomPassword, 10);
-      user = await db.user.create({
-        data: {
-          email: finalEmail,
-          name: name.trim(),
-          passwordHash
-        }
-      });
+    let userId: string;
+    const user = await db.user.findUnique({ where: { email: finalEmail } });
+    
+    if (user && trustedRole === 'host') {
+      userId = user.id;
+    } else {
+      // Always generate a unique ID for attendees to ensure multiple people using 
+      // the same email do not overlap in the WebRTC SFU.
+      userId = `guest_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
     }
 
     const sessionData = {
-      userId: user.id,
+      userId,
       roomId: room.slug,
       name: name.trim(),
       email: finalEmail,
