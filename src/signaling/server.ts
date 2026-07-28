@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
-import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache } from './historyCache';
+import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache, invalidateRoomHistoryCache } from './historyCache';
 import { monitorEventLoopDelay, PerformanceObserver } from 'perf_hooks';
 
 // --- Event Loop & GC Telemetry ---
@@ -212,6 +212,9 @@ async function cleanupRoomData(roomId: string) {
       });
       logger.info(`Cleared ${count} chat messages for room ${roomId} (persistChat=false).`);
     }
+
+    // 3. Clear Redis cache so new sessions don't load old history
+    await invalidateRoomHistoryCache(roomId);
   } catch (error) {
     logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
   }
