@@ -2385,6 +2385,10 @@ export function initializeSignaling(server: Server) {
         // Silently ignore ping messages used for keep-alive
         break;
 
+      case 'webrtc_client_stats':
+        logger.info(`[ClientStats] Room ${roomId} | User ${client.userId}: RTT=${data.roundTripTime || 0}ms, Jitter=${data.jitter || 0}, Loss=${data.packetsLost || 0}`);
+        break;
+
       default:
         logger.warn(`Unknown message type: ${data.type}`);
     }
