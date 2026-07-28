@@ -304,12 +304,15 @@ export default function JoinPage({
     
     try {
       const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
+      const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const payload: any = {
         room: resolvedParams.roomSlug,
         name: name.trim(),
         email: email.trim(),
         cam: isCameraOn,
-        mic: !isMuted
+        mic: !isMuted,
+        mobile: isMobileDevice,
+        isMobile: isMobileDevice
       };
 
       if (requiresAccessCode) {
