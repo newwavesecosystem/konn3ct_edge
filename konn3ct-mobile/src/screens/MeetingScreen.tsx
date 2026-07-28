@@ -41,7 +41,7 @@ import { useNetworkQuality } from '../hooks/useNetworkQuality';
 type Props = NativeStackScreenProps<RootStackParamList, 'Meeting'>;
 
 export default function MeetingScreen({ route, navigation }: Props) {
-  const { roomId, meetingToken, micOn, cameraOn } = route.params;
+  const { roomId, meetingToken, signalUrl, micOn, cameraOn } = route.params as any;
   const initialMicOn = micOn ?? true;
   const initialCameraOn = cameraOn ?? true;
 
@@ -381,7 +381,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
           }
         } else {
           // Normal path: connect fresh (e.g. host starting a meeting directly)
-          const initialStatus = await service.connect(meetingToken);
+          const initialStatus = await service.connect(meetingToken, signalUrl);
           if (!isMounted) return;
           
           if (initialStatus === 'active') {

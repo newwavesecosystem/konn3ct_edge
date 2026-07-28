@@ -289,9 +289,10 @@ export default function RoomsScreen() {
 
       const roomId: string = room.url || String(room.id);
       const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+      const signalUrl = startRes?.signalUrl || startRes?.signal_url;
       console.log('ROOMS SCREEN EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
 
-      navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
+      navigation.navigate('Meeting', { roomId, meetingToken, signalUrl, micOn: false, cameraOn: false });
     } catch (err: any) {
       Alert.alert(
         'Start Failed',

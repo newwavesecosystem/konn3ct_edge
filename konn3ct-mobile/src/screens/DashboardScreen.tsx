@@ -335,10 +335,11 @@ export default function DashboardScreen({ navigation }: Props) {
         console.log('--- DASHBOARD: START ROOM 1 RESPONSE ---');
         console.log(JSON.stringify(startRes, null, 2));
         const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+        const signalUrl = startRes?.signalUrl || startRes?.signal_url;
         console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
         
         const roomId = room.url || room.slug || String(room.id);
-        navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
+        navigation.navigate('Meeting', { roomId, meetingToken, signalUrl, micOn: false, cameraOn: false });
       } else {
         // Fallback if user has absolutely no rooms — create one and start it
         if (IS_DEV) {
@@ -357,8 +358,9 @@ export default function DashboardScreen({ navigation }: Props) {
             console.log('--- DASHBOARD: START ROOM 2 RESPONSE ---');
             console.log(JSON.stringify(startRes, null, 2));
             const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+            const signalUrl = startRes?.signalUrl || startRes?.signal_url;
             console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES' : 'NO');
-            navigation.navigate('Meeting', { roomId: randomSlug, meetingToken, micOn: false, cameraOn: false });
+            navigation.navigate('Meeting', { roomId: randomSlug, meetingToken, signalUrl, micOn: false, cameraOn: false });
           } else {
             Alert.alert('Error', 'Room was created but could not be found. Please try again.');
           }

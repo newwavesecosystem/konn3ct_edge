@@ -266,11 +266,18 @@ export class MediasoupService {
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
 
     if (customSignalUrl && customSignalUrl.trim()) {
-      // Connect directly to signalUrl as provided by the backend response
       let formattedUrl = customSignalUrl.trim();
 
       if (!formattedUrl.startsWith('ws://') && !formattedUrl.startsWith('wss://')) {
         formattedUrl = `wss://${formattedUrl.replace(/^https?:\/\//, '')}`;
+      }
+
+      // Remove trailing slash if present
+      formattedUrl = formattedUrl.replace(/\/+$/, '');
+
+      // Ensure /signal endpoint path is present
+      if (!formattedUrl.includes('/signal')) {
+        formattedUrl = `${formattedUrl}/signal`;
       }
 
       const separator = formattedUrl.includes('?') ? '&' : '?';
