@@ -143,6 +143,7 @@ export async function joinRoomKv4(
     email: finalEmail,
     cam,
     mic,
+    mobile: true,
   };
 
   const res = await apiClient.post('/kv4/join-room', payload);
