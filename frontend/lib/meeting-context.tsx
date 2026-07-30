@@ -25,6 +25,7 @@ import {
   mockMeetingInfo,
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
+import { useMeetingTheme } from "./meeting-theme-context";
 import { useMeetingDevicePreferences } from "./meeting-device-preferences";
 
 let lastChatToastTime = 0;
@@ -222,6 +223,17 @@ export function MeetingProvider({
   isRecorderMode?: boolean;
   recorderParticipantId?: string | null;
 }) {
+  // Safe theme extraction at top level of MeetingProvider
+  let activeTheme: 'midnight' | 'soft' | 'slate' | 'sage' = 'sage';
+  try {
+    const themeCtx = useMeetingTheme();
+    if (themeCtx && themeCtx.theme) {
+      activeTheme = themeCtx.theme;
+    }
+  } catch (e) {
+    // Fallback if not wrapped (e.g. recorder mode)
+  }
+
   // Extract user info from sessionStorage (passed from Join screen)
   let storedJoinInfo: any = null;
   let initialUrlParams: URLSearchParams | null = null;
@@ -1371,8 +1383,29 @@ export function MeetingProvider({
             console.warn("Failed to play doorbell sound", e);
           }
 
+          const toastBg = activeTheme === 'midnight' ? '#1F1F23' :
+                          activeTheme === 'slate' ? '#1E293B' :
+                          activeTheme === 'soft' ? '#FAFAF7' : '#FFFFFF';
+          const toastColor = activeTheme === 'midnight' ? '#FAFAFA' :
+                             activeTheme === 'slate' ? '#F1F5F9' :
+                             activeTheme === 'soft' ? '#1C1C1A' : '#1A2B1F';
+          const toastBorder = activeTheme === 'midnight' ? 'rgba(255,255,255,0.08)' :
+                              activeTheme === 'slate' ? 'rgba(255,255,255,0.07)' :
+                              activeTheme === 'soft' ? '#C8C7C1' : 'rgba(0,0,0,0.10)';
+          const controlBg = activeTheme === 'midnight' ? 'rgba(255,255,255,0.07)' :
+                            activeTheme === 'slate' ? 'rgba(255,255,255,0.06)' :
+                            activeTheme === 'soft' ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.07)';
+
           toast.custom((t) => (
-            <div className="bg-[var(--mt-bg-elevated)] text-[var(--mt-text)] p-4 rounded-xl shadow-lg border border-[var(--mt-border)] w-full flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+            <div 
+              className="p-4 rounded-xl shadow-2xl border w-full flex flex-col gap-3 backdrop-blur-2xl" 
+              style={{ 
+                backgroundColor: toastBg, 
+                color: toastColor, 
+                borderColor: toastBorder,
+                pointerEvents: 'auto' 
+              }}
+            >
               <div className="font-medium text-sm text-balance leading-tight">{msg.name} is waiting to join</div>
               <div className="flex gap-2 justify-end">
                 <button 
@@ -1381,8 +1414,12 @@ export function MeetingProvider({
                     notifiedWaitingUsersRef.current.delete(msg.userId);
                     toast.dismiss(t);
                   }}
-                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border border-[var(--mt-border)]"
-                  style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text)" }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border"
+                  style={{ 
+                    backgroundColor: controlBg, 
+                    color: toastColor,
+                    borderColor: toastBorder
+                  }}
                 >
                   Admit
                 </button>
