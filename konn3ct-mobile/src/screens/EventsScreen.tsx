@@ -864,6 +864,7 @@ export default function EventsScreen() {
         {/* Footer */}
         <View style={styles.cardFooter}>
           <TouchableOpacity
+            testID={`view-participants-${evt.id}`}
             style={styles.participantsBtn}
             activeOpacity={0.8}
             onPress={() => setParticipantsModal(evt)}
@@ -876,6 +877,7 @@ export default function EventsScreen() {
 
           <View style={styles.copyActionRow}>
             <TouchableOpacity
+              testID={`copy-event-link-${evt.id}`}
               style={styles.copyEventBtn}
               activeOpacity={0.8}
               onPress={async () => {
@@ -891,6 +893,7 @@ export default function EventsScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              testID={`copy-meeting-link-${evt.id}`}
               style={styles.copyMeetingBtn}
               activeOpacity={0.8}
               onPress={async () => {

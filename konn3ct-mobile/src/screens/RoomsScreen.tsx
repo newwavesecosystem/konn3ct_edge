@@ -412,7 +412,7 @@ export default function RoomsScreen() {
             </View>
 
             <TouchableOpacity
-              testID={`delete-room-${room.id}`}
+              testID={`delete-room-${room.url}`}
               style={styles.menuButton}
               onPress={() => handleDeleteRoom(room)}
               disabled={isDeleting}
@@ -458,6 +458,7 @@ export default function RoomsScreen() {
             <View style={styles.roomActionGroup}>
               {/* Schedule Room */}
               <TouchableOpacity
+                testID={`schedule-room-${room.url}`}
                 style={styles.roomActionBtn}
                 onPress={() => navigation.navigate('Schedule', { prefillRoomId: String(room.id) })}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -467,6 +468,7 @@ export default function RoomsScreen() {
 
               {/* Copy URL */}
               <TouchableOpacity
+                testID={`copy-room-url-${room.url}`}
                 style={styles.roomActionBtn}
                 onPress={() => handleCopyUrl(room.url)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -476,6 +478,7 @@ export default function RoomsScreen() {
 
               {/* Start Room */}
               <TouchableOpacity
+                testID={`start-room-${room.url}`}
                 style={[styles.roomActionBtn, styles.roomActionBtnPrimary]}
                 onPress={() => handleStartRoom(room)}
                 disabled={isStarting}
