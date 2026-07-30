@@ -291,7 +291,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 32, 48) }]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <Animated.View style={[styles.cardContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
           {/* ── Avatar card ── */}
           <View style={styles.avatarCard}>
@@ -554,6 +554,9 @@ const styles = StyleSheet.create({
   // Scroll
   scrollContent: {
     padding: 20,
+    gap: 16,
+  },
+  cardContainer: {
     gap: 16,
   },
 

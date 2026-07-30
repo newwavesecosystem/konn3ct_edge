@@ -29,6 +29,7 @@ export interface Participant {
   isSpeaking?: boolean;
   isMuted?: boolean;
   isCameraOn?: boolean;
+  isScreenSharing?: boolean;
 }
 
 export interface Reaction {
@@ -61,6 +62,7 @@ interface MeetingState {
   isHost: boolean;
   isHandRaisedLocally: boolean;
   isLocalUserSpeaking: boolean;
+  screenSharingUserId: string | null;
 
   // Active UI Panes
   activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation';
@@ -82,6 +84,7 @@ interface MeetingState {
   updateParticipantHandRaise: (userId: string, isRaised: boolean) => void;
   updateParticipantSpeaking: (userIds: string[]) => void;
   updateParticipantMuteState: (userId: string, isMuted: boolean) => void;
+  updateParticipantRole: (userId: string, newRole: string) => void;
   setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
@@ -89,6 +92,7 @@ interface MeetingState {
   setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation') => void;
   setTheme: (theme: 'sage' | 'midnight') => void;
   setCaptions: (updater: (curr: CaptionMessage[]) => CaptionMessage[]) => void;
+  setScreenSharing: (userId: string | null) => void;
   reset: () => void;
 }
 
@@ -107,11 +111,12 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   isHost: false,
   isHandRaisedLocally: false,
   isLocalUserSpeaking: false,
+  screenSharingUserId: null,
 
   setCurrentUser: (userId, role) => set({ 
     currentUserId: userId, 
     currentUserRole: role,
-    isHost: role === 'host' || role === 'moderator' || role === 'owner' || role === 'admin' 
+    isHost: role === 'host' || role === 'co-host' || role === 'moderator' || role === 'owner' || role === 'admin' 
   }),
   setTheme: (theme) => set({ theme }),
   setIsHandRaisedLocally: (isRaised) => set({ isHandRaisedLocally: isRaised }),
@@ -193,6 +198,12 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     )
   })),
 
+  updateParticipantRole: (userId, newRole) => set((state) => ({
+    participants: state.participants.map(p =>
+      p.userId === userId ? { ...p, role: newRole } : p
+    )
+  })),
+
   updateParticipantSpeaking: (userIds) => set((state) => ({
     participants: state.participants.map(p => ({
       ...p,
@@ -217,6 +228,14 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     unreadChatCount: pane === 'chat' ? 0 : state.unreadChatCount
   })),
 
+  setScreenSharing: (userId) => set((state) => ({
+    screenSharingUserId: userId,
+    participants: state.participants.map(p => ({
+      ...p,
+      isScreenSharing: p.userId === userId
+    }))
+  })),
+
   reset: () => set({
     chatMessages: [],
     polls: [],
@@ -230,6 +249,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     currentUserId: null,
     isHost: false,
     isHandRaisedLocally: false,
-    isLocalUserSpeaking: false
+    isLocalUserSpeaking: false,
+    screenSharingUserId: null
   })
 }));

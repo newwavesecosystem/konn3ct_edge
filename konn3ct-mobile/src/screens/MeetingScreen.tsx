@@ -19,7 +19,7 @@ if (Platform.OS !== 'web') {
 
 import * as Clipboard from 'expo-clipboard';
 import { useMeetingStore } from '../store/useMeetingStore';
-import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, SwitchCamera, Sun, Moon, Lock } from 'lucide-react-native';
+import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, SwitchCamera, Sun, Moon, Lock, MonitorUp, MonitorOff } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import PipService from '../native/KonnPip';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -57,6 +57,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const [isMoreMenuVisible, setIsMoreMenuVisible] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   
   const insets = useSafeAreaInsets();
   const serviceRef = useRef<MediasoupService | null>(null);
@@ -68,7 +69,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const currentUserId = useMeetingStore(state => state.currentUserId);
   const isLocalUserSpeaking = useMeetingStore(state => state.isLocalUserSpeaking);
   const user = useAuthStore((s) => s.user);
-  const localUserName = user?.name || 'Me';
+  const localParticipant = participants.find(p => p.userId === currentUserId);
+  const localUserName = localParticipant?.name || user?.name || 'Me';
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
   
@@ -92,10 +94,12 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
   const handleAdmitUser = (userId: string) => {
     if (serviceRef.current) serviceRef.current.admitUser(userId);
+    useMeetingStore.getState().removeWaitingRoomUser(userId);
   };
 
   const handleDenyUser = (userId: string) => {
     if (serviceRef.current) serviceRef.current.denyUser(userId);
+    useMeetingStore.getState().removeWaitingRoomUser(userId);
   };
 
   useEffect(() => {
@@ -317,11 +321,43 @@ export default function MeetingScreen({ route, navigation }: Props) {
         };
         service.onRecordingStarted = () => {
           setIsRecording(true);
-          Alert.alert("Recording Started", "The host has started cloud recording.");
+          setRecordingTime(0);
+          if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+          recordingIntervalRef.current = setInterval(() => {
+            setRecordingTime(prev => prev + 1);
+          }, 1000);
+          Alert.alert("Recording Started", "Cloud recording has started.");
         };
         service.onRecordingStopped = () => {
           setIsRecording(false);
+          if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+          setRecordingTime(0);
           Alert.alert("Recording Stopped", "Cloud recording has been stopped.");
+        };
+
+        // Screen share callbacks
+        service.onScreenShareStarted = (userId, producerId) => {
+          console.log(`[MeetingScreen] Screen share started by ${userId}`);
+          useMeetingStore.getState().setScreenSharing(userId);
+        };
+        service.onScreenShareStopped = (userId, producerId) => {
+          console.log(`[MeetingScreen] Screen share stopped by ${userId}`);
+          useMeetingStore.getState().setScreenSharing(null);
+          // If it was the local user's share that stopped (e.g. OS killed it)
+          if (userId === service.currentUserId) {
+            setIsScreenSharing(false);
+          }
+        };
+
+        // Role change notification
+        service.onRoleChanged = (userId, newRole) => {
+          if (userId === service.currentUserId) {
+            const roleLabel: Record<string, string> = {
+              host: 'Host', 'co-host': 'Co-host', presenter: 'Presenter',
+              attendee: 'Attendee', guest: 'Guest',
+            };
+            Alert.alert("Role Updated", `Your role has been updated to ${roleLabel[newRole] || newRole}.`);
+          }
         };
 
         const applyInitialMedia = async () => {
@@ -450,7 +486,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
 
   const handleLeave = useCallback(() => {
-    if (isHost) {
+    if (currentUserRole === 'host') {
       Alert.alert(
         'End or Leave Meeting?',
         'As the host, you can end the meeting for everyone or just leave the meeting.',
@@ -486,7 +522,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
         ]
       );
     }
-  }, [isHost, doLeave]);
+  }, [currentUserRole, doLeave]);
 
 
   // Intercept hardware back (Android) and swipe-back gesture to show leave dialog
@@ -593,19 +629,65 @@ export default function MeetingScreen({ route, navigation }: Props) {
     }
   };
 
-  const toggleRecording = () => {
-    // For now just toggle the UI state since backend is not fully setup
-    if (!isRecording) {
+  const toggleScreenShare = async () => {
+    if (!serviceRef.current) return;
+
+    if (Platform.OS !== 'android') {
+      Alert.alert('Not Supported', 'Screen sharing is currently available on Android only.');
+      return;
+    }
+
+    try {
+      if (isScreenSharing) {
+        // Stop sharing
+        serviceRef.current.disableScreenShare();
+        setIsScreenSharing(false);
+        useMeetingStore.getState().setScreenSharing(null);
+      } else {
+        // Start sharing
+        const screenTrack = await serviceRef.current.enableScreenShare();
+        if (screenTrack) {
+          setIsScreenSharing(true);
+          useMeetingStore.getState().setScreenSharing(
+            serviceRef.current.currentUserId || 'local'
+          );
+          // Auto-stop when the OS ends the capture
+          screenTrack.onended = () => {
+            setIsScreenSharing(false);
+            useMeetingStore.getState().setScreenSharing(null);
+          };
+        }
+      }
+    } catch (err: any) {
+      console.error('[MeetingScreen] Screen share error:', err);
+      if (err?.message !== 'Screen share already active') {
+        Alert.alert(
+          'Screen Share Failed',
+          'Could not start screen sharing. Please try again.'
+        );
+      }
+    }
+  };
+
+  // Additive bot-presence sync: if the server includes a recording bot in the
+  // participants list, automatically activate the recording UI. This handles
+  // late-joiners and reconnections where the recording_started WS event was missed.
+  // NOTE: We only turn recording ON here — turning it OFF is handled exclusively by
+  // the onRecordingStopped WS callback, because the server may not include bots
+  // in the participants list on all platforms.
+  useEffect(() => {
+    const hasBot = participants.some(p => p.role === 'bot' || p.role === 'recorder');
+    if (hasBot && !isRecording) {
       setIsRecording(true);
       setRecordingTime(0);
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
-    } else {
-      setIsRecording(false);
-      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
     }
-    
+  }, [participants]);
+
+  const toggleRecording = () => {
     if (serviceRef.current) {
       if (!isRecording) {
         serviceRef.current.sendStartRecording();
@@ -733,13 +815,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
             {hasVideo && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
             <View style={styles.nameBadgeContainer}>
               <Text style={styles.nameText} numberOfLines={1}>{p.name}</Text>
-              <View style={{ marginLeft: 6 }}>
-                {isRemoteMicMuted ? (
-                  <MicOff size={12} color="#ffb4ab" />
-                ) : (
-                  <Mic size={12} color="#c2e7ff" />
-                )}
-              </View>
+              {(p.role === 'host' || p.role === 'co-host') && (
+                <View style={[styles.rolePill, p.role === 'host' ? styles.rolePillHost : styles.rolePillCoHost]}>
+                  <Text style={[styles.rolePillText, p.role === 'host' ? styles.rolePillTextHost : styles.rolePillTextCoHost]}>
+                    {p.role === 'host' ? 'Host' : 'Co-host'}
+                  </Text>
+                </View>
+              )}
             </View>
             {p.isHandRaised && (
               <View style={styles.raisedHandBadge}>
@@ -787,13 +869,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
           {localStream && !isCameraOff && <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} style={styles.videoGradient} pointerEvents="none" />}
           <View style={styles.nameBadgeContainer}>
             <Text style={styles.nameText}>{localUserName}</Text>
-            <View style={{ marginLeft: 6 }}>
-              {isMicMuted ? (
-                <MicOff size={12} color="#ffb4ab" />
-              ) : (
-                <Mic size={12} color="#c2e7ff" />
-              )}
-            </View>
+            {(currentUserRole === 'host' || currentUserRole === 'co-host') && (
+              <View style={[styles.rolePill, currentUserRole === 'host' ? styles.rolePillHost : styles.rolePillCoHost]}>
+                <Text style={[styles.rolePillText, currentUserRole === 'host' ? styles.rolePillTextHost : styles.rolePillTextCoHost]}>
+                  {currentUserRole === 'host' ? 'Host' : 'Co-host'}
+                </Text>
+              </View>
+            )}
           </View>
           {isHandRaisedLocally && (
             <View style={styles.raisedHandBadge}>
@@ -946,6 +1028,24 @@ export default function MeetingScreen({ route, navigation }: Props) {
         </View>
       )}
 
+      {/* Local screen share active banner */}
+      {isScreenSharing && !isPipMode && (
+        <View style={[styles.screenShareBanner, { bottom: safeBottom + 80 }]}>
+          <View style={styles.screenShareBannerContent}>
+            <MonitorUp size={16} color="#60a5fa" strokeWidth={2.5} />
+            <Text style={styles.screenShareBannerText}>You are sharing your screen</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.screenShareStopBtn}
+            onPress={toggleScreenShare}
+            activeOpacity={0.8}
+          >
+            <MonitorOff size={14} color="#ffffff" strokeWidth={2.5} />
+            <Text style={styles.screenShareStopText}>Stop</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={[styles.videoGrid, activeScreenShare && styles.videoGridShrunk]}>
         {totalItems <= 4 && !activeScreenShare ? (
           <View style={[
@@ -993,6 +1093,19 @@ export default function MeetingScreen({ route, navigation }: Props) {
             <TouchableOpacity style={isHandRaisedLocally ? styles.toolBtnActive : styles.toolBtnNeutral} onPress={toggleHandRaise}>
               <Hand size={20} color={isHandRaisedLocally ? tokens.textInverse : tokens.textPrimary} fill={isHandRaisedLocally ? tokens.textInverse : "none"} strokeWidth={2} />
             </TouchableOpacity>
+
+            {Platform.OS === 'android' && (
+              <TouchableOpacity
+                style={isScreenSharing ? styles.toolBtnScreenActive : styles.toolBtnNeutral}
+                onPress={toggleScreenShare}
+                testID="toggle-screenshare"
+              >
+                {isScreenSharing
+                  ? <MonitorOff size={20} color="#ffffff" strokeWidth={2} />
+                  : <MonitorUp size={20} color={tokens.textPrimary} strokeWidth={2} />
+                }
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={styles.toolBtnNeutral} onPress={() => setIsMoreMenuVisible(true)} testID="more-button">
               <MoreVertical size={20} color={tokens.textPrimary} strokeWidth={2} />
@@ -1437,14 +1550,21 @@ const getStyles = (t: any) => StyleSheet.create({
     position: 'absolute',
     bottom: 10,
     left: 10,
+    right: 40,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  nameText: { color: 'white', fontSize: 12, fontWeight: '600', fontFamily: 'Inter' },
+  nameText: { color: 'white', fontSize: 11, fontWeight: '600', fontFamily: 'Inter', flexShrink: 1 },
+  rolePill: { marginLeft: 4, paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 6, flexShrink: 0 },
+  rolePillHost: { backgroundColor: 'rgba(234,179,8,0.25)' },
+  rolePillCoHost: { backgroundColor: 'rgba(59,130,246,0.25)' },
+  rolePillText: { fontSize: 8, fontWeight: '700', fontFamily: 'Inter', letterSpacing: 0.2 },
+  rolePillTextHost: { color: '#facc15' },
+  rolePillTextCoHost: { color: '#60a5fa' },
   raisedHandBadge: { position: 'absolute', top: 10, left: 10, backgroundColor: '#FFF3E0', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
   raisedHandText: { color: '#E65100', fontSize: 10, fontWeight: '700', marginLeft: 5, fontFamily: 'Inter', letterSpacing: 0.2 },
   activeSpeakerBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: t.bgActiveBadge, padding: 6, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
@@ -1611,6 +1731,66 @@ const getStyles = (t: any) => StyleSheet.create({
     color: t.textPrimary,
     fontSize: 14,
     fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  // Screen share toolbar button (active state)
+  toolBtnScreenActive: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    ...Platform.select({ web: { outlineStyle: 'none' as any } }),
+  },
+  // Screen share active banner
+  screenShareBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 25,
+    backgroundColor: 'rgba(30, 64, 175, 0.85)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#1e40af',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  screenShareBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  screenShareBannerText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  screenShareStopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  screenShareStopText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
     fontFamily: 'Inter',
   },
 });
