@@ -215,6 +215,10 @@ async function cleanupRoomData(roomId: string) {
 
     // 3. Clear Redis cache so new sessions don't load old history
     await invalidateRoomHistoryCache(roomId);
+
+    // 4. Clear memory state for eCinema
+    roomECinema.delete(roomId);
+    roomECinemaState.delete(roomId);
   } catch (error) {
     logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
   }
