@@ -26,11 +26,24 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
     if (logoutParam) setLogoutUrl(logoutParam);
   }, [searchParams]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API submission
-    console.log("Feedback submitted:", { rating, feedback, roomId: resolvedParams.roomId });
-    setSubmitted(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const response = await fetch(`${apiUrl}/rooms/${resolvedParams.roomId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, feedback })
+      });
+
+      if (!response.ok) {
+        console.error("Failed to submit feedback:", await response.text());
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+    } finally {
+      setSubmitted(true);
+    }
   };
 
   const handleReturnToDashboard = () => {
@@ -110,7 +123,7 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
                 <Star className="w-8 h-8 fill-brand-green" />
               </div>
               <h2 className="text-xl font-bold">Feedback Received!</h2>
-              <p className="text-white/60">Your insights help us make Konn3ct better.</p>
+              <p className="text-white/60">Your insights help us make {process.env.NEXT_PUBLIC_APP_NAME || 'Konn3ct'} better.</p>
             </div>
           )}
 
