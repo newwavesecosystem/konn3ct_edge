@@ -603,6 +603,17 @@ export class WebRTCClient {
           if (msg.message && msg.message.includes("Maximum number of active cameras")) {
             this.onServerReject?.(msg.message);
           }
+          if (msg.message && (msg.message.includes("Microphones are locked") || msg.message.includes("Cameras are locked"))) {
+            if (this.pendingRequests.has('produced')) {
+              const queue = this.pendingRequests.get('produced')!;
+              while (queue.length > 0) {
+                const resolver = queue.shift()!;
+                clearTimeout(resolver.timeoutId);
+                resolver.reject(new Error(msg.message));
+              }
+              this.pendingRequests.delete('produced');
+            }
+          }
           break;
         case 'ask_to_unmute':
           this.onAskToUnmute?.(msg.hostName);
