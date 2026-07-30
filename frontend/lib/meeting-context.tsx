@@ -199,6 +199,18 @@ export function useMeeting() {
   return ctx;
 }
 
+let sharedAudioCtx: AudioContext | null = null;
+function getSharedAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (!sharedAudioCtx) {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass) {
+      sharedAudioCtx = new AudioContextClass();
+    }
+  }
+  return sharedAudioCtx;
+}
+
 export function MeetingProvider({
   children,
   roomSlug,
@@ -282,6 +294,22 @@ export function MeetingProvider({
     prefsRef.current = prefs;
   }, [prefs]);
 
+  // Resume AudioContext on user interaction to unlock browser audio blocks
+  useEffect(() => {
+    const resumeAudio = () => {
+      const ctx = getSharedAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    };
+    window.addEventListener('click', resumeAudio);
+    window.addEventListener('touchstart', resumeAudio);
+    return () => {
+      window.removeEventListener('click', resumeAudio);
+      window.removeEventListener('touchstart', resumeAudio);
+    };
+  }, []);
+
   // Preload virtual backgrounds
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -303,10 +331,10 @@ export function MeetingProvider({
     if ((window as any).disableAudioNotifications) return;
     
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioCtx = getSharedAudioContext();
+      if (!audioCtx) return;
       if (audioCtx.state === 'suspended') {
-        // fail silently if browser blocks sound
-        return;
+        audioCtx.resume().catch(() => {});
       }
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -780,6 +808,11 @@ export function MeetingProvider({
 
         // --- Collaboration Event Listeners ---
         client.onMicError = (error: Error) => {
+          if (error.message && error.message.includes("Microphones are locked")) {
+            toast.error("The host has locked microphones for this meeting.");
+            setIsMuted(true);
+            return;
+          }
           setMicError({ name: error.name || 'Microphone Error', message: error.message || 'Unable to access your microphone.' });
           // Ensure the local state reflects that mic is off if it failed to turn on
           setIsMuted(true);
@@ -1310,22 +1343,29 @@ export function MeetingProvider({
 
           // Play Doorbell Sound (Ding-Dong)
           try {
-            if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              oscillator.type = 'sine';
-              // Ding
-              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-              // Dong
-              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
-              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
-              // Fade out smoothly to avoid popping
-              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-              oscillator.start(audioCtx.currentTime);
-              oscillator.stop(audioCtx.currentTime + 0.8);
+            const enableAll = prefsRef.current.notifications.enableAllSounds;
+            
+            if (enableAll && client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
+              const audioCtx = getSharedAudioContext();
+              if (audioCtx) {
+                if (audioCtx.state === 'suspended') {
+                  audioCtx.resume().catch(() => {});
+                }
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                // Ding
+                oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                // Dong
+                oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+                // Fade out smoothly to avoid popping
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.8);
+              }
             }
           } catch(e) {
             console.warn("Failed to play doorbell sound", e);
@@ -2116,7 +2156,11 @@ export function MeetingProvider({
       }).catch(err => {
         console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
-        setCamError({ name: err.name || 'Camera Error', message: err.message || 'Unable to access your camera.' });
+        if (err.message && err.message.includes("Cameras are locked")) {
+          toast.error("The host has locked cameras for this meeting.");
+        } else {
+          setCamError({ name: err.name || 'Camera Error', message: err.message || 'Unable to access your camera.' });
+        }
         // Ensure UI stays off
         setIsCameraOn(false);
       }).finally(() => {
