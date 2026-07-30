@@ -41,6 +41,7 @@ module.exports = {
         'WRITE_EXTERNAL_STORAGE',
         'FOREGROUND_SERVICE',
         'FOREGROUND_SERVICE_MEDIA_PROJECTION',
+        'FOREGROUND_SERVICE_MICROPHONE',
       ],
       predictiveBackGestureEnabled: false,
     },
@@ -71,6 +72,7 @@ module.exports = {
       ],
       './plugins/withPiP',
       './plugins/withScreenShare',
+      './plugins/withMeetingService',
     ],
     extra: {
           "eas": {
