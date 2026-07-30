@@ -192,6 +192,7 @@ export class WebRTCClient {
 
   // Settings
   public isHDVideo: boolean = true;
+  public isWidescreenEnabled: boolean = true;
   public isLowBandwidth: boolean = false;
   private needsRepublish: boolean = false;
 
@@ -1573,10 +1574,21 @@ export class WebRTCClient {
     this.cameraFallbackReachedVideoTrue = false;
 
     // A. Selected device with safe ideal constraints
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const targetAspect = this.isWidescreenEnabled ? 16 / 9 : 4 / 3;
+    
+    // Cap mobile to 720p/960p max, desktop can go up to 1080p in HD
+    const idealWidth = this.isHDVideo 
+      ? (isMobile ? 1280 : (this.isWidescreenEnabled ? 1920 : 1280)) 
+      : (this.isWidescreenEnabled ? 640 : 640);
+    const idealHeight = this.isHDVideo 
+      ? (isMobile ? 720 : (this.isWidescreenEnabled ? 1080 : 960)) 
+      : (this.isWidescreenEnabled ? 360 : 480);
+
     const constraintsA: MediaStreamConstraints = {
       video: deviceId 
-        ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }
-        : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
+        ? { deviceId: { exact: deviceId }, width: { ideal: idealWidth }, height: { ideal: idealHeight }, aspectRatio: { ideal: targetAspect }, frameRate: { ideal: 24, max: 30 } }
+        : { facingMode: "user", width: { ideal: idealWidth }, height: { ideal: idealHeight }, aspectRatio: { ideal: targetAspect }, frameRate: { ideal: 24, max: 30 } },
       audio: false
     };
 
@@ -1586,9 +1598,14 @@ export class WebRTCClient {
       audio: false
     };
 
-    // C. General safe camera
+    // C. General safe camera fallback
     const constraintsC: MediaStreamConstraints = {
-      video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 24 } },
+      video: { 
+        width: { ideal: this.isWidescreenEnabled ? 640 : 640 }, 
+        height: { ideal: this.isWidescreenEnabled ? 360 : 480 }, 
+        aspectRatio: { ideal: targetAspect },
+        frameRate: { ideal: 15, max: 24 } 
+      },
       audio: false
     };
 
@@ -1747,11 +1764,11 @@ export class WebRTCClient {
       : isMobileDevice
         ? [{ maxBitrate: 600000, maxFramerate: 30 }] // Single layer for mobile (Safari/iOS compatibility)
         : isSVC 
-          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: 1500000 }] // SVC for AV1/VP9
+          ? [{ scalabilityMode: 'L3T3_KEY', maxBitrate: this.isHDVideo ? 2500000 : 1200000 }] // SVC for AV1/VP9
           : [ // Simulcast for VP8/H264
               { scaleResolutionDownBy: 4, maxBitrate: 150000, maxFramerate: 15 }, // 180p
               { scaleResolutionDownBy: 2, maxBitrate: 500000, maxFramerate: 30 }, // 360p
-              { scaleResolutionDownBy: 1, maxBitrate: 1500000, maxFramerate: 30 } // 720p
+              { scaleResolutionDownBy: 1, maxBitrate: this.isHDVideo ? 2500000 : 1500000, maxFramerate: 30 } // 720p/1080p
             ];
 
     // If a live producer already exists, just swap the track — no second produce()

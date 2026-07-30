@@ -140,6 +140,8 @@ interface MeetingContextValue {
   setOutputVolume: (val: number) => void;
   isHDVideoEnabled: boolean;
   setIsHDVideoEnabled: (enabled: boolean) => void;
+  isWidescreenEnabled: boolean;
+  setIsWidescreenEnabled: (enabled: boolean) => void;
   isMirrorVideoEnabled: boolean;
   setIsMirrorVideoEnabled: (enabled: boolean) => void;
   isOriginalRatioEnabled: boolean;
@@ -496,6 +498,7 @@ export function MeetingProvider({
   
   // Settings State
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
+  const [isWidescreenEnabled, setIsWidescreenEnabled] = useState(true);
   const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
@@ -536,6 +539,9 @@ export function MeetingProvider({
 
       const hd = localStorage.getItem("mtg_hdVideo");
       if (hd !== null) setIsHDVideoEnabled(hd === "true");
+
+      const widescreen = localStorage.getItem("mtg_widescreenCapture");
+      if (widescreen !== null) setIsWidescreenEnabled(widescreen === "true");
 
       const mirror = localStorage.getItem("mtg_mirrorVideo");
       if (mirror !== null) setIsMirrorVideoEnabled(mirror === "true");
@@ -584,6 +590,22 @@ export function MeetingProvider({
     if (webrtcClient.current && webrtcClient.current.isHDVideo !== val) {
       webrtcClient.current.isHDVideo = val;
       // Restart camera with new resolution if active
+      if (isCameraOn) {
+        webrtcClient.current.enableCamera().then(track => {
+          localCameraTrackRef.current = track;
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: track } : p));
+        });
+      }
+    }
+  };
+
+  const updateWidescreen = (val: boolean) => {
+    setIsWidescreenEnabled(val);
+    localStorage.setItem("mtg_widescreenCapture", String(val));
+    // Apply immediately to WebRTC if connected
+    if (webrtcClient.current && webrtcClient.current.isWidescreenEnabled !== val) {
+      webrtcClient.current.isWidescreenEnabled = val;
+      // Restart camera with new aspect ratio if active
       if (isCameraOn) {
         webrtcClient.current.enableCamera().then(track => {
           localCameraTrackRef.current = track;
@@ -719,6 +741,7 @@ export function MeetingProvider({
 
         client = new WebRTCClient(roomSlug, data.token, clientParticipantId, isRecorderMode);
         client.isHDVideo = isHDVideoEnabled;
+        client.isWidescreenEnabled = isWidescreenEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
         client.networkConfig = {
           networkDetectionEnabled: roomSettings.networkDetectionEnabled ?? true,
@@ -2478,6 +2501,8 @@ export function MeetingProvider({
         },
         isHDVideoEnabled,
         setIsHDVideoEnabled: updateHDVideo,
+        isWidescreenEnabled,
+        setIsWidescreenEnabled: updateWidescreen,
         isMirrorVideoEnabled,
         setIsMirrorVideoEnabled: updateMirrorVideo,
         isOriginalRatioEnabled,

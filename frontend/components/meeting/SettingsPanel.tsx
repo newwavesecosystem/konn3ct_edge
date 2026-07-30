@@ -37,6 +37,8 @@ export function SettingsPanel() {
     toggleAINoiseSuppression,
     isHDVideoEnabled,
     setIsHDVideoEnabled,
+    isWidescreenEnabled,
+    setIsWidescreenEnabled,
     isMirrorVideoEnabled,
     setIsMirrorVideoEnabled,
     isOriginalRatioEnabled,
@@ -155,6 +157,11 @@ export function SettingsPanel() {
             label="HD Video" 
             checked={isHDVideoEnabled} 
             onChange={setIsHDVideoEnabled}
+          />
+          <SettingsToggle 
+            label="Widescreen Capture (16:9)" 
+            checked={isWidescreenEnabled} 
+            onChange={setIsWidescreenEnabled}
           />
           <SettingsToggle 
             label="Mirror my video" 

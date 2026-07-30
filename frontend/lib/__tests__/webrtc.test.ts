@@ -2,33 +2,54 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { WebRTCClient } from '../webrtc';
 import * as mediasoupClient from 'mediasoup-client';
 
+// Mock browser media elements for JSDOM
+if (typeof HTMLCanvasElement !== 'undefined' && !HTMLCanvasElement.prototype.captureStream) {
+  HTMLCanvasElement.prototype.captureStream = function() {
+    return {
+      getVideoTracks: () => [{ kind: 'video', id: 'processed-track', stop: () => {} }],
+      getAudioTracks: () => [],
+      addTrack: () => {},
+      removeTrack: () => {}
+    } as any;
+  };
+}
+if (typeof HTMLMediaElement !== 'undefined') {
+  HTMLMediaElement.prototype.play = async () => {};
+  HTMLMediaElement.prototype.pause = () => {};
+}
+
 // Mock mediasoup-client
 vi.mock('mediasoup-client', () => ({
-  Device: vi.fn().mockImplementation(() => ({
-    load: vi.fn(),
-    createSendTransport: vi.fn().mockReturnValue({
-      on: vi.fn(),
-      produce: vi.fn().mockResolvedValue({
-        id: 'mock-producer-id',
-        pause: vi.fn().mockImplementation(function() { this.paused = true; }),
-        resume: vi.fn().mockImplementation(function() { this.paused = false; }),
-        replaceTrack: vi.fn(),
-        closed: false,
-        paused: false,
-        track: { stop: vi.fn() }
-      })
-    }),
-    createRecvTransport: vi.fn().mockReturnValue({
-      on: vi.fn(),
-      consume: vi.fn().mockResolvedValue({})
-    }),
-    rtpCapabilities: {
-      codecs: [
-        { mimeType: 'audio/opus', kind: 'audio' },
-        { mimeType: 'video/vp8', kind: 'video' }
-      ]
-    }
-  }))
+  Device: vi.fn().mockImplementation(function(this: any) {
+    return {
+      load: vi.fn(),
+      createSendTransport: vi.fn().mockReturnValue({
+        on: vi.fn(),
+        close: vi.fn(),
+        produce: vi.fn().mockResolvedValue({
+          id: 'mock-producer-id',
+          on: vi.fn(),
+          pause: vi.fn().mockImplementation(function(this: any) { this.paused = true; }),
+          resume: vi.fn().mockImplementation(function(this: any) { this.paused = false; }),
+          replaceTrack: vi.fn(),
+          closed: false,
+          paused: false,
+          track: { stop: vi.fn() }
+        })
+      }),
+      createRecvTransport: vi.fn().mockReturnValue({
+        on: vi.fn(),
+        close: vi.fn(),
+        consume: vi.fn().mockResolvedValue({})
+      }),
+      rtpCapabilities: {
+        codecs: [
+          { mimeType: 'audio/opus', kind: 'audio' },
+          { mimeType: 'video/vp8', kind: 'video' }
+        ]
+      }
+    };
+  })
 }));
 
 describe('WebRTCClient - Audio Reconnect Regression Tests', () => {
@@ -57,7 +78,7 @@ describe('WebRTCClient - Audio Reconnect Regression Tests', () => {
         getUserMedia: vi.fn().mockResolvedValue(mockStream)
       }
     };
-    (global as any).MediaStream = vi.fn().mockImplementation(() => mockStream);
+    (global as any).MediaStream = vi.fn().mockImplementation(function(this: any) { return mockStream; });
 
     client = new WebRTCClient('test-room', 'test-token', 'test-participant-id');
     
@@ -154,6 +175,111 @@ describe('WebRTCClient - Audio Reconnect Regression Tests', () => {
 
     // Verify it called enableMic with startMuted = true
     expect(enableMicSpy).toHaveBeenCalledWith(true, true);
+  });
+});
+
+describe('WebRTCClient - Camera Resolution and Aspect Ratio Constraints', () => {
+  let client: any;
+  let mockStream: any;
+  let mockTrack: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockTrack = {
+      enabled: true,
+      stop: vi.fn(),
+      readyState: 'live'
+    };
+
+    mockStream = {
+      getVideoTracks: () => [mockTrack],
+      getAudioTracks: () => []
+    };
+
+    // Global mocks for browser APIs
+    (global as any).navigator = {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', // Desktop
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue(mockStream)
+      }
+    };
+    (global as any).MediaStream = vi.fn().mockImplementation(function(this: any) { return mockStream; });
+
+    client = new WebRTCClient('test-room', 'test-token', 'test-participant-id');
+    client.request = vi.fn().mockResolvedValue({ transportParams: {} });
+    client.device = new mediasoupClient.Device();
+    client.sendTransport = client.device.createSendTransport();
+  });
+
+  it('should request 1080p widescreen constraints on desktop by default (HD=true, Widescreen=true)', async () => {
+    client.isHDVideo = true;
+    client.isWidescreenEnabled = true;
+
+    await client.enableCamera();
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: expect.objectContaining({
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          aspectRatio: { ideal: 16 / 9 } // 16:9
+        })
+      })
+    );
+  });
+
+  it('should request 1280x960 4:3 standard constraints on desktop when HD=true and Widescreen=false', async () => {
+    client.isHDVideo = true;
+    client.isWidescreenEnabled = false;
+
+    await client.enableCamera();
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: expect.objectContaining({
+          width: { ideal: 1280 },
+          height: { ideal: 960 },
+          aspectRatio: { ideal: 4 / 3 } // 4:3
+        })
+      })
+    );
+  });
+
+  it('should cap resolution to 720p widescreen on mobile even if HD is enabled', async () => {
+    (global as any).navigator.userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)'; // iPhone mobile
+
+    client.isHDVideo = true;
+    client.isWidescreenEnabled = true;
+
+    await client.enableCamera();
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: expect.objectContaining({
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 16 / 9 }
+        })
+      })
+    );
+  });
+
+  it('should request 360p (640x360) constraints when HD is disabled and Widescreen=true', async () => {
+    client.isHDVideo = false;
+    client.isWidescreenEnabled = true;
+
+    await client.enableCamera();
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: expect.objectContaining({
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          aspectRatio: { ideal: 16 / 9 }
+        })
+      })
+    );
   });
 });
 

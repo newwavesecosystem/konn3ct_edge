@@ -31,6 +31,7 @@ test.describe('Meeting Settings Toggles', () => {
       'Audio-only mode',
       'AI Noise Suppression (Premium)',
       'HD Video',
+      'Widescreen Capture (16:9)',
       'Mirror my video',
       'Original Ratio'
     ];
