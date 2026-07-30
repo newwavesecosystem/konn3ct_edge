@@ -22,6 +22,7 @@ import { useMeetingStore } from '../store/useMeetingStore';
 import { Settings, Users, MessageSquare, Hand, Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Phone, Radio, BarChart2, Disc, Square, UserPlus, Presentation, FileText, Gift, Copy, MoreVertical, SwitchCamera, Sun, Moon, Lock, MonitorUp, MonitorOff } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import PipService from '../native/KonnPip';
+import MeetingService from '../native/MeetingService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { meetingThemeTokens } from '../theme/meetingTheme';
 // Components
@@ -111,6 +112,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
     if (PipService.isAvailable()) {
       // Tell native side a meeting is active — enables auto-PiP on Home press
       PipService.setMeetingActive(true);
+      // Start foreground service to keep WebSocket alive when minimized
+      MeetingService.start('Meeting in progress');
       pipListener = PipService.onModeChanged((isInPip: boolean) => {
         if (isMounted) {
           setIsPipMode(isInPip);
@@ -460,6 +463,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
       }
       // Tell native side meeting is no longer active — disables auto-PiP on Home
       PipService.setMeetingActive(false);
+      // Stop the foreground service
+      MeetingService.stop();
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
       }
@@ -475,6 +480,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
       serviceRef.current.disconnect();
       serviceRef.current = null;
     }
+    MeetingService.stop();
     // Guest users (no token) go back to the GuestJoin screen; logged-in users go to MainTabs
     const isGuest = !useAuthStore.getState().token;
     if (isGuest) {
