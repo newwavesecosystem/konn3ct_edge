@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useVirtualBackgrounds } from "@/hooks/use-virtual-backgrounds";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { VideoProcessor, VirtualBackgroundMode } from "@/lib/video-processor";
@@ -366,6 +367,7 @@ export default function JoinPage({
   const appName = process.env.NEXT_PUBLIC_APP_NAME || "Konn3ct";
   const appInitial = appName.charAt(0).toUpperCase();
 
+  const { backgrounds } = useVirtualBackgrounds();
   return (
     <div className="min-h-screen bg-[#0d0d1a] flex flex-col">
       {/* Top bar */}
@@ -623,11 +625,7 @@ export default function JoinPage({
                           <span className="relative z-10 text-[10px] text-white">Blur</span>
                         </button>
                         
-                        {[
-                          '/backgrounds/modern_office.png',
-                          '/backgrounds/cozy_cafe.png',
-                          '/backgrounds/minimalist_gradient.png'
-                        ].map((url, i) => (
+                        {backgrounds.map((url, i) => (
                           <button
                             key={url}
                             onClick={() => handleVbSelect('image', url)}
@@ -827,3 +825,4 @@ function DeviceSelect({
     </div>
   );
 }
+

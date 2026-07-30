@@ -11,6 +11,9 @@ const appName = process.env.NEXT_PUBLIC_APP_NAME || "konn3ct";
 export const metadata: Metadata = {
   title: `${appName} - Premium Video Conferencing`,
   description: "Modern video conferencing, webinars, and recording platform.",
+  icons: {
+    icon: "/icon.png",
+  }
 };
 
 export default function RootLayout({
