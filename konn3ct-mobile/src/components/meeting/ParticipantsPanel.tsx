@@ -56,8 +56,8 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   const isActualHost = currentUserRole === 'host';
 
   /* ── handlers ─────────────────────────────────────────────────────────── */
-  const handleAdmit = (userId: string) => service?.admitUser(userId);
-  const handleDeny  = (userId: string) => service?.denyUser(userId);
+  const handleAdmit = (userId: string) => { service?.admitUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
+  const handleDeny  = (userId: string) => { service?.denyUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
   const handleMuteAll = () => service?.forceMute();
 
   const handleMuteUser = (userId: string) => {

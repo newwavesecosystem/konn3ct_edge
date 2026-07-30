@@ -39,6 +39,8 @@ module.exports = {
         'RECEIVE_BOOT_COMPLETED',
         'READ_EXTERNAL_STORAGE',
         'WRITE_EXTERNAL_STORAGE',
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_MEDIA_PROJECTION',
       ],
       predictiveBackGestureEnabled: false,
     },
@@ -68,6 +70,7 @@ module.exports = {
         },
       ],
       './plugins/withPiP',
+      './plugins/withScreenShare',
     ],
     extra: {
           "eas": {
