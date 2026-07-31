@@ -11,8 +11,8 @@ module.exports = {
     userInterfaceStyle: 'light',
     splash: {
       image: './assets/splash.png',
-      resizeMode: 'contain',
-      backgroundColor: '#0a5c36',
+      resizeMode: 'cover',
+      backgroundColor: '#023c69',
     },
     ios: {
       supportsTablet: true,
