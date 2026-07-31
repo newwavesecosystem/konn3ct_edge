@@ -136,3 +136,20 @@ body {
 /* Utility: hide scrollbar but keep scrolling */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Custom modern themed scrollbar for panel containers */
+.meeting-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.meeting-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.meeting-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--mt-scrollbar-thumb, rgba(255,255,255,0.15));
+  border-radius: 9999px;
+}
+.meeting-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mt-scrollbar-thumb, rgba(255,255,255,0.15)) transparent;
+}

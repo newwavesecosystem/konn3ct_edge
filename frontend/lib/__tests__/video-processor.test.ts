@@ -115,4 +115,41 @@ describe('VideoProcessor (Always-On Interceptor)', () => {
     processor.setMode('blur');
     expect(processor.getMode()).toBe('blur');
   });
+
+  it('should cap the processing canvas size to 720p maximum when a 1080p stream is processed', () => {
+    // Set video element width/height to 1080p (1920x1080)
+    mockVideoElement.videoWidth = 1920;
+    mockVideoElement.videoHeight = 1080;
+
+    const processor = new VideoProcessor();
+    processor.setMode('none');
+    processor.startProcessing(mockStream as any);
+
+    // Trigger the animation frame manually to run processFrame sizing logic
+    (global as any).triggerAnimationFrame();
+
+    // Verify canvas size is capped to 1280x720 (720p widescreen)
+    expect(mockCanvas.width).toBe(1280);
+    expect(mockCanvas.height).toBe(720);
+  });
+
+  it('should cap the processing canvas size to 720p max for 4:3 high-res input (e.g. 1920x1440)', () => {
+    // 1920x1440 is 4:3 high-resolution input
+    mockVideoElement.videoWidth = 1920;
+    mockVideoElement.videoHeight = 1440;
+
+    const processor = new VideoProcessor();
+    processor.setMode('none');
+    processor.startProcessing(mockStream as any);
+
+    // Trigger the animation frame manually
+    (global as any).triggerAnimationFrame();
+
+    // Verify canvas size is scaled down keeping 4:3 ratio:
+    // Scale factor = min(1280/1920, 720/1440) = min(0.6666, 0.5) = 0.5
+    // 1920 * 0.5 = 960 width
+    // 1440 * 0.5 = 720 height
+    expect(mockCanvas.width).toBe(960);
+    expect(mockCanvas.height).toBe(720);
+  });
 });

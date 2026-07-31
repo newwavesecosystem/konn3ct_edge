@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
-import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache } from './historyCache';
+import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache, invalidateRoomHistoryCache } from './historyCache';
 import { monitorEventLoopDelay, PerformanceObserver } from 'perf_hooks';
 
 // --- Event Loop & GC Telemetry ---
@@ -212,6 +212,13 @@ async function cleanupRoomData(roomId: string) {
       });
       logger.info(`Cleared ${count} chat messages for room ${roomId} (persistChat=false).`);
     }
+
+    // 3. Clear Redis cache so new sessions don't load old history
+    await invalidateRoomHistoryCache(roomId);
+
+    // 4. Clear memory state for eCinema
+    roomECinema.delete(roomId);
+    roomECinemaState.delete(roomId);
   } catch (error) {
     logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
   }
@@ -2380,6 +2387,10 @@ export function initializeSignaling(server: Server) {
 
       case 'ping':
         // Silently ignore ping messages used for keep-alive
+        break;
+
+      case 'webrtc_client_stats':
+        logger.info(`[ClientStats] Room ${roomId} | User ${client.userId}: RTT=${data.roundTripTime || 0}ms, Jitter=${data.jitter || 0}, Loss=${data.packetsLost || 0}`);
         break;
 
       default:

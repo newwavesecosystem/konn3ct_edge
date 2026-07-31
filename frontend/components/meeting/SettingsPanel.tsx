@@ -4,6 +4,7 @@ import React from "react";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
 import { useMeeting } from "@/lib/meeting-context";
 import { useMeetingDevicePreferences } from "@/lib/meeting-device-preferences";
+import { useVirtualBackgrounds } from "@/hooks/use-virtual-backgrounds";
 import type { GridOverflowMode } from "@/lib/types/meeting";
 import {
   Speaker,
@@ -37,6 +38,8 @@ export function SettingsPanel() {
     toggleAINoiseSuppression,
     isHDVideoEnabled,
     setIsHDVideoEnabled,
+    isWidescreenEnabled,
+    setIsWidescreenEnabled,
     isMirrorVideoEnabled,
     setIsMirrorVideoEnabled,
     isOriginalRatioEnabled,
@@ -63,6 +66,7 @@ export function SettingsPanel() {
     playNotificationSound
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
+  const { backgrounds } = useVirtualBackgrounds();
   
   const { preferences, setMeetingDevicePreferences } = useMeetingDevicePreferences();
   const nPrefs = preferences.notifications;
@@ -73,7 +77,7 @@ export function SettingsPanel() {
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Settings</h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 space-y-5">
+      <div className="flex-1 overflow-y-auto meeting-scrollbar px-4 py-4 space-y-5">
         {/* Theme settings */}
         <SettingsGroup label="Theme">
           <div className="space-y-2">
@@ -157,6 +161,11 @@ export function SettingsPanel() {
             onChange={setIsHDVideoEnabled}
           />
           <SettingsToggle 
+            label="Widescreen Capture (16:9)" 
+            checked={isWidescreenEnabled} 
+            onChange={setIsWidescreenEnabled}
+          />
+          <SettingsToggle 
             label="Mirror my video" 
             checked={isMirrorVideoEnabled} 
             onChange={setIsMirrorVideoEnabled}
@@ -200,11 +209,7 @@ export function SettingsPanel() {
                 <img src={`/backgrounds/blur.png`} alt={`blur`} className="w-full h-full object-cover" />
               </button>
               
-              {[
-                '/backgrounds/modern_office.png',
-                '/backgrounds/cozy_cafe.png',
-                '/backgrounds/minimalist_gradient.png'
-              ].map((url, i) => (
+              {backgrounds.map((url, i) => (
                 <button
                   key={url}
                   title={`Use Background ${i + 1}`}
@@ -719,3 +724,4 @@ function SettingsSlider({
     </div>
   );
 }
+

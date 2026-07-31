@@ -1,23 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+
 import "./globals.css";
 import { Toaster } from "sonner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSansVariable = "font-sans";
+const geistMonoVariable = "font-mono";
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME || "konn3ct";
 
 export const metadata: Metadata = {
   title: `${appName} - Premium Video Conferencing`,
   description: "Modern video conferencing, webinars, and recording platform.",
+  icons: {
+    icon: "/icon.png",
+  }
 };
 
 export default function RootLayout({
@@ -26,10 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+      <html
+        lang="en"
+        className={`${geistSansVariable} ${geistMonoVariable} h-full antialiased`}
+      >
       <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
         {children}
         <Toaster position="top-right" richColors closeButton />
