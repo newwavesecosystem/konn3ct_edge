@@ -187,6 +187,8 @@ export default function LoginScreen() {
         return;
       }
 
+      await AsyncStorage.setItem('@1gov_mda', mda.trim());
+
       // 2FA required
       if (resData.twoFactorAuth) {
         const defaultMedium = resData.twoFactorMedium || 'EMAIL';

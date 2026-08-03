@@ -193,6 +193,8 @@ export async function createEvent(payload: CreateEventPayload): Promise<{ succes
       'Content-Type': 'multipart/form-data',
     },
   });
+
+  console.log("pre-reg "+res.data);
   return res.data;
 }
 
