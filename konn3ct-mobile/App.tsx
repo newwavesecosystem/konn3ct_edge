@@ -1,7 +1,9 @@
-import { registerGlobals } from 'react-native-webrtc';
-// Polyfill WebRTC globals for mediasoup-client
-registerGlobals();
-// @ts-ignore
+import { Platform } from 'react-native';
+if (Platform.OS !== 'web') {
+  const { registerGlobals } = require('react-native-webrtc');
+  // Polyfill WebRTC globals for mediasoup-client
+  registerGlobals();
+}
 
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, Alert } from 'react-native';
@@ -52,8 +54,8 @@ Notifications.setNotificationHandler({
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  Lobby: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
-  Meeting: { roomId: string; meetingToken?: string; micOn?: boolean; cameraOn?: boolean };
+  Lobby: { roomId: string; meetingToken?: string; signalUrl?: string; micOn?: boolean; cameraOn?: boolean };
+  Meeting: { roomId: string; meetingToken?: string; signalUrl?: string; micOn?: boolean; cameraOn?: boolean };
   MeetingSummary: { roomId: string };
   Streaming: undefined;
   Recordings: undefined;
@@ -88,11 +90,15 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const token = useAuthStore((state) => state.token);
+  const token       = useAuthStore((state) => state.token);
+  const isHydrated  = useAuthStore((state) => state.isHydrated);
+  const hydrate     = useAuthStore((state) => state.hydrate);
 
   useEffect(() => {
-    // Hide the infinite white splash screen!
-    SplashScreen.hideAsync().catch(console.warn);
+    // Restore saved session from SecureStore, then hide the splash screen
+    hydrate().finally(() => {
+      SplashScreen.hideAsync().catch(console.warn);
+    });
   }, []);
 
   useEffect(() => {
@@ -100,6 +106,9 @@ export default function App() {
       registerForPushNotificationsAsync();
     }
   }, [token]);
+
+  // Keep splash visible until we know whether the user is logged in
+  if (!isHydrated) return null;
 
   return (
     <ErrorBoundary>

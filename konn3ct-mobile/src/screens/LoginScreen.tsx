@@ -19,8 +19,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
-import { Fingerprint, Eye, EyeOff, Mail, Lock, Square, CheckSquare, Building2 } from 'lucide-react-native';
+import * as SecureStore from '../store/secureStore';
+import { Fingerprint, Eye, EyeOff, Mail, Lock, Square, CheckSquare, Building2, Smartphone, ShieldCheck } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { APP_CONFIG, APP_LOGO } from '../config/appConfig';
 
@@ -55,7 +55,10 @@ export default function LoginScreen() {
 
   // 2FA state (gov1 only)
   const [twoFAPending, setTwoFAPending] = useState(false);
+  // 'select' = choosing method, 'enter' = typing code
+  const [twoFAStep, setTwoFAStep] = useState<'select' | 'enter'>('select');
   const [twoFAMedium, setTwoFAMedium] = useState('EMAIL');
+  const [availableMediums, setAvailableMediums] = useState<string[]>(['EMAIL']);
   const [otpCode, setOtpCode] = useState('');
   const [twoFALoading, setTwoFALoading] = useState(false);
 
@@ -103,8 +106,10 @@ export default function LoginScreen() {
         const enrolled = await LocalAuthentication.isEnrolledAsync();
         setIsBiometricSupported(compatible && enrolled);
 
-        const savedToken = await SecureStore.getItemAsync('konn3ct_token');
-        if (savedToken) setHasSavedCredentials(true);
+        // Use the dedicated biometric token (never cleared on logout)
+        // so the button stays available even after the user logs out.
+        const biometricToken = await SecureStore.getItemAsync('konn3ct_biometric_token');
+        if (biometricToken) setHasSavedCredentials(true);
       } catch (e) {
         console.error('Init error:', e);
       }
@@ -131,6 +136,11 @@ export default function LoginScreen() {
 
     await SecureStore.setItemAsync('konn3ct_token', token);
     await SecureStore.setItemAsync('konn3ct_user', JSON.stringify(userObj));
+    // konn3ct_biometric_token is a persistent copy kept for biometric re-login.
+    // It is intentionally NOT deleted on logout so the biometric button remains
+    // available the next time the user opens the login screen.
+    await SecureStore.setItemAsync('konn3ct_biometric_token', token);
+    await SecureStore.setItemAsync('konn3ct_biometric_user', JSON.stringify(userObj));
     login(userObj, token);
   };
 
@@ -179,9 +189,28 @@ export default function LoginScreen() {
 
       // 2FA required
       if (resData.twoFactorAuth) {
-        setTwoFAMedium(resData.twoFactorMedium || 'EMAIL');
-        setTwoFAPending(true);
-        setSuccess(`A verification code has been sent to your ${resData.twoFactorMedium || 'email'}.`);
+        const defaultMedium = resData.twoFactorMedium || 'EMAIL';
+        // Parse comma-separated list of available mediums e.g. "AUTHENTICATOR_APP,EMAIL"
+        const mediumsRaw: string = resData.twoFactorMediums || defaultMedium;
+        const parsedMediums = mediumsRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
+        const mediums = parsedMediums.length > 0 ? parsedMediums : [defaultMedium];
+
+        setAvailableMediums(mediums);
+        setTwoFAMedium(defaultMedium);
+
+        if (mediums.length > 1) {
+          // Multiple methods available — let user choose
+          setTwoFAStep('select');
+          setTwoFAPending(true);
+          setSuccess('');
+        } else {
+          // Only one method — go straight to code entry
+          setTwoFAStep('enter');
+          setTwoFAPending(true);
+          if (defaultMedium === 'EMAIL') {
+            setSuccess('A verification code has been sent to your email.');
+          }
+        }
         return;
       }
 
@@ -198,9 +227,22 @@ export default function LoginScreen() {
     }
   };
 
+  // ── 1Gov 2FA: user selects method ─────────────────────────────────────────
+  const handleSelectMedium = (medium: string) => {
+    setTwoFAMedium(medium);
+    setOtpCode('');
+    setError('');
+    setSuccess(medium === 'EMAIL' ? 'A verification code has been sent to your email.' : '');
+    setTwoFAStep('enter');
+  };
+
   // ── 1Gov 2FA verification (step 2) ──────────────────────────────────────────
   const handleGovTwoFactor = async () => {
-    if (!otpCode || otpCode.length < 4) { setError('Please enter the verification code.'); return; }
+    const minLength = twoFAMedium === 'AUTHENTICATOR_APP' ? 6 : 4;
+    if (!otpCode || otpCode.length < minLength) {
+      setError(`Please enter the ${twoFAMedium === 'AUTHENTICATOR_APP' ? '6-digit' : 'verification'} code.`);
+      return;
+    }
     setTwoFALoading(true); setError(''); setSuccess('');
     try {
       const response = await apiClient.post('/1gov/login/2fa', {
@@ -232,8 +274,9 @@ export default function LoginScreen() {
         fallbackLabel: 'Use Password',
       });
       if (result.success) {
-        const savedToken = await SecureStore.getItemAsync('konn3ct_token');
-        const savedUserStr = await SecureStore.getItemAsync('konn3ct_user');
+        // Read from the persistent biometric store (survives logout)
+        const savedToken = await SecureStore.getItemAsync('konn3ct_biometric_token');
+        const savedUserStr = await SecureStore.getItemAsync('konn3ct_biometric_user');
         if (savedToken && savedUserStr) {
           const parsed = JSON.parse(savedUserStr);
           // Coerce id to string — old saves may have stored a numeric id from the API
@@ -242,6 +285,9 @@ export default function LoginScreen() {
             email: parsed?.email || '',
             name: parsed?.name || parsed?.email || 'User',
           };
+          // Restore the session token so API calls work
+          await SecureStore.setItemAsync('konn3ct_token', savedToken);
+          await SecureStore.setItemAsync('konn3ct_user', savedUserStr);
           login(safeUser, savedToken);
         } else {
           Alert.alert('Error', 'No saved credentials found. Please login with password first.');
@@ -307,46 +353,128 @@ export default function LoginScreen() {
           {/* ── 2FA Pending (gov1 only) ── */}
           {twoFAPending ? (
             <>
-              <Text style={styles.twoFAHint}>
-                Enter the code sent to your {twoFAMedium.toLowerCase()}.
-              </Text>
+              {twoFAStep === 'select' ? (
+                /* ── Step 1: Choose 2FA Method ── */
+                <>
+                  <View style={styles.twoFAHeaderRow}>
+                    <ShieldCheck color={COLORS.brandGreen} size={28} />
+                    <Text style={styles.twoFATitle}>Two-Factor Authentication</Text>
+                  </View>
+                  <Text style={styles.twoFAHint}>
+                    Your account has 2FA enabled. Choose how you'd like to verify your identity.
+                  </Text>
 
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Verification Code</Text>
-                <View style={[styles.inputWrapper, otpFocused && styles.inputWrapperFocused]}>
-                  <TextInput
-                    style={[styles.input, { textAlign: 'center', letterSpacing: 6, fontSize: 20 }]}
-                    placeholder="------"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={otpCode}
-                    onChangeText={setOtpCode}
-                    keyboardType="number-pad"
-                    maxLength={8}
-                    onFocus={() => setOtpFocused(true)}
-                    onBlur={() => setOtpFocused(false)}
-                    autoFocus
-                  />
-                </View>
-              </View>
+                  {availableMediums.includes('AUTHENTICATOR_APP') && (
+                    <TouchableOpacity
+                      style={styles.methodCard}
+                      onPress={() => handleSelectMedium('AUTHENTICATOR_APP')}
+                      activeOpacity={0.8}
+                      testID="select-authenticator-app"
+                    >
+                      <View style={styles.methodCardIcon}>
+                        <Smartphone color={COLORS.brandGreen} size={24} />
+                      </View>
+                      <View style={styles.methodCardText}>
+                        <Text style={styles.methodCardTitle}>Gov OTP</Text>
+                        <Text style={styles.methodCardDesc}>Use the 6-digit code from your Gov OTP app</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
 
-              <TouchableOpacity
-                style={[styles.loginButton, twoFALoading && styles.loginButtonDisabled]}
-                onPress={handleGovTwoFactor}
-                disabled={twoFALoading}
-                activeOpacity={0.85}
-              >
-                {twoFALoading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
-                <Text style={styles.loginButtonText}>
-                  {twoFALoading ? 'Verifying...' : 'Verify Code'}
-                </Text>
-              </TouchableOpacity>
+                  {availableMediums.includes('EMAIL') && (
+                    <TouchableOpacity
+                      style={styles.methodCard}
+                      onPress={() => handleSelectMedium('EMAIL')}
+                      activeOpacity={0.8}
+                      testID="select-email-2fa"
+                    >
+                      <View style={styles.methodCardIcon}>
+                        <Mail color={COLORS.brandGreen} size={24} />
+                      </View>
+                      <View style={styles.methodCardText}>
+                        <Text style={styles.methodCardTitle}>Email</Text>
+                        <Text style={styles.methodCardDesc}>Receive a verification code sent to your registered email address</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
 
-              <TouchableOpacity
-                style={styles.backToLoginBtn}
-                onPress={() => { setTwoFAPending(false); setOtpCode(''); setError(''); setSuccess(''); }}
-              >
-                <Text style={styles.backToLoginText}>← Back to Login</Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.backToLoginBtn}
+                    onPress={() => { setTwoFAPending(false); setOtpCode(''); setError(''); setSuccess(''); }}
+                    testID="back-to-login-button"
+                  >
+                    <Text style={styles.backToLoginText}>← Back to Login</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                /* ── Step 2: Enter Code ── */
+                <>
+                  <View style={styles.twoFAHeaderRow}>
+                    {twoFAMedium === 'AUTHENTICATOR_APP'
+                      ? <Smartphone color={COLORS.brandGreen} size={24} />
+                      : <Mail color={COLORS.brandGreen} size={24} />}
+                    <Text style={styles.twoFAMethodLabel}>
+                      {twoFAMedium === 'AUTHENTICATOR_APP' ? 'Gov OTP' : 'Email Verification'}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.twoFAHint}>
+                    {twoFAMedium === 'AUTHENTICATOR_APP'
+                      ? 'Open your Gov OTP app and enter the 6-digit code shown for this account.'
+                      : 'Enter the verification code sent to your email address.'}
+                  </Text>
+
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>Verification Code</Text>
+                    <View style={[styles.inputWrapper, otpFocused && styles.inputWrapperFocused]}>
+                      <TextInput
+                        style={[styles.input, { textAlign: 'center', letterSpacing: 6, fontSize: 20 }]}
+                        placeholder={twoFAMedium === 'AUTHENTICATOR_APP' ? '000000' : '------'}
+                        placeholderTextColor={COLORS.textMuted}
+                        value={otpCode}
+                        onChangeText={setOtpCode}
+                        keyboardType="number-pad"
+                        maxLength={twoFAMedium === 'AUTHENTICATOR_APP' ? 6 : 8}
+                        onFocus={() => setOtpFocused(true)}
+                        onBlur={() => setOtpFocused(false)}
+                        autoFocus
+                      />
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.loginButton, twoFALoading && styles.loginButtonDisabled]}
+                    onPress={handleGovTwoFactor}
+                    disabled={twoFALoading}
+                    activeOpacity={0.85}
+                    testID="verify-code-button"
+                  >
+                    {twoFALoading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
+                    <Text style={styles.loginButtonText}>
+                      {twoFALoading ? 'Verifying...' : 'Verify Code'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Go back to method selection if multiple methods are available */}
+                  {availableMediums.length > 1 && (
+                    <TouchableOpacity
+                      style={styles.backToLoginBtn}
+                      onPress={() => { setTwoFAStep('select'); setOtpCode(''); setError(''); setSuccess(''); }}
+                      testID="back-to-method-select-button"
+                    >
+                      <Text style={styles.backToLoginText}>← Choose a different method</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.backToLoginBtn, availableMediums.length > 1 && { marginTop: 0 }]}
+                    onPress={() => { setTwoFAPending(false); setOtpCode(''); setError(''); setSuccess(''); }}
+                    testID="back-to-login-button"
+                  >
+                    <Text style={[styles.backToLoginText, { color: COLORS.textMuted }]}>← Back to Login</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -369,6 +497,7 @@ export default function LoginScreen() {
                       autoCapitalize="none"
                       onFocus={() => setMdaFocused(true)}
                       onBlur={() => setMdaFocused(false)}
+                      testID="mda-input"
                     />
                   </View>
                 </View>
@@ -393,6 +522,7 @@ export default function LoginScreen() {
                     keyboardType="email-address"
                     onFocus={() => setEmailFocused(true)}
                     onBlur={() => setEmailFocused(false)}
+                    testID="email-input"
                   />
                 </View>
               </View>
@@ -415,11 +545,13 @@ export default function LoginScreen() {
                     secureTextEntry={!showPassword}
                     onFocus={() => setPasswordFocused(true)}
                     onBlur={() => setPasswordFocused(false)}
+                    testID="password-input"
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    testID="toggle-password-visibility"
                   >
                     {showPassword
                       ? <EyeOff color={COLORS.textMuted} size={18} />
@@ -431,7 +563,7 @@ export default function LoginScreen() {
               {/* ── Options Row (Forgot Password) ── */}
               <View style={[styles.optionsRow, { justifyContent: 'flex-end' }]}>
                 {APP_CONFIG.SHOW_FORGOT_PASSWORD && (
-                  <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} testID="forgot-password-link">
                     <Text style={styles.forgotText}>Forgot Password?</Text>
                   </TouchableOpacity>
                 )}
@@ -443,6 +575,7 @@ export default function LoginScreen() {
                 onPress={handleLogin}
                 disabled={loading}
                 activeOpacity={0.85}
+                testID="login-button"
               >
                 {loading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
                 <Text style={styles.loginButtonText}>
@@ -456,6 +589,7 @@ export default function LoginScreen() {
                   style={styles.biometricButton}
                   onPress={handleBiometricLogin}
                   activeOpacity={0.8}
+                  testID="biometric-login-button"
                 >
                   <Fingerprint color={COLORS.brandGreen} size={20} style={{ marginRight: 8 }} />
                   <Text style={styles.biometricButtonText}>Login with Biometrics</Text>
@@ -469,11 +603,24 @@ export default function LoginScreen() {
                   <TouchableOpacity
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     onPress={() => navigation.navigate('Signup')}
+                    testID="signup-link"
                   >
                     <Text style={styles.signUpText}>Sign up</Text>
                   </TouchableOpacity>
                 </View>
               )}
+
+              {/* ── Guest join link ── */}
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Just want to join a meeting? </Text>
+                <TouchableOpacity
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => navigation.navigate('GuestJoin')}
+                  testID="guest-link"
+                >
+                  <Text style={styles.signUpText}>Join as Guest</Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
         </Animated.View>
@@ -532,6 +679,36 @@ const styles = StyleSheet.create({
   twoFAHint: {
     fontSize: 14, color: COLORS.textSecondary,
     textAlign: 'center', marginBottom: 20, lineHeight: 20,
+  },
+  twoFAHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 10, gap: 8,
+  },
+  twoFATitle: {
+    fontSize: 17, fontWeight: '700', color: COLORS.textPrimary,
+  },
+  twoFAMethodLabel: {
+    fontSize: 15, fontWeight: '700', color: COLORS.brandGreen,
+  },
+  methodCard: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: COLORS.inputBorder,
+    borderRadius: 14, padding: 16, marginBottom: 14,
+    backgroundColor: COLORS.white,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+  },
+  methodCardIcon: {
+    width: 48, height: 48, borderRadius: 12,
+    backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center',
+    marginRight: 14,
+  },
+  methodCardText: { flex: 1 },
+  methodCardTitle: {
+    fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 3,
+  },
+  methodCardDesc: {
+    fontSize: 12, color: COLORS.textSecondary, lineHeight: 17,
   },
   fieldContainer: { marginBottom: 24 },
   label: { color: COLORS.textSecondary, fontWeight: '600', fontSize: 13, marginBottom: 8 },

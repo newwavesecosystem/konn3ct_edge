@@ -6,6 +6,8 @@
  * Strategy (tried in order):
  *   1. POST /api/join directly  — works if the server has this Next.js route
  *   2. POST /api/prejoin → POST /api/join  — two-step guest flow
+ *   3. POST /kv4/join-room via the main API  — fallback when Edge Frontend
+ *      doesn't expose the /api routes (e.g. konn3ctedge-test.konn3ct.net)
  *
  * The JWT is created with role: "attendee" — the signal server automatically
  * upgrades the user to "host" if they own the room.
@@ -13,6 +15,7 @@
 
 import { SIGNAL_SERVER_DOMAIN } from '../webrtc/MediasoupService';
 import { useAuthStore } from '../store/useAuthStore';
+import { joinRoomKv4 } from './rooms';
 
 // Override via env var for other environments.
 const EDGE_FRONTEND_URL =
@@ -24,17 +27,60 @@ const EDGE_FRONTEND_URL =
  * Works for both hosts and attendees — the signal server checks room ownership
  * and upgrades the role to "host" if the user is the room owner.
  */
+export interface AttendeeTokenResult {
+  token: string;
+  signalUrl?: string;
+}
+
+/**
+ * Get a WebRTC connection JWT and signalUrl for the signal server.
+ *
+ * Ignores landing page `url` and extracts `sessionToken` and `signalUrl`.
+ */
 export async function getAttendeeToken(
   roomId: string,
-  name: string,
-  email: string
-): Promise<string> {
+  name?: string,
+  email?: string,
+  cam: boolean = false,
+  mic: boolean = false
+): Promise<AttendeeTokenResult> {
+  const authUser = useAuthStore.getState().user;
+  const finalName = (name && name.trim()) ? name.trim() : (authUser?.name || 'Mobile User');
+  const finalEmail = (email && email.trim()) ? email.trim() : (authUser?.email || 'guest@conn3ct.com');
+
   // Get the Sanctum token for Authorization header
   const sanctumToken = useAuthStore.getState().token;
 
-  // ── Attempt 1: Direct /api/join ──────────────────────────────────────────
-  // The web meeting page calls POST /api/join with { roomId } + auth cookie.
-  // On mobile we pass the Sanctum token as Authorization header instead.
+  // ── Attempt 1: Main API /kv4/join-room ───────────────────────────────────
+  // Primary endpoint returning sessionToken & signalUrl
+  console.log('[edgeApi] Joining room via main API /kv4/join-room...');
+  try {
+    const joinData = await joinRoomKv4(roomId, finalName, finalEmail, cam, mic);
+    console.log('[edgeApi] /kv4/join-room response:', JSON.stringify(joinData, null, 2));
+
+    if (joinData?.success === false && joinData?.message) {
+      throw new Error(joinData.message);
+    }
+
+    const fallbackToken =
+      joinData?.sessionToken ||
+      joinData?.token ||
+      joinData?.url?.match(/[?&]t=([^&]+)/)?.[1];
+
+    const signalUrl = joinData?.signalUrl || joinData?.signal_url;
+
+    if (fallbackToken) {
+      console.log('[edgeApi] Got meeting token and signalUrl via main API /kv4/join-room');
+      return { token: fallbackToken, signalUrl };
+    }
+  } catch (e: any) {
+    if (e.response?.data?.message) {
+      throw new Error(e.response.data.message);
+    }
+    console.warn('[edgeApi] /kv4/join-room failed, trying Edge frontend fallbacks:', e.message);
+  }
+
+  // ── Attempt 2: Direct /api/join ──────────────────────────────────────────
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -53,70 +99,81 @@ export async function getAttendeeToken(
       const data = await joinRes.json();
       if (data?.token) {
         console.log('[edgeApi] Got meeting token via direct /api/join');
-        return data.token;
+        return { token: data.token, signalUrl: data.signalUrl || data.signal_url };
       }
     }
-
-    // If /api/join returned a non-OK response, log it and try the 2-step flow
-    const errBody = await joinRes.json().catch(() => ({}));
-    console.warn(`[edgeApi] Direct /api/join failed (${joinRes.status}):`, errBody?.error || 'unknown');
   } catch (e: any) {
     console.warn('[edgeApi] Direct /api/join threw:', e.message);
   }
 
-  // ── Attempt 2: Two-step /api/prejoin → /api/join ─────────────────────────
-  // Guest flow: get a session token first, then exchange for a WebSocket JWT.
-  const prejoinRes = await fetch(`${EDGE_FRONTEND_URL}/api/prejoin`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      roomId,
-      name,
-      email,
-      isMobile: true,
-      camera: true,
-      mic: true,
-    }),
-  });
+  // ── Attempt 3: Two-step /api/prejoin → /api/join ─────────────────────────
+  try {
+    const prejoinRes = await fetch(`${EDGE_FRONTEND_URL}/api/prejoin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId,
+        name: finalName,
+        email: finalEmail,
+        isMobile: true,
+        camera: cam,
+        mic: mic,
+      }),
+    });
 
-  if (!prejoinRes.ok) {
-    const errBody = await prejoinRes.json().catch(() => ({}));
-    throw new Error(errBody?.error || `Pre-join failed (${prejoinRes.status})`);
+    if (!prejoinRes.ok) {
+      const errBody = await prejoinRes.json().catch(() => ({}));
+      console.warn(`[edgeApi] /api/prejoin failed (${prejoinRes.status}):`, errBody?.error || 'unknown');
+      throw new Error(errBody?.error || 'prejoin failed');
+    }
+
+    const prejoinData = await prejoinRes.json();
+    const { sessionToken } = prejoinData;
+    const signalUrl = prejoinData?.signalUrl || prejoinData?.signal_url;
+
+    if (!sessionToken) {
+      throw new Error('Pre-join did not return a session token');
+    }
+
+    const joinRes2 = await fetch(`${EDGE_FRONTEND_URL}/api/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId, sessionToken }),
+    });
+
+    if (!joinRes2.ok) {
+      const errBody = await joinRes2.json().catch(() => ({}));
+      throw new Error(errBody?.error || `Join failed (${joinRes2.status})`);
+    }
+
+    const { token } = await joinRes2.json();
+    if (!token) {
+      throw new Error('Join did not return a connection token');
+    }
+
+    console.log('[edgeApi] Got meeting token via /api/prejoin → /api/join');
+    return { token, signalUrl };
+  } catch (e: any) {
+    console.warn('[edgeApi] Two-step prejoin flow failed:', e.message);
+    throw e;
   }
-
-  const { sessionToken } = await prejoinRes.json();
-  if (!sessionToken) {
-    throw new Error('Pre-join did not return a session token');
-  }
-
-  const joinRes2 = await fetch(`${EDGE_FRONTEND_URL}/api/join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roomId, sessionToken }),
-  });
-
-  if (!joinRes2.ok) {
-    const errBody = await joinRes2.json().catch(() => ({}));
-    throw new Error(errBody?.error || `Join failed (${joinRes2.status})`);
-  }
-
-  const { token } = await joinRes2.json();
-  if (!token) {
-    throw new Error('Join did not return a connection token');
-  }
-
-  return token;
 }
 
 /**
  * Convenience helper: get a WebSocket JWT using the currently logged-in user's
  * identity.  Falls back to sensible defaults if auth state is unavailable.
  */
-export async function getMeetingToken(roomId: string): Promise<string> {
+export async function getMeetingToken(
+  roomId: string,
+  cam: boolean = false,
+  mic: boolean = false
+): Promise<AttendeeTokenResult> {
   const authUser = useAuthStore.getState().user;
   return getAttendeeToken(
     roomId,
     authUser?.name || 'Mobile User',
     authUser?.email || 'guest@conn3ct.com',
+    cam,
+    mic
   );
 }

@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { useAuthStore } from '../store/useAuthStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,30 @@ export async function fetchMyRooms(): Promise<Room[]> {
 }
 
 /**
+ * GET /myrooms (with metadata)
+ * Fetch all rooms and limits belonging to the authenticated user.
+ */
+export async function fetchMyRoomsData(): Promise<{ rooms: Room[]; total_rooms: number; max_rooms: number }> {
+  const res = await apiClient.get('/myrooms');
+  const data = res.data;
+  
+  const payload = data?.data || data;
+  
+  let rooms: Room[] = [];
+  if (payload?.rooms && Array.isArray(payload.rooms)) {
+    rooms = payload.rooms;
+  } else if (Array.isArray(payload)) {
+    rooms = payload;
+  }
+  
+  return {
+    rooms,
+    total_rooms: payload?.total_rooms || 0,
+    max_rooms: payload?.max_rooms || 0
+  };
+}
+
+/**
  * POST /createroom
  * Create a new room.
  */
@@ -99,9 +124,29 @@ export async function joinRoom(id: number, name: string, email: string): Promise
 /**
  * POST /kv4/join-room
  * Join an existing room as a participant using room slug.
+ * Auto populates name and email if user is logged in.
  */
-export async function joinRoomKv4(room: string, name: string, email: string): Promise<any> {
-  const res = await apiClient.post('/kv4/join-room', { room, name, email });
+export async function joinRoomKv4(
+  room: string,
+  name?: string,
+  email?: string,
+  cam: boolean = false,
+  mic: boolean = false
+): Promise<any> {
+  const user = useAuthStore.getState().user;
+  const finalName = (name && name.trim()) ? name.trim() : (user?.name || 'Guest');
+  const finalEmail = (email && email.trim()) ? email.trim() : (user?.email || 'guest@conn3ct.com');
+
+  const payload = {
+    room,
+    name: finalName,
+    email: finalEmail,
+    cam,
+    mic,
+    mobile: true,
+  };
+
+  const res = await apiClient.post('/kv4/join-room', payload);
   return res.data;
 }
 
@@ -129,10 +174,11 @@ export async function setAccessCode(payload: AccessCodePayload): Promise<{ succe
  * Returns room name, owner, and whether an access code is required.
  */
 export async function validateMeetingKv4(roomSlug: string): Promise<any> {
-  console.log('[API] validateMeetingKv4 → POST /kv4/validate-meeting, payload:', { name: roomSlug });
+  console.log(`[API] validateMeetingKv4 -> POST ${apiClient.defaults.baseURL}/kv4/validate-meeting`);
+  console.log('[API] payload:', { name: roomSlug });
   try {
     const res = await apiClient.post('/kv4/validate-meeting', { name: roomSlug });
-    console.log('[API] validateMeetingKv4 ← status:', res.status, 'data:', JSON.stringify(res.data, null, 2));
+    console.log('[API] validateMeetingKv4 <- status:', res.status, 'data:', JSON.stringify(res.data, null, 2));
     return res.data;
   } catch (err: any) {
     console.error('[API] validateMeetingKv4 error:', err.response?.status, JSON.stringify(err.response?.data, null, 2));

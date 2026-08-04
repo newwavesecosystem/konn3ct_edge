@@ -88,8 +88,13 @@ export default function ProfileScreen() {
   }, []);
 
   // Derived values from state or fallback
-  const firstName = profile?.user?.firstname || user?.name?.split(' ')[0] || 'User';
-  const lastName = profile?.user?.lastname || '';
+  const firstName = user?.name?.split(' ')[0] || 'User'; // For greeting
+  const actualFirstName = profile?.user?.firstname || '';
+  const actualLastName = profile?.user?.lastname || '';
+  const displayProfileName = (actualFirstName || actualLastName) 
+    ? `${actualLastName} ${actualFirstName}`.trim() 
+    : (user?.name || 'User');
+    
   const email = profile?.user?.email || user?.email || 'user@example.com';
   const phone = profile?.user?.phone || '';
   const plan = profile?.user_plan?.name || 'Basic Plan';
@@ -97,8 +102,8 @@ export default function ProfileScreen() {
   const referralLink = `https://konn3ct.com/r/${referralCode}`;
   
   const handleEditProfilePress = () => {
-    setFormFirstname(firstName);
-    setFormLastname(lastName);
+    setFormFirstname(actualFirstName || user?.name?.split(' ')[1] || '');
+    setFormLastname(actualLastName || user?.name?.split(' ')[0] || '');
     setFormPhone(phone);
     setEditModalVisible(true);
   };
@@ -209,10 +214,10 @@ export default function ProfileScreen() {
                 <Text style={styles.profileMetaInitial}>{firstName.charAt(0)}</Text>
               </View>
               <View style={styles.profileMetaText}>
-                <Text style={styles.profileName}>{lastName ? `${lastName} ` : ''}{firstName}</Text>
+                <Text style={styles.profileName}>{displayProfileName}</Text>
                 <Text style={styles.profileEmail}>{email}</Text>
               </View>
-              <TouchableOpacity style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>
+              <TouchableOpacity testID="edit-profile-btn" style={styles.outlineBtnSmall} onPress={handleEditProfilePress}>
                 <Text style={styles.outlineBtnSmallText}>Edit</Text>
               </TouchableOpacity>
             </View>
@@ -282,7 +287,7 @@ export default function ProfileScreen() {
           </View>
           
           <View style={styles.cardBody}>
-            <TouchableOpacity style={styles.actionRowBtn} activeOpacity={0.7} onPress={() => setPasswordModalVisible(true)}>
+            <TouchableOpacity testID="change-password-btn" style={styles.actionRowBtn} activeOpacity={0.7} onPress={() => setPasswordModalVisible(true)}>
               <View style={styles.actionRowLeft}>
                 <View style={styles.actionRowIconBox}>
                   <Lock color={COLORS.textMuted} size={18} />
@@ -344,16 +349,16 @@ export default function ProfileScreen() {
               </View>
               <ScrollView style={{ paddingHorizontal: 20, paddingTop: 10 }}>
                 <Text style={styles.inputLabel}>First Name</Text>
-                <TextInput style={styles.textInputFull} value={formFirstname} onChangeText={setFormFirstname} />
+                <TextInput testID="firstname-input" style={styles.textInputFull} value={formFirstname} onChangeText={setFormFirstname} />
 
                 <Text style={styles.inputLabel}>Last Name</Text>
-                <TextInput style={styles.textInputFull} value={formLastname} onChangeText={setFormLastname} />
+                <TextInput testID="lastname-input" style={styles.textInputFull} value={formLastname} onChangeText={setFormLastname} />
 
                 <Text style={styles.inputLabel}>Phone</Text>
-                <TextInput style={styles.textInputFull} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" />
+                <TextInput testID="phone-input" style={styles.textInputFull} value={formPhone} onChangeText={setFormPhone} keyboardType="phone-pad" />
               </ScrollView>
               <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 24) + 16 }]}>
-                <TouchableOpacity style={styles.primaryBtn} onPress={submitEditProfile} disabled={isSubmitting}>
+                <TouchableOpacity testID="save-profile-btn" style={styles.primaryBtn} onPress={submitEditProfile} disabled={isSubmitting}>
                   {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Save Changes</Text>}
                 </TouchableOpacity>
               </View>

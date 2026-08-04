@@ -9,6 +9,10 @@ function addPiPSupport(androidManifest) {
   if (activity) {
     activity.$['android:supportsPictureInPicture'] = 'true';
     
+    // Remove fixed screenOrientation — Android 12+ blocks PiP when it's set.
+    // Orientation is locked programmatically in MainActivity.onCreate instead.
+    delete activity.$['android:screenOrientation'];
+    
     const configChanges = activity.$['android:configChanges'] || '';
     const newConfigChanges = [
       'orientation',
@@ -43,3 +47,4 @@ const withPiP = (config) => {
 };
 
 module.exports = withPiP;
+

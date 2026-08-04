@@ -128,7 +128,7 @@ export default function PaymentsScreen() {
             <Icon color={color} size={24} />
           </View>
           <View>
-            <Text style={styles.planName} style={{textTransform: 'capitalize'}}>{plan.name}</Text>
+            <Text style={[styles.planName, {textTransform: 'capitalize'}]}>{plan.name}</Text>
             <Text style={styles.planTarget}>{target}</Text>
           </View>
         </View>
