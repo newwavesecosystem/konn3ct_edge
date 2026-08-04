@@ -1,11 +1,10 @@
 // Gov Conference — dedicated branch (gov1_mobile)
 const APP_NAME = 'Gov Conference';
-const SLUG = 'GovConference';
 
 module.exports = {
   expo: {
     name: APP_NAME,
-    slug: SLUG,
+    slug: 'konn3ct',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',

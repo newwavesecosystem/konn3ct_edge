@@ -134,7 +134,8 @@ function ParticipantsModal({
     if (visible && event?.id) {
       setLoading(true);
       setError(null);
-      fetchEventParticipants(String(event.id))
+      console.log("Fetchin Ref ", event.reference);
+      fetchEventParticipants(String(event.reference))
         .then(setParticipants)
         .catch((e) => setError(e?.response?.data?.message || 'Failed to load participants'))
         .finally(() => setLoading(false));
@@ -874,7 +875,7 @@ export default function EventsScreen() {
           >
             <Users color={COLORS.brandGreen} size={16} />
             <Text style={styles.participantsBtnText}>
-              View Participants{evt.participants_count != null ? ` (${evt.participants_count})` : ''}
+              View Participants{evt.total_registrations != null ? ` (${evt.total_registrations})` : ''}
             </Text>
           </TouchableOpacity>
 
@@ -1029,7 +1030,7 @@ export default function EventsScreen() {
                 <Text style={styles.statLabel}>Participants</Text>
                 {loading
                   ? <View style={styles.skeletonStat} />
-                  : <Text style={styles.statValue}>{summary?.total_participants ?? '—'}</Text>
+                  : <Text style={styles.statValue}>{summary?.total_registrations ?? '—'}</Text>
                 }
               </View>
             </View>
