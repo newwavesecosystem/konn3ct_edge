@@ -700,15 +700,29 @@ export class MediasoupService {
       console.error('[enableCamera] sendTransport is NULL — cannot produce.');
       return;
     }
+
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
-      console.log('[enableCamera] Camera is already producing');
+      console.log('[enableCamera] Replacing track on existing video producer...');
+      try {
+        await this.localVideoProducer.replaceTrack({ track: videoTrack as any });
+        this.sendCameraState(true);
+      } catch (err) {
+        console.error('[enableCamera] Failed to replace video track:', err);
+      }
       return;
     }
     
     console.log(`[enableCamera] Producing video track... readyState=${videoTrack.readyState}, enabled=${videoTrack.enabled}`);
+    const videoCodec = this.device?.rtpCapabilities.codecs?.find(
+      (c: any) => c.kind === 'video' && c.mimeType.toLowerCase() === 'video/vp8'
+    ) || this.device?.rtpCapabilities.codecs?.find(
+      (c: any) => c.kind === 'video' && c.mimeType.toLowerCase() === 'video/h264'
+    );
+
     try {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack as any, 
+        codec: videoCodec,
         appData: { source: 'camera' },
         encodings: [{ maxBitrate: 600000, maxFramerate: 30 }],
         codecOptions: { videoGoogleStartBitrate: 1000 }
@@ -927,6 +941,8 @@ export class MediasoupService {
         try { this.recvTransport?.close(); } catch (_) {}
         this.sendTransport = null;
         this.recvTransport = null;
+        this.localVideoProducer = null;
+        this.localAudioProducer = null;
         this.consumers.clear();
         this.remoteStreams.clear();
         this.remoteScreenStreams.clear();
@@ -952,7 +968,7 @@ export class MediasoupService {
           console.log('[Reconnect] Re-publishing screen share...');
           try {
             if (this.screenShareProducer) {
-              this.screenShareProducer.close();
+              try { this.screenShareProducer.close(); } catch (_) {}
               this.screenShareProducer = null;
             }
             const screenCodec = this.device?.rtpCapabilities.codecs?.find(
@@ -968,14 +984,29 @@ export class MediasoupService {
               codecOptions: { videoGoogleStartBitrate: 1000 }
             });
             console.log(`[Reconnect] Screen share re-published: id=${this.screenShareProducer.id}`);
+
+            if (this.localScreenAudioTrack && this.localScreenAudioTrack.readyState === 'live') {
+              if (this.screenAudioShareProducer) {
+                try { this.screenAudioShareProducer.close(); } catch (_) {}
+                this.screenAudioShareProducer = null;
+              }
+              this.screenAudioShareProducer = await this.sendTransport!.produce({
+                track: this.localScreenAudioTrack as any,
+                appData: { source: 'screen-audio' }
+              });
+              console.log(`[Reconnect] Screen audio re-published: id=${this.screenAudioShareProducer.id}`);
+            }
           } catch (e) {
             console.error('[Reconnect] Failed to re-publish screen share:', e);
             this.localScreenTrack = null;
+            this.localScreenAudioTrack = null;
           }
         } else if (this.localScreenTrack) {
           // Track ended during reconnection, clean up
           this.localScreenTrack = null;
+          this.localScreenAudioTrack = null;
           this.screenShareProducer = null;
+          this.screenAudioShareProducer = null;
         }
 
         console.log('Reconnected successfully!');
@@ -997,16 +1028,27 @@ export class MediasoupService {
   /**
    * Re-publish local audio and video tracks after a WebSocket reconnection.
    * Called by attemptReconnect() once a new transport pair has been created.
-   * Previously missing — caused silent failure on every reconnect attempt.
    */
   public async broadcast(localStream: MediaStream) {
     const videoTrack = localStream.getVideoTracks()[0];
     const audioTrack = localStream.getAudioTracks()[0];
-    if (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live') {
+
+    // Ensure stale producer references are cleared before re-publishing on new transport
+    this.localVideoProducer = null;
+    this.localAudioProducer = null;
+
+    if (videoTrack && videoTrack.readyState === 'live' && videoTrack.enabled) {
       await this.enableCamera(videoTrack);
     }
-    if (audioTrack && audioTrack.enabled && audioTrack.readyState === 'live') {
+    if (audioTrack && audioTrack.readyState === 'live') {
+      const wasEnabled = audioTrack.enabled;
       await this.enableMic(audioTrack);
+      if (!wasEnabled && this.localAudioProducer) {
+        // Retain muted state if user was muted before reconnect
+        audioTrack.enabled = false;
+        try { this.localAudioProducer.pause(); } catch (_) {}
+        this.sendMuteState(true);
+      }
     }
   }
 
