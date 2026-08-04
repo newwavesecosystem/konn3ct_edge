@@ -156,21 +156,19 @@ router.post('/meetings/join', async (req, res) => {
     const finalEmail = email?.trim() || "guest@conn3ct.com";
 
     // Lookup or create joining user to assign them a proper DB userId
-    let user = await db.user.findUnique({ where: { email: finalEmail } });
-    if (!user) {
-      const randomPassword = crypto.randomUUID();
-      const passwordHash = await bcrypt.hash(randomPassword, 10);
-      user = await db.user.create({
-        data: {
-          email: finalEmail,
-          name: name.trim(),
-          passwordHash
-        }
-      });
+    let userId: string;
+    const user = await db.user.findUnique({ where: { email: finalEmail } });
+    
+    if (user && trustedRole === 'host') {
+      userId = user.id;
+    } else {
+      // Always generate a unique ID for attendees to ensure multiple people using 
+      // the same email do not overlap in the WebRTC SFU.
+      userId = `guest_${crypto.randomUUID().replace(/-/g, '').substring(0, 10)}`;
     }
 
     const sessionData = {
-      userId: user.id,
+      userId,
       roomId: room.slug,
       name: name.trim(),
       email: finalEmail,
@@ -218,6 +216,8 @@ router.post('/meetings/create-and-join', async (req, res) => {
       aiFeaturesEnabled,
       captionsEnabled,
       donationsEnabled,
+      persistChat,
+      networkDetectionEnabled,
     } = req.body;
 
     if (!name || name.trim() === "") {
@@ -272,6 +272,8 @@ router.post('/meetings/create-and-join', async (req, res) => {
           aiFeaturesEnabled: aiFeaturesEnabled !== undefined ? aiFeaturesEnabled : true,
           captionsEnabled: captionsEnabled !== undefined ? captionsEnabled : true,
           donationsEnabled: donationsEnabled !== undefined ? donationsEnabled : true,
+          persistChat: persistChat !== undefined ? persistChat : true,
+          networkDetectionEnabled: networkDetectionEnabled !== undefined ? networkDetectionEnabled : true,
         }
       });
     }
@@ -375,6 +377,95 @@ router.get('/meetings/:roomId/recordings', async (req, res) => {
 
     res.json({
       roomId: room.slug,
+      recordings
+    });
+  } catch (error) {
+    logger.error("External API /recordings error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// 6. Global Recordings (Fetch all recordings, optionally filter by various params)
+router.get('/recordings', async (req, res) => {
+  try {
+    const { 
+      email, 
+      roomSlug, 
+      status, 
+      accessType, 
+      isPaid, 
+      isPublished,
+      limit = '50', 
+      offset = '0' 
+    } = req.query;
+
+    const whereClause: any = {};
+
+    // Defaults to 'completed' unless explicitly requested otherwise (e.g. status=all or status=processing)
+    if (status && status !== 'all') {
+      whereClause.status = String(status);
+    } else if (!status) {
+      whereClause.status = 'completed';
+    }
+
+    if (email) {
+      const user = await db.user.findUnique({ where: { email: String(email) } });
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      whereClause.ownerId = user.id;
+    }
+
+    if (roomSlug) {
+      const room = await db.room.findUnique({ where: { slug: String(roomSlug) } });
+      if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+      }
+      whereClause.roomId = room.id;
+    }
+
+    if (accessType) {
+      whereClause.accessType = String(accessType);
+    }
+
+    if (isPaid !== undefined) {
+      whereClause.isPaid = isPaid === 'true';
+    }
+
+    if (isPublished !== undefined) {
+      whereClause.isPublished = isPublished === 'true';
+    }
+
+    const recordings = await db.recording.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        title: true,
+        url: true,
+        duration: true,
+        status: true,
+        isPaid: true,
+        isPublished: true,
+        accessType: true,
+        createdAt: true,
+        room: {
+          select: {
+            slug: true,
+            name: true
+          }
+        },
+        owner: {
+          select: {
+            email: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(String(limit), 10),
+      skip: parseInt(String(offset), 10)
+    });
+
+    res.json({
       recordings
     });
   } catch (error) {

@@ -23,7 +23,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   const recoveryCountRef = useRef<number>(0);
   const lastRecoveryTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
-  const healthyStartTimeRef = useRef<number>(Date.now());
+  const healthyStartTimeRef = useRef<number>(0);
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -81,6 +81,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
 
   useEffect(() => {
     if (!track) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHealth('healthy'); 
       return;
     }
@@ -101,6 +102,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
       if (health === 'recovering' && recoveryStartTimeRef.current > 0) {
         if (Date.now() - recoveryStartTimeRef.current > 5000) {
           logDev('Recovery overlay timed out, marking as stalled to prevent stuck UI.');
+          console.log('participant_tile_video_stalled');
           setHealth('stalled');
           recoveryStartTimeRef.current = 0;
           return; // Skip further checks this tick
@@ -128,6 +130,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           lastTimeRef.current = currentTime;
           stallCountRef.current = 0;
           if (health !== 'healthy' && health !== 'black') {
+             console.log('participant_tile_video_recovered');
              setHealth('healthy');
              recoveryStartTimeRef.current = 0;
              healthyStartTimeRef.current = Date.now();
@@ -144,6 +147,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           if (isSafariQuirk) {
              stallCountRef.current = 0;
              if (health !== 'healthy') {
+                console.log('participant_tile_video_recovered');
                 setHealth('healthy');
                 recoveryStartTimeRef.current = 0;
                 healthyStartTimeRef.current = Date.now();
@@ -152,7 +156,10 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
              if (health !== 'recovering' && !video.paused) {
                 stallCountRef.current++;
                 if (stallCountRef.current > 4) {
-                  triggerRecovery('currentTime stalled');
+                  if (health !== 'stalled') {
+                    console.log('participant_tile_video_stalled');
+                    setHealth('stalled');
+                  }
                   return;
                 }
              }
@@ -184,8 +191,9 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
          if (checkBlackFrame(video)) {
             if (health !== 'black') {
                setHealth('black');
+               console.log('participant_tile_video_black');
             }
-            triggerRecovery('black frame detected');
+            // intentionally NOT calling triggerRecovery here to prevent infinite destruction loops
          } else if (health === 'black') {
             // It recovered from black!
             setHealth('healthy');

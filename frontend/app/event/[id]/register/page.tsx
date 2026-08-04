@@ -77,9 +77,9 @@ export default function EventRegistrationPage() {
             <div className="w-16 h-16 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green mb-2">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl font-extrabold text-text-primary">You're Registered!</h1>
+            <h1 className="text-2xl font-extrabold text-text-primary">You&apos;re Registered!</h1>
             <p className="text-text-muted">
-              We've sent a calendar invite and join link to <strong>{formData.email}</strong>.
+              We&apos;ve sent a calendar invite and join link to <strong>{formData.email}</strong>.
             </p>
             <div className="p-4 rounded-xl bg-black/[0.02] border border-border/40 w-full text-left mt-4">
               <p className="font-semibold text-text-primary">{event.title}</p>

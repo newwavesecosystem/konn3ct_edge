@@ -23,7 +23,7 @@ export default function ContactPage() {
               animate={{ opacity: 1, y: 0 }}
               className="text-4xl font-extrabold tracking-tight text-text-primary sm:text-5xl md:text-6xl"
             >
-              Let's build something <br />
+              Let&apos;s build something <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-blue to-brand-green">
                 great together
               </span>
@@ -34,7 +34,7 @@ export default function ContactPage() {
               transition={{ delay: 0.1 }}
               className="text-lg text-text-secondary leading-relaxed max-w-2xl mx-auto"
             >
-              Have questions about Enterprise pricing, custom integrations, or just want to say hi? We'd love to hear from you.
+              Have questions about Enterprise pricing, custom integrations, or just want to say hi? We&apos;d love to hear from you.
             </motion.p>
           </div>
         </section>
@@ -52,7 +52,7 @@ export default function ContactPage() {
               >
                 <div className="mb-8">
                   <h3 className="text-2xl font-bold text-text-primary mb-2">Send us a message</h3>
-                  <p className="text-text-secondary">We'll get back to you within 24 hours.</p>
+                  <p className="text-text-secondary">We&apos;ll get back to you within 24 hours.</p>
                 </div>
 
                 <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>

@@ -28,26 +28,33 @@ export function CaptionsOverlay() {
         dragMomentum={false}
         dragElastic={0.1}
         style={{ scale: captionSize, transformOrigin: "bottom center" }}
-        className="flex flex-col gap-1.5 bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl overflow-y-auto pointer-events-auto max-h-[160px] no-scrollbar shadow-2xl border border-white/10 w-fit max-w-[calc(100%-2rem)] md:max-w-2xl cursor-grab active:cursor-grabbing"
-        ref={scrollRef as any}
+        className="bg-black/70 backdrop-blur-md px-6 py-4 rounded-2xl pointer-events-auto shadow-2xl border border-white/10 w-fit max-w-[calc(100%-2rem)] md:max-w-2xl cursor-grab active:cursor-grabbing"
       >
-        {captions.map((caption, idx) => (
-          <div 
-            key={`${caption.userId}-${caption.timestamp}-${idx}`}
-            className="flex items-start gap-2 text-white text-sm sm:text-base md:text-lg"
-            style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
-          >
-            <span className="font-semibold text-brand-green whitespace-nowrap shrink-0">
-              {caption.name}:
-            </span>
-            <span className={cn(
-              "leading-tight font-medium",
-              !caption.isFinal && "text-white/70 italic"
-            )}>
-              {caption.text}
-            </span>
-          </div>
-        ))}
+        <div 
+          className="flex flex-col gap-1.5 overflow-y-auto max-h-[160px] no-scrollbar"
+          ref={scrollRef as any}
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          onWheelCapture={(e) => e.stopPropagation()}
+          onTouchStartCapture={(e) => e.stopPropagation()}
+        >
+          {captions.map((caption, idx) => (
+            <div 
+              key={`${caption.userId}-${caption.timestamp}-${idx}`}
+              className="flex items-start gap-2 text-white text-sm sm:text-base md:text-lg"
+              style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
+            >
+              <span className="font-semibold text-brand-green whitespace-nowrap shrink-0">
+                {caption.name}:
+              </span>
+              <span className={cn(
+                "leading-tight font-medium",
+                !caption.isFinal && "text-white/70 italic"
+              )}>
+                {caption.text}
+              </span>
+            </div>
+          ))}
+        </div>
       </motion.div>
     </div>
   );

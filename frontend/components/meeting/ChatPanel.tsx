@@ -17,6 +17,7 @@ const roleBadge: Record<string, { icon: React.ReactNode; color: string }> = {
 };
 
 const LinkifiedText = ({ text }: { text: string }) => {
+  if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
 
@@ -55,7 +56,7 @@ const LinkifiedText = ({ text }: { text: string }) => {
 };
 
 export function ChatPanel() {
-  const { chatMessages, sendMessage, currentUser, participants, roomSettings, markChatMessageRendered } = useMeeting();
+  const { chatMessages, sendMessage, currentUser, participants, roomSettings, markChatMessageRendered, clearChat } = useMeeting();
   
   const ChatMessageRenderTracker = ({ messageId, status }: { messageId: string, status?: string }) => {
     useEffect(() => {
@@ -152,8 +153,20 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--mt-border)" }}>
+      <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--mt-border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Chat</h3>
+        {(currentUser.role === 'host' || currentUser.role === 'co-host') && (
+          <button 
+            onClick={() => {
+              if (window.confirm("Are you sure you want to clear the chat for everyone?")) {
+                clearChat();
+              }
+            }}
+            className="text-xs text-red-500 hover:text-red-600 transition-colors"
+          >
+            Clear Chat
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -266,6 +279,7 @@ export function ChatPanel() {
                     <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--mt-border)" }}>
                       {msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
                         <a href={msg.fileUrl} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={msg.fileUrl} alt="attachment" className="max-w-full rounded-lg max-h-48 object-cover" />
                         </a>
                       ) : (
@@ -292,9 +306,9 @@ export function ChatPanel() {
             className="text-[10px] outline-none px-2 py-1 rounded-lg appearance-none"
             style={{ color: "var(--mt-text-muted)", backgroundColor: "var(--mt-bg-control)", border: "1px solid var(--mt-border)" }}
           >
-            <option value="everyone">To: Everyone</option>
+            <option value="everyone" style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: Everyone</option>
             {participants.filter(p => p.id !== currentUser.id).map(p => (
-              <option key={p.id} value={p.id}>To: {p.name}</option>
+              <option key={p.id} value={p.id} style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: {p.name}</option>
             ))}
           </select>
         </div>

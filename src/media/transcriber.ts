@@ -116,12 +116,32 @@ a=rtpmap:${pt} opus/48000/2
     }
   });
   
+  let pingInterval: NodeJS.Timeout;
+  
   ffmpegProcess.on('error', (err: any) => {
     logger.error(`FFmpeg error for user ${userId}:`, err);
   });
   
+  ffmpegProcess.on('exit', (code, signal) => {
+    logger.warn(`FFmpeg process exited for user ${userId} with code ${code} signal ${signal}`);
+    cleanup();
+  });
+  
+  ffmpegProcess.on('close', () => {
+    logger.warn(`FFmpeg process closed for user ${userId}`);
+    cleanup();
+  });
+  
   dgSocket.on('open', async () => {
     logger.info(`[DEEPGRAM] deepgram_connected: user ${userId}`);
+    
+    // Ping mechanism to detect dead TCP connections
+    pingInterval = setInterval(() => {
+      if (dgSocket.readyState === WebSocket.OPEN) {
+         dgSocket.ping();
+      }
+    }, 15000);
+    
     try {
       if (!consumer || consumer.closed) {
         logger.info(`[DEEPGRAM] sfu_consumer_resume_skipped: consumer closed for user ${userId}`);
@@ -183,6 +203,7 @@ a=rtpmap:${pt} opus/48000/2
   dgSocket.on('close', () => {
     logger.warn(`[DEEPGRAM] WebSocket closed for user ${userId}`);
     clearInterval(keepAliveInterval);
+    clearInterval(pingInterval);
     if (!intentionalClose && !producer.closed) {
         logger.info(`[DEEPGRAM] Reconnecting for user ${userId} in 2 seconds...`);
         cleanup(); // Cleanup old resources
@@ -205,6 +226,11 @@ a=rtpmap:${pt} opus/48000/2
     
     intentionalClose = true;
     clearInterval(keepAliveInterval);
+    clearInterval(pingInterval);
+    
+    producer.removeListener('transportclose', cleanup);
+    producer.removeListener('@close' as any, cleanup);
+    
     if (transcribers.has(producer.id)) {
       transcribers.delete(producer.id);
     }

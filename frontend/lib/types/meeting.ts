@@ -36,6 +36,8 @@ export interface QAPlaybackStats {
   diagnosisHint?: string;
 }
 
+export type AudioConnectionStatus = "not_started" | "connecting" | "connected" | "muted" | "reconnecting" | "failed";
+
 export interface Participant {
   id: string; // This is now participantId (sessionId)
   userId: string; // The identity user ID
@@ -43,6 +45,7 @@ export interface Participant {
   avatarUrl?: string;
   role: ParticipantRole;
   isMuted: boolean;
+  audioConnectionStatus?: AudioConnectionStatus;
   isCameraOn: boolean;
   isScreenSharing: boolean;
   isHandRaised: boolean;
@@ -51,6 +54,7 @@ export interface Participant {
   videoTrack?: MediaStreamTrack | null;
   audioTrack?: MediaStreamTrack | null;
   screenTrack?: MediaStreamTrack | null; // Dedicated screen share track
+  screenAudioTrack?: MediaStreamTrack | null; // Dedicated screen share audio track
   
   // Stream identifiers
   cameraProducerId?: string;
@@ -59,9 +63,12 @@ export interface Participant {
   screenProducerId?: string;
   screenConsumerId?: string;
   screenTrackId?: string;
+  screenAudioProducerId?: string;
+  screenAudioConsumerId?: string;
+  screenAudioTrackId?: string;
 
   isConnecting?: boolean;
-  networkQuality?: 'good' | 'poor' | 'bad';
+  networkQuality?: import('../webrtc').NetworkQualityLabel;
   isMobile?: boolean;
   isBot?: boolean;
   isRecorder?: boolean;
@@ -148,6 +155,22 @@ export interface DocNote {
   content: string;
   lastEditedBy: string;
   lastEditedAt: string;
+}
+
+export interface NetworkDetectionConfig {
+  networkDetectionEnabled: boolean;
+  poorNetworkRttMs: number;
+  poorNetworkLossPercent: number;
+  poorNetworkJitterMs: number;
+  networkWindowSize: number;
+  networkMonitorIntervalMs: number;
+}
+
+export interface RoomSettings extends Partial<NetworkDetectionConfig> {
+  micLocked?: boolean;
+  videoLocked?: boolean;
+  chatLocked?: boolean;
+  bypassWaitingRoom?: boolean;
 }
 
 export type SidePanel = "chat" | "participants" | "polls" | "docs" | "settings" | "info" | "ai" | "streaming" | "qa" | "security" | null;

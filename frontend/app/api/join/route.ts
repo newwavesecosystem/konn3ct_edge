@@ -57,12 +57,16 @@ export async function POST(request: NextRequest) {
           console.error(JSON.stringify({ event: 'bot_join_rejected', reason: 'BOT_TOKEN_ROOM_MISMATCH', claimRoomId: decoded.roomId, claimRoomSlug: decoded.roomSlug, expectedRoom: roomId, roomSlug: roomId, status: 403 }));
           return NextResponse.json({ error: 'Invalid bot token room mismatch' }, { status: 403 });
         }
+        if (!decoded.participantId) {
+          console.error(JSON.stringify({ event: 'recorder_participant_id_missing_or_invalid', reason: 'BOT_TOKEN_MISSING_PARTICIPANT_ID', roomSlug: roomId, status: 400 }));
+          return NextResponse.json({ error: 'Missing participantId in bot token' }, { status: 400 });
+        }
+        finalUserId = decoded.participantId;
+        finalRole = 'bot';
       } catch (err) {
         console.error(JSON.stringify({ event: 'bot_join_rejected', reason: 'BOT_TOKEN_INVALID_SIGNATURE', roomSlug: roomId, status: 401 }));
         return NextResponse.json({ error: 'Expired or malformed bot token' }, { status: 401 });
       }
-      finalUserId = 'bot_recorder';
-      finalRole = 'bot';
     } else {
       let isDashboardUser = false;
       const authCookie = request.headers.get("cookie");
@@ -146,6 +150,7 @@ export async function POST(request: NextRequest) {
           captionsEnabled?: boolean;
           donationsEnabled?: boolean;
           virtualBackgroundEnabled?: boolean;
+          logoutUrl?: string | null;
         };
 
         fetchedRoomLimits = {
@@ -156,6 +161,7 @@ export async function POST(request: NextRequest) {
           captionsEnabled: room.captionsEnabled ?? true,
           donationsEnabled: room.donationsEnabled ?? true,
           virtualBackgroundEnabled: room.virtualBackgroundEnabled ?? true,
+          logoutUrl: room.logoutUrl ?? null,
         };
 
         // 1. Enforce access PIN (timing-safe comparison)
@@ -221,6 +227,7 @@ export async function POST(request: NextRequest) {
         if (sessionData.ownerEmail) payload.ownerEmail = sessionData.ownerEmail;
         if (sessionData.roomName) payload.roomName = sessionData.roomName;
         if (sessionData.isWaitingRoomEnabled !== undefined) payload.isWaitingRoomEnabled = sessionData.isWaitingRoomEnabled;
+        if (sessionData.logoutUrl) payload.logoutUrl = sessionData.logoutUrl;
       } catch (e) {
         // Already verified above — ignore
       }
