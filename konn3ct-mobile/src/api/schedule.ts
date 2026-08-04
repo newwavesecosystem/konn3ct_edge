@@ -3,6 +3,7 @@ import { apiClient } from './client';
 export interface SchedulePayload {
   room_id: string | number;
   title: string;
+  hostname?: string;
   description: string;
   recurrence: string; // once, daily, weekly, monthly
   date: string;       // YYYY-MM-DD

@@ -53,7 +53,7 @@ const GRID_ITEMS = [
   { id: 'payments', title: 'Payments', subtitle: 'Billing & plans', icon: CreditCard, colors: ['#eab308', '#ca8a04'] },
   { id: 'donations', title: 'Donations', subtitle: 'Support & gifts', icon: Heart, colors: ['#f43f5e', '#e11d48'] },
   { id: 'referees', title: 'Referees', subtitle: 'Manage officials', icon: Users, colors: ['#84cc16', '#65a30d'] },
-  { id: 'past_meetings', title: 'Past Meetings', subtitle: 'Previous sessions', icon: History, colors: ['#64748b', '#475569'] },
+  // { id: 'past_meetings', title: 'Past Meetings', subtitle: 'Previous sessions', icon: History, colors: ['#64748b', '#475569'] },
 ];
 
 // Filter grid items based on feature flags
@@ -216,7 +216,7 @@ export default function MoreScreen() {
             <View style={styles.headerIconWrapper}>
               <Sparkles color="#fff" size={24} />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>Explore Hub</Text>
               <Text style={styles.headerSubtitle}>{`Discover all ${APP_CONFIG.APP_NAME} features`}</Text>
             </View>
@@ -387,9 +387,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerSubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 13.5,
     fontWeight: '500',
+    lineHeight: 18,
   },
 
   // Sections

@@ -1425,7 +1425,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
               />
             </TouchableOpacity>
 
-            {Platform.OS === "android" && (
+            {/* Screen sharing icon - commented out */}
+            {false && Platform.OS === "android" && (
               <TouchableOpacity
                 style={
                   isScreenSharing
