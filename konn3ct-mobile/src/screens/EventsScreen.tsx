@@ -15,6 +15,7 @@ import {
   RefreshControl,
   FlatList,
   Image,
+  Share,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ import {
   Copy,
   Link,
   Video,
+  Share2,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
@@ -65,6 +67,7 @@ import {
 } from '../api/events';
 import { fetchMyRooms, Room } from '../api/rooms';
 import { APP_CONFIG } from '../config/appConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -131,7 +134,8 @@ function ParticipantsModal({
     if (visible && event?.id) {
       setLoading(true);
       setError(null);
-      fetchEventParticipants(String(event.id))
+      console.log("Fetchin Ref ", event.reference);
+      fetchEventParticipants(String(event.reference))
         .then(setParticipants)
         .catch((e) => setError(e?.response?.data?.message || 'Failed to load participants'))
         .finally(() => setLoading(false));
@@ -837,7 +841,7 @@ export default function EventsScreen() {
             <View style={styles.metaItem}>
               <MapPin color={COLORS.textMuted} size={14} />
               <Text style={styles.metaText}>
-                {evt.room_name || rooms.find(r => String(r.id) === String(evt.room_id))?.url || `Room ${evt.room_id}`}
+                {evt.room_name || rooms.find(r => String(r.id) === String(evt.room_id))?.name || `Room ${evt.room_id}`}
               </Text>
             </View>
           ) : null}
@@ -871,25 +875,46 @@ export default function EventsScreen() {
           >
             <Users color={COLORS.brandGreen} size={16} />
             <Text style={styles.participantsBtnText}>
-              View Participants{evt.participants_count != null ? ` (${evt.participants_count})` : ''}
+              View Participants{evt.total_registrations != null ? ` (${evt.total_registrations})` : ''}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.copyActionRow}>
             <TouchableOpacity
-              testID={`copy-event-link-${evt.id}`}
+              testID={`share-event-link-${evt.id}`}
               style={styles.copyEventBtn}
               activeOpacity={0.8}
               onPress={async () => {
-                const eventUrl =
-                  evt.event_url ||
-                  `https://www.konn3ct.com/event/${evt.reference || evt.ref || evt.id}`;
-                await Clipboard.setStringAsync(eventUrl);
-                Alert.alert('Event Link Copied', `Event registration link copied!\n\n${eventUrl}`);
+                const govMDA = await AsyncStorage.getItem('@1gov_mda');
+                var eventUrl = evt.event_url.toString();
+                if (govMDA != null) {
+                  eventUrl = evt.event_url.toString().replace('govsupport', govMDA || '');
+                }
+
+                const host = evt.hostname || evt.host_name;
+                const formattedDate = evt.date ? formatDate(evt.date) : '';
+                const formattedTime = evt.time ? formatTime(evt.time) : '';
+
+                let shareMessage = `📅 You're invited to: ${evt.title}\n\n`;
+                if (host) shareMessage += `👤 Host: ${host}\n`;
+                if (formattedDate) shareMessage += `🗓️ Date: ${formattedDate}\n`;
+                if (formattedTime) shareMessage += `⏰ Time: ${formattedTime}${evt.timezone ? ` (${evt.timezone})` : ''}\n`;
+                if (evt.about) shareMessage += `\n📝 About: ${evt.about}\n`;
+                shareMessage += `\n🔗 Register & Join here:\n${eventUrl}`;
+                
+                try {
+                  await Share.share({
+                    title: `Event Invitation: ${evt.title}`,
+                    message: shareMessage,
+                    url: eventUrl,
+                  });
+                } catch (error) {
+                  console.error('Error sharing event link:', error);
+                }
               }}
             >
-              <Copy color={COLORS.purple} size={15} />
-              <Text style={styles.copyEventBtnText}>Copy Event Link</Text>
+              <Share2 color={COLORS.purple} size={15} />
+              <Text style={styles.copyEventBtnText}>Share Event Link</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1005,7 +1030,7 @@ export default function EventsScreen() {
                 <Text style={styles.statLabel}>Participants</Text>
                 {loading
                   ? <View style={styles.skeletonStat} />
-                  : <Text style={styles.statValue}>{summary?.total_participants ?? '—'}</Text>
+                  : <Text style={styles.statValue}>{summary?.total_registrations ?? '—'}</Text>
                 }
               </View>
             </View>

@@ -29,7 +29,9 @@ export class MediasoupService {
   private localVideoProducer: types.Producer | null = null;
   private localAudioProducer: types.Producer | null = null;
   private screenShareProducer: types.Producer | null = null;
+  private screenAudioShareProducer: types.Producer | null = null;
   public localScreenTrack: MediaStreamTrack | null = null;
+  public localScreenAudioTrack: MediaStreamTrack | null = null;
   private consumers: Map<string, types.Consumer> = new Map();
   private remoteStreams: Map<string, MediaStream> = new Map();
   private remoteScreenStreams = new Map<string, MediaStream>();
@@ -698,15 +700,29 @@ export class MediasoupService {
       console.error('[enableCamera] sendTransport is NULL — cannot produce.');
       return;
     }
+
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
-      console.log('[enableCamera] Camera is already producing');
+      console.log('[enableCamera] Replacing track on existing video producer...');
+      try {
+        await this.localVideoProducer.replaceTrack({ track: videoTrack as any });
+        this.sendCameraState(true);
+      } catch (err) {
+        console.error('[enableCamera] Failed to replace video track:', err);
+      }
       return;
     }
     
     console.log(`[enableCamera] Producing video track... readyState=${videoTrack.readyState}, enabled=${videoTrack.enabled}`);
+    const videoCodec = this.device?.rtpCapabilities.codecs?.find(
+      (c: any) => c.kind === 'video' && c.mimeType.toLowerCase() === 'video/vp8'
+    ) || this.device?.rtpCapabilities.codecs?.find(
+      (c: any) => c.kind === 'video' && c.mimeType.toLowerCase() === 'video/h264'
+    );
+
     try {
       this.localVideoProducer = await this.sendTransport.produce({ 
         track: videoTrack as any, 
+        codec: videoCodec,
         appData: { source: 'camera' },
         encodings: [{ maxBitrate: 600000, maxFramerate: 30 }],
         codecOptions: { videoGoogleStartBitrate: 1000 }
@@ -925,6 +941,8 @@ export class MediasoupService {
         try { this.recvTransport?.close(); } catch (_) {}
         this.sendTransport = null;
         this.recvTransport = null;
+        this.localVideoProducer = null;
+        this.localAudioProducer = null;
         this.consumers.clear();
         this.remoteStreams.clear();
         this.remoteScreenStreams.clear();
@@ -950,24 +968,45 @@ export class MediasoupService {
           console.log('[Reconnect] Re-publishing screen share...');
           try {
             if (this.screenShareProducer) {
-              this.screenShareProducer.close();
+              try { this.screenShareProducer.close(); } catch (_) {}
               this.screenShareProducer = null;
             }
+            const screenCodec = this.device?.rtpCapabilities.codecs?.find(
+              (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+            ) || this.device?.rtpCapabilities.codecs?.find(
+              (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+            );
             this.screenShareProducer = await this.sendTransport!.produce({
               track: this.localScreenTrack as any,
+              codec: screenCodec,
               appData: { source: 'screen' },
-              encodings: [{ maxBitrate: 500000, maxFramerate: 10 }],
-              codecOptions: { videoGoogleStartBitrate: 500 }
+              encodings: [{ maxBitrate: 1500000, maxFramerate: 15 }],
+              codecOptions: { videoGoogleStartBitrate: 1000 }
             });
             console.log(`[Reconnect] Screen share re-published: id=${this.screenShareProducer.id}`);
+
+            if (this.localScreenAudioTrack && this.localScreenAudioTrack.readyState === 'live') {
+              if (this.screenAudioShareProducer) {
+                try { this.screenAudioShareProducer.close(); } catch (_) {}
+                this.screenAudioShareProducer = null;
+              }
+              this.screenAudioShareProducer = await this.sendTransport!.produce({
+                track: this.localScreenAudioTrack as any,
+                appData: { source: 'screen-audio' }
+              });
+              console.log(`[Reconnect] Screen audio re-published: id=${this.screenAudioShareProducer.id}`);
+            }
           } catch (e) {
             console.error('[Reconnect] Failed to re-publish screen share:', e);
             this.localScreenTrack = null;
+            this.localScreenAudioTrack = null;
           }
         } else if (this.localScreenTrack) {
           // Track ended during reconnection, clean up
           this.localScreenTrack = null;
+          this.localScreenAudioTrack = null;
           this.screenShareProducer = null;
+          this.screenAudioShareProducer = null;
         }
 
         console.log('Reconnected successfully!');
@@ -989,16 +1028,27 @@ export class MediasoupService {
   /**
    * Re-publish local audio and video tracks after a WebSocket reconnection.
    * Called by attemptReconnect() once a new transport pair has been created.
-   * Previously missing — caused silent failure on every reconnect attempt.
    */
   public async broadcast(localStream: MediaStream) {
     const videoTrack = localStream.getVideoTracks()[0];
     const audioTrack = localStream.getAudioTracks()[0];
-    if (videoTrack && videoTrack.enabled && videoTrack.readyState === 'live') {
+
+    // Ensure stale producer references are cleared before re-publishing on new transport
+    this.localVideoProducer = null;
+    this.localAudioProducer = null;
+
+    if (videoTrack && videoTrack.readyState === 'live' && videoTrack.enabled) {
       await this.enableCamera(videoTrack);
     }
-    if (audioTrack && audioTrack.enabled && audioTrack.readyState === 'live') {
+    if (audioTrack && audioTrack.readyState === 'live') {
+      const wasEnabled = audioTrack.enabled;
       await this.enableMic(audioTrack);
+      if (!wasEnabled && this.localAudioProducer) {
+        // Retain muted state if user was muted before reconnect
+        audioTrack.enabled = false;
+        try { this.localAudioProducer.pause(); } catch (_) {}
+        this.sendMuteState(true);
+      }
     }
   }
 
@@ -1022,7 +1072,8 @@ export class MediasoupService {
 
     console.log('[ScreenShare] Requesting getDisplayMedia...');
     const stream = await (mediaDevices as any).getDisplayMedia({
-      video: { frameRate: { ideal: 10, max: 15 } }
+      video: { frameRate: { ideal: 15, max: 30 } },
+      audio: true
     });
     const screenTrack = stream.getVideoTracks()[0];
     if (!screenTrack) {
@@ -1031,14 +1082,36 @@ export class MediasoupService {
     this.localScreenTrack = screenTrack;
     console.log(`[ScreenShare] Got screen track: id=${screenTrack.id}, readyState=${screenTrack.readyState}`);
 
+    // Prioritize VP8, fallback to H264 Baseline for cross-platform compatibility
+    const screenCodec = this.device.rtpCapabilities.codecs?.find(
+      (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+    ) || this.device.rtpCapabilities.codecs?.find(
+      (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+    );
+
     // Create a SEPARATE producer — camera producer stays untouched
     this.screenShareProducer = await this.sendTransport.produce({
       track: screenTrack as any,
+      codec: screenCodec,
       appData: { source: 'screen' },
-      encodings: [{ maxBitrate: 500000, maxFramerate: 10 }],
-      codecOptions: { videoGoogleStartBitrate: 500 }
+      encodings: [{ maxBitrate: 1500000, maxFramerate: 15 }],
+      codecOptions: { videoGoogleStartBitrate: 1000 }
     });
     console.log(`[ScreenShare] Screen producer created: id=${this.screenShareProducer.id}`);
+
+    // Check for system audio track from display media and produce if available
+    const screenAudioTrack = stream.getAudioTracks()[0];
+    if (screenAudioTrack) {
+      this.localScreenAudioTrack = screenAudioTrack;
+      this.screenAudioShareProducer = await this.sendTransport.produce({
+        track: screenAudioTrack as any,
+        appData: { source: 'screen-audio' }
+      });
+      console.log(`[ScreenShare] Screen audio producer created: id=${this.screenAudioShareProducer.id}`);
+      screenAudioTrack.onended = () => {
+        this.disableScreenShare();
+      };
+    }
 
     // Auto-stop when the OS stops the screen capture (e.g. notification bar "Stop")
     screenTrack.onended = () => {
@@ -1075,6 +1148,27 @@ export class MediasoupService {
 
       this.screenShareProducer.close();
       this.screenShareProducer = null;
+    }
+
+    if (this.screenAudioShareProducer) {
+      const audioProducerId = this.screenAudioShareProducer.id;
+      console.log(`[ScreenShare] Stopping screen audio producer: id=${audioProducerId}`);
+
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId: audioProducerId,
+          appData: { source: 'screen-audio' }
+        }));
+      }
+
+      if (this.localScreenAudioTrack) {
+        this.localScreenAudioTrack.stop();
+        this.localScreenAudioTrack = null;
+      }
+
+      this.screenAudioShareProducer.close();
+      this.screenAudioShareProducer = null;
     }
   }
 
