@@ -28,7 +28,7 @@ export function PollsPanel() {
         style={{ borderBottom: "1px solid var(--mt-border)" }}
       >
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Polls</h3>
-        {currentUser.role === "host" && (
+        {(currentUser.role === "host" || currentUser.role === "co-host") && (
           <button 
             onClick={() => setIsCreating(true)}
             className="text-xs text-brand-green-soft hover:text-brand-green transition-colors font-medium"

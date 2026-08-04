@@ -47,6 +47,11 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
     lsb-release \
+    pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    dbus \
+    dbus-x11 \
     wget \
     xdg-utils \
     --no-install-recommends \
@@ -65,8 +70,18 @@ RUN mkdir -p /etc/opt/chrome/policies/managed/ && \
     echo '{ "ExtensionManifestV2Availability": 2 }' > /etc/opt/chrome/policies/managed/policy.json && \
     echo '{ "ExtensionManifestV2Availability": 2 }' > /etc/chromium/policies/managed/policy.json
 
-# Add a script to run Xvfb and Node together
-RUN echo '#!/bin/bash\nxvfb-run --server-args="-screen 0 1920x1080x24" node index.js' > start.sh
+# Add a script to run Xvfb, PulseAudio, and Node together
+RUN echo '#!/bin/bash\n\
+echo "recorder_audio_daemon_started"\n\
+pulseaudio --start --exit-idle-time=-1 || pulseaudio -D --exit-idle-time=-1\n\
+pactl load-module module-null-sink sink_name=recorder_sink sink_properties=device.description=RecorderSink\n\
+echo "recorder_audio_sink_detected"\n\
+pactl set-default-sink recorder_sink\n\
+echo "recorder_audio_default_sink_set"\n\
+pactl info\n\
+pactl list short sinks\n\
+echo "recorder_xvfb_started"\n\
+xvfb-run --server-args="-screen 0 1920x1080x24" bash -c "echo \\\"recorder_display_detected\\\" && node index.js"' > start.sh
 RUN chmod +x start.sh
 
 CMD ["./start.sh"]

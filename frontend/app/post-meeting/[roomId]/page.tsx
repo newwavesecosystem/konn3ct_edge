@@ -21,15 +21,29 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
     // Read parameters passed from the exit logic
     const roleParam = searchParams.get("role");
     const logoutParam = searchParams.get("logoutUrl");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (roleParam) setRole(roleParam);
     if (logoutParam) setLogoutUrl(logoutParam);
   }, [searchParams]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API submission
-    console.log("Feedback submitted:", { rating, feedback, roomId: resolvedParams.roomId });
-    setSubmitted(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const response = await fetch(`${apiUrl}/rooms/${resolvedParams.roomId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, feedback })
+      });
+
+      if (!response.ok) {
+        console.error("Failed to submit feedback:", await response.text());
+      }
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+    } finally {
+      setSubmitted(true);
+    }
   };
 
   const handleReturnToDashboard = () => {
@@ -109,7 +123,7 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
                 <Star className="w-8 h-8 fill-brand-green" />
               </div>
               <h2 className="text-xl font-bold">Feedback Received!</h2>
-              <p className="text-white/60">Your insights help us make Konn3ct better.</p>
+              <p className="text-white/60">Your insights help us make {process.env.NEXT_PUBLIC_APP_NAME || 'Konn3ct'} better.</p>
             </div>
           )}
 
@@ -122,12 +136,14 @@ export default function PostMeetingPage({ params }: { params: Promise<{ roomId: 
             </button>
 
             {isGuest ? (
-              <button
-                onClick={() => router.push('/register')}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/20"
-              >
-                <LogIn className="w-4 h-4" /> Sign Up Free
-              </button>
+              process.env.NEXT_PUBLIC_HIDE_SIGNUP_BUTTON === 'true' ? null : (
+                <button
+                  onClick={() => router.push('/register')}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/20"
+                >
+                  <LogIn className="w-4 h-4" /> Sign Up Free
+                </button>
+              )
             ) : (
               <button
                 onClick={handleReturnToDashboard}

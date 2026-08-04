@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Radio, Plus, Trash2, StopCircle, RefreshCw } from "lucide-react";
@@ -15,14 +15,7 @@ export default function StreamingPanel() {
   const [isStarting, setIsStarting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchStreams();
-    // Poll every 10 seconds to update status
-    const interval = setInterval(fetchStreams, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchStreams = async () => {
+  const fetchStreams = useCallback(async () => {
     if (!meetingInfo?.roomSlug || currentUser?.role !== 'host') return;
     try {
       const streams = await apiClient.streaming.getStreams(meetingInfo.roomSlug);
@@ -32,7 +25,15 @@ export default function StreamingPanel() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [meetingInfo, currentUser]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchStreams();
+    // Poll every 10 seconds to update status
+    const interval = setInterval(fetchStreams, 10000);
+    return () => clearInterval(interval);
+  }, [fetchStreams]);
 
   const addUrlField = () => {
     if (rtmpUrls.length >= 5) {

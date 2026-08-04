@@ -87,6 +87,14 @@ model Room {
   captionsEnabled Boolean @default(true)
   donationsEnabled Boolean @default(true)
   virtualBackgroundEnabled Boolean @default(true)
+  networkDetectionEnabled Boolean @default(true)
+  poorNetworkRttMs Int @default(300)
+  poorNetworkLossPercent Float @default(8.0)
+  poorNetworkJitterMs Int @default(60)
+  networkWindowSize Int @default(5)
+  networkMonitorIntervalMs Int @default(2000)
+  persistChat Boolean @default(true)
+
   createdAt DateTime @default(now())
 
   owner User @relation("RoomOwner", fields: [ownerId], references: [id])
@@ -104,6 +112,7 @@ model Room {
   paymentTransactions PaymentTransaction[]
   liveStreams LiveStream[]
   qaMessages MeetingQA[]
+  feedbacks MeetingFeedback[]
 
   @@index([ownerId])
   @@index([teamId])
@@ -333,6 +342,16 @@ model MeetingQA {
   answerText  String?
   answeredBy  String?
   createdAt   DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+  @@index([roomId])
+}
+model MeetingFeedback {
+  id        String   @id @default(cuid())
+  roomId    String
+  rating    Int
+  feedback  String?
+  createdAt DateTime @default(now())
 
   room Room @relation(fields: [roomId], references: [id])
   @@index([roomId])

@@ -28,30 +28,35 @@ export default async function globalSetup(config: FullConfig) {
       const db = new PrismaClient();
 
       async function main() {
-        // Upsert a test owner user
         const owner = await db.user.upsert({
           where: { email: 'playwright-bot@konn3ct.test' },
           update: {},
           create: {
             email: 'playwright-bot@konn3ct.test',
             name: 'Playwright Bot',
-            password: 'not-used',
+            passwordHash: 'not-used',
           },
         });
 
-        // Upsert the test room
-        const room = await db.room.upsert({
-          where: { slug: '${TEST_ROOM_SLUG}' },
-          update: { name: '${TEST_ROOM_NAME}' },
-          create: {
-            slug: '${TEST_ROOM_SLUG}',
-            name: '${TEST_ROOM_NAME}',
-            ownerId: owner.id,
-            isWaitingRoomEnabled: false,  // no waiting room so tests join immediately
-          },
-        });
+        console.log('\\n🔧 [Global Setup] Creating test rooms in database...');
+    
+        for (const slug of ['playwright-prefs-room', 'playwright-health-room', 'playwright-webrtc-room', 'playwright-waiting-room', 'playwright-polls-room', 'playwright-roles-room']) {
+          await db.room.upsert({
+            where: { slug },
+            update: { guestJoinAllowed: true, isWaitingRoomEnabled: slug === 'playwright-waiting-room' },
+            create: {
+              name: slug.replace(/-/g, ' '),
+              slug,
+              ownerId: owner.id,
+              guestJoinAllowed: true,
+              isWaitingRoomEnabled: slug === 'playwright-waiting-room',
+              aiFeaturesEnabled: false,
+            }
+          });
+          console.log(\`Room upserted: \${slug}\`);
+        }
 
-        console.log('Room upserted:', room.id, room.slug);
+        console.log('\\n✅ [Global Setup] Test rooms ready.\\n');
         await db.$disconnect();
       }
 

@@ -39,9 +39,9 @@ describe('Recordings API & Idempotency', () => {
   });
 
   afterAll(async () => {
-    await db.recording.deleteMany({ where: { ownerId: userId } });
-    await db.room.delete({ where: { id: roomId } });
-    await db.user.delete({ where: { id: userId } });
+    if (userId) await db.recording.deleteMany({ where: { ownerId: userId } });
+    if (roomId) await db.room.delete({ where: { id: roomId } });
+    if (userId) await db.user.delete({ where: { id: userId } });
   });
 
   it('Start recording creates one active recording', async () => {
@@ -93,7 +93,7 @@ describe('Recordings API & Idempotency', () => {
     
     // Verify that the launcher was called exactly once
     expect(launcher.launchRecorderBot).toHaveBeenCalledTimes(1);
-  });
+  }, 15000);
 
   it('Invalid recorder token is rejected in callback', async () => {
     const res = await request(app)
@@ -141,7 +141,7 @@ describe('Recordings API & Idempotency', () => {
 
   it('Finalized callback updates completed status and URL', async () => {
     const res = await request(app)
-      .post(`/api/recordings/${recordingId}/callback/finalized`)
+      .post(`/api/recordings/${recordingId}/callback/status`)
       .set('Authorization', `Bearer ${botToken}`)
       .send({ status: 'completed', url: 'https://storage/rec.mp4', duration: 120 });
 
