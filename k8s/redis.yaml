@@ -17,8 +17,17 @@ spec:
       containers:
         - name: redis
           image: redis:7-alpine
+          command: ["redis-server"]
+          args: ["--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
           ports:
             - containerPort: 6379
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
 ---
 apiVersion: v1
 kind: Service

@@ -67,6 +67,9 @@ export default defineConfig({
       port: 3001,
       timeout: 120 * 1000,
       reuseExistingServer: !process.env.CI,
+      env: {
+        NEXT_PUBLIC_BACKEND_DOMAIN: 'konn3ctedge.konn3ct.net',
+      },
     }
   ],
 });

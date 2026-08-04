@@ -3,6 +3,8 @@
 import React from "react";
 import { useMeetingTheme, type MeetingTheme } from "@/lib/meeting-theme-context";
 import { useMeeting } from "@/lib/meeting-context";
+import { useMeetingDevicePreferences } from "@/lib/meeting-device-preferences";
+import { useVirtualBackgrounds } from "@/hooks/use-virtual-backgrounds";
 import type { GridOverflowMode } from "@/lib/types/meeting";
 import {
   Speaker,
@@ -19,11 +21,14 @@ import {
   ArrowLeftRight,
   Image as ImageIcon,
   Ban,
-  Droplet
+  Droplet,
+  Info,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SettingsPanel() {
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { theme, setTheme } = useMeetingTheme();
   const { 
     devices, 
@@ -33,10 +38,16 @@ export function SettingsPanel() {
     toggleAINoiseSuppression,
     isHDVideoEnabled,
     setIsHDVideoEnabled,
+    isWidescreenEnabled,
+    setIsWidescreenEnabled,
     isMirrorVideoEnabled,
     setIsMirrorVideoEnabled,
+    isOriginalRatioEnabled,
+    setIsOriginalRatioEnabled,
     isLowBandwidthEnabled,
     setIsLowBandwidthEnabled,
+    isAudioOnlyModeEnabled,
+    setIsAudioOnlyModeEnabled,
     isAlwaysMuteOnJoin,
     setIsAlwaysMuteOnJoin,
     vbMode,
@@ -48,9 +59,17 @@ export function SettingsPanel() {
     setCaptionSize,
     outputVolume,
     setOutputVolume,
-    roomFeatureFlags
+    roomFeatureFlags,
+    roomSettings,
+    updateRoomSettings,
+    currentUser,
+    playNotificationSound
   } = useMeeting();
   const { gridOverflowMode, setGridOverflowMode } = useMeeting();
+  const { backgrounds } = useVirtualBackgrounds();
+  
+  const { preferences, setMeetingDevicePreferences } = useMeetingDevicePreferences();
+  const nPrefs = preferences.notifications;
 
   return (
     <div className="flex flex-col h-full">
@@ -58,7 +77,7 @@ export function SettingsPanel() {
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Settings</h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 space-y-5">
+      <div className="flex-1 overflow-y-auto meeting-scrollbar px-4 py-4 space-y-5">
         {/* Theme settings */}
         <SettingsGroup label="Theme">
           <div className="space-y-2">
@@ -142,12 +161,22 @@ export function SettingsPanel() {
             onChange={setIsHDVideoEnabled}
           />
           <SettingsToggle 
+            label="Widescreen Capture (16:9)" 
+            checked={isWidescreenEnabled} 
+            onChange={setIsWidescreenEnabled}
+          />
+          <SettingsToggle 
             label="Mirror my video" 
             checked={isMirrorVideoEnabled} 
             onChange={setIsMirrorVideoEnabled}
           />
+          <SettingsToggle 
+            label="Original Ratio" 
+            checked={isOriginalRatioEnabled} 
+            onChange={setIsOriginalRatioEnabled}
+          />
 
-          {roomFeatureFlags.virtualBackgroundEnabled && (
+          {roomFeatureFlags.virtualBackgroundEnabled && !isIOS && (
             <div className="pt-2 border-t" style={{ borderColor: "var(--mt-border)" }}>
               <div className="flex items-center gap-2 mb-2" style={{ color: "var(--mt-text-muted)" }}>
                 <ImageIcon className="w-4 h-4" />
@@ -176,14 +205,11 @@ export function SettingsPanel() {
               >
                 <div className="absolute inset-0 backdrop-blur-md bg-white/5" />
                 <Droplet className="relative z-10 w-5 h-5 mb-1 text-white/70" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/backgrounds/blur.png`} alt={`blur`} className="w-full h-full object-cover" />
               </button>
               
-              {[
-                '/backgrounds/modern_office.png',
-                '/backgrounds/cozy_cafe.png',
-                '/backgrounds/minimalist_gradient.png'
-              ].map((url, i) => (
+              {backgrounds.map((url, i) => (
                 <button
                   key={url}
                   title={`Use Background ${i + 1}`}
@@ -193,6 +219,7 @@ export function SettingsPanel() {
                     vbMode === 'image' && vbImageUrl === url ? "ring-2 ring-brand-green" : "ring-1 ring-white/10 hover:ring-white/20"
                   )}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt={`BG ${i+1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
@@ -210,20 +237,111 @@ export function SettingsPanel() {
                   type="file" 
                   accept="image/*" 
                   className="hidden" 
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      handleVbSelect('image', ev.target?.result as string);
-                    };
-                    reader.readAsDataURL(file);
-                  }} 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const { compressImage } = await import('@/lib/utils');
+                        const compressedData = await compressImage(file);
+                        handleVbSelect('image', compressedData);
+                      } catch (err) {
+                        console.error("Failed to compress background image", err);
+                      }
+                    }}
                 />
               </label>
             </div>
             </div>
           )}
+        </SettingsGroup>
+
+        {/* Notifications */}
+        <SettingsGroup label="Notifications">
+          <div className="mb-4">
+            <p className="text-xs mb-3" style={{ color: "var(--mt-text-muted)" }}>
+              These settings are saved on this browser/device and will apply to future meetings you join from this device.
+            </p>
+            
+            <div className="flex flex-col gap-2 p-3 rounded-md mb-4" style={{ backgroundColor: "var(--mt-bg-hover)" }}>
+              <SettingsToggle 
+                label="Enable all pop-up notifications" 
+                checked={nPrefs.enableAllToasts} 
+                onChange={(val) => setMeetingDevicePreferences({ notifications: { enableAllToasts: val } })}
+              />
+              <div className="flex items-center justify-between">
+                <SettingsToggle 
+                  label="Enable all notification sounds" 
+                  checked={nPrefs.enableAllSounds} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { enableAllSounds: val } })}
+                />
+                <button 
+                  onClick={() => playNotificationSound(800, 0.15, 0.1)} 
+                  disabled={!nPrefs.enableAllSounds}
+                  className="ml-2 px-2 py-1 text-[10px] uppercase font-bold rounded bg-brand-green/20 text-brand-green hover:bg-brand-green/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Test
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>Chat Messages</p>
+                <SettingsToggle 
+                  label="Show chat message popups" 
+                  checked={nPrefs.showChatToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showChatToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play chat message sound" 
+                  checked={nPrefs.playChatSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playChatSound: val } })}
+                />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>Participants</p>
+                <SettingsToggle 
+                  label="Show join/leave popups" 
+                  checked={nPrefs.showJoinLeaveToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showJoinLeaveToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play join/leave sound" 
+                  checked={nPrefs.playJoinLeaveSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playJoinLeaveSound: val } })}
+                />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>Mute / Unmute</p>
+                <SettingsToggle 
+                  label="Show mute/unmute popups" 
+                  checked={nPrefs.showMuteUnmuteToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showMuteUnmuteToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play mute/unmute sound" 
+                  checked={nPrefs.playMuteUnmuteSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playMuteUnmuteSound: val } })}
+                />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold mb-2 uppercase tracking-wider" style={{ color: "var(--mt-text-faint)" }}>System Notifications</p>
+                <SettingsToggle 
+                  label="Show system popups" 
+                  checked={nPrefs.showSystemToasts} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { showSystemToasts: val } })}
+                />
+                <SettingsToggle 
+                  label="Play system sound" 
+                  checked={nPrefs.playSystemSound} 
+                  onChange={(val) => setMeetingDevicePreferences({ notifications: { playSystemSound: val } })}
+                />
+              </div>
+            </div>
+          </div>
         </SettingsGroup>
 
         {/* General */}
@@ -275,6 +393,11 @@ export function SettingsPanel() {
             onChange={setIsLowBandwidthEnabled}
           />
           <SettingsToggle 
+            label="Audio-only mode" 
+            checked={isAudioOnlyModeEnabled} 
+            onChange={setIsAudioOnlyModeEnabled}
+          />
+          <SettingsToggle 
             label="Always mute on join" 
             checked={isAlwaysMuteOnJoin} 
             onChange={setIsAlwaysMuteOnJoin}
@@ -303,6 +426,10 @@ export function SettingsPanel() {
                 <ArrowLeftRight className="w-4 h-4 rotate-90" style={{ color: gridOverflowMode === "scroll" ? "var(--mt-text)" : "var(--mt-text-muted)" }} />
                 <span className="text-xs font-semibold" style={{ color: gridOverflowMode === "scroll" ? "var(--mt-text)" : "var(--mt-text-muted)" }}>Scroll</span>
                 <span className="text-[10px]" style={{ color: "var(--mt-text-faint)" }}>Scrollbar</span>
+                <span className="text-xs font-medium">Scrollable</span>
+                <span className="text-[10px] text-center" style={{ color: "var(--mt-text-faint)" }}>
+                  Scroll vertically through all participants
+                </span>
               </button>
               <button
                 onClick={() => setGridOverflowMode("paginate")}
@@ -312,13 +439,73 @@ export function SettingsPanel() {
                   border: gridOverflowMode === "paginate" ? "2px solid var(--color-brand-green)" : "2px solid var(--mt-border)",
                 }}
               >
-                <LayoutGrid className="w-4 h-4" style={{ color: gridOverflowMode === "paginate" ? "var(--mt-text)" : "var(--mt-text-muted)" }} />
-                <span className="text-xs font-semibold" style={{ color: gridOverflowMode === "paginate" ? "var(--mt-text)" : "var(--mt-text-muted)" }}>Pages</span>
-                <span className="text-[10px]" style={{ color: "var(--mt-text-faint)" }}>Dot pagination</span>
+                <span className="text-xs font-medium">Pages</span>
+                <span className="text-[10px] text-center" style={{ color: "var(--mt-text-faint)" }}>
+                  Show arrows to paginate through participants
+                </span>
               </button>
             </div>
           </div>
         </SettingsGroup>
+
+        {/* Media & Network (Host Only) */}
+        {(currentUser.role === 'host' || currentUser.role === 'co-host') && (
+          <SettingsGroup label="Media & Network">
+            <SettingsToggle 
+              label="Enable Network Detection" 
+              checked={roomSettings.networkDetectionEnabled ?? true}
+              onChange={(c) => updateRoomSettings({ networkDetectionEnabled: c })}
+            />
+            
+            <div className="flex gap-2 my-3">
+              <button onClick={() => updateRoomSettings({ poorNetworkRttMs: 300, poorNetworkLossPercent: 8, poorNetworkJitterMs: 60, networkWindowSize: 5, networkMonitorIntervalMs: 2000 })} className="text-[10px] bg-[var(--mt-bg-control)] px-2 py-1 rounded border">Default</button>
+              <button onClick={() => updateRoomSettings({ poorNetworkRttMs: 1000, poorNetworkLossPercent: 25, poorNetworkJitterMs: 220, networkWindowSize: 8, networkMonitorIntervalMs: 2000 })} className="text-[10px] bg-[var(--mt-bg-control)] px-2 py-1 rounded border">Nigeria Relaxed</button>
+              <button onClick={() => updateRoomSettings({ poorNetworkRttMs: 300, poorNetworkLossPercent: 5, poorNetworkJitterMs: 50, networkWindowSize: 5, networkMonitorIntervalMs: 2000 })} className="text-[10px] bg-[var(--mt-bg-control)] px-2 py-1 rounded border">Strict</button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="flex items-center gap-1">RTT Threshold (ms) <span title="Round-trip time measures how long it takes network/media packets to travel to the server and back. Higher values mean more delay."><Info className="w-3 h-3 text-brand-green"/></span></span>
+                  <span>{roomSettings.poorNetworkRttMs ?? 300}ms</span>
+                </div>
+                <input type="range" min="100" max="3000" step="50" value={roomSettings.poorNetworkRttMs ?? 300} onChange={(e) => updateRoomSettings({ poorNetworkRttMs: parseInt(e.target.value) })} className="w-full accent-brand-green" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="flex items-center gap-1">Packet Loss (%) <span title="Packet loss means some audio/video packets are not arriving. High packet loss can cause frozen video, robotic audio or missing frames."><Info className="w-3 h-3 text-brand-green"/></span></span>
+                  <span>{roomSettings.poorNetworkLossPercent ?? 8}%</span>
+                </div>
+                <input type="range" min="1" max="50" step="1" value={roomSettings.poorNetworkLossPercent ?? 8} onChange={(e) => updateRoomSettings({ poorNetworkLossPercent: parseFloat(e.target.value) })} className="w-full accent-brand-green" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="flex items-center gap-1">Jitter (ms) <span title="Jitter measures how inconsistent the network delay is. High jitter can cause unstable audio and video even when speed looks good."><Info className="w-3 h-3 text-brand-green"/></span></span>
+                  <span>{roomSettings.poorNetworkJitterMs ?? 60}ms</span>
+                </div>
+                <input type="range" min="10" max="1000" step="10" value={roomSettings.poorNetworkJitterMs ?? 60} onChange={(e) => updateRoomSettings({ poorNetworkJitterMs: parseInt(e.target.value) })} className="w-full accent-brand-green" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="flex items-center gap-1">Window Size <span title="This controls how many recent samples are checked before deciding that the connection is poor. A larger window reduces false warnings."><Info className="w-3 h-3 text-brand-green"/></span></span>
+                  <span>{roomSettings.networkWindowSize ?? 5}</span>
+                </div>
+                <input type="range" min="3" max="20" step="1" value={roomSettings.networkWindowSize ?? 5} onChange={(e) => updateRoomSettings({ networkWindowSize: parseInt(e.target.value) })} className="w-full accent-brand-green" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="flex items-center gap-1">Monitor Interval (ms) <span title="This controls how often Konn3ct checks WebRTC network stats. 2000ms means every 2 seconds."><Info className="w-3 h-3 text-brand-green"/></span></span>
+                  <span>{roomSettings.networkMonitorIntervalMs ?? 2000}ms</span>
+                </div>
+                <input type="range" min="1000" max="10000" step="500" value={roomSettings.networkMonitorIntervalMs ?? 2000} onChange={(e) => updateRoomSettings({ networkMonitorIntervalMs: parseInt(e.target.value) })} className="w-full accent-brand-green" />
+              </div>
+            </div>
+          </SettingsGroup>
+        )}
       </div>
     </div>
   );
@@ -480,6 +667,7 @@ function SettingsToggle({
     <div className="flex items-center justify-between py-1">
       <span className="text-xs" style={{ color: "var(--mt-text-muted)" }}>{label}</span>
       <button
+        aria-label={label}
         onClick={handleClick}
         className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
           isOn ? "bg-brand-green" : ""
@@ -510,6 +698,7 @@ function SettingsSlider({
   const [val, setVal] = React.useState(value);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVal(value);
   }, [value]);
 
@@ -535,3 +724,4 @@ function SettingsSlider({
     </div>
   );
 }
+

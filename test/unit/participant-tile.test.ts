@@ -1,13 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import React from 'react';
 
 vi.mock('@/lib/utils', () => ({ cn: (...args: any[]) => args.join(' ') }));
-vi.mock('lucide-react', () => ({ MicOff: () => null, VideoOff: () => null, MonitorUp: () => null, Hand: () => null, Crown: () => null, Shield: () => null, SignalHigh: () => null, SignalMedium: () => null, SignalLow: () => null }));
-vi.mock('../../frontend/hooks/useVideoHealth', () => ({ useVideoHealth: () => ({ health: 'good', remountKey: 0 }) }));
-vi.mock('../../frontend/lib/meeting-context', () => ({ useMeeting: () => ({}) }));
-vi.mock('@/lib/meeting-context', () => ({ useMeeting: () => ({}) }));
+vi.mock('lucide-react', () => ({ 
+  MicOff: () => React.createElement('div', { 'data-testid': 'mic-off-icon' }), 
+  VideoOff: () => React.createElement('div', { 'data-testid': 'video-off-icon' }), 
+  MonitorUp: () => React.createElement('div', { 'data-testid': 'screen-share-icon' }), 
+  Hand: () => React.createElement('div', { 'data-testid': 'hand-icon' }), 
+  Crown: () => React.createElement('div', { 'data-testid': 'crown-icon' }), 
+  Shield: () => React.createElement('div', { 'data-testid': 'shield-icon' }), 
+  SignalHigh: () => React.createElement('div', { 'data-testid': 'signal-high-icon' }), 
+  SignalMedium: () => React.createElement('div', { 'data-testid': 'signal-medium-icon' }), 
+  SignalLow: () => React.createElement('div', { 'data-testid': 'signal-low-icon' }) 
+}));
+
+const mockUseVideoHealth = vi.fn().mockReturnValue({ health: 'good', remountKey: 0 });
+vi.mock('../../frontend/hooks/useVideoHealth', () => ({ useVideoHealth: () => mockUseVideoHealth() }));
+
+const mockUseMeeting = vi.fn().mockReturnValue({ isRecording: false, isAIProcessing: false, localUserId: '1', forceMuteUser: vi.fn(), changeUserRole: vi.fn(), kickUser: vi.fn() });
+vi.mock('../../frontend/lib/meeting-context', () => ({ useMeeting: () => mockUseMeeting() }));
+vi.mock('@/lib/meeting-context', () => ({ useMeeting: () => mockUseMeeting() }));
 vi.mock('@/lib/types/meeting', () => ({}));
 
-import { getEffectiveVideoState } from '../../frontend/components/meeting/ParticipantTile';
+import { ParticipantTile, getEffectiveVideoState } from '../../frontend/components/meeting/ParticipantTile';
 import { Participant } from '../../frontend/lib/types/meeting';
 
 describe('getEffectiveVideoState', () => {
@@ -31,3 +48,4 @@ describe('getEffectiveVideoState', () => {
     expect(getEffectiveVideoState(participant)).toBe('stalled');
   });
 });
+

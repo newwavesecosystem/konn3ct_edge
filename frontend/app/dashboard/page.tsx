@@ -24,7 +24,7 @@ export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<{name: string} | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [selectedRecording, setSelectedRecording] = useState<{title: string, date: string, duration: string} | null>(null);
+  const [selectedRecording, setSelectedRecording] = useState<{id: string, title: string, date: string, duration: string} | null>(null);
   const [accessLevel, setAccessLevel] = useState("anyone");
   const [specificUsers, setSpecificUsers] = useState("");
   const [generatedLink, setGeneratedLink] = useState("");
@@ -38,9 +38,13 @@ export default function DashboardPage() {
   };
 
   const handleGenerateLink = () => {
-    // Simulate link generation
-    const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
-    setGeneratedLink(link);
+    if (selectedRecording?.id) {
+      const link = `${window.location.origin}/recordings/${selectedRecording.id}`;
+      setGeneratedLink(link);
+    } else {
+      const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
+      setGeneratedLink(link);
+    }
   };
 
   const handleCopyPersonalLink = () => {
@@ -100,7 +104,7 @@ export default function DashboardPage() {
             Welcome back, {currentUser?.name || "Alex"} 👋
           </h1>
           <p className="text-text-muted mt-1 text-lg">
-            Here's what's happening with your meetings today.
+            Here&apos;s what&apos;s happening with your meetings today.
           </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
@@ -163,7 +167,7 @@ export default function DashboardPage() {
           className="lg:col-span-2 space-y-6"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-text-primary">Today's Schedule</h2>
+            <h2 className="text-xl font-bold text-text-primary">Today&apos;s Schedule</h2>
             <Button variant="ghost" className="text-brand-green hover:text-brand-green-soft hover:bg-brand-green/10 rounded-lg">
               View Calendar <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
@@ -303,7 +307,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-xl font-bold text-text-primary">Share Recording</h2>
             <p className="text-sm text-text-muted mt-1">
-              Configure access settings for "{selectedRecording?.title}"
+              Configure access settings for &quot;{selectedRecording?.title}&quot;
             </p>
           </div>
 
@@ -337,7 +341,11 @@ export default function DashboardPage() {
             <div className="p-4 rounded-xl border border-brand-green/20 bg-brand-green/5 space-y-3">
               <p className="text-sm font-medium text-brand-green">Link generated successfully!</p>
               <div className="flex gap-2">
-                <Input value={generatedLink} readOnly className="h-10 bg-white" />
+                <input 
+                  value={generatedLink} 
+                  readOnly 
+                  className="flex-1 px-4 py-2 rounded-xl border outline-none bg-white text-slate-900 border-brand-green/20" 
+                />
                 <Button 
                   onClick={() => navigator.clipboard.writeText(generatedLink)}
                   className="h-10 bg-brand-green hover:bg-[#287854] shrink-0"

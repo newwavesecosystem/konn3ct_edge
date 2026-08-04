@@ -198,6 +198,9 @@ export function MeetingControls() {
             tooltip={isMuted ? "Unmute" : "Mute"}
             className={(!isMuted && currentUser.isSpeaking) ? "shadow-[0_0_12px_rgba(34,197,94,0.6)] ring-2 ring-brand-green/50 bg-brand-green/10 text-brand-green transition-all duration-75" : ""}
           />
+          
+          <div className="w-2 sm:w-3" />
+          
           {/* Camera */}
           <ControlBtn
             icon={isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
@@ -566,6 +569,7 @@ function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
   const [linkInput, setLinkInput] = React.useState(eCinemaLink || "");
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isOpen) setLinkInput(eCinemaLink || "");
   }, [isOpen, eCinemaLink]);
 

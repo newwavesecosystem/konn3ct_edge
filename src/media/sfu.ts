@@ -1,7 +1,27 @@
 import * as mediasoup from 'mediasoup';
-import { Worker, Router, Transport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
+import { Worker, Router, Transport, WebRtcTransport, Producer, Consumer, AudioLevelObserver } from 'mediasoup/node/lib/types';
 import { config } from './config';
 import { logger } from '../logger';
+import * as promClient from 'prom-client';
+
+const workerGauge = new promClient.Gauge({ name: 'konn3ct_active_workers', help: 'Number of active Mediasoup workers' });
+const routerGauge = new promClient.Gauge({ name: 'konn3ct_active_routers', help: 'Number of active routers' });
+const transportGauge = new promClient.Gauge({ name: 'konn3ct_active_transports', help: 'Number of active transports' });
+const producerGauge = new promClient.Gauge({ name: 'konn3ct_active_producers', help: 'Number of active producers' });
+const consumerGauge = new promClient.Gauge({ name: 'konn3ct_active_consumers', help: 'Number of active consumers' });
+
+// Phase 0 Deep Metrics
+const inboundBitrateGauge = new promClient.Gauge({ name: 'konn3ct_inbound_bitrate', help: 'Total inbound WebRTC bitrate' });
+const outboundBitrateGauge = new promClient.Gauge({ name: 'konn3ct_outbound_bitrate', help: 'Total outbound WebRTC bitrate' });
+const packetLossGauge = new promClient.Gauge({ name: 'konn3ct_packet_loss_total', help: 'Total packet loss count' });
+const nackCountGauge = new promClient.Gauge({ name: 'konn3ct_nack_total', help: 'Total NACK count' });
+const pliCountGauge = new promClient.Gauge({ name: 'konn3ct_pli_total', help: 'Total PLI count' });
+const firCountGauge = new promClient.Gauge({ name: 'konn3ct_fir_total', help: 'Total FIR count' });
+const roomCreationLatencyGauge = new promClient.Gauge({ name: 'konn3ct_room_creation_latency_ms', help: 'Time to create a mediasoup router' });
+const iceFailureGauge = new promClient.Gauge({ name: 'konn3ct_ice_failure_total', help: 'Total ICE failures' });
+
+
+
 
 // Store workers, and map roomId -> Router
 const workers: Worker[] = [];
@@ -12,6 +32,100 @@ const transports = new Map<string, Transport>();
 const producers = new Map<string, Producer>();
 const consumers = new Map<string, Consumer>();
 const audioObservers = new Map<string, AudioLevelObserver>();
+
+// --- Telemetry Data Structures ---
+const consumerLatencies: { canConsume: number, consume: number, total: number }[] = [];
+
+setInterval(async () => {
+  // Worker Resource Usage
+  for (const worker of workers) {
+    try {
+      const usage = await worker.getResourceUsage();
+      let routerCount = 0;
+      let transportCount = 0;
+      let producerCount = 0;
+      let consumerCount = 0;
+      
+      // Correlate with worker
+      for (const router of routers.values()) {
+        if ((router as any).appData?.workerPid === worker.pid) {
+          routerCount++;
+        }
+      }
+      
+      // Global counts as fallback
+      transportCount = transports.size;
+      producerCount = producers.size;
+      consumerCount = consumers.size;
+
+      logger.info(`[Telemetry] Worker ${worker.pid} CPU: user=${usage.ru_utime}ms, sys=${usage.ru_stime}ms, RSS=${usage.ru_maxrss}kb. Globals: Transports=${transportCount}, Producers=${producerCount}, Consumers=${consumerCount}, Routers=${routerCount}`);
+      
+      workerGauge.set(workers.length);
+      routerGauge.set(routers.size);
+      transportGauge.set(transportCount);
+      producerGauge.set(producerCount);
+      consumerGauge.set(consumerCount);
+    } catch (e) {
+      logger.warn('Failed to get worker resource usage', e);
+    }
+  }
+  
+  // Latency Percentiles
+  if (consumerLatencies.length > 0) {
+    const latencies = consumerLatencies.splice(0, consumerLatencies.length); // clear and grab
+    latencies.sort((a, b) => a.total - b.total);
+    const getP = (p: number) => latencies[Math.floor((latencies.length - 1) * p)].total.toFixed(1);
+    const fastest = latencies[0].total.toFixed(1);
+    const slowest = latencies[latencies.length - 1].total.toFixed(1);
+    const p50 = getP(0.5);
+    const p95 = getP(0.95);
+    const p99 = getP(0.99);
+    
+    // Average sub-stages
+    const avgCanConsume = (latencies.reduce((sum, l) => sum + l.canConsume, 0) / latencies.length).toFixed(1);
+    const avgConsume = (latencies.reduce((sum, l) => sum + l.consume, 0) / latencies.length).toFixed(1);
+    
+    logger.info(`[Telemetry] Consumer Latency (${latencies.length} samples): Fastest=${fastest}ms, P50=${p50}ms, P95=${p95}ms, P99=${p99}ms, Slowest=${slowest}ms. Sub-stages Avg: canConsume=${avgCanConsume}ms, consume=${avgConsume}ms`);
+  }
+}, 5000);
+
+// --- Phase 0 Deep WebRTC Stats Polling ---
+setInterval(async () => {
+  let inBitrate = 0;
+  let outBitrate = 0;
+  let packetLoss = 0;
+  let nackCount = 0;
+  let pliCount = 0;
+  let firCount = 0;
+
+  for (const transport of transports.values()) {
+    try {
+      const stats = await transport.getStats();
+      for (const stat of stats as any[]) {
+        if (stat.type === 'inbound-rtp') {
+          inBitrate += stat.bitrate || 0;
+          packetLoss += stat.packetsLost || 0;
+          nackCount += stat.nackCount || 0;
+          pliCount += stat.pliCount || 0;
+          firCount += stat.firCount || 0;
+        } else if (stat.type === 'outbound-rtp') {
+          outBitrate += stat.bitrate || 0;
+        }
+      }
+    } catch (e) {
+      // transport may be closed, ignore
+    }
+  }
+
+  inboundBitrateGauge.set(inBitrate);
+  outboundBitrateGauge.set(outBitrate);
+  packetLossGauge.set(packetLoss);
+  nackCountGauge.set(nackCount);
+  pliCountGauge.set(pliCount);
+  firCountGauge.set(firCount);
+}, 15000);
+// ----------------------------------
+
 
 /**
  * Initialize mediasoup workers based on CPU cores
@@ -98,11 +212,14 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   }
 
   const promise = (async () => {
+    const startMs = performance.now();
     const worker = getWorker();
     const router = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+    router.appData.workerPid = worker.pid;
     
     routers.set(roomId, router);
     logger.info(`Router created for room ${roomId}`);
+    roomCreationLatencyGauge.set(performance.now() - startMs);
     return router;
   })();
 
@@ -113,6 +230,18 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
     return router;
   } finally {
     routersPromises.delete(roomId);
+  }
+}
+
+/**
+ * Close a Router and remove it from memory
+ */
+export function closeRouter(roomId: string) {
+  const router = routers.get(roomId);
+  if (router) {
+    router.close();
+    routers.delete(roomId);
+    logger.info(`Router closed for room ${roomId}`);
   }
 }
 
@@ -131,6 +260,21 @@ export async function createWebRtcTransport(roomId: string) {
   });
 
   transports.set(transport.id, transport);
+
+  if (config.mediasoup.webRtcTransport.maxIncomingBitrate) {
+    try {
+      await transport.setMaxIncomingBitrate(config.mediasoup.webRtcTransport.maxIncomingBitrate);
+    } catch (e) {
+      logger.error('Failed to set max incoming bitrate:', e);
+    }
+  }
+
+  transport.on('icestatechange', (iceState) => {
+    logger.info(`Transport ${transport.id} icestatechange: ${iceState}`);
+    if (iceState === 'disconnected' || iceState === 'closed') {
+      iceFailureGauge.inc();
+    }
+  });
 
   transport.on('dtlsstatechange', (dtlsState) => {
     if (dtlsState === 'closed' || dtlsState === 'failed') {
@@ -209,7 +353,7 @@ export function cleanupAudioObserver(roomId: string) {
   }
 }
 
-import { startTranscription } from './transcriber';
+import { startTranscription, stopTranscription } from './transcriber';
 
 /**
  * Get a specific Producer by ID
@@ -351,17 +495,29 @@ export async function createConsumerWithCallback(
   onProducerClose: (consumerId: string) => void,
   onScore?: (score: number) => void
 ) {
+  const startTotal = performance.now();
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
+  const startCanConsume = performance.now();
   if (!router.canConsume({ producerId, rtpCapabilities })) {
     throw new Error('Client cannot consume this producer');
   }
+  const endCanConsume = performance.now();
 
+  const startConsume = performance.now();
   const consumer = await transport.consume({
     producerId,
     rtpCapabilities,
     paused: true
+  });
+  const endConsume = performance.now();
+  
+  const endTotal = performance.now();
+  consumerLatencies.push({
+    canConsume: endCanConsume - startCanConsume,
+    consume: endConsume - startConsume,
+    total: endTotal - startTotal
   });
 
   consumers.set(consumer.id, consumer);
@@ -405,6 +561,15 @@ export function closeTransport(transportId: string) {
   }
 }
 
+export async function restartIce(transportId: string) {
+  const transport = transports.get(transportId) as WebRtcTransport;
+  if (!transport || transport.closed) {
+    throw new Error(`Transport ${transportId} not found or closed`);
+  }
+  const iceParameters = await transport.restartIce();
+  return iceParameters;
+}
+
 export async function pauseConsumer(consumerId: string) {
   const consumer = consumers.get(consumerId);
   if (consumer) {
@@ -414,11 +579,25 @@ export async function pauseConsumer(consumerId: string) {
 
 export async function requestConsumerKeyFrame(consumerId: string) {
   const consumer = consumers.get(consumerId);
-  if (consumer && consumer.kind === 'video') {
-    try {
-      await consumer.requestKeyFrame();
-    } catch (err) {
-      console.warn(`[SFU] Failed to request keyframe for consumer ${consumerId}:`, err);
+  if (!consumer) throw new Error(`Consumer ${consumerId} not found`);
+  
+  if (consumer.kind !== 'video') {
+    return;
+  }
+  
+  await consumer.requestKeyFrame();
+}
+
+export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {
+  if (isMuted) {
+    stopTranscription(producerId);
+  } else {
+    const producer = producers.get(producerId);
+    const router = routers.get(roomId);
+    if (producer && router && !producer.closed) {
+      startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
+        logger.error(`Failed to restart transcription for ${userId} on unmute:`, e);
+      });
     }
   }
 }

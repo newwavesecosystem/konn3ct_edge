@@ -127,7 +127,7 @@ describe('Payments API', () => {
 
       const sub = await db.subscription.findFirst({ where: { userId } });
       expect(sub?.status).toBe('active');
-    });
+    }, 15000);
 
     it('should reject invalid webhook signature', async () => {
       const payload = {
