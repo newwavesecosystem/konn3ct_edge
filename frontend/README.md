@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Conn3ct Meeting - Frontend
 
-## Getting Started
+This is the frontend application for Conn3ct Meeting, built with Next.js, React, and TypeScript. It provides a rich, interactive video conferencing experience featuring WebRTC integration (via Mediasoup) and AI-powered virtual backgrounds (via MediaPipe).
 
-First, run the development server:
+## 🚀 Tech Stack
+
+- **Framework:** Next.js (v16), React (v19)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS (v4), Framer Motion
+- **State Management:** Zustand
+- **WebRTC:** `mediasoup-client`
+- **Signaling:** `socket.io-client`
+- **AI/Vision:** `@mediapipe/tasks-vision` (for virtual backgrounds)
+- **Forms & Validation:** `react-hook-form`, Zod
+- **Icons:** `lucide-react`
+- **Testing:** Playwright (E2E)
+
+## 📁 Key Directories
+
+- `app/` - Next.js App Router pages and layouts.
+- `components/` - Reusable React components (UI elements, meeting controls, video tiles).
+- `hooks/` - Custom React hooks (e.g., WebRTC state, audio/video handling).
+- `lib/` - Utility functions, WebRTC managers, signaling logic.
+- `e2e/` - Playwright end-to-end tests.
+- `public/` - Static assets, including MediaPipe models for background segmentation.
+- `types/` - TypeScript type definitions.
+
+## 🛠️ Getting Started
+
+### Prerequisites
+
+- Node.js (v20+ recommended)
+- npm or yarn or pnpm
+
+### Installation
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Set up environment variables:
+Create a `.env.local` file in the root of the `frontend` directory based on your configuration requirements (e.g., API URLs, Socket URLs).
+
+### Development
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Building for Production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Build the application:
 
-## Learn More
+```bash
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+Start the production server:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run start
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🧪 Testing
 
-## Deploy on Vercel
+End-to-end tests are configured using Playwright.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Run E2E tests:
+```bash
+npm run test:e2e
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## ⚠️ Important Rules & Considerations
+
+- **Audio Logic Integrity:** The audio handling, autoplay unlocking, and microphone re-acquisition logic in files like `webrtc.ts`, `server.ts`, and `meeting-context.tsx` are critical and highly sensitive. **Never modify these without explicit authorization.**
+- **Testing Policy:** Every new feature, change, or bug fix MUST be accompanied by revisiting the corresponding test or creating a new one if it does not exist.
+
+## 🌐 Features Overview
+
+- Multi-party video conferencing powered by Mediasoup SFU.
+- Real-time signaling via Socket.io.
+- Client-side virtual background and background blurring using MediaPipe segmenter.
+- Modern, responsive UI with Tailwind CSS.
+- Audio context and device management.

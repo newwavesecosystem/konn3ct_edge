@@ -49,6 +49,20 @@ jobs:
             --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} \
             --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
             --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
+            --build-arg NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+            --build-arg NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
+            --build-arg NEXT_PUBLIC_POOR_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_RTT }}" \
+            --build-arg NEXT_PUBLIC_POOR_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_LOSS }}" \
+            --build-arg NEXT_PUBLIC_POOR_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_JITTER }}" \
+            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_RTT }}" \
+            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS }}" \
+            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
+            --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
+            --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
+            --build-arg NEXT_PUBLIC_HIDE_SIGNUP_BUTTON="${{ vars.NEXT_PUBLIC_HIDE_SIGNUP_BUTTON }}" \
+            --build-arg NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
+            --build-arg NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL="${{ vars.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL }}" \
+            --build-arg NEXT_PUBLIC_SIGNIN_URL="${{ vars.NEXT_PUBLIC_SIGNIN_URL }}" \
             -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -62,16 +76,16 @@ jobs:
             docker push $IMAGE_NAME:1gov_stag
           fi
 
-      # - name: Build and Push Recorder Docker Image
-      #   if: github.ref != 'refs/heads/1gov_stag'
-      #   run: |
-      #     IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
-      #     docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
-      #     docker push $IMAGE_NAME:${{ github.sha }}
-      #     if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
-      #       docker push $IMAGE_NAME:staging-latest
-      #     fi
+      - name: Build and Push Recorder Docker Image
+        if: github.ref != 'refs/heads/1gov_stag'
+        run: |
+          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
+          docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
+          docker push $IMAGE_NAME:${{ github.sha }}
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
 
       # - name: Build and Push Streaming Worker Docker Image
       #   run: |
@@ -109,6 +123,8 @@ jobs:
             --from-literal=NEXT_PUBLIC_FRONTEND_DOMAIN="${{ secrets.NEXT_PUBLIC_FRONTEND_DOMAIN }}" \
             --from-literal=NEXT_PUBLIC_FRONTEND_URL="${{ secrets.NEXT_PUBLIC_FRONTEND_URL }}" \
             --from-literal=NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
+            --from-literal=NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL="${{ vars.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL }}" \
+            --from-literal=NEXT_PUBLIC_SIGNIN_URL="${{ vars.NEXT_PUBLIC_SIGNIN_URL }}" \
             --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
             --from-literal=NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY="${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" \
             --from-literal=DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
@@ -116,6 +132,10 @@ jobs:
             --from-literal=DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
             --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
             --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
+            --from-literal=S3_FORCE_PATH_STYLE="${{ vars.S3_FORCE_PATH_STYLE }}" \
+            --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+            --from-literal=NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
+            --from-literal=NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
           # Apply all our deployment, service, and redis yaml files

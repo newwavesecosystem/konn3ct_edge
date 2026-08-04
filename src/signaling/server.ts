@@ -4,14 +4,62 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame } from '../media/sfu';
+import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce, handleTranscriptionMute } from '../media/sfu';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
+import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache, invalidateRoomHistoryCache } from './historyCache';
+import { monitorEventLoopDelay, PerformanceObserver } from 'perf_hooks';
 
+// --- Event Loop & GC Telemetry ---
+const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
+eventLoopMonitor.enable();
+
+setInterval(() => {
+  logger.info(`[Telemetry] Event Loop Delay: Mean=${(eventLoopMonitor.mean / 1e6).toFixed(2)}ms, P50=${(eventLoopMonitor.percentile(50) / 1e6).toFixed(2)}ms, P95=${(eventLoopMonitor.percentile(95) / 1e6).toFixed(2)}ms, P99=${(eventLoopMonitor.percentile(99) / 1e6).toFixed(2)}ms, Max=${(eventLoopMonitor.max / 1e6).toFixed(2)}ms`);
+  eventLoopMonitor.reset();
+}, 5000);
+
+const gcObserver = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    logger.info(`[Telemetry] GC Pause: ${entry.duration.toFixed(2)}ms`);
+  }
+});
+try {
+  gcObserver.observe({ entryTypes: ['gc'] });
+} catch (e) {
+  // Ignore if gc is not supported
+}
+
+const consumeBursts = new Map<string, number[]>();
+
+setInterval(() => {
+  for (const [burstRoomId, timestamps] of consumeBursts.entries()) {
+    if (timestamps.length === 0) continue;
+    
+    // Sort timestamps to ensure chronologial order
+    timestamps.sort((a, b) => a - b);
+    
+    const firstTime = timestamps[0];
+    const distribution = { '0-10ms': 0, '10-20ms': 0, '20-30ms': 0, '30-40ms': 0, '40-50ms': 0, '50ms+': 0 };
+    for (const t of timestamps) {
+      const diff = t - firstTime;
+      if (diff <= 10) distribution['0-10ms']++;
+      else if (diff <= 20) distribution['10-20ms']++;
+      else if (diff <= 30) distribution['20-30ms']++;
+      else if (diff <= 40) distribution['30-40ms']++;
+      else if (diff <= 50) distribution['40-50ms']++;
+      else distribution['50ms+']++;
+    }
+    
+    logger.info(`[Telemetry] WebSocket Burst for room ${burstRoomId}: Total consumes=${timestamps.length}, Distribution=${JSON.stringify(distribution)}`);
+  }
+  consumeBursts.clear();
+}, 5000);
+// ----------------------------------
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] JWT_SECRET must be set in production');
 }
@@ -20,7 +68,7 @@ if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
 }
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const redis = new Redis(redisUrl, {
+export const redis = new Redis(redisUrl, {
   retryStrategy: (times) => {
     if (process.env.NODE_ENV !== 'production') return null;
     return Math.min(times * 50, 2000);
@@ -122,7 +170,9 @@ interface Client {
   audioOnlyMode?: boolean;
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
+  isMuted: boolean;
   maxActiveCameras?: number;
+  preempted?: boolean;
   maxParticipants?: number;
   roomCreatedDate: Date;
   isBot?: boolean;
@@ -131,7 +181,7 @@ interface Client {
   micExemption?: boolean;
 }
 
-const rooms = new Map<string, Map<string, Client>>();
+export const rooms = new Map<string, Map<string, Client>>();
 const roomProducers = new Map<string, Array<{ producerId: string, userId: string, participantId: string, name: string, kind: string, appData?: Record<string, any> }>>();
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
@@ -140,6 +190,39 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
+
+async function cleanupRoomData(roomId: string) {
+  try {
+    // 1. Close any active polls
+    await db.meetingPoll.updateMany({
+      where: { roomId, isActive: true },
+      data: { isActive: false }
+    });
+
+    // 2. Check if chat persistence is enabled
+    const room = await db.room.findUnique({
+      where: { id: roomId },
+      select: { persistChat: true }
+    });
+
+    // If persistChat is explicitly false, delete all chat messages
+    if (room && room.persistChat === false) {
+      const { count } = await db.chatMessage.deleteMany({
+        where: { roomId }
+      });
+      logger.info(`Cleared ${count} chat messages for room ${roomId} (persistChat=false).`);
+    }
+
+    // 3. Clear Redis cache so new sessions don't load old history
+    await invalidateRoomHistoryCache(roomId);
+
+    // 4. Clear memory state for eCinema
+    roomECinema.delete(roomId);
+    roomECinemaState.delete(roomId);
+  } catch (error) {
+    logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
+  }
+}
 
 async function asyncWithRetry<T>(
   operation: () => Promise<T>,
@@ -161,7 +244,7 @@ async function asyncWithRetry<T>(
   }
 }
 export function getActiveRoomParticipants(roomId: string) {
-  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
+  const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, isMuted: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   const roomClients = rooms.get(roomId);
   if (roomClients) {
     for (const client of roomClients.values()) {
@@ -173,6 +256,7 @@ export function getActiveRoomParticipants(roomId: string) {
           role: client.role,
           isMobile: client.isMobile,
           isCameraOn: client.isCameraOn,
+          isMuted: client.isMuted,
           audioOnlyMode: client.audioOnlyMode,
           videoSuspendedReason: client.videoSuspendedReason
         });
@@ -190,47 +274,45 @@ export interface RoomSettings {
   videoLocked: boolean;
   chatLocked: boolean;
   bypassWaitingRoom: boolean;
+  networkDetectionEnabled?: boolean;
+  poorNetworkRttMs?: number;
+  poorNetworkLossPercent?: number;
+  poorNetworkJitterMs?: number;
+  networkWindowSize?: number;
+  networkMonitorIntervalMs?: number;
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
 export async function sendRoomHistoryAndState(client: Client) {
-  const { ws, roomId, roomCreatedDate } = client;
+  const { ws, roomId, roomCreatedDate, participantId, userId } = client;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   try {
     const activeParticipants = getActiveRoomParticipants(roomId);
     ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
-    const chatHistory = await db.chatMessage.findMany({
-      where: { roomId: roomId, createdAt: { gte: roomCreatedDate } },
-      orderBy: { createdAt: 'asc' },
-      take: 50,
-    });
-
-    ws.send(JSON.stringify({ type: 'chat_history', messages: chatHistory }));
+    const history = await getOrLoadRoomHistory(roomId, roomCreatedDate, participantId, userId);
+    
+    if (ws.readyState === WebSocket.OPEN && history) {
+      // Filter chat history for private messages intended for this user
+      const filteredChatHistory = history.chatHistory.filter((msg: any) => {
+        return !msg.isPrivate || msg.targetUserId === participantId || msg.userId === userId;
+      });
+      
+      ws.send(JSON.stringify({ type: 'chat_history', messages: filteredChatHistory }));
+      ws.send(JSON.stringify({ type: 'poll_history', polls: history.pollHistory }));
+      ws.send(JSON.stringify({ type: 'qa_history', messages: history.qaHistory }));
+      if (history.noteHistory) {
+        ws.send(JSON.stringify({ type: 'note_history', content: history.noteHistory.content }));
+      }
+    }
 
     const settings = roomSettingsMap.get(roomId);
-    if (settings) {
+    if (settings && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'room_settings_updated', settings }));
     }
-    const pollHistory = await db.meetingPoll.findMany({
-      where: { roomId, isActive: true },
-      orderBy: { createdAt: 'asc' }
-    });
-    const noteHistory = await db.sharedNote.findUnique({
-      where: { roomId }
-    });
-    const qaHistory = await db.meetingQA.findMany({
-      where: { roomId },
-      orderBy: { upvotes: 'desc' }
-    });
 
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'poll_history', polls: pollHistory }));
-      ws.send(JSON.stringify({ type: 'qa_history', messages: qaHistory }));
-      if (noteHistory) {
-        ws.send(JSON.stringify({ type: 'note_history', content: noteHistory.content }));
-      }
       const eCinemaLink = roomECinema.get(roomId);
       if (eCinemaLink) {
         ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
@@ -405,6 +487,7 @@ export function initializeSignaling(server: Server) {
       const roomSlug = url.searchParams.get('roomId');
       const isMobile = url.searchParams.get('isMobile') === 'true';
       const participantIdParam = url.searchParams.get('participantId');
+      const userAgent = request.headers['user-agent'] || 'unknown_agent';
 
       if (!token || !roomSlug) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -423,22 +506,48 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
+      if (!roomSettingsMap.has(room.id)) {
+        roomSettingsMap.set(room.id, {
+          micLocked: false,
+          videoLocked: false,
+          chatLocked: false,
+          bypassWaitingRoom: false,
+          networkDetectionEnabled: room.networkDetectionEnabled,
+          poorNetworkRttMs: room.poorNetworkRttMs,
+          poorNetworkLossPercent: room.poorNetworkLossPercent,
+          poorNetworkJitterMs: room.poorNetworkJitterMs,
+          networkWindowSize: room.networkWindowSize,
+          networkMonitorIntervalMs: room.networkMonitorIntervalMs,
+        });
+      }
+
       // Extract role directly from the JWT token (set by the frontend API)
       let role = decoded.role || 'audience';
       if (room.ownerId === decoded.userId) {
         role = 'host';
       }
 
-      const currentParticipants = rooms.get(room.id)?.size || 0;
-      const maxParticipants = room.maxParticipants ?? 100;
-      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
-      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
+      if (role === 'bot' || role === 'recorder') {
+        logger.info(`recorder_signaling_join_participant_id: ${participantIdParam}`);
+      }
 
-      // Allow hosts and bots to bypass capacity
-      if (role !== 'host' && role !== 'bot' && currentParticipants >= limit) {
-        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
-        socket.destroy();
-        return;
+      // Recover dynamic roles (e.g. co-host) from existing session or Redis
+      const existingClientForRole = participantIdParam ? rooms.get(room.id)?.get(participantIdParam) : null;
+      if (existingClientForRole && existingClientForRole.role === 'co-host') {
+        role = 'co-host';
+      } else {
+        try {
+          const redisParticipantsStr = await redis.get(`room:${roomSlug}:participants`);
+          if (redisParticipantsStr) {
+            const redisParticipants = JSON.parse(redisParticipantsStr);
+            const existingInRedis = redisParticipants.find((p: any) => p.userId === decoded.userId);
+            if (existingInRedis && existingInRedis.role === 'co-host') {
+              role = 'co-host';
+            }
+          }
+        } catch (e) {
+          logger.error('Failed to parse redis participants for role recovery', e);
+        }
       }
 
       // Guardrails: Validate participantId
@@ -449,13 +558,35 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      // Guardrails: Check for duplicate active connections using the same participantId (not a reconnect)
+      // Guardrails: Check if this user is already in the room (e.g. reconnecting within 15s grace period)
       const existingClient = rooms.get(room.id)?.get(participantIdParam);
-      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN && !disconnectTimeouts.has(`${participantIdParam}:${room.id}`)) {
-        logger.warn(`Rejecting connection due to duplicate active participantId: ${participantIdParam}`);
-        socket.write('HTTP/1.1 409 Conflict\r\nX-Conn3ct-Error: Duplicate session\r\n\r\n');
+
+      const currentParticipants = rooms.get(room.id)?.size || 0;
+      const maxParticipants = room.maxParticipants ?? 100;
+      const maxWebinarAudience = room.maxWebinarAudience ?? 1000;
+      const limit = room.mode === 'webinar' ? maxWebinarAudience : maxParticipants;
+
+      // Allow hosts, bots, and already-connected users (reconnecting) to bypass capacity limits
+      if (role !== 'host' && role !== 'bot' && !existingClient && currentParticipants >= limit) {
+        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Capacity Reached\r\n\r\n');
         socket.destroy();
         return;
+      }
+
+      if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
+        logger.info(`Preempting old connection for participantId: ${participantIdParam}`);
+        existingClient.preempted = true;
+        
+        // If a disconnect timeout was already running for this user, clear it
+        const timeoutKey = `${participantIdParam}:${room.id}`;
+        if (disconnectTimeouts.has(timeoutKey)) {
+          clearTimeout(disconnectTimeouts.get(timeoutKey));
+          disconnectTimeouts.delete(timeoutKey);
+        }
+
+        try {
+          existingClient.ws.terminate();
+        } catch(e) {}
       }
 
       wss.handleUpgrade(request, socket, head, (ws) => {
@@ -470,6 +601,7 @@ export function initializeSignaling(server: Server) {
           participantId: participantIdParam,
           isWaitingRoomEnabled: room.isWaitingRoomEnabled,
           isMobile,
+          userAgent,
           maxActiveCameras: room.maxActiveCameras ?? 15,
           maxParticipants: maxParticipants,
         });
@@ -482,7 +614,9 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId } = clientData;
+    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
+
+    logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
@@ -491,7 +625,7 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: true, isBot };
+    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isMuted: true, isBot };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -580,7 +714,8 @@ export function initializeSignaling(server: Server) {
           participantId,
           name: client.name,
           role: client.role,
-          isMobile: client.isMobile
+          isMobile: client.isMobile,
+          isMuted: client.isMuted
         });
         broadcastRoomState(roomId);
         
@@ -640,6 +775,10 @@ export function initializeSignaling(server: Server) {
     });
 
     ws.on('close', () => {
+      if (client.preempted) {
+        logger.info(`[CLEANUP] client_cleanup_ignored_preempted for user ${userId}`);
+        return;
+      }
       if (client.cleanupStarted) {
         logger.info(`[CLEANUP] client_cleanup_ignored_duplicate for user ${userId}`);
         return;
@@ -669,6 +808,13 @@ export function initializeSignaling(server: Server) {
       });
       client.transports = [];
 
+      // Clean up consumer owners to prevent invalid ownership spam
+      for (const [consumerId, owner] of consumerOwners.entries()) {
+        if (owner === client) {
+          consumerOwners.delete(consumerId);
+        }
+      }
+
       const gracePeriodMs = 30000;
       const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
@@ -681,9 +827,11 @@ export function initializeSignaling(server: Server) {
           roomClients.delete(participantId);
           if (roomClients.size === 0) {
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId); // Clean up talking indicator
+            closeRouter(roomId); // Prevent Mediasoup Router memory leaks
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
@@ -821,7 +969,7 @@ export function initializeSignaling(server: Server) {
       return;
     }
 
-    const confirmableActions = new Set(['chat', 'camera_state', 'mute_state', 'hand_raise', 'reaction', 'produce']);
+    const confirmableActions = new Set(['chat', 'camera_state', 'mute_state', 'audio_connection_status', 'hand_raise', 'reaction', 'produce']);
     const isConfirmable = confirmableActions.has(data.type) || (data.type === 'stop_producer' && data.appData?.source === 'screen');
     
     // Ensure clientEventId exists for QA/Bot scripts in these actions
@@ -859,14 +1007,14 @@ export function initializeSignaling(server: Server) {
           for (const targetClient of rooms.get(roomId)?.values() || []) {
             if (targetClient.userId === data.userId && targetClient.status === 'waiting') {
               targetClient.status = 'active';
-              targetClient.ws.send(JSON.stringify({ type: 'admitted' }));
+              targetClient.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: targetClient.userId, name: targetClient.name, role: targetClient.role }));
               
               // Re-fetch admissions set since the client object may be recreated
               let updatedAdmissions = roomAdmissions.get(roomId);
               if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
               updatedAdmissions.add(targetClient.userId);
 
-              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role }, targetClient.userId);
+              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
               broadcastRoomState(roomId);
               sendRoomHistoryAndState(targetClient);
               syncRoomStateToRedis(roomId, client.roomSlug);
@@ -1007,9 +1155,50 @@ export function initializeSignaling(server: Server) {
 
       case 'update_room_settings':
         if (client.role === 'host' || client.role === 'co-host') {
-          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false };
-          const newSettings = { ...currentSettings, ...data.settings };
+          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false, bypassWaitingRoom: false };
+          const d = data.settings || {};
+          const newSettings = { ...currentSettings };
+          
+          if (d.micLocked !== undefined) newSettings.micLocked = d.micLocked;
+          if (d.videoLocked !== undefined) newSettings.videoLocked = d.videoLocked;
+          if (d.chatLocked !== undefined) newSettings.chatLocked = d.chatLocked;
+          if (d.bypassWaitingRoom !== undefined) newSettings.bypassWaitingRoom = d.bypassWaitingRoom;
+          
+          if (d.networkDetectionEnabled !== undefined) newSettings.networkDetectionEnabled = d.networkDetectionEnabled;
+          if (d.poorNetworkRttMs !== undefined) {
+             if (d.poorNetworkRttMs >= 100 && d.poorNetworkRttMs <= 3000) newSettings.poorNetworkRttMs = d.poorNetworkRttMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (RTT)");
+          }
+          if (d.poorNetworkLossPercent !== undefined) {
+             if (d.poorNetworkLossPercent >= 1 && d.poorNetworkLossPercent <= 50) newSettings.poorNetworkLossPercent = d.poorNetworkLossPercent;
+             else logger.warn("network_detection_settings_update_rejected_validation (Loss)");
+          }
+          if (d.poorNetworkJitterMs !== undefined) {
+             if (d.poorNetworkJitterMs >= 10 && d.poorNetworkJitterMs <= 1000) newSettings.poorNetworkJitterMs = d.poorNetworkJitterMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Jitter)");
+          }
+          if (d.networkWindowSize !== undefined) {
+             if (d.networkWindowSize >= 3 && d.networkWindowSize <= 20) newSettings.networkWindowSize = d.networkWindowSize;
+             else logger.warn("network_detection_settings_update_rejected_validation (WindowSize)");
+          }
+          if (d.networkMonitorIntervalMs !== undefined) {
+             if (d.networkMonitorIntervalMs >= 1000 && d.networkMonitorIntervalMs <= 10000) newSettings.networkMonitorIntervalMs = d.networkMonitorIntervalMs;
+             else logger.warn("network_detection_settings_update_rejected_validation (Interval)");
+          }
+          
           roomSettingsMap.set(roomId, newSettings);
+          
+          db.room.update({
+            where: { id: roomId },
+            data: {
+              networkDetectionEnabled: newSettings.networkDetectionEnabled,
+              poorNetworkRttMs: newSettings.poorNetworkRttMs,
+              poorNetworkLossPercent: newSettings.poorNetworkLossPercent,
+              poorNetworkJitterMs: newSettings.poorNetworkJitterMs,
+              networkWindowSize: newSettings.networkWindowSize,
+              networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
+            }
+          }).catch((e: any) => logger.error("Failed to persist network settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
@@ -1037,6 +1226,8 @@ export function initializeSignaling(server: Server) {
               }
             }
           }
+        } else {
+          logger.warn(`network_detection_settings_update_rejected_permission: User ${client.userId} (${client.role}) attempted to update room settings in ${roomId}`);
         }
         break;
 
@@ -1047,6 +1238,7 @@ export function initializeSignaling(server: Server) {
           rc.delete(client.participantId);
           if (rc.size === 0) {
             rooms.delete(roomId);
+            cleanupRoomData(roomId);
             roomProducers.delete(roomId);
             roomAdmissions.delete(roomId);
             cleanupAudioObserver(roomId);
@@ -1073,9 +1265,26 @@ export function initializeSignaling(server: Server) {
           logger.info(`Host ${userId} ended the meeting in room ${roomId}`);
           const roomClients = rooms.get(roomId);
           if (roomClients) {
+            // Immediately destroy the room to prevent 30s grace periods on close
+            rooms.delete(roomId);
+            cleanupRoomData(roomId);
+            roomProducers.delete(roomId);
+            roomAdmissions.delete(roomId);
+            cleanupAudioObserver(roomId);
+            redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            syncRoomStateToRedis(roomId, client.roomSlug);
+            
+            closeRouter(roomId);
+            roomSettingsMap.delete(roomId);
+
             for (const [id, c] of roomClients.entries()) {
               if (c.userId !== userId) { // Don't send 'ended' to the host that just ended it
                 c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended' }));
+              }
+              
+              if (disconnectTimeouts.has(`${c.userId}:${roomId}`)) {
+                clearTimeout(disconnectTimeouts.get(`${c.userId}:${roomId}`)!);
+                disconnectTimeouts.delete(`${c.userId}:${roomId}`);
               }
               c.ws.close();
             }
@@ -1132,7 +1341,7 @@ export function initializeSignaling(server: Server) {
             serverEventId,
             roomId,
             userId,
-            senderParticipantId: userId,
+            senderParticipantId: client.participantId,
             name: client.name,
             message: data.message,
             timestamp: createdAt.toISOString(),
@@ -1155,24 +1364,27 @@ export function initializeSignaling(server: Server) {
               }
             }
           } else {
-            broadcastToRoom(roomId, msgPayload, userId);
+            broadcastToRoom(roomId, msgPayload, client.participantId);
           }
 
           asyncWithRetry(
             async () => {
+              const dbFormatMessage = {
+                id: serverEventId,
+                roomId,
+                userId,
+                senderName: client.name,
+                content: data.message,
+                fileUrl: data.fileUrl || null,
+                isPrivate: !!data.targetUserId,
+                targetUserId: data.targetUserId || null,
+                createdAt
+              };
               await db.chatMessage.create({
-                data: {
-                  id: serverEventId,
-                  roomId,
-                  userId,
-                  senderName: client.name,
-                  content: data.message,
-                  fileUrl: data.fileUrl || null,
-                  isPrivate: !!data.targetUserId,
-                  targetUserId: data.targetUserId || null,
-                  createdAt
-                }
+                data: dbFormatMessage
               });
+              // Write-through to cache after successful DB persist (Option A)
+              await appendChatToCache(roomId, dbFormatMessage);
             },
             (err) => {
               logger.error("Failed to persist chat message after retries", err);
@@ -1191,6 +1403,20 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'clear_chat': {
+        if (client.role === 'host' || client.role === 'co-host') {
+          try {
+            await db.chatMessage.deleteMany({
+              where: { roomId }
+            });
+            broadcastToRoom(roomId, { type: 'chat_cleared' });
+          } catch (e) {
+            logger.error("Failed to clear chat", e);
+          }
+        }
+        break;
+      }
+
       case 'reaction':
         if (clientEventId) {
           const serverEventId = crypto.randomUUID();
@@ -1207,7 +1433,7 @@ export function initializeSignaling(server: Server) {
             name: client.name, // Always include name so clients don't need to look it up
             reaction: data.reaction,
             broadcastAt: new Date().toISOString()
-          }, userId); // <-- userId as excludeUserId prevents the double-animation
+          }, client.participantId); // <-- userId as excludeUserId prevents the double-animation
         } else {
           broadcastToRoom(roomId, {
             type: 'reaction',
@@ -1218,7 +1444,7 @@ export function initializeSignaling(server: Server) {
             name: client.name,
             reaction: data.reaction,
             broadcastAt: new Date().toISOString()
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1227,7 +1453,7 @@ export function initializeSignaling(server: Server) {
           type: 'network_quality',
           userId,
           quality: data.quality
-        }, userId);
+        }, client.participantId);
         break;
 
       case 'caption':
@@ -1236,7 +1462,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_update':
-        if (client.role === 'host' || client.role === 'presenter') {
+        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
           if (data.link) {
             try {
               const url = new URL(data.link);
@@ -1260,13 +1486,13 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_action':
-        if (client.role === 'host' || client.role === 'presenter') {
+        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
           roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
             action: data.action,
             time: data.time
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1275,7 +1501,7 @@ export function initializeSignaling(server: Server) {
           broadcastToRoom(roomId, {
             type: 'donation_status',
             active: data.active
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1286,7 +1512,7 @@ export function initializeSignaling(server: Server) {
           name: client.name,
           amount: data.amount,
           currency: data.currency
-        }, userId);
+        }, client.participantId);
         break;
 
       case 'note_update':
@@ -1296,18 +1522,19 @@ export function initializeSignaling(server: Server) {
             create: { roomId, content: data.content },
             update: { content: data.content }
           });
+          await refreshNoteCache(roomId, data.content);
           broadcastToRoom(roomId, {
             type: 'note_update',
             userId,
             content: data.content
-          }, userId);
+          }, client.participantId);
         } catch (e) {
           logger.error("Failed to update shared note", e);
         }
         break;
 
       case 'poll_create':
-        if (client.role === 'host') {
+        if (client.role === 'host' || client.role === 'co-host') {
           try {
             const newPoll = await db.meetingPoll.create({
               data: {
@@ -1318,13 +1545,14 @@ export function initializeSignaling(server: Server) {
                 createdBy: userId,
               }
             });
+            await refreshPollsCache(roomId);
             broadcastToRoom(roomId, {
               type: 'poll_create',
               pollId: newPoll.id,
               question: newPoll.question,
               options: newPoll.options,
               userId
-            }, userId);
+            }, client.participantId);
           } catch (e) {
             logger.error("Failed to create poll", e);
           }
@@ -1337,6 +1565,7 @@ export function initializeSignaling(server: Server) {
               where: { id: data.pollId },
               data: { isActive: false }
             });
+            await refreshPollsCache(roomId);
             broadcastToRoom(roomId, {
               type: 'poll_ended',
               pollId: data.pollId
@@ -1370,6 +1599,7 @@ export function initializeSignaling(server: Server) {
               where: { id: data.pollId },
               data: { options: updatedOptions }
             });
+            await refreshPollsCache(roomId);
           }
 
           broadcastToRoom(roomId, {
@@ -1384,9 +1614,47 @@ export function initializeSignaling(server: Server) {
         }
         break;
 
+      case 'audio_connection_status': {
+        const serverEventId = crypto.randomUUID();
+        if (clientEventId) emitActionAck(client, clientEventId, 'audio_connection_status', serverEventId, 'accepted');
+        
+        logger.info(JSON.stringify({
+          event: "audio_connection_status_broadcast",
+          roomId,
+          userId,
+          participantId: client.participantId,
+          audioConnectionStatus: data.audioConnectionStatus,
+          timestamp: new Date().toISOString()
+        }));
+
+        broadcastToRoom(roomId, {
+          type: 'audio_connection_status',
+          actionType: 'audio_connection_status',
+          clientEventId,
+          serverEventId,
+          roomId,
+          userId,
+          participantId: client.participantId,
+          audioConnectionStatus: data.audioConnectionStatus,
+          broadcastAt: new Date().toISOString()
+        }, client.participantId);
+        break;
+      }
+
       case 'mute_state': {
         const serverEventId = crypto.randomUUID();
         if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
+        client.isMuted = data.isMuted;
+        
+        // Pause or resume transcription based on mute state
+        const producersList = roomProducers.get(roomId);
+        if (producersList) {
+          const audioProducer = producersList.find(p => p.participantId === client.participantId && p.kind === 'audio');
+          if (audioProducer) {
+             handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
+          }
+        }
+        
         broadcastToRoom(roomId, {
           type: 'mute_state',
           actionType: 'mute_state',
@@ -1449,7 +1717,7 @@ export function initializeSignaling(server: Server) {
           broadcastToRoom(roomId, {
             type: 'sync_panel',
             panel: data.panel
-          }, userId);
+          }, client.participantId);
         }
         break;
 
@@ -1472,8 +1740,9 @@ export function initializeSignaling(server: Server) {
               });
 
               // 2. Generate secure short-lived token for the bot
+              const participantId = crypto.randomUUID();
               const botToken = jwt.sign(
-                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id },
+                { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: recording.id, participantId },
                 process.env.JWT_SECRET || 'fallback',
                 { expiresIn: '4h' }
               );
@@ -1484,7 +1753,7 @@ export function initializeSignaling(server: Server) {
                 roomSlug: room.slug,
                 recordingId: recording.id,
                 botToken,
-                url: `${protocol}://${domain}/meeting/${room.slug}?botToken=${botToken}`
+                url: `${protocol}://${domain}/recording/${room.slug}?botToken=${botToken}`
               });
 
               if (launchResult.queued) {
@@ -1543,7 +1812,8 @@ export function initializeSignaling(server: Server) {
                   participantId: c.participantId,
                   name: c.name,
                   role: c.role,
-                  isMobile: c.isMobile
+                  isMobile: c.isMobile,
+                  isMuted: c.isMuted
                 });
                 sendRoomHistoryAndState(c);
               }
@@ -1557,11 +1827,16 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           const roomClients = rooms.get(roomId);
           if (roomClients) {
+            let deniedAny = false;
             for (const [id, c] of Array.from(roomClients.entries())) {
               if (c.status === 'waiting') {
                 c.ws.send(JSON.stringify({ type: 'error', message: 'You have been denied entry to this room.' }));
                 roomClients.delete(id);
+                deniedAny = true;
               }
+            }
+            if (deniedAny) {
+              broadcastToHosts(roomId, { type: 'waiting_room_denied_all' });
             }
           }
         }
@@ -1578,6 +1853,7 @@ export function initializeSignaling(server: Server) {
               question: data.question,
             }
           });
+          await refreshQaCache(roomId);
           broadcastToRoom(roomId, {
             type: 'qa_updated',
             action: 'ask',
@@ -1601,6 +1877,7 @@ export function initializeSignaling(server: Server) {
                   voterIds: [...voterIds, userId]
                 }
               });
+              await refreshQaCache(roomId);
               broadcastToRoom(roomId, {
                 type: 'qa_updated',
                 action: 'upvote',
@@ -1624,6 +1901,7 @@ export function initializeSignaling(server: Server) {
                 answeredBy: client.name
               }
             });
+            await refreshQaCache(roomId);
             broadcastToRoom(roomId, {
               type: 'qa_updated',
               action: 'answer',
@@ -1639,6 +1917,7 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           try {
             await db.meetingQA.delete({ where: { id: data.questionId } });
+            await refreshQaCache(roomId);
             broadcastToRoom(roomId, {
               type: 'qa_updated',
               action: 'delete',
@@ -1783,7 +2062,7 @@ export function initializeSignaling(server: Server) {
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
 
         // Broadcast to others — include appData.source so they render screen share correctly
-        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData }, userId);
+        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData }, client.participantId);
 
         // For screen share, send a dedicated state event so peers update isScreenSharing immediately
         if (source === 'screen') {
@@ -1798,12 +2077,16 @@ export function initializeSignaling(server: Server) {
             senderParticipantId: userId,
             producerId,
             broadcastAt: new Date().toISOString()
-          }, userId);
+          }, client.participantId);
         }
         break;
       }
 
       case 'consume': {
+        const now = Date.now();
+        if (!consumeBursts.has(roomId)) consumeBursts.set(roomId, []);
+        consumeBursts.get(roomId)!.push(now);
+        
         try {
           const router = await getOrCreateRouter(roomId);
           const allProducers = Array.from(roomProducers.values()).flat();
@@ -1815,7 +2098,9 @@ export function initializeSignaling(server: Server) {
           let canConsume = false;
           try {
             canConsume = router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
-          } catch (err) {} // catch if router or producer doesn't exist
+          } catch (err) {
+            logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
+          }
 
           // 1. Log structured attempt
           logger.info(JSON.stringify({
@@ -1839,7 +2124,7 @@ export function initializeSignaling(server: Server) {
           if (!hasRecvTransport) failReason = "RECV_TRANSPORT_NOT_READY";
           else if (!hasRtpCapabilities) failReason = "MISSING_RTP_CAPABILITIES";
           else if (!targetProducer) failReason = "PRODUCER_CLOSED";
-          else if (targetProducer.userId === userId) failReason = "SELF_CONSUME_BLOCKED";
+          else if (targetProducer.participantId === client.participantId) failReason = "SELF_CONSUME_NOT_ALLOWED";
           else if (!canConsume) {
             failReason = "RTP_CAPABILITIES_MISMATCH";
             sfuProducer = getProducer(data.producerId);
@@ -1908,7 +2193,8 @@ export function initializeSignaling(server: Server) {
             logger.warn(JSON.stringify(errPayload));
             client.ws.send(JSON.stringify({
               type: 'consume_failed',
-              errorCode: 'CLIENT_CANNOT_CONSUME_PRODUCER',
+              requestId: data.requestId,
+              errorCode: failReason === "RTP_CAPABILITIES_MISMATCH" ? preciseReason : failReason,
               producerId: data.producerId,
               producerKind: targetProducer?.kind || "unknown",
               producerSource: targetProducer?.appData?.source || "unknown",
@@ -1955,7 +2241,7 @@ export function initializeSignaling(server: Server) {
           );
           // Track which client owns this consumer for cleanup
           consumerOwners.set(consumerParams.id, client);
-          client.ws.send(JSON.stringify({ type: 'consumed', ...consumerParams }));
+          client.ws.send(JSON.stringify({ type: 'consumed', requestId: data.requestId, ...consumerParams }));
         } catch (e) {
           logger.warn(`Consume failed for producer ${data.producerId}:`, e);
           // Don't send a response, let the client timeout or we can send an error response if we want.
@@ -1983,9 +2269,36 @@ export function initializeSignaling(server: Server) {
         }
         client.transports = [];
         
+        // Clean up consumer owners to prevent invalid ownership spam on reconnect
+        for (const [consumerId, owner] of consumerOwners.entries()) {
+          if (owner === client) {
+            consumerOwners.delete(consumerId);
+          }
+        }
+        
         const rp = roomProducers.get(roomId);
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
+        }
+        break;
+      }
+
+      case 'restart_ice': {
+        const { transportId } = data;
+        try {
+          logger.info(`User ${userId} requesting ICE Restart for transport ${transportId}`);
+          const iceParameters = await restartIce(transportId);
+          client.ws.send(JSON.stringify({
+            type: 'ice_restarted',
+            transportId,
+            iceParameters
+          }));
+        } catch (error) {
+          logger.error(`Failed to restart ICE for transport ${transportId}: ${error}`);
+          client.ws.send(JSON.stringify({
+            type: 'error',
+            message: 'Failed to restart ICE'
+          }));
         }
         break;
       }
@@ -2024,10 +2337,10 @@ export function initializeSignaling(server: Server) {
               senderParticipantId: userId,
               producerId: pidToStop,
               broadcastAt: new Date().toISOString()
-            }, userId);
+            }, client.participantId);
           } else {
             // Send producer_closed event to everyone else
-            broadcastToRoom(roomId, { type: 'producer_closed', producerId: pidToStop }, userId);
+            broadcastToRoom(roomId, { type: 'producer_closed', producerId: pidToStop }, client.participantId);
           };
         }
         break;
@@ -2045,7 +2358,9 @@ export function initializeSignaling(server: Server) {
 
       case 'pause_consumer': {
         if (consumerOwners.get(data.consumerId) !== client) {
-          logger.warn(`User ${userId} tried to pause a consumer they don't own`);
+          logger.warn(`User ${userId} tried to pause a consumer they don't own (${data.consumerId})`);
+          // Send an error response so the client's await doesn't time out
+          client.ws.send(JSON.stringify({ type: 'error', errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
           return;
         }
         await pauseConsumer(data.consumerId);
@@ -2064,7 +2379,7 @@ export function initializeSignaling(server: Server) {
       case 'getProducers': {
         const producers = roomProducers.get(roomId) || [];
         // Exclude own producers
-        const othersProducers = producers.filter(p => p.userId !== userId);
+        const othersProducers = producers.filter(p => p.participantId !== client.participantId);
         // Include appData so late joiners know which producers are screen share vs camera
         client.ws.send(JSON.stringify({ type: 'producersList', producers: othersProducers }));
         break;
@@ -2072,6 +2387,10 @@ export function initializeSignaling(server: Server) {
 
       case 'ping':
         // Silently ignore ping messages used for keep-alive
+        break;
+
+      case 'webrtc_client_stats':
+        logger.info(`[ClientStats] Room ${roomId} | User ${client.userId}: RTT=${data.roundTripTime || 0}ms, Jitter=${data.jitter || 0}, Loss=${data.packetsLost || 0}`);
         break;
 
       default:
@@ -2085,7 +2404,7 @@ export function initializeSignaling(server: Server) {
     broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
   }
 
-  function broadcastToRoom(roomId: string, message: any, excludeUserId?: string) {
+  function broadcastToRoom(roomId: string, message: any, excludeParticipantId?: string) {
     const roomClients = rooms.get(roomId);
     if (!roomClients) return;
 
@@ -2099,7 +2418,7 @@ export function initializeSignaling(server: Server) {
       const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
       for (let i = currentIndex; i < end; i++) {
         const [id, client] = clientsArr[i];
-        if (client.userId !== excludeUserId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+        if (id !== excludeParticipantId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
           client.ws.send(payload);
         }
       }

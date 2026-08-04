@@ -142,10 +142,10 @@ export default function RecordingViewerPage({ params }: { params: Promise<{ reco
                   <Calendar className="w-4 h-4" /> {data?.recording?.createdAt ? new Date(data.recording.createdAt).toLocaleDateString() : 'N/A'}
                 </div>
                 <div className={`flex items-center gap-1.5 ${theme.iconBg} px-3 py-1.5 rounded-lg border ${theme.border}`}>
-                  <Clock className="w-4 h-4" /> {data?.recording?.duration ? Math.floor(data.recording.duration / 60) + 'm' : 'Unknown Duration'}
+                  <Clock className="w-4 h-4" /> {data?.recording?.duration > 0 ? Math.floor(data.recording.duration / 60) + 'm ' + (data.recording.duration % 60) + 's' : 'Unknown Duration'}
                 </div>
                 <div className={`flex items-center gap-1.5 ${theme.iconBg} px-3 py-1.5 rounded-lg border ${theme.border}`}>
-                  <Users className="w-4 h-4" /> {data?.room?.name || 'N/A'}
+                  <Users className="w-4 h-4" /> {data?.recording?.room?.name || 'N/A'}
                 </div>
                 <div className={`flex items-center gap-1.5 ${theme.iconBg} px-3 py-1.5 rounded-lg border ${theme.border}`}>
                   <span className="w-2 h-2 rounded-full bg-brand-green animate-pulse" />
@@ -272,10 +272,10 @@ export default function RecordingViewerPage({ params }: { params: Promise<{ reco
 
           <div className={`p-4 rounded-xl border ${isDarkMode ? 'border-white/10 bg-white/[0.02]' : 'border-slate-200 bg-slate-50'} space-y-3`}>
             <div className="flex gap-2">
-              <Input 
+              <input 
                 value={typeof window !== 'undefined' ? window.location.href : ''} 
                 readOnly 
-                className={`h-10 ${isDarkMode ? 'bg-black/20 text-white border-white/10' : 'bg-white text-slate-900 border-slate-200'}`} 
+                className={`flex-1 px-4 py-2 rounded-xl border outline-none ${isDarkMode ? 'bg-black/20 text-white border-white/10' : 'bg-white text-slate-900 border-slate-200'}`} 
               />
               <Button 
                 onClick={() => {

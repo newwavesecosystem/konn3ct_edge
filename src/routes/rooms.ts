@@ -8,6 +8,39 @@ import { sendPushNotification } from '../notifications/push';
 
 export const roomsRouter = Router();
 
+const feedbackSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  feedback: z.string().optional()
+});
+
+roomsRouter.post('/:slug/feedback', async (req: Request, res: Response) => {
+  try {
+    const slug = req.params.slug as string;
+    const { rating, feedback } = feedbackSchema.parse(req.body);
+
+    const room = await db.room.findUnique({ where: { slug } });
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    const meetingFeedback = await db.meetingFeedback.create({
+      data: {
+        roomId: room.id,
+        rating,
+        feedback: feedback || null,
+      }
+    });
+
+    res.status(201).json({ message: 'Feedback submitted', feedback: meetingFeedback });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid input', details: error.flatten().fieldErrors });
+    }
+    logger.error('Error submitting feedback', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 roomsRouter.use(requireAuth);
 
 const createRoomSchema = z.object({

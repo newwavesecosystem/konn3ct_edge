@@ -7,7 +7,15 @@ import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import path from 'path';
+import client from 'prom-client';
 import { initializeSignaling } from './signaling/server';
+import { startDeepTelemetry } from './telemetry';
+
+// Initialize default prometheus metrics
+client.collectDefaultMetrics();
+startDeepTelemetry();
+
+
 import { initializeWorkers } from './media/sfu';
 import { config } from './media/config';
 import { logger } from './logger';
@@ -24,6 +32,7 @@ import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
 import { streamingRouter } from './routes/streaming';
+import { internalRecordingsRouter } from './routes/internalRecordings';
 
 if (process.env.NODE_ENV === 'production') {
   const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
@@ -102,6 +111,18 @@ app.use('/api/telephony', telephonyRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/external/v1', externalRouter);
 app.use('/api/streaming', streamingRouter);
+app.use('/api/internal/recordings', internalRecordingsRouter);
+
+// Prometheus metrics endpoint for Phase 0 Baseline
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (ex) {
+    res.status(500).end(String(ex));
+  }
+});
+
 
 // Basic 404 handler
 app.use((req, res) => {

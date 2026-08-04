@@ -22,7 +22,8 @@ vi.stubGlobal('navigator', {
       getVideoTracks: () => [{
         onended: vi.fn(),
         stop: vi.fn()
-      }]
+      }],
+      getAudioTracks: () => []
     })
   }
 });
@@ -205,6 +206,39 @@ describe('WebRTCClient Camera Fallback', () => {
       JSON.stringify({ type: 'stop_producer', producerId: 'prod1', appData: { source: 'camera' } })
     );
   });
+
+  it('translates NotAllowedError to actionable message', async () => {
+    const getUserMedia = global.navigator.mediaDevices.getUserMedia as any;
+    getUserMedia.mockImplementation(async () => {
+      const err = new Error('Permission denied');
+      err.name = 'NotAllowedError';
+      throw err;
+    });
+
+    await expect(webrtc.enableCamera()).rejects.toThrow("Permission denied: Please allow camera access in your browser or system settings.");
+  });
+
+  it('translates NotFoundError to actionable message', async () => {
+    const getUserMedia = global.navigator.mediaDevices.getUserMedia as any;
+    getUserMedia.mockImplementation(async () => {
+      const err = new Error('Not found');
+      err.name = 'NotFoundError';
+      throw err;
+    });
+
+    await expect(webrtc.enableCamera()).rejects.toThrow("No camera found: Please connect a camera or continue audio-only.");
+  });
+
+  it('translates NotReadableError to actionable message', async () => {
+    const getUserMedia = global.navigator.mediaDevices.getUserMedia as any;
+    getUserMedia.mockImplementation(async () => {
+      const err = new Error('Not readable');
+      err.name = 'NotReadableError';
+      throw err;
+    });
+
+    await expect(webrtc.enableCamera()).rejects.toThrow("Camera busy: Another app may be using the camera, or the OS blocked it.");
+  });
 });
 
 describe('WebRTCClient Screen Share Codec Selection', () => {
@@ -215,16 +249,26 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
     client = new WebRTCClient('test-room', 'test-user', 'Test User', 'attendee');
   });
 
-  it('should prefer H.264 packetization-mode=1 if available in device capabilities', async () => {
+  it('should prefer VP8, then H.264 Baseline if available in device capabilities', async () => {
+    // Mock navigator.mediaDevices.getDisplayMedia
+    const mockTrack = { stop: vi.fn(), kind: 'video' };
+    (global.navigator as any).mediaDevices = {
+      getDisplayMedia: vi.fn().mockResolvedValue({
+        getVideoTracks: () => [mockTrack],
+        getAudioTracks: () => [],
+        getTracks: () => [mockTrack]
+      })
+    };
+
     const mockProduce = vi.fn().mockResolvedValue({
-      id: 'screen-prod',
-      track: { stop: vi.fn(), onended: vi.fn() },
+      id: 'screen-1',
       close: vi.fn(),
       paused: false,
       closed: false,
-      rtpParameters: { codecs: [{ mimeType: 'video/H264' }] }
+      rtpParameters: { codecs: [{ mimeType: 'video/VP8' }] }
     });
 
+    const mockVP8Codec = { mimeType: 'video/vp8' };
     const mockH264Codec = {
       mimeType: 'video/h264',
       parameters: { 'packetization-mode': 1, 'profile-level-id': '42e01f' }
@@ -234,7 +278,7 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
     (client as any).device = {
       rtpCapabilities: {
         codecs: [
-          { mimeType: 'video/vp8' },
+          mockVP8Codec,
           { mimeType: 'video/vp9' },
           mockH264Codec
         ]
@@ -245,7 +289,7 @@ describe('WebRTCClient Screen Share Codec Selection', () => {
 
     expect(mockProduce).toHaveBeenCalledWith(
       expect.objectContaining({
-        codec: mockH264Codec,
+        codec: mockVP8Codec,
         appData: { source: 'screen' }
       })
     );
