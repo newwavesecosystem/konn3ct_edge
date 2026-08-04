@@ -15,7 +15,9 @@ import {
   Platform,
   Animated,
   Switch,
+  Share,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
@@ -36,6 +38,9 @@ import {
   RefreshCw,
   Zap,
   Calendar,
+  Ban,
+  UserKey,
+  Share2
 } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import {
@@ -255,13 +260,13 @@ export default function RoomsScreen() {
       const res = await createRoom(payload);
       if (res.success) {
         setCreateSuccess('Room created successfully!');
-        // Reload list
-        await loadRooms();
         setTimeout(() => {
           setShowCreateModal(false);
           setCreateSuccess('');
           setCreateForm({ name: '', url: '', mode: 'meeting', privacy: 0, color: '', access_code: '' });
         }, 1200);
+        // Reload list
+        await loadRooms();
       } else {
         setCreateError(res.message || 'Failed to create room.');
       }
@@ -354,7 +359,7 @@ export default function RoomsScreen() {
     { label: 'Total Rooms', value: stats.total, icon: Video, color: COLORS.brandBlue },
     { label: 'Active', value: stats.active, icon: Play, color: COLORS.brandGreen },
     { label: 'Scheduled', value: stats.scheduled, icon: Globe, color: COLORS.amber },
-    { label: 'Inactive', value: stats.inactive, icon: Lock, color: COLORS.danger },
+    { label: 'Inactive', value: stats.inactive, icon: Ban, color: COLORS.textMuted },
   ];
 
   const renderStatCard = (item: typeof STAT_ITEMS[0], idx: number) => {
@@ -377,6 +382,7 @@ export default function RoomsScreen() {
   const renderRoomCard = (room: Room, index: number) => {
     const palette = getPalette(room, index);
     const isLocked = room.privacy === 1 || String(room.privacy) === '1';
+    const accessCodeRequired = room.password_attendee != "";
     const isStarting = startingRoomId === room.id;
     const isDeleting = deletingRoomId === room.id;
 
@@ -449,6 +455,14 @@ export default function RoomsScreen() {
                 {room.mode || 'meeting'}
               </Text>
             </View>
+
+            {accessCodeRequired ? (
+              <View style={[styles.statusBadge, { backgroundColor: COLORS.dangerBg }]}>
+                <UserKey color={COLORS.danger} size={11} />
+                <Text style={[styles.statusText, { color: COLORS.danger }]}>Access Code</Text>
+              </View>
+            ) : null}
+
           </View>
 
           {/* Footer row */}
@@ -464,6 +478,43 @@ export default function RoomsScreen() {
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Calendar color={COLORS.textMuted} size={14} />
+              </TouchableOpacity>
+
+              {/* Share Room */}
+              <TouchableOpacity
+                testID={`share-room-${room.url}`}
+                style={styles.roomActionBtn}
+                onPress={async () => {
+                  const govMDA = await AsyncStorage.getItem('@1gov_mda');
+                  let roomUrl = `${EDGE_FRONTEND_URL}/join/${room.url}`;
+                  if (govMDA != null) {
+                    roomUrl = roomUrl.replace('govsupport', govMDA || '');
+                  }
+
+                  const roomTitle = room.name || 'Meeting Room';
+                  const modeText = room.mode ? room.mode.charAt(0).toUpperCase() + room.mode.slice(1) : 'Meeting';
+                  const privacyText = room.privacy === 1 ? 'Private' : 'Public';
+
+                  let shareMessage = `🎥 You're invited to join a ${modeText}: ${roomTitle}\n\n`;
+                  shareMessage += `🔒 Mode: ${privacyText} ${modeText}\n`;
+                  if (room.access_code) {
+                    shareMessage += `🔑 Access Code: ${room.access_code}\n`;
+                  }
+                  shareMessage += `\n🔗 Join the room here:\n${roomUrl}`;
+
+                  try {
+                    await Share.share({
+                      title: `Join ${roomTitle}`,
+                      message: shareMessage,
+                      url: roomUrl,
+                    });
+                  } catch (error) {
+                    console.error('Error sharing room link:', error);
+                  }
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Share2 color={COLORS.textMuted} size={14} />
               </TouchableOpacity>
 
               {/* Copy URL */}
@@ -612,7 +663,7 @@ export default function RoomsScreen() {
                     placeholder="my-room-name"
                     placeholderTextColor={COLORS.textMuted}
                     value={createForm.url}
-                    editable={false}
+                    editable={true}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
