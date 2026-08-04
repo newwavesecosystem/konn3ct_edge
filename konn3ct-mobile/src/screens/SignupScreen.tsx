@@ -213,6 +213,7 @@ function RegisterStep({
                     onChangeText={setFirstname}
                     onFocus={() => setFocused('firstname')}
                     onBlur={() => setFocused(null)}
+                    testID="signup-firstname-input"
                   />
                 </View>
               </View>
@@ -228,6 +229,7 @@ function RegisterStep({
                     onChangeText={setLastname}
                     onFocus={() => setFocused('lastname')}
                     onBlur={() => setFocused(null)}
+                    testID="signup-lastname-input"
                   />
                 </View>
               </View>
@@ -248,6 +250,7 @@ function RegisterStep({
                   keyboardType="email-address"
                   onFocus={() => setFocused('email')}
                   onBlur={() => setFocused(null)}
+                  testID="signup-email-input"
                 />
               </View>
             </View>
@@ -266,6 +269,7 @@ function RegisterStep({
                   keyboardType="phone-pad"
                   onFocus={() => setFocused('phone')}
                   onBlur={() => setFocused(null)}
+                  testID="signup-phone-input"
                 />
               </View>
             </View>
@@ -284,6 +288,7 @@ function RegisterStep({
                   secureTextEntry={!showPassword}
                   onFocus={() => setFocused('password')}
                   onBlur={() => setFocused(null)}
+                  testID="signup-password-input"
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
                   {showPassword ? (
@@ -309,6 +314,7 @@ function RegisterStep({
                   secureTextEntry={!showConfirmPassword}
                   onFocus={() => setFocused('confirm')}
                   onBlur={() => setFocused(null)}
+                  testID="signup-confirm-password-input"
                 />
                 <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>
                   {showConfirmPassword ? (
@@ -325,6 +331,7 @@ function RegisterStep({
               onPress={handleRegister}
               disabled={loading}
               activeOpacity={0.85}
+              testID="signup-submit-btn"
             >
               {loading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
               <Text style={styles.primaryButtonText}>

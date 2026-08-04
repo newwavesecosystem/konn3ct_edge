@@ -23,6 +23,16 @@ const PipService = {
   },
 
   /**
+   * Tell the native side whether a meeting is currently in progress.
+   * When true, pressing Home will auto-enter PiP mode (like Google Meet).
+   */
+  setMeetingActive(active: boolean): void {
+    if (KonnPip) {
+      KonnPip.setMeetingActive(active);
+    }
+  },
+
+  /**
    * Enter Picture-in-Picture mode.
    * @param width  Aspect ratio width  (default 16)
    * @param height Aspect ratio height (default 9)

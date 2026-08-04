@@ -305,13 +305,22 @@ export default function RecordingsScreen() {
 
         {/* Recordings List */}
         <View style={styles.recordingsList}>
-          {recordings.length === 0 && !isLoading ? (
-             <View style={{ padding: 40, alignItems: 'center' }}>
-               <Text style={{ color: COLORS.textMuted }}>No recordings found.</Text>
-             </View>
-          ) : (
-             recordings.map((r, idx) => renderRecordingCard(r, idx))
-          )}
+          {(() => {
+            const filteredRecordings = recordings.filter(r => 
+              (r.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+            );
+            
+            if (filteredRecordings.length === 0 && !isLoading) {
+              return (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Text style={{ color: COLORS.textMuted }}>
+                    {searchQuery ? 'No recordings match your search.' : 'No recordings found.'}
+                  </Text>
+                </View>
+              );
+            }
+            return filteredRecordings.map((r, idx) => renderRecordingCard(r, idx));
+          })()}
         </View>
       </ScrollView>
     </View>

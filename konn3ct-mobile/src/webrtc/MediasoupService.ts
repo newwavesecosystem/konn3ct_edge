@@ -1,11 +1,14 @@
 import { Device, types } from 'mediasoup-client';
-import { MediaStream } from 'react-native-webrtc';
+import { MediaStream, mediaDevices } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
 import { useMeetingStore } from '../store/useMeetingStore';
 
-// Signal server domain — as specified by the team:
-// https://konn3ctedge.konn3ct.net/signal
-export const SIGNAL_SERVER_DOMAIN = process.env.EXPO_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
+// Signal server domain — read from EXPO_PUBLIC_BACKEND_DOMAIN.
+// Falls back to extracting the hostname from EXPO_PUBLIC_EDGE_FRONTEND_URL.
+const EDGE_URL = process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL || 'https://edge-test.konn3ct.net';
+export const SIGNAL_SERVER_DOMAIN =
+  process.env.EXPO_PUBLIC_BACKEND_DOMAIN ||
+  EDGE_URL.replace(/^https?:\/\//, '').split('/')[0];
 const BACKEND_DOMAIN = SIGNAL_SERVER_DOMAIN;
 
 export interface RemoteParticipant {
@@ -25,6 +28,8 @@ export class MediasoupService {
   
   private localVideoProducer: types.Producer | null = null;
   private localAudioProducer: types.Producer | null = null;
+  private screenShareProducer: types.Producer | null = null;
+  public localScreenTrack: MediaStreamTrack | null = null;
   private consumers: Map<string, types.Consumer> = new Map();
   private remoteStreams: Map<string, MediaStream> = new Map();
   private remoteScreenStreams = new Map<string, MediaStream>();
@@ -47,6 +52,7 @@ export class MediasoupService {
   private _cachedParticipantsList: any[] | null = null;
   private _cachedChatHistory: any[] | null = null;
   private _cachedPollHistory: any[] | null = null;
+  private _cachedUserJoined: any[] = [];
 
   // Connection State
   
@@ -74,6 +80,9 @@ export class MediasoupService {
   public onReconnecting?: (attempt: number) => void;
   public onReconnected?: () => void;
   public onReconnectFailed?: () => void;
+  public onScreenShareStarted?: (userId: string, producerId: string) => void;
+  public onScreenShareStopped?: (userId: string, producerId: string) => void;
+  public onRoleChanged?: (userId: string, newRole: string) => void;
   
   public roomId: string;
   public sessionStatus?: string;
@@ -183,6 +192,13 @@ export class MediasoupService {
       this.onPollHistory(this._cachedPollHistory);
       this._cachedPollHistory = null;
     }
+    // Replay any user_joined events that arrived before MeetingScreen registered callbacks
+    if (this._cachedUserJoined.length > 0 && this.onUserJoined) {
+      for (const user of this._cachedUserJoined) {
+        this.onUserJoined(user);
+      }
+      this._cachedUserJoined = [];
+    }
   }
 
   private notifyStreamUpdate() {
@@ -241,7 +257,7 @@ export class MediasoupService {
     });
   }
 
-  public async connect(meetingToken?: string) {
+  public async connect(meetingToken?: string, customSignalUrl?: string) {
     if (!meetingToken) {
       throw new Error(
         'No meeting JWT provided – the signal server requires a JWT, not a Sanctum token. '
@@ -251,17 +267,35 @@ export class MediasoupService {
     const token = meetingToken;
     this._lastMeetingToken = meetingToken;
 
-    // Only URL-encode the name (may contain spaces). The token must be passed
-    // raw — the signal server validates it as-is before the WebSocket upgrade,
-    // and encoding the pipe character (| → %7C) causes a 401 Unauthorized.
+    let wsUrl = '';
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
-    const wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
+
+    if (customSignalUrl && customSignalUrl.trim()) {
+      let formattedUrl = customSignalUrl.trim();
+
+      if (!formattedUrl.startsWith('ws://') && !formattedUrl.startsWith('wss://')) {
+        formattedUrl = `wss://${formattedUrl.replace(/^https?:\/\//, '')}`;
+      }
+
+      // Remove trailing slash if present
+      formattedUrl = formattedUrl.replace(/\/+$/, '');
+
+      // Ensure /signal endpoint path is present
+      if (!formattedUrl.includes('/signal')) {
+        formattedUrl = `${formattedUrl}/signal`;
+      }
+
+      const separator = formattedUrl.includes('?') ? '&' : '?';
+      wsUrl = `${formattedUrl}${separator}roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
+    } else {
+      wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
+    }
     
     console.log('--- WEBSOCKET CONNECTION INFO ---');
-    console.log('Connecting to Domain:', BACKEND_DOMAIN);
+    console.log('Signal URL Source:', customSignalUrl || BACKEND_DOMAIN);
     console.log('Room ID:', this.roomId);
     console.log('Token Length:', token ? token.length : 'NO TOKEN');
-    console.log('Full WS URL (first 100 chars):', wsUrl.substring(0, 100) + '...');
+    console.log('Full WS URL:', wsUrl);
     console.log('---------------------------------');
     
     this.ws = new WebSocket(wsUrl);
@@ -420,6 +454,9 @@ export class MediasoupService {
                 );
               }
               setTimeout(() => this.notifyStreamUpdate(), 100);
+            } else {
+              // Cache for replay when MeetingScreen registers the callback (lobby handoff)
+              this._cachedUserJoined.push(msg);
             }
             break;
 
@@ -432,6 +469,17 @@ export class MediasoupService {
               this.remoteScreenStreams.delete(msg.userId);
               this.notifyStreamUpdate();
             }
+            break;
+
+          case 'role_changed':
+            // Update own role & isHost flag if this message targets the current user
+            if (msg.userId === this.currentUserId) {
+              this.currentUserRole = msg.role;
+              useMeetingStore.getState().setCurrentUser(msg.userId, msg.role);
+            }
+            // Update the participant list entry for any user
+            useMeetingStore.getState().updateParticipantRole(msg.userId, msg.role);
+            if (this.onRoleChanged) this.onRoleChanged(msg.userId, msg.role);
             break;
 
           case 'chat_history':
@@ -496,6 +544,21 @@ export class MediasoupService {
 
           case 'recording_stopped':
             if (this.onRecordingStopped) this.onRecordingStopped();
+            break;
+
+          case 'screen_share_started':
+            console.log(`[MediasoupService] screen_share_started from ${msg.userId}`);
+            if (this.onScreenShareStarted) this.onScreenShareStarted(msg.userId, msg.producerId);
+            break;
+
+          case 'screen_share_stopped':
+            console.log(`[MediasoupService] screen_share_stopped from ${msg.userId}`);
+            // Clean up the remote screen stream for the user who stopped sharing
+            if (msg.userId && this.remoteScreenStreams.has(msg.userId)) {
+              this.remoteScreenStreams.delete(msg.userId);
+              this.notifyStreamUpdate();
+            }
+            if (this.onScreenShareStopped) this.onScreenShareStopped(msg.userId, msg.producerId);
             break;
 
           case 'newProducer':
@@ -670,7 +733,7 @@ export class MediasoupService {
           appData: { source: 'camera' }
         }));
       }
-      this.localVideoProducer = undefined;
+      this.localVideoProducer = null;
     }
   }
 
@@ -712,7 +775,7 @@ export class MediasoupService {
           appData: { source: 'mic' }
         }));
       }
-      this.localAudioProducer = undefined;
+      this.localAudioProducer = null;
     }
   }
 
@@ -818,6 +881,8 @@ export class MediasoupService {
   public disconnect() {
     this._intentionalDisconnect = true;
     if (this.pingInterval) clearInterval(this.pingInterval);
+    // Stop local screen share if active
+    this.disableScreenShare();
     if (this.sendTransport) this.sendTransport.close();
     if (this.recvTransport) this.recvTransport.close();
     if (this.ws) this.ws.close();
@@ -880,6 +945,31 @@ export class MediasoupService {
           }
         }
 
+        // Re-publish local screen share if the track is still live
+        if (this.localScreenTrack && this.localScreenTrack.readyState === 'live') {
+          console.log('[Reconnect] Re-publishing screen share...');
+          try {
+            if (this.screenShareProducer) {
+              this.screenShareProducer.close();
+              this.screenShareProducer = null;
+            }
+            this.screenShareProducer = await this.sendTransport!.produce({
+              track: this.localScreenTrack as any,
+              appData: { source: 'screen' },
+              encodings: [{ maxBitrate: 500000, maxFramerate: 10 }],
+              codecOptions: { videoGoogleStartBitrate: 500 }
+            });
+            console.log(`[Reconnect] Screen share re-published: id=${this.screenShareProducer.id}`);
+          } catch (e) {
+            console.error('[Reconnect] Failed to re-publish screen share:', e);
+            this.localScreenTrack = null;
+          }
+        } else if (this.localScreenTrack) {
+          // Track ended during reconnection, clean up
+          this.localScreenTrack = null;
+          this.screenShareProducer = null;
+        }
+
         console.log('Reconnected successfully!');
         this._reconnectAttempts = 0;
         this._isReconnecting = false;
@@ -910,6 +1000,89 @@ export class MediasoupService {
     if (audioTrack && audioTrack.enabled && audioTrack.readyState === 'live') {
       await this.enableMic(audioTrack);
     }
+  }
+
+  // ── Screen Share ────────────────────────────────────────────────────────────
+
+  /**
+   * Start sharing the device screen.
+   * Calls getDisplayMedia() which triggers the Android MediaProjection permission
+   * dialog. Creates a separate mediasoup producer with `appData: { source: 'screen' }`
+   * so the server and remote peers identify it as a screen share (not camera).
+   *
+   * Uses conservative encoding (500 Kbps, 10 fps) to preserve mobile data.
+   */
+  public async enableScreenShare(): Promise<MediaStreamTrack> {
+    if (!this.device || !this.sendTransport) {
+      throw new Error('Device not initialized — cannot start screen share');
+    }
+    if (this.screenShareProducer && !this.screenShareProducer.closed) {
+      throw new Error('Screen share already active');
+    }
+
+    console.log('[ScreenShare] Requesting getDisplayMedia...');
+    const stream = await (mediaDevices as any).getDisplayMedia({
+      video: { frameRate: { ideal: 10, max: 15 } }
+    });
+    const screenTrack = stream.getVideoTracks()[0];
+    if (!screenTrack) {
+      throw new Error('No video track from getDisplayMedia');
+    }
+    this.localScreenTrack = screenTrack;
+    console.log(`[ScreenShare] Got screen track: id=${screenTrack.id}, readyState=${screenTrack.readyState}`);
+
+    // Create a SEPARATE producer — camera producer stays untouched
+    this.screenShareProducer = await this.sendTransport.produce({
+      track: screenTrack as any,
+      appData: { source: 'screen' },
+      encodings: [{ maxBitrate: 500000, maxFramerate: 10 }],
+      codecOptions: { videoGoogleStartBitrate: 500 }
+    });
+    console.log(`[ScreenShare] Screen producer created: id=${this.screenShareProducer.id}`);
+
+    // Auto-stop when the OS stops the screen capture (e.g. notification bar "Stop")
+    screenTrack.onended = () => {
+      console.log('[ScreenShare] Screen track ended by OS — stopping producer');
+      this.disableScreenShare();
+    };
+
+    return screenTrack;
+  }
+
+  /**
+   * Stop sharing the device screen.
+   * Sends `stop_producer` to the server, stops the track, and closes the producer.
+   */
+  public disableScreenShare() {
+    if (this.screenShareProducer) {
+      const producerId = this.screenShareProducer.id;
+      console.log(`[ScreenShare] Stopping screen share producer: id=${producerId}`);
+
+      // Tell the server FIRST so it can broadcast screen_share_stopped
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'stop_producer',
+          producerId,
+          appData: { source: 'screen' }
+        }));
+      }
+
+      // Stop the track so the OS screen capture indicator disappears
+      if (this.localScreenTrack) {
+        this.localScreenTrack.stop();
+        this.localScreenTrack = null;
+      }
+
+      this.screenShareProducer.close();
+      this.screenShareProducer = null;
+    }
+  }
+
+  /**
+   * Returns true if the local user is currently sharing their screen.
+   */
+  public get isScreenSharing(): boolean {
+    return this.screenShareProducer != null && !this.screenShareProducer.closed;
   }
 
   // ── Transport Stats (for network quality monitoring) ───────────────────────

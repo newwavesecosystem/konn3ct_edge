@@ -1,4 +1,5 @@
-const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Gov Conference';
+// Gov Conference — dedicated branch (gov1_mobile)
+const APP_NAME = 'Gov Conference';
 
 module.exports = {
   expo: {
@@ -10,12 +11,12 @@ module.exports = {
     userInterfaceStyle: 'light',
     splash: {
       image: './assets/splash.png',
-      resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      resizeMode: 'cover',
+      backgroundColor: '#023c69',
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.konn3ct.mobile',
+      bundleIdentifier: 'com.onegov.govmeeting',
       buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: `Allow ${APP_NAME} to access your camera for video meetings.`,
@@ -24,10 +25,10 @@ module.exports = {
       },
     },
     android: {
-      package: 'com.konn3ct.mobile',
+      package: 'com.onegov.govmeeting',
       versionCode: 1,
       adaptiveIcon: {
-        backgroundColor: '#ffffff',
+        backgroundColor: '#0a5c36',
         foregroundImage: './assets/adaptive-icon.png',
       },
       permissions: [
@@ -38,6 +39,9 @@ module.exports = {
         'RECEIVE_BOOT_COMPLETED',
         'READ_EXTERNAL_STORAGE',
         'WRITE_EXTERNAL_STORAGE',
+        'FOREGROUND_SERVICE',
+        'FOREGROUND_SERVICE_MEDIA_PROJECTION',
+        'FOREGROUND_SERVICE_MICROPHONE',
       ],
       predictiveBackGestureEnabled: false,
     },
@@ -67,6 +71,13 @@ module.exports = {
         },
       ],
       './plugins/withPiP',
+      './plugins/withScreenShare',
+      './plugins/withMeetingService',
     ],
+    extra: {
+          "eas": {
+            "projectId": "9a37c584-561d-4e54-a152-6b8a32218f2b"
+          }
+        }
   },
 };
