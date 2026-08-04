@@ -1,0 +1,141 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Attendance Flow', () => {
+  test('should load attendance list and view participants', async ({ page }) => {
+        // 1. Mock API Responses
+    
+    // Mock user profile/auth check
+    await page.route(/.*profile.*/, route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            id: 1,
+            name: 'Playwright User',
+            email: 'test@example.com',
+          }
+        })
+      });
+    });
+
+    // We inject auth token to bypass login screen or navigate via login
+    const loginMock = (route: any) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          token: 'fake-token',
+          access_token: 'fake-token',
+          user: { name: 'Playwright User', email: 'test@example.com' },
+          data: { name: 'Playwright User', email: 'test@example.com' }
+        })
+      });
+    };
+    await page.route(/.*login.*/, loginMock);
+
+    // Mock Dashboard stats (so it doesn't fail on Home)
+    await page.route(/.*dashboard.*/, route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          rooms: 1,
+          upcoming_meetings: 0,
+          streaming: 0,
+          recordings: 0
+        })
+      });
+    });
+
+    // Mock Schedule for Dashboard
+    await page.route(/.*schedule.*/, route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [] })
+      });
+    });
+
+    // 2. Mock Attendance APIs
+    await page.route(/.*meeting-attendance.*/, route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              meetingId: 'm1',
+              roomId: 'r1',
+              host: 'Test Host',
+              date: '2026-10-10',
+              time: '10:00'
+            }
+          ]
+        })
+      });
+    });
+
+    await page.route(/.*attendance-details.*/, route => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              name: 'John Guest',
+              email: 'guest@example.com',
+              duration: '45 mins',
+              joinTime: '10:00',
+              leaveTime: '10:45'
+            }
+          ]
+        })
+      });
+    });
+
+        // Navigate and Login
+    await page.goto('/');
+    const signInButton = page.getByTestId('welcome-signin-button');
+    await signInButton.waitFor({ state: 'visible', timeout: 15000 });
+    await signInButton.click();
+
+    const mdaInput = page.getByTestId('mda-input');
+    if (await mdaInput.isVisible()) {
+      await mdaInput.fill('test-mda');
+    }
+    const emailInput = page.getByTestId('email-input');
+    await expect(emailInput).toBeVisible({ timeout: 15000 });
+    await emailInput.fill('test@example.com');
+    await page.getByTestId('password-input').fill('password123');
+    await page.getByTestId('login-button').click();
+
+    // Verify Dashboard Loaded by checking for host meeting btn
+    const hostBtn = page.getByTestId('host-meeting-btn');
+    await expect(hostBtn).toBeVisible({ timeout: 15000 });
+
+    // Go to More Tab
+    const moreTab = page.getByText('More', { exact: true });
+    await expect(moreTab).toBeVisible({ timeout: 15000 });
+    await moreTab.click();
+
+    // Click Attendance
+    const attendanceBtn = page.getByText('Attendance', { exact: true });
+    await expect(attendanceBtn).toBeVisible();
+    await attendanceBtn.click();
+
+    // Verify Attendance Screen Loaded
+    await expect(page.getByText('Test Host')).toBeVisible();
+
+    // View Participants
+    const viewParticipantsBtn = page.getByText('View Participants');
+    await viewParticipantsBtn.click();
+
+    // Verify Modal
+    await expect(page.getByText('John Guest')).toBeVisible();
+    await expect(page.getByText('45 mins')).toBeVisible();
+  });
+});

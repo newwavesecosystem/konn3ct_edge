@@ -2,12 +2,8 @@ import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
 
 // Connected to Kubernetes Backend Ingress Domain
-export const IS_DEV = true; // Change to false for production
-const API_URL = process.env.EXPO_PUBLIC_API_URL || (
-  IS_DEV 
-    ? 'https://dev.konn3ct.ng/api/app' 
-    : 'https://konn3ctedge.konn3ct.net/api'
-);
+export const IS_DEV = true;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://govsupport.convergenceondemand.com/conferencing/api/app';
 export const apiClient = axios.create({
   baseURL: API_URL,
   headers: {

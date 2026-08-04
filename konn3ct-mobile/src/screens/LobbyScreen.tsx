@@ -100,7 +100,7 @@ function useElapsed(active: boolean) {
 
 // ─── Main Screen ───────────────────────────────────────────────────────────────
 export default function LobbyScreen({ route, navigation }: Props) {
-  const { roomId, meetingToken, micOn = true, cameraOn = true } = route.params;
+  const { roomId, meetingToken, signalUrl: initialSignalUrl, micOn = true, cameraOn = true } = route.params as any;
   const insets = useSafeAreaInsets();
   const user = useAuthStore(s => s.user);
   const initials = user?.name
@@ -129,6 +129,14 @@ export default function LobbyScreen({ route, navigation }: Props) {
     ]).start();
   }, []);
 
+  // Detect guest vs authenticated user to pick the right route names.
+  // The AuthStackNavigator uses GuestMeeting / GuestLobby / GuestJoin,
+  // while the main stack uses Meeting / Lobby / MainTabs.
+  const isGuest = !useAuthStore(s => s.token);
+  const meetingRoute = isGuest ? 'GuestMeeting' : 'Meeting';
+  const lobbyRoute   = isGuest ? 'GuestLobby'   : 'Lobby';
+  const homeRoute    = isGuest ? 'GuestJoin'     : 'MainTabs';
+
   // ── Connection ─────────────────────────────────────────────────────────────
   useEffect(() => {
     isMountedRef.current = true;
@@ -150,7 +158,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
         setStatus('active');
         setTimeout(() => {
           if (isMountedRef.current) {
-            navigation.replace('Meeting', { roomId, meetingToken, micOn, cameraOn });
+            navigation.replace(meetingRoute as any, { roomId, meetingToken, micOn, cameraOn });
           }
         }, 400);
       } else if (newStatus === 'denied') {
@@ -167,19 +175,21 @@ export default function LobbyScreen({ route, navigation }: Props) {
 
     (async () => {
       try {
-        // If no meetingToken was passed, obtain one via the Edge frontend API.
-        // This covers navigations (e.g. meeting cards, schedules) that don't
-        // pre-fetch a token.
         let tokenToUse = meetingToken;
+        let signalUrlToUse = initialSignalUrl;
         if (!tokenToUse) {
           const authUser = useAuthStore.getState().user;
-          tokenToUse = await getAttendeeToken(
+          const tokenRes = await getAttendeeToken(
             roomId,
             authUser?.name || 'Guest',
-            authUser?.email || 'guest@conn3ct.com'
+            authUser?.email || 'guest@conn3ct.com',
+            cameraOn,
+            micOn
           );
+          tokenToUse = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
+          signalUrlToUse = typeof tokenRes === 'string' ? initialSignalUrl : (tokenRes.signalUrl || initialSignalUrl);
         }
-        const initialStatus = await service.connect(tokenToUse);
+        const initialStatus = await service.connect(tokenToUse, signalUrlToUse);
         if (!isMountedRef.current) return;
 
         // Try to get room name from the service after connect
@@ -189,7 +199,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
           // Bypass lobby — user is host or waiting room is disabled
           handedOffRef.current = true;
           setActiveMeetingService(service);
-          navigation.replace('Meeting', { roomId, meetingToken, micOn, cameraOn });
+          navigation.replace(meetingRoute as any, { roomId, meetingToken, micOn, cameraOn });
         } else if (initialStatus === 'waiting') {
           // Show lobby — wait for host to admit
           setStatus('waiting');
@@ -197,11 +207,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
       } catch (err: any) {
         if (!isMountedRef.current) return;
         const msg: string = err?.message || '';
+        console.error('[LobbyScreen] Connection failed:', msg, err);
         const is404 = msg.includes('404');
         setErrorMsg(
           is404
             ? `Room "${roomId}" was not found.\n\nRoom IDs are case-sensitive — double-check the capitalisation.`
-            : 'Could not connect to the meeting. Check your internet connection and try again.'
+            : `Could not connect to the meeting. Check your internet connection and try again.\n\nDetails: ${msg || 'Unknown error'}`
         );
         setStatus('failed');
       }
@@ -222,12 +233,16 @@ export default function LobbyScreen({ route, navigation }: Props) {
       serviceRef.current.disconnect();
       serviceRef.current = null;
     }
-    navigation.replace('MainTabs');
-  }, [navigation]);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.replace(homeRoute as any);
+    }
+  }, [navigation, homeRoute]);
 
   const handleRetry = useCallback(() => {
-    navigation.replace('Lobby', { roomId, meetingToken, micOn, cameraOn });
-  }, [navigation, roomId, meetingToken, micOn, cameraOn]);
+    navigation.replace(lobbyRoute as any, { roomId, meetingToken, micOn, cameraOn });
+  }, [navigation, lobbyRoute, roomId, meetingToken, micOn, cameraOn]);
 
   // ── Status label helpers ────────────────────────────────────────────────────
   const isError = status === 'denied' || status === 'ended' || status === 'failed';
@@ -276,7 +291,7 @@ export default function LobbyScreen({ route, navigation }: Props) {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 32, 48) }]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <Animated.View style={[styles.cardContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
           {/* ── Avatar card ── */}
           <View style={styles.avatarCard}>
@@ -431,7 +446,12 @@ export default function LobbyScreen({ route, navigation }: Props) {
       {/* ── Bottom leave button ── */}
       {(isConnecting || isWaiting) && (
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-          <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave} activeOpacity={0.85}>
+          <TouchableOpacity 
+            style={styles.leaveBtn} 
+            onPress={handleLeave} 
+            activeOpacity={0.85}
+            testID="leave-lobby-btn"
+          >
             <PhoneOff size={16} color={COLORS.danger} />
             <Text style={styles.leaveBtnText}>Leave Lobby</Text>
           </TouchableOpacity>
@@ -534,6 +554,9 @@ const styles = StyleSheet.create({
   // Scroll
   scrollContent: {
     padding: 20,
+    gap: 16,
+  },
+  cardContainer: {
     gap: 16,
   },
 

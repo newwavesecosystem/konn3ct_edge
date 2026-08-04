@@ -273,7 +273,7 @@ export default function StreamingScreen() {
 
         {/* Action Button */}
         <View style={styles.actionRow}>
-          <TouchableOpacity activeOpacity={0.85} style={{ flex: 1 }} onPress={() => setModalVisible(true)}>
+          <TouchableOpacity testID="open-stream-modal" activeOpacity={0.85} style={{ flex: 1 }} onPress={() => setModalVisible(true)}>
             <LinearGradient
               colors={[COLORS.brandBlue, COLORS.brandBlueDark]}
               start={{ x: 0, y: 0 }}
@@ -473,6 +473,7 @@ export default function StreamingScreen() {
               )}
 
               <TouchableOpacity 
+                testID="start-stream-btn"
                 style={[styles.btnPrimary, { marginTop: 24, marginBottom: 40 }]} 
                 onPress={handleStartStream}
                 disabled={isStarting}
