@@ -37,8 +37,6 @@ spec:
           command: ["npm", "run", "start:media"]
           imagePullPolicy: Always
           ports:
-            - containerPort: 3000
-              name: http
             # UDP ports do not strictly need declaring if hostNetwork=true, but good for docs
             - containerPort: 10000
               name: webrtc-udp
@@ -164,9 +162,3 @@ spec:
             limits:
               cpu: "3500m"
               memory: "6Gi"
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 3000
-            initialDelaySeconds: 5
-            periodSeconds: 10
