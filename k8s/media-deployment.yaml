@@ -20,18 +20,21 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       affinity:
         podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - conn3ct-recorder
-                - conn3ct-media
-            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - conn3ct-recorder
+                  - conn3ct-media
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
-          image: registry.digitalocean.com/konn3ct-registry/conn3ct-media:latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:latest
+          command: ["npm", "run", "start:media"]
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

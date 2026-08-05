@@ -16,22 +16,23 @@ spec:
       labels:
         app: conn3ct-signaling
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       affinity:
         podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - conn3ct-recorder
-                - conn3ct-signaling
-            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - conn3ct-recorder
+                  - conn3ct-signaling
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
-          image: registry.digitalocean.com/konn3ct-registry/conn3ct-signaling:latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:latest
+          command: ["npm", "run", "start:signaling"]
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
