@@ -27,6 +27,7 @@ spec:
                 operator: In
                 values:
                 - conn3ct-recorder
+                - conn3ct-backend
             topologyKey: kubernetes.io/hostname
       containers:
         - name: backend

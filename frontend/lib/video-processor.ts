@@ -115,9 +115,11 @@ export class VideoProcessor {
     this.processedStream = new MediaStream([processedVideoTrack]);
     
     // Pass through audio tracks
-    rawStream.getAudioTracks().forEach(track => {
-      this.processedStream?.addTrack(track);
-    });
+    if (rawStream && typeof rawStream.getAudioTracks === 'function') {
+      rawStream.getAudioTracks().forEach(track => {
+        this.processedStream?.addTrack(track);
+      });
+    }
 
     this.isProcessing = true;
     this.processFrame();

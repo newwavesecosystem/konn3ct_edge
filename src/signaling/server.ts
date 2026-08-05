@@ -4,9 +4,9 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { localMediaController as mediaController } from '../services/LocalMediaController';
+import { redisMediaController as mediaController } from '../services/RedisMediaController';
 import os from 'os';
-import Redis from 'ioredis';
+import { redis, duplicateRedis } from '../redis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
@@ -67,29 +67,14 @@ if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('[FATAL] TURN_SECRET must be set in production');
 }
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-export const redis = new Redis(redisUrl, {
-  retryStrategy: (times) => {
-    if (process.env.NODE_ENV !== 'production') return null;
-    return Math.min(times * 50, 2000);
-  },
-  maxRetriesPerRequest: 1
-});
+redis.on("error", (e: any) => logger.error('Redis connection error', e));
 
-redis.on("error", (e) => logger.error('Redis connection error', e));
+const redisSubscriber = duplicateRedis(redis);
+redisSubscriber.on("error", (e: any) => logger.error('Redis subscriber connection error', e));
 
-const redisSubscriber = new Redis(redisUrl, {
-  retryStrategy: (times) => {
-    if (process.env.NODE_ENV !== 'production') return null;
-    return Math.min(times * 50, 2000);
-  },
-  maxRetriesPerRequest: 1
-});
-redisSubscriber.on("error", (e) => logger.error('Redis connection error', e));
-
-redisSubscriber.subscribe('recorder:completed').catch(e => logger.error('Failed to subscribe to recorder:completed', e));
-redisSubscriber.subscribe('streamer:status').catch(e => logger.error('Failed to subscribe to streamer:status', e));
-redisSubscriber.on('message', async (channel, message) => {
+redisSubscriber.subscribe('recorder:completed').catch((e: any) => logger.error('Failed to subscribe to recorder:completed', e));
+redisSubscriber.subscribe('streamer:status').catch((e: any) => logger.error('Failed to subscribe to streamer:status', e));
+redisSubscriber.on('message', async (channel: string, message: string) => {
   if (channel === 'recorder:completed') {
     try {
       const data = JSON.parse(message);
@@ -182,7 +167,7 @@ interface Client {
 }
 
 export const rooms = new Map<string, Map<string, Client>>();
-const roomProducers = new Map<string, Array<{ producerId: string, userId: string, participantId: string, name: string, kind: string, appData?: Record<string, any> }>>();
+
 const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
 const consumerOwners = new Map<string, Client>();
 const roomECinema = new Map<string, string | null>();
@@ -343,7 +328,7 @@ export function syncRoomStateToRedis(roomId: string, roomSlug: string) {
   const existingTimeout = syncRoomTimeouts.get(roomId);
   if (existingTimeout) clearTimeout(existingTimeout);
   
-  const timeout = setTimeout(() => {
+  const timeout = setTimeout(async () => {
     executeSyncRoomStateToRedis(roomId, roomSlug);
     syncRoomTimeouts.delete(roomId);
   }, 1000); // 1 second debounce
@@ -419,6 +404,20 @@ async function generateMeetingSummary(roomId: string) {
   }
 }
 
+export async function getRoomProducers(roomId: string): Promise<any[]> {
+  const data = await redis.hgetall(`room:${roomId}:producers`);
+  return Object.values(data).map(pStr => JSON.parse(pStr as string));
+}
+
+export async function removeRoomProducersByPredicate(roomId: string, predicate: (p: any) => boolean) {
+  const data = await redis.hgetall(`room:${roomId}:producers`);
+  const toDelete: string[] = [];
+  for (const [pid, pStr] of Object.entries(data)) {
+    if (predicate(JSON.parse(pStr as string))) toDelete.push(pid);
+  }
+  if (toDelete.length > 0) await redis.hdel(`room:${roomId}:producers`, ...toDelete);
+}
+
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -436,11 +435,11 @@ export function initializeSignaling(server: Server) {
     consumerOwners.delete(consumerId);
   });
 
-  mediaController.on('activeSpeaker', (data) => {
+  mediaController.on('activeSpeaker', async (data) => {
     const { roomId, producerIds } = data;
     const activeUsers = new Set<string>();
     const activeParticipantIds = new Set<string>();
-    const allProducers = roomProducers.get(roomId) || [];
+    const allProducers = await getRoomProducers(roomId);
     for (const pid of producerIds) {
       const prod = allProducers.find(p => p.producerId === pid);
       if (prod) {
@@ -834,7 +833,7 @@ export function initializeSignaling(server: Server) {
       const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
 
-      const timeout = setTimeout(() => {
+      const timeout = setTimeout(async () => {
         logger.info(`Participant ${participantId} (User ${userId}) grace period expired. Cleaning up session.`);
         logger.info(`[CLEANUP] client_cleanup_completed for user ${userId} in room ${roomId}`);
         const roomClients = rooms.get(roomId);
@@ -843,7 +842,7 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             cleanupRoomData(roomId);
-            roomProducers.delete(roomId); // Clean up producers array when room empties
+            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             roomAdmissions.delete(roomId);
             mediaController.cleanupAudioObserver(roomId); // Clean up talking indicator
             mediaController.closeRouter(roomId); // Prevent Mediasoup Router memory leaks
@@ -852,8 +851,7 @@ export function initializeSignaling(server: Server) {
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             // Remove their producers from the array
-            const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.participantId !== participantId));
+            await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
 
             broadcastToRoom(roomId, {
               type: 'user_left',
@@ -1062,8 +1060,7 @@ export function initializeSignaling(server: Server) {
             if (targetClient.userId === data.userId && targetClient.role !== 'host') {
               // Remove first so the close handler skips grace period
               rooms.get(roomId)?.delete(targetClient.participantId);
-              const producers = roomProducers.get(roomId) || [];
-              roomProducers.set(roomId, producers.filter(p => p.userId !== data.userId));
+              await removeRoomProducersByPredicate(roomId, (p: any) => p.userId === data.userId);
               broadcastToRoom(roomId, { type: 'user_left', userId: data.userId, participantId: targetClient.participantId });
               targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
               targetClient.ws.close();
@@ -1112,7 +1109,7 @@ export function initializeSignaling(server: Server) {
             broadcastForceMute(c => c.role !== 'host' && c.role !== 'co-host');
           } else if (data.target === 'all_except_presenters') {
             const presenters = new Set(
-              (roomProducers.get(roomId) || [])
+              (await getRoomProducers(roomId))
                 .filter(p => p.appData?.source === 'screen')
                 .map(p => p.userId)
             );
@@ -1157,7 +1154,7 @@ export function initializeSignaling(server: Server) {
             broadcastForceVideoOff(c => c.role !== 'host' && c.role !== 'co-host');
           } else if (data.target === 'all_except_presenters') {
             const presenters = new Set(
-              (roomProducers.get(roomId) || [])
+              (await getRoomProducers(roomId))
                 .filter(p => p.appData?.source === 'screen')
                 .map(p => p.userId)
             );
@@ -1254,15 +1251,14 @@ export function initializeSignaling(server: Server) {
           if (rc.size === 0) {
             rooms.delete(roomId);
             cleanupRoomData(roomId);
-            roomProducers.delete(roomId);
+            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             roomAdmissions.delete(roomId);
             mediaController.cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, client.roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
-            const producers = roomProducers.get(roomId) || [];
-            roomProducers.set(roomId, producers.filter(p => p.participantId !== client.participantId));
+            await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
             broadcastToRoom(roomId, { type: 'user_left', userId, participantId: client.participantId });
             syncRoomStateToRedis(roomId, client.roomSlug);
           }
@@ -1283,7 +1279,7 @@ export function initializeSignaling(server: Server) {
             // Immediately destroy the room to prevent 30s grace periods on close
             rooms.delete(roomId);
             cleanupRoomData(roomId);
-            roomProducers.delete(roomId);
+            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             roomAdmissions.delete(roomId);
             mediaController.cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
@@ -1662,9 +1658,9 @@ export function initializeSignaling(server: Server) {
         client.isMuted = data.isMuted;
         
         // Pause or resume transcription based on mute state
-        const producersList = roomProducers.get(roomId);
+        const producersList = await getRoomProducers(roomId);
         if (producersList) {
-          const audioProducer = producersList.find(p => p.participantId === client.participantId && p.kind === 'audio');
+          const audioProducer = producersList.find((p: any) => p.participantId === client.participantId && p.kind === 'audio');
           if (audioProducer) {
              mediaController.handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
           }
@@ -2036,8 +2032,8 @@ export function initializeSignaling(server: Server) {
 
         // Camera cap only applies to actual cameras, NOT screen share producers
         if (data.kind === 'video' && source !== 'screen') {
-          const roomProducersList = roomProducers.get(roomId) || [];
-          const cameraProducers = roomProducersList.filter(p => p.kind === 'video' && p.appData?.source !== 'screen');
+          const roomProducersList = await getRoomProducers(roomId);
+          const cameraProducers = roomProducersList.filter((p: any) => p.kind === 'video' && p.appData?.source !== 'screen');
           const maxCameras = client.maxActiveCameras ?? 15;
           if (cameraProducers.length >= maxCameras) {
             client.ws.send(JSON.stringify({
@@ -2070,8 +2066,8 @@ export function initializeSignaling(server: Server) {
         }
 
         // Track for late joiners — store appData so late joiners know source type
-        if (!roomProducers.has(roomId)) roomProducers.set(roomId, []);
-        roomProducers.get(roomId)!.push({ producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData });
+        const newProd = { producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData };
+        await redis.hset(`room:${roomId}:producers`, producerId, JSON.stringify(newProd));
 
         client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
@@ -2104,8 +2100,8 @@ export function initializeSignaling(server: Server) {
         
         try {
           const router = await mediaController.getOrCreateRouter(roomId);
-          const allProducers = Array.from(roomProducers.values()).flat();
-          const targetProducer = allProducers.find(p => p.producerId === data.producerId);
+          const allProducers = await getRoomProducers(client.roomId);
+          const targetProducer = allProducers.find((p: any) => p.producerId === data.producerId);
 
           const hasRecvTransport = client.transports && client.transports.includes(data.transportId);
           const hasRtpCapabilities = !!data.rtpCapabilities;
@@ -2261,10 +2257,7 @@ export function initializeSignaling(server: Server) {
           }
         }
         
-        const rp = roomProducers.get(roomId);
-        if (rp) {
-          roomProducers.set(roomId, rp.filter(p => p.participantId !== client.participantId));
-        }
+        await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
         break;
       }
 
@@ -2290,7 +2283,7 @@ export function initializeSignaling(server: Server) {
 
       case 'stop_producer': {
         // Client is explicitly closing a producer (e.g. stopped screen sharing)
-        const rp0 = roomProducers.get(roomId);
+        const rp0 = await getRoomProducers(roomId);
         const ownedProducer = rp0?.find(p => p.producerId === data.producerId && p.userId === userId);
         if (!ownedProducer) {
           logger.warn(`User ${userId} tried to stop a producer they don't own: ${data.producerId}`);
@@ -2301,9 +2294,8 @@ export function initializeSignaling(server: Server) {
         const source = (stopAppData || {}).source || 'unknown';
 
         // Remove from room tracking
-        const rp = roomProducers.get(roomId);
-        if (rp) {
-          roomProducers.set(roomId, rp.filter(p => p.producerId !== pidToStop));
+        await redis.hdel(`room:${roomId}:producers`, pidToStop);
+        if (true) {
           // Close the Mediasoup producer — this triggers producerclose on all consumers
           mediaController.closeProducer(pidToStop);
 
@@ -2362,9 +2354,9 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'getProducers': {
-        const producers = roomProducers.get(roomId) || [];
+        const producers = await getRoomProducers(roomId);
         // Exclude own producers
-        const othersProducers = producers.filter(p => p.participantId !== client.participantId);
+        const othersProducers = producers.filter((p: any) => p.participantId !== client.participantId);
         // Include appData so late joiners know which producers are screen share vs camera
         client.ws.send(JSON.stringify({ type: 'producersList', producers: othersProducers }));
         break;

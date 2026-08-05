@@ -16,7 +16,7 @@ client.collectDefaultMetrics();
 startDeepTelemetry();
 
 
-import { initializeWorkers } from './media/sfu';
+
 import { config } from './media/config';
 import { logger } from './logger';
 import { generalLimiter } from './middleware/rateLimiter';
@@ -139,26 +139,49 @@ async function boot() {
   try {
     // In production (Kubernetes), dynamically fetch the true public IP for WebRTC routing
     if (process.env.NODE_ENV === 'production') {
+      const http = require('http');
       const https = require('https');
-      const publicIp = await new Promise<string>((resolve) => {
-        https.get('https://api.ipify.org', (res: any) => {
+      
+      const fetchDO = () => new Promise<string>((resolve, reject) => {
+        const req = http.get('http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address', { timeout: 2000 }, (res: any) => {
+          if (res.statusCode !== 200) return reject(new Error('DO Metadata not found'));
           let data = '';
           res.on('data', (chunk: string) => data += chunk);
           res.on('end', () => resolve(data.trim()));
-        }).on('error', (err: any) => {
-          logger.error('Failed to fetch public IP for WebRTC', err);
-          resolve(process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1');
         });
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('timeout')));
       });
-      logger.info(`Dynamically detected Public IP for WebRTC: ${publicIp}`);
+
+      const fetchIpify = () => new Promise<string>((resolve, reject) => {
+        const req = https.get('https://api.ipify.org', { timeout: 3000 }, (res: any) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve(data.trim()));
+        });
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('timeout')));
+      });
+
+      let publicIp = process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1';
+      try {
+        publicIp = await fetchDO();
+        logger.info(`Detected Public IP via DO Metadata: ${publicIp}`);
+      } catch (err) {
+        logger.warn('DO Metadata failed, falling back to ipify...');
+        try {
+          publicIp = await fetchIpify();
+          logger.info(`Detected Public IP via ipify: ${publicIp}`);
+        } catch (err2) {
+          logger.error('Failed to fetch public IP for WebRTC', err2);
+        }
+      }
       config.mediasoup.webRtcTransport.listenIps[0].announcedIp = publicIp;
     }
 
-    await initializeWorkers();
-    logger.info('Mediasoup workers initialized successfully.');
-  } catch (err) {
-    logger.error('Failed to initialize mediasoup workers.', err);
-    if (process.env.NODE_ENV === 'production') throw err;
+    // Mediasoup workers are no longer initialized here in Phase 4.
+    // They run in the dedicated media-server.ts entrypoint.
+    logger.info('Signaling server booting without local Mediasoup workers.');
   } finally {
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);
