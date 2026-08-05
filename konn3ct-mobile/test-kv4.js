@@ -24,8 +24,10 @@ async function test() {
     try {
         const req2 = await axios.post('https://dev.konn3ct.ng/api/app/kv4/join-room', {
             room: "Joso24j20",
-            name: "Test User",
-            email: "test@example.com"
+            name: "Sammy",
+            email: "odejinmisamuel@gmail.com",
+            cam: false,
+            mic: false
         }, {
           headers: { Authorization: 'Bearer ' + token }
         });

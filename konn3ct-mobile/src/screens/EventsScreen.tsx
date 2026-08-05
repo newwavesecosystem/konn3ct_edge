@@ -15,6 +15,7 @@ import {
   RefreshControl,
   FlatList,
   Image,
+  Share,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,6 +47,8 @@ import {
   AlertCircle,
   Copy,
   Link,
+  Video,
+  Share2,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
@@ -64,6 +67,7 @@ import {
 } from '../api/events';
 import { fetchMyRooms, Room } from '../api/rooms';
 import { APP_CONFIG } from '../config/appConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -130,7 +134,8 @@ function ParticipantsModal({
     if (visible && event?.id) {
       setLoading(true);
       setError(null);
-      fetchEventParticipants(String(event.id))
+      console.log("Fetchin Ref ", event.reference);
+      fetchEventParticipants(String(event.reference))
         .then(setParticipants)
         .catch((e) => setError(e?.response?.data?.message || 'Failed to load participants'))
         .finally(() => setLoading(false));
@@ -167,6 +172,7 @@ function ParticipantsModal({
         </View>
 
         {/* Send Reminder Button */}
+        {/*
         <View style={{ paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
           <TouchableOpacity
             style={[styles.reminderBtn, sendingReminder && { opacity: 0.6 }]}
@@ -179,6 +185,7 @@ function ParticipantsModal({
             <Text style={styles.reminderBtnText}>{sendingReminder ? 'Sending...' : 'Send Reminder'}</Text>
           </TouchableOpacity>
         </View>
+        */}
 
         {/* List */}
         {loading ? (
@@ -671,6 +678,7 @@ function CreateEventModal({
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            testID="submit-event-btn"
             style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
             onPress={handleCreate}
             disabled={isSubmitting}
@@ -832,7 +840,9 @@ export default function EventsScreen() {
           {(evt.room_name || evt.room_id) ? (
             <View style={styles.metaItem}>
               <MapPin color={COLORS.textMuted} size={14} />
-              <Text style={styles.metaText}>{evt.room_name || `Room ${evt.room_id}`}</Text>
+              <Text style={styles.metaText}>
+                {evt.room_name || rooms.find(r => String(r.id) === String(evt.room_id))?.name || `Room ${evt.room_id}`}
+              </Text>
             </View>
           ) : null}
           <View style={styles.metaItem}>
@@ -858,30 +868,78 @@ export default function EventsScreen() {
         {/* Footer */}
         <View style={styles.cardFooter}>
           <TouchableOpacity
+            testID={`view-participants-${evt.id}`}
             style={styles.participantsBtn}
             activeOpacity={0.8}
             onPress={() => setParticipantsModal(evt)}
           >
             <Users color={COLORS.brandGreen} size={16} />
             <Text style={styles.participantsBtnText}>
-              View Participants{evt.participants_count != null ? ` (${evt.participants_count})` : ''}
+              View Participants{evt.total_registrations != null ? ` (${evt.total_registrations})` : ''}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.copyLinkBtn, { marginTop: 10 }]}
-            activeOpacity={0.8}
-            onPress={async () => {
-              // Fallback through common identifier keys if 'ref' isn't explicitly defined
-              const eventRef = evt.ref || evt.event_ref || evt.uuid || evt.id;
-              const url = `https://konn3ct.com/${eventRef}`;
-              await Clipboard.setStringAsync(url);
-              Alert.alert('Link Copied', 'The registration link has been copied to your clipboard!');
-            }}
-          >
-            <Copy color={COLORS.blue} size={16} />
-            <Text style={styles.copyLinkBtnText}>Copy Link</Text>
-          </TouchableOpacity>
+          <View style={styles.copyActionRow}>
+            <TouchableOpacity
+              testID={`share-event-link-${evt.id}`}
+              style={styles.copyEventBtn}
+              activeOpacity={0.8}
+              onPress={async () => {
+                const govMDA = await AsyncStorage.getItem('@1gov_mda');
+                var eventUrl = evt.event_url.toString();
+                if (govMDA != null) {
+                  eventUrl = evt.event_url.toString().replace('govsupport', govMDA || '');
+                }
+
+                const host = evt.hostname || evt.host_name;
+                const formattedDate = evt.date ? formatDate(evt.date) : '';
+                const formattedTime = evt.time ? formatTime(evt.time) : '';
+
+                let shareMessage = `📅 You're invited to: ${evt.title}\n\n`;
+                if (host) shareMessage += `👤 Host: ${host}\n`;
+                if (formattedDate) shareMessage += `🗓️ Date: ${formattedDate}\n`;
+                if (formattedTime) shareMessage += `⏰ Time: ${formattedTime}${evt.timezone ? ` (${evt.timezone})` : ''}\n`;
+                if (evt.about) shareMessage += `\n📝 About: ${evt.about}\n`;
+                shareMessage += `\n🔗 Register & Join here:\n${eventUrl}`;
+                
+                try {
+                  await Share.share({
+                    title: `Event Invitation: ${evt.title}`,
+                    message: shareMessage,
+                    url: eventUrl,
+                  });
+                } catch (error) {
+                  console.error('Error sharing event link:', error);
+                }
+              }}
+            >
+              <Share2 color={COLORS.purple} size={15} />
+              <Text style={styles.copyEventBtnText}>Share Event Link</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID={`copy-meeting-link-${evt.id}`}
+              style={styles.copyMeetingBtn}
+              activeOpacity={0.8}
+              onPress={async () => {
+                const matched = rooms.find((r) => String(r.id) === String(evt.room_id));
+                const roomSlug =
+                  evt.room_name ||
+                  matched?.url ||
+                  matched?.name ||
+                  String(evt.room_id);
+                const edgeFrontendUrl =
+                  process.env.EXPO_PUBLIC_EDGE_FRONTEND_URL ||
+                  'https://meetingapp.konn3ct.net';
+                const meetingUrl = `${edgeFrontendUrl}/join/${roomSlug}`;
+                await Clipboard.setStringAsync(meetingUrl);
+                Alert.alert('Meeting Link Copied', `Meeting link copied!\n\n${meetingUrl}`);
+              }}
+            >
+              <Video color={COLORS.blue} size={15} />
+              <Text style={styles.copyMeetingBtnText}>Copy Meeting Link</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -919,23 +977,25 @@ export default function EventsScreen() {
           <Text style={styles.pageTitle}>Events</Text>
           <Text style={styles.pageSubtitle}>Manage pre-registered events & participants</Text>
         </View>
-        <TouchableOpacity 
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              // @ts-ignore
-              navigation.navigate('MainTabs');
-            }
-          }} 
-          style={styles.closeBtn}
-        >
-          <X size={24} color="#64748b" />
-        </TouchableOpacity>
+        {!APP_CONFIG.GOV_LOGIN && (
+          <TouchableOpacity 
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                // @ts-ignore
+                navigation.navigate('MainTabs');
+              }
+            }} 
+            style={styles.closeBtn}
+          >
+            <X size={24} color="#64748b" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 16) + 160 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -970,13 +1030,14 @@ export default function EventsScreen() {
                 <Text style={styles.statLabel}>Participants</Text>
                 {loading
                   ? <View style={styles.skeletonStat} />
-                  : <Text style={styles.statValue}>{summary?.total_participants ?? '—'}</Text>
+                  : <Text style={styles.statValue}>{summary?.total_registrations ?? '—'}</Text>
                 }
               </View>
             </View>
           </View>
 
           <TouchableOpacity
+            testID="create-event-btn"
             style={styles.createBtn}
             activeOpacity={0.85}
             onPress={() => setCreateModalVisible(true)}
@@ -1175,20 +1236,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  copyLinkBtn: {
+  copyActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  copyEventBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 11,
+    backgroundColor: COLORS.purpleLight,
+    borderRadius: 12,
+  },
+  copyEventBtnText: {
+    color: COLORS.purple,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  copyMeetingBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
     backgroundColor: COLORS.blueLight,
     borderRadius: 12,
   },
-  copyLinkBtnText: {
+  copyMeetingBtnText: {
     color: COLORS.blue,
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
 
   // Recent Registrations

@@ -12,7 +12,7 @@ const publicApi = axios.create({ baseURL: PUBLIC_API_URL });
 
 export interface EventSummary {
   total_events: number;
-  total_participants: number;
+  total_registrations: number;
   [key: string]: any;
 }
 
@@ -33,8 +33,8 @@ export interface EventItem {
   amount?: number | string;
   tags?: string;
   reminder?: number | string;
-  ref?: string;         // public event reference id
-  participants_count?: number;
+  reference?: string;         // public event reference id
+  total_registrations?: number;
   created_at?: string;
   [key: string]: any;
 }
@@ -141,16 +141,8 @@ export async function fetchRecentRegistrations(): Promise<RecentRegistration[]> 
 export async function fetchEventParticipants(eventId: string): Promise<EventParticipant[]> {
   const res = await apiClient.get(`/event-participants/${eventId}`);
   const data = res.data;
-  if (Array.isArray(data)) return data;
-  if (data?.data && Array.isArray(data.data)) return data.data;
-  if (data?.participants && Array.isArray(data.participants)) return data.participants;
-  if (data?.data?.participants && Array.isArray(data.data.participants)) return data.data.participants;
-  if (data?.data?.data && Array.isArray(data.data.data)) return data.data.data;
+  if (data?.data?.users && Array.isArray(data.data.users)) return data.data.users;
 
-  if (data && typeof data === 'object') {
-    const arrayValues = Object.values(data).find(v => Array.isArray(v));
-    if (arrayValues) return arrayValues as EventParticipant[];
-  }
   return [];
 }
 
@@ -193,6 +185,8 @@ export async function createEvent(payload: CreateEventPayload): Promise<{ succes
       'Content-Type': 'multipart/form-data',
     },
   });
+
+  console.log("pre-reg "+res.data);
   return res.data;
 }
 
