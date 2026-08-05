@@ -25,6 +25,7 @@ import {
   mockMeetingInfo,
 } from "@/lib/mock/meeting";
 import { WebRTCClient } from "./webrtc";
+import { useMeetingTheme } from "./meeting-theme-context";
 import { useMeetingDevicePreferences } from "./meeting-device-preferences";
 
 let lastChatToastTime = 0;
@@ -140,6 +141,8 @@ interface MeetingContextValue {
   setOutputVolume: (val: number) => void;
   isHDVideoEnabled: boolean;
   setIsHDVideoEnabled: (enabled: boolean) => void;
+  isWidescreenEnabled: boolean;
+  setIsWidescreenEnabled: (enabled: boolean) => void;
   isMirrorVideoEnabled: boolean;
   setIsMirrorVideoEnabled: (enabled: boolean) => void;
   isOriginalRatioEnabled: boolean;
@@ -197,6 +200,18 @@ export function useMeeting() {
   return ctx;
 }
 
+let sharedAudioCtx: AudioContext | null = null;
+function getSharedAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (!sharedAudioCtx) {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass) {
+      sharedAudioCtx = new AudioContextClass();
+    }
+  }
+  return sharedAudioCtx;
+}
+
 export function MeetingProvider({
   children,
   roomSlug,
@@ -208,6 +223,17 @@ export function MeetingProvider({
   isRecorderMode?: boolean;
   recorderParticipantId?: string | null;
 }) {
+  // Safe theme extraction at top level of MeetingProvider
+  let activeTheme: 'midnight' | 'soft' | 'slate' | 'sage' = 'sage';
+  try {
+    const themeCtx = useMeetingTheme();
+    if (themeCtx && themeCtx.theme) {
+      activeTheme = themeCtx.theme;
+    }
+  } catch (e) {
+    // Fallback if not wrapped (e.g. recorder mode)
+  }
+
   // Extract user info from sessionStorage (passed from Join screen)
   let storedJoinInfo: any = null;
   let initialUrlParams: URLSearchParams | null = null;
@@ -280,6 +306,22 @@ export function MeetingProvider({
     prefsRef.current = prefs;
   }, [prefs]);
 
+  // Resume AudioContext on user interaction to unlock browser audio blocks
+  useEffect(() => {
+    const resumeAudio = () => {
+      const ctx = getSharedAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    };
+    window.addEventListener('click', resumeAudio);
+    window.addEventListener('touchstart', resumeAudio);
+    return () => {
+      window.removeEventListener('click', resumeAudio);
+      window.removeEventListener('touchstart', resumeAudio);
+    };
+  }, []);
+
   // Preload virtual backgrounds
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -301,10 +343,10 @@ export function MeetingProvider({
     if ((window as any).disableAudioNotifications) return;
     
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioCtx = getSharedAudioContext();
+      if (!audioCtx) return;
       if (audioCtx.state === 'suspended') {
-        // fail silently if browser blocks sound
-        return;
+        audioCtx.resume().catch(() => {});
       }
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -496,6 +538,7 @@ export function MeetingProvider({
   
   // Settings State
   const [isHDVideoEnabled, setIsHDVideoEnabled] = useState(true);
+  const [isWidescreenEnabled, setIsWidescreenEnabled] = useState(true);
   const [outputVolume, setOutputVolume] = useState(75);
   const [isMirrorVideoEnabled, setIsMirrorVideoEnabled] = useState(true);
   const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
@@ -536,6 +579,9 @@ export function MeetingProvider({
 
       const hd = localStorage.getItem("mtg_hdVideo");
       if (hd !== null) setIsHDVideoEnabled(hd === "true");
+
+      const widescreen = localStorage.getItem("mtg_widescreenCapture");
+      if (widescreen !== null) setIsWidescreenEnabled(widescreen === "true");
 
       const mirror = localStorage.getItem("mtg_mirrorVideo");
       if (mirror !== null) setIsMirrorVideoEnabled(mirror === "true");
@@ -584,6 +630,22 @@ export function MeetingProvider({
     if (webrtcClient.current && webrtcClient.current.isHDVideo !== val) {
       webrtcClient.current.isHDVideo = val;
       // Restart camera with new resolution if active
+      if (isCameraOn) {
+        webrtcClient.current.enableCamera().then(track => {
+          localCameraTrackRef.current = track;
+          setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, videoTrack: track } : p));
+        });
+      }
+    }
+  };
+
+  const updateWidescreen = (val: boolean) => {
+    setIsWidescreenEnabled(val);
+    localStorage.setItem("mtg_widescreenCapture", String(val));
+    // Apply immediately to WebRTC if connected
+    if (webrtcClient.current && webrtcClient.current.isWidescreenEnabled !== val) {
+      webrtcClient.current.isWidescreenEnabled = val;
+      // Restart camera with new aspect ratio if active
       if (isCameraOn) {
         webrtcClient.current.enableCamera().then(track => {
           localCameraTrackRef.current = track;
@@ -719,6 +781,7 @@ export function MeetingProvider({
 
         client = new WebRTCClient(roomSlug, data.token, clientParticipantId, isRecorderMode);
         client.isHDVideo = isHDVideoEnabled;
+        client.isWidescreenEnabled = isWidescreenEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
         client.networkConfig = {
           networkDetectionEnabled: roomSettings.networkDetectionEnabled ?? true,
@@ -757,6 +820,11 @@ export function MeetingProvider({
 
         // --- Collaboration Event Listeners ---
         client.onMicError = (error: Error) => {
+          if (error.message && error.message.includes("Microphones are locked")) {
+            toast.error("The host has locked microphones for this meeting.");
+            setIsMuted(true);
+            return;
+          }
           setMicError({ name: error.name || 'Microphone Error', message: error.message || 'Unable to access your microphone.' });
           // Ensure the local state reflects that mic is off if it failed to turn on
           setIsMuted(true);
@@ -1287,29 +1355,57 @@ export function MeetingProvider({
 
           // Play Doorbell Sound (Ding-Dong)
           try {
-            if (client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
-              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const oscillator = audioCtx.createOscillator();
-              const gainNode = audioCtx.createGain();
-              oscillator.connect(gainNode);
-              gainNode.connect(audioCtx.destination);
-              oscillator.type = 'sine';
-              // Ding
-              oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-              // Dong
-              oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
-              gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
-              // Fade out smoothly to avoid popping
-              gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-              oscillator.start(audioCtx.currentTime);
-              oscillator.stop(audioCtx.currentTime + 0.8);
+            const enableAll = prefsRef.current.notifications.enableAllSounds;
+            
+            if (enableAll && client?.userRole !== 'bot' && client?.userRole !== 'recorder' && !(window as any).disableAudioNotifications) {
+              const audioCtx = getSharedAudioContext();
+              if (audioCtx) {
+                if (audioCtx.state === 'suspended') {
+                  audioCtx.resume().catch(() => {});
+                }
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                // Ding
+                oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                // Dong
+                oscillator.frequency.setValueAtTime(450, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime); // Volume
+                // Fade out smoothly to avoid popping
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+                oscillator.start(audioCtx.currentTime);
+                oscillator.stop(audioCtx.currentTime + 0.8);
+              }
             }
           } catch(e) {
             console.warn("Failed to play doorbell sound", e);
           }
 
+          const toastBg = activeTheme === 'midnight' ? '#1F1F23' :
+                          activeTheme === 'slate' ? '#1E293B' :
+                          activeTheme === 'soft' ? '#FAFAF7' : '#FFFFFF';
+          const toastColor = activeTheme === 'midnight' ? '#FAFAFA' :
+                             activeTheme === 'slate' ? '#F1F5F9' :
+                             activeTheme === 'soft' ? '#1C1C1A' : '#1A2B1F';
+          const toastBorder = activeTheme === 'midnight' ? 'rgba(255,255,255,0.08)' :
+                              activeTheme === 'slate' ? 'rgba(255,255,255,0.07)' :
+                              activeTheme === 'soft' ? '#C8C7C1' : 'rgba(0,0,0,0.10)';
+          const controlBg = activeTheme === 'midnight' ? 'rgba(255,255,255,0.07)' :
+                            activeTheme === 'slate' ? 'rgba(255,255,255,0.06)' :
+                            activeTheme === 'soft' ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.07)';
+
           toast.custom((t) => (
-            <div className="bg-[var(--mt-bg-elevated)] text-[var(--mt-text)] p-4 rounded-xl shadow-lg border border-[var(--mt-border)] w-full flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+            <div 
+              className="p-4 rounded-xl shadow-2xl border w-full flex flex-col gap-3 backdrop-blur-2xl" 
+              style={{ 
+                backgroundColor: toastBg, 
+                color: toastColor, 
+                borderColor: toastBorder,
+                pointerEvents: 'auto' 
+              }}
+            >
               <div className="font-medium text-sm text-balance leading-tight">{msg.name} is waiting to join</div>
               <div className="flex gap-2 justify-end">
                 <button 
@@ -1318,8 +1414,12 @@ export function MeetingProvider({
                     notifiedWaitingUsersRef.current.delete(msg.userId);
                     toast.dismiss(t);
                   }}
-                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border border-[var(--mt-border)]"
-                  style={{ backgroundColor: "var(--mt-bg-control)", color: "var(--mt-text)" }}
+                  className="px-4 py-2 text-xs font-medium rounded-md transition-colors border"
+                  style={{ 
+                    backgroundColor: controlBg, 
+                    color: toastColor,
+                    borderColor: toastBorder
+                  }}
                 >
                   Admit
                 </button>
@@ -2093,7 +2193,11 @@ export function MeetingProvider({
       }).catch(err => {
         console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
-        setCamError({ name: err.name || 'Camera Error', message: err.message || 'Unable to access your camera.' });
+        if (err.message && err.message.includes("Cameras are locked")) {
+          toast.error("The host has locked cameras for this meeting.");
+        } else {
+          setCamError({ name: err.name || 'Camera Error', message: err.message || 'Unable to access your camera.' });
+        }
         // Ensure UI stays off
         setIsCameraOn(false);
       }).finally(() => {
@@ -2478,6 +2582,8 @@ export function MeetingProvider({
         },
         isHDVideoEnabled,
         setIsHDVideoEnabled: updateHDVideo,
+        isWidescreenEnabled,
+        setIsWidescreenEnabled: updateWidescreen,
         isMirrorVideoEnabled,
         setIsMirrorVideoEnabled: updateMirrorVideo,
         isOriginalRatioEnabled,

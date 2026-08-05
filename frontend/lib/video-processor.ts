@@ -133,9 +133,21 @@ export class VideoProcessor {
     if (!this.isProcessing || !this.rawStream) return;
 
     if (this.videoElement.readyState >= 2) {
-      if (this.videoElement.videoWidth > 0 && this.canvas.width !== this.videoElement.videoWidth) {
-        this.canvas.width = this.videoElement.videoWidth;
-        this.canvas.height = this.videoElement.videoHeight;
+      if (this.videoElement.videoWidth > 0) {
+        let targetWidth = this.videoElement.videoWidth;
+        let targetHeight = this.videoElement.videoHeight;
+        
+        // Cap dimensions to 720p max to protect CPU
+        if (targetWidth > 1280 || targetHeight > 720) {
+          const scale = Math.min(1280 / targetWidth, 720 / targetHeight);
+          targetWidth = Math.round(targetWidth * scale);
+          targetHeight = Math.round(targetHeight * scale);
+        }
+        
+        if (this.canvas.width !== targetWidth) {
+          this.canvas.width = targetWidth;
+          this.canvas.height = targetHeight;
+        }
       }
       
       const { width, height } = this.canvas;

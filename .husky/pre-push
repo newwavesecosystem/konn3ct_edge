@@ -11,13 +11,21 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-echo "2/2 Building Frontend..."
+echo "2/3 Building Frontend..."
 cd frontend
 npm run build
 if [ $? -ne 0 ]; then
   echo "Frontend build failed! Aborting push."
   exit 1
 fi
+
+# cd ../konn3ct-mobile
+# echo "3/3 Running Mobile E2E Tests (Playwright)..."
+# npm run test:e2e
+# if [ $? -ne 0 ]; then
+#   echo "Mobile E2E tests failed! Aborting push."
+#   exit 1
+# fi
 
 echo "========================================="
 echo "Validation passed! Pushing to GitHub..."

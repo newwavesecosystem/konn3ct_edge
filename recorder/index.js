@@ -356,7 +356,11 @@ async function processRecordingJob(job) {
           pubsub.removeListener('message', stopHandler);
           
           console.log(JSON.stringify({ event: "recorder_ffmpeg_sigint_sent", recordingId }));
-          ffmpegProc.kill('SIGINT');
+          if (ffmpegProc.stdin && ffmpegProc.stdin.writable) {
+            ffmpegProc.stdin.write('q\n');
+          } else {
+            ffmpegProc.kill('SIGINT');
+          }
           
           // Timeout for SIGINT
           const killTimeout = setTimeout(() => {

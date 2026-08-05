@@ -25,7 +25,7 @@ import { RootStackParamList } from '../../App';
 import { apiClient } from '../api/client';
 import { fetchDashboardStats, fetchTodayMeetings, DashboardStats, TodayMeeting } from '../api/dashboard';
 import { fetchSchedules } from '../api/schedule';
-import { createRoom, fetchMyRooms, startRoom, joinRoomKv4, validateMeetingKv4 } from '../api/rooms';
+import { createRoom, fetchMyRooms, fetchMyRoomsData, startRoom, joinRoomKv4, validateMeetingKv4 } from '../api/rooms';
 import { getAttendeeToken } from '../api/edgeApi';
 import { SIGNAL_SERVER_DOMAIN as SIGNAL_DOMAIN } from '../webrtc/MediasoupService';
 import { useAuthStore } from '../store/useAuthStore';
@@ -206,7 +206,7 @@ export default function DashboardScreen({ navigation }: Props) {
         // === DEV ENDPOINTS (NEW) ===
         fetchDashboardStats(),
         fetchTodayMeetings(),
-        fetchMyRooms().catch(() => []),
+        fetchMyRoomsData().catch(() => ({ rooms: [], total_rooms: 0, max_rooms: 0 })),
       ]);
       setPastRooms(summariesRes.data.slice(0, 3));
       const schedulesArray = Array.isArray(schedRes) ? schedRes : schedRes?.data || [];
@@ -217,12 +217,19 @@ export default function DashboardScreen({ navigation }: Props) {
         return isNaN(meetingTime) || meetingTime >= now;
       });
       setUpcoming(futureSchedules);
-      setDashboardStats(statsRes);
+      
+      const adjustedStats = statsRes ? { ...statsRes } : { rooms: 0, upcoming_meetings: 0, streaming: 0, recordings: 0 };
+      if (roomsRes && typeof roomsRes === 'object' && 'total_rooms' in roomsRes) {
+        adjustedStats.rooms = roomsRes.total_rooms || 0;
+      }
+      setDashboardStats(adjustedStats as DashboardStats);
+      
       setTodayMeetings(todayRes);
 
       // Set personal room URL from user's default room (or first room)
-      if (Array.isArray(roomsRes) && roomsRes.length > 0) {
-        const defaultRoom = roomsRes.find((r: any) => r.default_room === 'yes') || roomsRes[0];
+      const roomsArray = roomsRes?.rooms || [];
+      if (Array.isArray(roomsArray) && roomsArray.length > 0) {
+        const defaultRoom = roomsArray.find((r: any) => r.default_room === 'yes') || roomsArray[0];
         setPersonalRoomUrl(defaultRoom.url || null);
       }
     } catch (e) {
@@ -276,11 +283,14 @@ export default function DashboardScreen({ navigation }: Props) {
       // This calls /api/prejoin → /api/join which force-locks role to "attendee",
       // ensuring the signal server puts the user in the waiting room.
       setJoinStatus('Connecting...');
-      const meetingToken = await getAttendeeToken(
+      const tokenRes = await getAttendeeToken(
         roomId,
         user?.name || 'Guest',
         user?.email || 'guest@conn3ct.com'
       );
+
+      const meetingToken = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
+      const signalUrl = typeof tokenRes === 'string' ? undefined : tokenRes.signalUrl;
 
       // Step 3: Navigate to lobby — LobbyScreen handles the WebSocket
       // connection and waiting room UI, including error states (404, host not ready).
@@ -288,7 +298,7 @@ export default function DashboardScreen({ navigation }: Props) {
       setJoinRoomId('');
       setJoinStatus('Join Room');
       setIsJoining(false);
-      navigation.navigate('Lobby', { roomId, meetingToken, micOn: joinMicOn, cameraOn: joinCameraOn });
+      navigation.navigate('Lobby', { roomId, meetingToken, signalUrl, micOn: joinMicOn, cameraOn: joinCameraOn });
       return;
     } catch (e: any) {
       console.error('Join failed:', e.response?.data || e.message);
@@ -325,10 +335,11 @@ export default function DashboardScreen({ navigation }: Props) {
         console.log('--- DASHBOARD: START ROOM 1 RESPONSE ---');
         console.log(JSON.stringify(startRes, null, 2));
         const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+        const signalUrl = startRes?.signalUrl || startRes?.signal_url;
         console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
         
         const roomId = room.url || room.slug || String(room.id);
-        navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
+        navigation.navigate('Meeting', { roomId, meetingToken, signalUrl, micOn: false, cameraOn: false });
       } else {
         // Fallback if user has absolutely no rooms — create one and start it
         if (IS_DEV) {
@@ -347,8 +358,9 @@ export default function DashboardScreen({ navigation }: Props) {
             console.log('--- DASHBOARD: START ROOM 2 RESPONSE ---');
             console.log(JSON.stringify(startRes, null, 2));
             const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+            const signalUrl = startRes?.signalUrl || startRes?.signal_url;
             console.log('DASHBOARD EXTRACTED TOKEN:', meetingToken ? 'YES' : 'NO');
-            navigation.navigate('Meeting', { roomId: randomSlug, meetingToken, micOn: false, cameraOn: false });
+            navigation.navigate('Meeting', { roomId: randomSlug, meetingToken, signalUrl, micOn: false, cameraOn: false });
           } else {
             Alert.alert('Error', 'Room was created but could not be found. Please try again.');
           }
@@ -522,6 +534,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   style={styles.joinButton}
                   onPress={() => setShowJoinInput(true)}
                   activeOpacity={0.85}
+                  testID="join-meeting-btn"
                 >
                   <View style={styles.joinIconBox} />
                   <Text style={styles.joinButtonText}>
@@ -534,6 +547,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   onPress={handleCreate}
                   disabled={isCreating}
                   activeOpacity={0.85}
+                  testID="host-meeting-btn"
                 >
                   {isCreating ? (
                     <ActivityIndicator color={COLORS.white} size="small" />
@@ -550,6 +564,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 style={styles.scheduleButton}
                 onPress={() => (navigation.navigate as any)('Schedule')}
                 activeOpacity={0.85}
+                testID="schedule-meeting-btn"
               >
                 <Calendar color={COLORS.white} size={18} />
                 <Text style={styles.scheduleButtonText}>Schedule for later</Text>
@@ -644,6 +659,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   editable={!isJoining}
                   onSubmitEditing={handleJoin}
                   returnKeyType="go"
+                  testID="join-room-id-input"
                 />
 
                 <View style={styles.togglesContainer}>
@@ -675,6 +691,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   onPress={handleJoin}
                   activeOpacity={0.85}
                   disabled={isJoining}
+                  testID="join-room-submit-btn"
                 >
                   {isJoining ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

@@ -4,14 +4,14 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { getOrCreateRouter, closeRouter, createWebRtcTransport, connectTransport, createProducer, createConsumerWithCallback, resumeConsumer, pauseConsumer, closeProducer, closeTransport, setupAudioObserver, cleanupAudioObserver, getProducer, requestConsumerKeyFrame, restartIce, handleTranscriptionMute } from '../media/sfu';
+import { localMediaController as mediaController } from '../services/LocalMediaController';
 import os from 'os';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
-import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache } from './historyCache';
+import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache, invalidateRoomHistoryCache } from './historyCache';
 import { monitorEventLoopDelay, PerformanceObserver } from 'perf_hooks';
 
 // --- Event Loop & GC Telemetry ---
@@ -212,6 +212,13 @@ async function cleanupRoomData(roomId: string) {
       });
       logger.info(`Cleared ${count} chat messages for room ${roomId} (persistChat=false).`);
     }
+
+    // 3. Clear Redis cache so new sessions don't load old history
+    await invalidateRoomHistoryCache(roomId);
+
+    // 4. Clear memory state for eCinema
+    roomECinema.delete(roomId);
+    roomECinemaState.delete(roomId);
   } catch (error) {
     logger.error(`Error during cleanupRoomData for room ${roomId}:`, error);
   }
@@ -414,6 +421,39 @@ async function generateMeetingSummary(roomId: string) {
 
 export function initializeSignaling(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
+
+  mediaController.on('producerClose', (data) => {
+    const { consumerId, producerId, appData } = data;
+    const client = consumerOwners.get(consumerId);
+    if (client && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(JSON.stringify({
+        type: 'producer_closed',
+        producerId,
+        consumerId,
+        appData
+      }));
+    }
+    consumerOwners.delete(consumerId);
+  });
+
+  mediaController.on('activeSpeaker', (data) => {
+    const { roomId, producerIds } = data;
+    const activeUsers = new Set<string>();
+    const activeParticipantIds = new Set<string>();
+    const allProducers = roomProducers.get(roomId) || [];
+    for (const pid of producerIds) {
+      const prod = allProducers.find(p => p.producerId === pid);
+      if (prod) {
+        activeUsers.add(prod.userId);
+        activeParticipantIds.add(prod.participantId);
+      }
+    }
+    broadcastToRoom(roomId, {
+      type: 'active_speaker',
+      userIds: Array.from(activeUsers),
+      participantIds: Array.from(activeParticipantIds)
+    });
+  });
 
   transcriberEvents.on('caption', (data) => {
     const { roomId, userId, name, text, isFinal, lang } = data;
@@ -627,25 +667,7 @@ export function initializeSignaling(server: Server) {
       redis.expire(`room:${roomSlug}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
 
       // Setup audio observer for talking indicators
-      setupAudioObserver(roomId, (producerIds) => {
-        // Map producer IDs to user IDs
-        const activeUsers = new Set<string>();
-        const activeParticipantIds = new Set<string>();
-        const allProducers = roomProducers.get(roomId) || [];
-        for (const pid of producerIds) {
-          const prod = allProducers.find(p => p.producerId === pid);
-          if (prod) {
-            activeUsers.add(prod.userId);
-            activeParticipantIds.add(prod.participantId);
-          }
-        }
-        
-        broadcastToRoom(roomId, {
-          type: 'active_speaker',
-          userIds: Array.from(activeUsers),
-          participantIds: Array.from(activeParticipantIds)
-        });
-      }).catch(e => logger.error('Failed to setup audio observer', e));
+      mediaController.setupAudioObserver(roomId).catch(e => logger.error('Failed to setup audio observer', e));
     }
 
     // Check if there's an existing client in the room that was already admitted
@@ -683,7 +705,7 @@ export function initializeSignaling(server: Server) {
       // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
       if (client.status === 'active') {
         try {
-          await getOrCreateRouter(roomId);
+          await mediaController.getOrCreateRouter(roomId);
         } catch (e) {
           logger.error('Failed to pre-warm router on join', e);
         }
@@ -794,7 +816,7 @@ export function initializeSignaling(server: Server) {
       // This prevents orphaned ports from causing "UDP connection failed" errors.
       client.transports.forEach(tId => {
         try {
-          closeTransport(tId);
+          mediaController.closeTransport(tId);
         } catch (e) {
           logger.warn(`Failed to close transport ${tId}`, e);
         }
@@ -823,8 +845,8 @@ export function initializeSignaling(server: Server) {
             cleanupRoomData(roomId);
             roomProducers.delete(roomId); // Clean up producers array when room empties
             roomAdmissions.delete(roomId);
-            cleanupAudioObserver(roomId); // Clean up talking indicator
-            closeRouter(roomId); // Prevent Mediasoup Router memory leaks
+            mediaController.cleanupAudioObserver(roomId); // Clean up talking indicator
+            mediaController.closeRouter(roomId); // Prevent Mediasoup Router memory leaks
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
@@ -1234,7 +1256,7 @@ export function initializeSignaling(server: Server) {
             cleanupRoomData(roomId);
             roomProducers.delete(roomId);
             roomAdmissions.delete(roomId);
-            cleanupAudioObserver(roomId);
+            mediaController.cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, client.roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
@@ -1263,11 +1285,11 @@ export function initializeSignaling(server: Server) {
             cleanupRoomData(roomId);
             roomProducers.delete(roomId);
             roomAdmissions.delete(roomId);
-            cleanupAudioObserver(roomId);
+            mediaController.cleanupAudioObserver(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             syncRoomStateToRedis(roomId, client.roomSlug);
             
-            closeRouter(roomId);
+            mediaController.closeRouter(roomId);
             roomSettingsMap.delete(roomId);
 
             for (const [id, c] of roomClients.entries()) {
@@ -1644,7 +1666,7 @@ export function initializeSignaling(server: Server) {
         if (producersList) {
           const audioProducer = producersList.find(p => p.participantId === client.participantId && p.kind === 'audio');
           if (audioProducer) {
-             handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
+             mediaController.handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
           }
         }
         
@@ -1924,13 +1946,13 @@ export function initializeSignaling(server: Server) {
 
       // --- WebRTC Media Signaling ---
       case 'getRouterRtpCapabilities': {
-        const router = await getOrCreateRouter(roomId);
+        const router = await mediaController.getOrCreateRouter(roomId);
         client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: router.rtpCapabilities }));
         break;
       }
 
       case 'createWebRtcTransport': {
-        const transportParams = await createWebRtcTransport(roomId);
+        const transportParams = await mediaController.createWebRtcTransport(roomId);
         client.transports.push(transportParams.id);
 
         // Generate temporary TURN credentials for this client
@@ -1968,7 +1990,7 @@ export function initializeSignaling(server: Server) {
           logger.warn(`User ${userId} tried to connect a transport they don't own: ${data.transportId}`);
           return;
         }
-        await connectTransport(data.transportId, data.dtlsParameters);
+        await mediaController.connectTransport(data.transportId, data.dtlsParameters);
         client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
         break;
       }
@@ -2026,7 +2048,7 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        const producerId = await createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
+        const { id: producerId } = await mediaController.createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
         
         logger.info(JSON.stringify({
           event: "producer_created",
@@ -2081,7 +2103,7 @@ export function initializeSignaling(server: Server) {
         consumeBursts.get(roomId)!.push(now);
         
         try {
-          const router = await getOrCreateRouter(roomId);
+          const router = await mediaController.getOrCreateRouter(roomId);
           const allProducers = Array.from(roomProducers.values()).flat();
           const targetProducer = allProducers.find(p => p.producerId === data.producerId);
 
@@ -2090,7 +2112,7 @@ export function initializeSignaling(server: Server) {
           
           let canConsume = false;
           try {
-            canConsume = router.canConsume({ producerId: data.producerId, rtpCapabilities: data.rtpCapabilities });
+            canConsume = await mediaController.canConsume(roomId, data.producerId, data.rtpCapabilities);
           } catch (err) {
             logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
           }
@@ -2120,7 +2142,7 @@ export function initializeSignaling(server: Server) {
           else if (targetProducer.participantId === client.participantId) failReason = "SELF_CONSUME_NOT_ALLOWED";
           else if (!canConsume) {
             failReason = "RTP_CAPABILITIES_MISMATCH";
-            sfuProducer = getProducer(data.producerId);
+            sfuProducer = await mediaController.getProducer(data.producerId);
             const consumerCodecs = data.rtpCapabilities?.codecs || [];
             const hasAudioOpus = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase() === 'audio/opus');
             const hasVideoCodec = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase().startsWith('video/'));
@@ -2162,7 +2184,7 @@ export function initializeSignaling(server: Server) {
                   producerSource: targetProducer.appData?.source || "unknown",
                   producerCodec: sfuProducer?.rtpParameters?.codecs?.[0]?.mimeType || "unknown",
                   consumerCodecList: consumerCodecs.map((c: any) => c.mimeType),
-                  routerCodecList: router.rtpCapabilities.codecs?.map(c => c.mimeType),
+                  routerCodecList: router.rtpCapabilities.codecs?.map((c: any) => c.mimeType),
                   canConsume: false,
                   reason: preciseReason,
                   routerId: router.id,
@@ -2196,41 +2218,11 @@ export function initializeSignaling(server: Server) {
             return;
           }
 
-          const consumerParams = await createConsumerWithCallback(
+          const consumerParams = await mediaController.createConsumer(
             data.transportId,
             data.producerId,
             data.rtpCapabilities,
-            router,
-            (closedConsumerId) => {
-              // Producer was closed (e.g. remote peer stopped screen share)
-              // Find the appData of the producer so we know if it was a screen share
-              // Find the appData of the producer so we know if it was a screen share
-              const currentAllProducers = Array.from(roomProducers.values()).flat();
-              const closedProducerRef = currentAllProducers.find(p => p.producerId === data.producerId);
-              if (client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(JSON.stringify({
-                  type: 'producer_closed',
-                  producerId: data.producerId,
-                  consumerId: closedConsumerId,
-                  appData: closedProducerRef?.appData || {}
-                }));
-              }
-              consumerOwners.delete(closedConsumerId);
-            },
-            (score) => {
-              // If the connection is poor, tell the client so it can pause video
-              if (score < 3 && client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(JSON.stringify({
-                  type: 'connection_poor',
-                  producerId: data.producerId
-                }));
-              } else if (score >= 3 && client.ws.readyState === WebSocket.OPEN) {
-                client.ws.send(JSON.stringify({
-                  type: 'connection_recovered',
-                  producerId: data.producerId
-                }));
-              }
-            }
+            roomId
           );
           // Track which client owns this consumer for cleanup
           consumerOwners.set(consumerParams.id, client);
@@ -2258,7 +2250,7 @@ export function initializeSignaling(server: Server) {
       case 'reset_webrtc_state': {
         logger.info(`User ${userId} requested WebRTC state reset (IP change detected)`);
         for (const tid of client.transports) {
-          closeTransport(tid);
+          mediaController.closeTransport(tid);
         }
         client.transports = [];
         
@@ -2280,7 +2272,7 @@ export function initializeSignaling(server: Server) {
         const { transportId } = data;
         try {
           logger.info(`User ${userId} requesting ICE Restart for transport ${transportId}`);
-          const iceParameters = await restartIce(transportId);
+          const iceParameters = await mediaController.restartIce(transportId);
           client.ws.send(JSON.stringify({
             type: 'ice_restarted',
             transportId,
@@ -2313,7 +2305,7 @@ export function initializeSignaling(server: Server) {
         if (rp) {
           roomProducers.set(roomId, rp.filter(p => p.producerId !== pidToStop));
           // Close the Mediasoup producer — this triggers producerclose on all consumers
-          closeProducer(pidToStop);
+          mediaController.closeProducer(pidToStop);
 
           if (clientEventId) emitActionAck(client, clientEventId, 'stop_producer', crypto.randomUUID(), 'accepted');
 
@@ -2344,7 +2336,7 @@ export function initializeSignaling(server: Server) {
           logger.warn(`User ${userId} tried to resume a consumer they don't own`);
           return;
         }
-        await resumeConsumer(data.consumerId, client.cleanupStarted);
+        await mediaController.resumeConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
         break;
       }
@@ -2356,7 +2348,7 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({ type: 'error', errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
           return;
         }
-        await pauseConsumer(data.consumerId);
+        await mediaController.pauseConsumer(data.consumerId);
         client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
         break;
       }
@@ -2364,7 +2356,7 @@ export function initializeSignaling(server: Server) {
       case 'request_screen_keyframe': {
         if (data.consumerId) {
           logger.info(`Requesting keyframe for screen share consumer ${data.consumerId} by user ${userId}`);
-          await requestConsumerKeyFrame(data.consumerId);
+          await mediaController.requestConsumerKeyFrame(data.consumerId);
         }
         break;
       }
@@ -2380,6 +2372,10 @@ export function initializeSignaling(server: Server) {
 
       case 'ping':
         // Silently ignore ping messages used for keep-alive
+        break;
+
+      case 'webrtc_client_stats':
+        logger.info(`[ClientStats] Room ${roomId} | User ${client.userId}: RTT=${data.roundTripTime || 0}ms, Jitter=${data.jitter || 0}, Loss=${data.packetsLost || 0}`);
         break;
 
       default:

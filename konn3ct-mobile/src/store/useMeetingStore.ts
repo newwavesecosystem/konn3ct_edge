@@ -13,13 +13,14 @@ export interface ChatMessage {
 export interface Poll {
   id: string;
   question: string;
-  options: { id: string; text: string; votes: number }[];
+  options: { id: string; text: string; votes: number; votedBy?: { userId: string; name: string }[] }[];
   votedOptionId?: string;
   isActive: boolean;
 }
 
 export interface Participant {
   userId: string;
+  participantId?: string;  // session-level routing ID used by signal server for private messages
   name: string;
   role: string;
   isMobile?: boolean;
@@ -28,6 +29,7 @@ export interface Participant {
   isSpeaking?: boolean;
   isMuted?: boolean;
   isCameraOn?: boolean;
+  isScreenSharing?: boolean;
 }
 
 export interface Reaction {
@@ -60,6 +62,7 @@ interface MeetingState {
   isHost: boolean;
   isHandRaisedLocally: boolean;
   isLocalUserSpeaking: boolean;
+  screenSharingUserId: string | null;
 
   // Active UI Panes
   activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation';
@@ -73,7 +76,7 @@ interface MeetingState {
   removeReaction: (id: string) => void;
   setPolls: (polls: Poll[]) => void;
   addPoll: (poll: Poll) => void;
-  updatePollVote: (pollId: string, optionId: string) => void;
+  updatePollVote: (pollId: string, optionId: string, voter?: { userId: string; name: string }) => void;
   endPoll: (pollId: string) => void;
   setParticipants: (participants: Participant[]) => void;
   addParticipant: (participant: Participant) => void;
@@ -81,6 +84,7 @@ interface MeetingState {
   updateParticipantHandRaise: (userId: string, isRaised: boolean) => void;
   updateParticipantSpeaking: (userIds: string[]) => void;
   updateParticipantMuteState: (userId: string, isMuted: boolean) => void;
+  updateParticipantRole: (userId: string, newRole: string) => void;
   setIsHandRaisedLocally: (isRaised: boolean) => void;
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
@@ -88,6 +92,7 @@ interface MeetingState {
   setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation') => void;
   setTheme: (theme: 'sage' | 'midnight') => void;
   setCaptions: (updater: (curr: CaptionMessage[]) => CaptionMessage[]) => void;
+  setScreenSharing: (userId: string | null) => void;
   reset: () => void;
 }
 
@@ -106,11 +111,12 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   isHost: false,
   isHandRaisedLocally: false,
   isLocalUserSpeaking: false,
+  screenSharingUserId: null,
 
   setCurrentUser: (userId, role) => set({ 
     currentUserId: userId, 
     currentUserRole: role,
-    isHost: role === 'host' || role === 'moderator' || role === 'owner' || role === 'admin' 
+    isHost: role === 'host' || role === 'co-host' || role === 'moderator' || role === 'owner' || role === 'admin' 
   }),
   setTheme: (theme) => set({ theme }),
   setIsHandRaisedLocally: (isRaised) => set({ isHandRaisedLocally: isRaised }),
@@ -143,13 +149,19 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     return { polls: [...state.polls, poll] };
   }),
 
-  updatePollVote: (pollId, optionId) => set((state) => ({
+  updatePollVote: (pollId, optionId, voter) => set((state) => ({
     polls: state.polls.map(p => {
       if (p.id === pollId) {
         return {
           ...p,
           options: p.options.map(opt => 
-            opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt
+            opt.id === optionId 
+              ? { 
+                  ...opt, 
+                  votes: opt.votes + 1,
+                  votedBy: voter ? [...(opt.votedBy || []), voter] : opt.votedBy
+                } 
+              : opt
           )
         };
       }
@@ -186,6 +198,12 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     )
   })),
 
+  updateParticipantRole: (userId, newRole) => set((state) => ({
+    participants: state.participants.map(p =>
+      p.userId === userId ? { ...p, role: newRole } : p
+    )
+  })),
+
   updateParticipantSpeaking: (userIds) => set((state) => ({
     participants: state.participants.map(p => ({
       ...p,
@@ -210,6 +228,14 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     unreadChatCount: pane === 'chat' ? 0 : state.unreadChatCount
   })),
 
+  setScreenSharing: (userId) => set((state) => ({
+    screenSharingUserId: userId,
+    participants: state.participants.map(p => ({
+      ...p,
+      isScreenSharing: p.userId === userId
+    }))
+  })),
+
   reset: () => set({
     chatMessages: [],
     polls: [],
@@ -223,6 +249,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     currentUserId: null,
     isHost: false,
     isHandRaisedLocally: false,
-    isLocalUserSpeaking: false
+    isLocalUserSpeaking: false,
+    screenSharingUserId: null
   })
 }));

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useVirtualBackgrounds } from "@/hooks/use-virtual-backgrounds";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { VideoProcessor, VirtualBackgroundMode } from "@/lib/video-processor";
@@ -40,6 +41,13 @@ export default function JoinPage({
   const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
+  
+  // Validation States
+  const [validationStatus, setValidationStatus] = useState<"loading" | "valid" | "invalid">("loading");
+  const [requiresAccessCode, setRequiresAccessCode] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
+  const [roomDetails, setRoomDetails] = useState<any>(null);
+  const [validationError, setValidationError] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -71,24 +79,33 @@ export default function JoinPage({
     }
   }, []);
 
-  // Check if the signalling server is reachable
+  // Validate Room via external API
   useEffect(() => {
-    const checkServer = async () => {
+    const validateRoom = async () => {
       try {
-        // Ping the server to check if it's reachable. We use isPing: true to bypass the pre-join session requirement for this simple ping.
-        const res = await fetch("/api/join", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId: resolvedParams.roomSlug, isPing: true }),
-          signal: AbortSignal.timeout(5000),
+        const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
+        const res = await fetch(`${baseUrl}/validate-meeting`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: resolvedParams.roomSlug })
         });
         const data = await res.json();
-        setServerStatus(data.token ? "online" : "offline");
-      } catch {
-        setServerStatus("offline");
+        
+        if (data.success) {
+          setValidationStatus("valid");
+          setRequiresAccessCode(data.access_code);
+          setRoomDetails(data.data);
+        } else {
+          setValidationStatus("invalid");
+          setValidationError(data.message || "Rooms does not exist");
+        }
+      } catch (err) {
+        console.error("Validation error:", err);
+        setValidationStatus("invalid");
+        setValidationError("Unable to connect to validation service.");
       }
     };
-    checkServer();
+    validateRoom();
   }, [resolvedParams.roomSlug]);
 
   useEffect(() => {
@@ -276,33 +293,48 @@ export default function JoinPage({
   }, [isCameraOn, selectedDevices.videoInput]);
 
   const handleJoin = async () => {
-    if (!name.trim() || isJoining) return;
+    if (!name.trim() || !email.trim() || isJoining) return;
+    if (requiresAccessCode && !accessCode.trim()) {
+      alert("Access code is required.");
+      return;
+    }
     setIsJoining(true);
     // Stop the preview stream so it doesn't block camera in the meeting
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
     
     try {
-      const res = await fetch("/api/prejoin", {
+      const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
+      const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const payload: any = {
+        room: resolvedParams.roomSlug,
+        name: name.trim(),
+        email: email.trim(),
+        cam: isCameraOn,
+        mic: !isMuted,
+        mobile: isMobileDevice,
+        isMobile: isMobileDevice
+      };
+
+      if (requiresAccessCode) {
+        payload.access_code = accessCode.trim();
+      }
+
+      const res = await fetch(`${baseUrl}/join-room`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId: resolvedParams.roomSlug,
-          name: name.trim(),
-          email: email.trim(),
-          isMobile: typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
-          camera: isCameraOn,
-          mic: !isMuted
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
-      if (!res.ok || !data.sessionToken) {
-        throw new Error(data.error || "Failed to create join session");
+      if (!data.success) {
+        throw new Error(data.message || "Failed to join room");
       }
 
-      // Save the secure session token to navigate with
-      sessionStorage.setItem("conn3ct_session_token", data.sessionToken);
+      if (data.sessionToken) {
+        // Save the secure session token to navigate with
+        sessionStorage.setItem("conn3ct_session_token", data.sessionToken);
+      }
 
       // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
       router.push(`/meeting/${resolvedParams.roomSlug}`);
@@ -335,6 +367,7 @@ export default function JoinPage({
   const appName = process.env.NEXT_PUBLIC_APP_NAME || "Konn3ct";
   const appInitial = appName.charAt(0).toUpperCase();
 
+  const { backgrounds } = useVirtualBackgrounds();
   return (
     <div className="min-h-screen bg-[#0d0d1a] flex flex-col">
       {/* Top bar */}
@@ -355,12 +388,40 @@ export default function JoinPage({
 
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="w-full max-w-4xl"
-        >
+        {validationStatus === "loading" && (
+          <div className="flex flex-col items-center gap-4 text-white/50">
+            <Loader2 className="w-8 h-8 animate-spin text-brand-green" />
+            <p>Validating room...</p>
+          </div>
+        )}
+
+        {validationStatus === "invalid" && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="max-w-md w-full bg-[#1a1a2e] border border-red-500/20 rounded-2xl p-8 text-center shadow-2xl"
+          >
+            <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center mx-auto mb-4">
+              <Shield className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Invalid Room URL</h2>
+            <p className="text-white/60 mb-8">{validationError}</p>
+            {/* <button
+              onClick={() => router.push("/")}
+              className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              Go to Homepage
+            </button> */}
+          </motion.div>
+        )}
+
+        {validationStatus === "valid" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-full max-w-4xl"
+          >
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
             {/* Camera preview */}
             <div className="order-1">
@@ -564,11 +625,7 @@ export default function JoinPage({
                           <span className="relative z-10 text-[10px] text-white">Blur</span>
                         </button>
                         
-                        {[
-                          '/backgrounds/modern_office.png',
-                          '/backgrounds/cozy_cafe.png',
-                          '/backgrounds/minimalist_gradient.png'
-                        ].map((url, i) => (
+                        {backgrounds.map((url, i) => (
                           <button
                             key={url}
                             onClick={() => handleVbSelect('image', url)}
@@ -601,12 +658,29 @@ export default function JoinPage({
             {/* Join form */}
             <div className="order-2 flex flex-col justify-center">
               <div className="space-y-5">
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Ready to join?</h1>
-                  <p className="text-sm text-white/40">
-                    You&apos;re about to join{" "}
-                    <span className="text-white/70 font-medium">{roomName}</span>
-                  </p>
+                <div className="flex items-center gap-4 mb-2">
+                  {roomDetails?.display_image && (
+                    <img 
+                      src={roomDetails.display_image} 
+                      alt="Room Logo" 
+                      className="w-14 h-14 rounded-xl object-contain bg-white/5 border border-white/10 p-1 shrink-0" 
+                    />
+                  )}
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1">Ready to join?</h1>
+                    <p className="text-sm text-white/40 leading-relaxed">
+                      You&apos;re about to join{" "}
+                      <span className="text-white/70 font-medium">{roomDetails?.name || roomName}</span>
+                      {roomDetails?.owner && (
+                        <>
+                          <br />
+                          <span className="text-xs text-brand-green/80 font-medium">
+                            Hosted by {roomDetails.owner}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Server status */}
@@ -656,16 +730,32 @@ export default function JoinPage({
                   />
                 </div>
 
+                {/* Access Code input */}
+                {requiresAccessCode && (
+                  <div>
+                    <label className="block text-xs text-white/40 mb-2 font-medium">Access Code</label>
+                    <input
+                      id="join-access-code"
+                      type="text"
+                      value={accessCode}
+                      onChange={(e) => setAccessCode(e.target.value)}
+                      placeholder="Enter access code"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none focus:border-brand-green/40 focus:bg-white/[0.07] transition-colors"
+                      onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+                    />
+                  </div>
+                )}
+
                 {/* Role picker removed as it is now securely forced to attendee by the backend. Hosts will use the dashboard. */}
 
                 {/* Join button */}
                 <button
                   id="join-meeting-btn"
                   onClick={handleJoin}
-                  disabled={!name.trim() || isJoining}
+                  disabled={!name.trim() || !email.trim() || isJoining}
                   className={cn(
                     "w-full py-3.5 rounded-xl font-semibold text-sm transition-all duration-300 active:scale-[0.98]",
-                    name.trim()
+                    name.trim() && email.trim()
                       ? "bg-brand-green text-white hover:bg-[#287854] shadow-lg shadow-brand-green/20"
                       : "bg-white/5 text-white/20 cursor-not-allowed"
                   )}
@@ -688,6 +778,7 @@ export default function JoinPage({
             </div>
           </div>
         </motion.div>
+        )}
       </main>
     </div>
   );
@@ -734,3 +825,4 @@ function DeviceSelect({
     </div>
   );
 }
+

@@ -15,7 +15,9 @@ import {
   Platform,
   Animated,
   Switch,
+  Share,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
@@ -35,10 +37,15 @@ import {
   AlertCircle,
   RefreshCw,
   Zap,
+  Calendar,
+  Ban,
+  UserKey,
+  Share2
 } from 'lucide-react-native';
 import { useAuthStore } from '../store/useAuthStore';
 import {
   fetchMyRooms,
+  fetchMyRoomsData,
   createRoom,
   deleteRoom,
   startRoom,
@@ -137,6 +144,8 @@ export default function RoomsScreen() {
 
   // ── Data state ──
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [totalRooms, setTotalRooms] = useState(0);
+  const [maxRooms, setMaxRooms] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -181,8 +190,10 @@ export default function RoomsScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError('');
-      const data = await fetchMyRooms();
-      setRooms(data);
+      const data = await fetchMyRoomsData();
+      setRooms(data.rooms);
+      setTotalRooms(data.total_rooms);
+      setMaxRooms(data.max_rooms);
     } catch (err: any) {
       const msg =
         err.response?.data?.message ||
@@ -203,7 +214,7 @@ export default function RoomsScreen() {
   // ─── Stats derived from real data ─────────────────────────────────────────
 
   const stats = {
-    total: rooms.length,
+    total: totalRooms || rooms.length,
     active: rooms.filter((r) => r.status === 'active' || r.status === '1' || Number(r.status) === 1).length,
     inactive: rooms.filter((r) => r.status === 'inactive' || r.status === '0' || Number(r.status) === 0).length,
     scheduled: rooms.filter((r) => r.status === 'scheduled').length,
@@ -212,6 +223,15 @@ export default function RoomsScreen() {
   // ─── Create Room ──────────────────────────────────────────────────────────
 
   const handleCreateRoom = async () => {
+    if (maxRooms > 0 && totalRooms >= maxRooms) {
+      if (APP_CONFIG.GOV_LOGIN) {
+        setCreateError(`Room limit reached. You can only create up to ${maxRooms} rooms.`);
+      } else {
+        setCreateError(`Room limit reached. You can only create up to ${maxRooms} rooms on your current plan.`);
+      }
+      return;
+    }
+
     if (!createForm.name.trim()) {
       setCreateError('Room name is required.');
       return;
@@ -235,18 +255,18 @@ export default function RoomsScreen() {
         mode: createForm.mode,
         privacy: createForm.privacy,
         color: createForm.color || undefined,
-        access_code: createForm.access_code || undefined,
+        access_code: createForm.access_code ? createForm.access_code.trim() : '',
       };
       const res = await createRoom(payload);
       if (res.success) {
         setCreateSuccess('Room created successfully!');
-        // Reload list
-        await loadRooms();
         setTimeout(() => {
           setShowCreateModal(false);
           setCreateSuccess('');
           setCreateForm({ name: '', url: '', mode: 'meeting', privacy: 0, color: '', access_code: '' });
         }, 1200);
+        // Reload list
+        await loadRooms();
       } else {
         setCreateError(res.message || 'Failed to create room.');
       }
@@ -274,9 +294,10 @@ export default function RoomsScreen() {
 
       const roomId: string = room.url || String(room.id);
       const meetingToken = startRes?.sessionToken || startRes?.url?.match(/[?&]t=([^&]+)/)?.[1];
+      const signalUrl = startRes?.signalUrl || startRes?.signal_url;
       console.log('ROOMS SCREEN EXTRACTED TOKEN:', meetingToken ? 'YES (Length: ' + meetingToken.length + ')' : 'NO TOKEN FOUND');
 
-      navigation.navigate('Meeting', { roomId, meetingToken, micOn: false, cameraOn: false });
+      navigation.navigate('Meeting', { roomId, meetingToken, signalUrl, micOn: false, cameraOn: false });
     } catch (err: any) {
       Alert.alert(
         'Start Failed',
@@ -338,7 +359,7 @@ export default function RoomsScreen() {
     { label: 'Total Rooms', value: stats.total, icon: Video, color: COLORS.brandBlue },
     { label: 'Active', value: stats.active, icon: Play, color: COLORS.brandGreen },
     { label: 'Scheduled', value: stats.scheduled, icon: Globe, color: COLORS.amber },
-    { label: 'Inactive', value: stats.inactive, icon: Lock, color: COLORS.danger },
+    { label: 'Inactive', value: stats.inactive, icon: Ban, color: COLORS.textMuted },
   ];
 
   const renderStatCard = (item: typeof STAT_ITEMS[0], idx: number) => {
@@ -361,6 +382,7 @@ export default function RoomsScreen() {
   const renderRoomCard = (room: Room, index: number) => {
     const palette = getPalette(room, index);
     const isLocked = room.privacy === 1 || String(room.privacy) === '1';
+    const accessCodeRequired = room.password_attendee != "";
     const isStarting = startingRoomId === room.id;
     const isDeleting = deletingRoomId === room.id;
 
@@ -396,6 +418,7 @@ export default function RoomsScreen() {
             </View>
 
             <TouchableOpacity
+              testID={`delete-room-${room.url}`}
               style={styles.menuButton}
               onPress={() => handleDeleteRoom(room)}
               disabled={isDeleting}
@@ -432,15 +455,71 @@ export default function RoomsScreen() {
                 {room.mode || 'meeting'}
               </Text>
             </View>
+
+            {accessCodeRequired ? (
+              <View style={[styles.statusBadge, { backgroundColor: COLORS.dangerBg }]}>
+                <UserKey color={COLORS.danger} size={11} />
+                <Text style={[styles.statusText, { color: COLORS.danger }]}>Access Code</Text>
+              </View>
+            ) : null}
+
           </View>
 
           {/* Footer row */}
           <View style={styles.roomFooter}>
-            <Text style={styles.roomIdText}>ID: {room.id}</Text>
+            <View />
 
             <View style={styles.roomActionGroup}>
+              {/* Schedule Room */}
+              <TouchableOpacity
+                testID={`schedule-room-${room.url}`}
+                style={styles.roomActionBtn}
+                onPress={() => navigation.navigate('Schedule', { prefillRoomId: String(room.id) })}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Calendar color={COLORS.textMuted} size={14} />
+              </TouchableOpacity>
+
+              {/* Share Room */}
+              <TouchableOpacity
+                testID={`share-room-${room.url}`}
+                style={styles.roomActionBtn}
+                onPress={async () => {
+                  const govMDA = await AsyncStorage.getItem('@1gov_mda');
+                  let roomUrl = `${EDGE_FRONTEND_URL}/join/${room.url}`;
+                  if (govMDA != null) {
+                    roomUrl = roomUrl.replace('govsupport', govMDA || '');
+                  }
+
+                  const roomTitle = room.name || 'Meeting Room';
+                  const modeText = room.mode ? room.mode.charAt(0).toUpperCase() + room.mode.slice(1) : 'Meeting';
+                  const privacyText = room.privacy === 1 ? 'Private' : 'Public';
+
+                  let shareMessage = `🎥 You're invited to join a ${modeText}: ${roomTitle}\n\n`;
+                  shareMessage += `🔒 Mode: ${privacyText} ${modeText}\n`;
+                  if (room.access_code) {
+                    shareMessage += `🔑 Access Code: ${room.access_code}\n`;
+                  }
+                  shareMessage += `\n🔗 Join the room here:\n${roomUrl}`;
+
+                  try {
+                    await Share.share({
+                      title: `Join ${roomTitle}`,
+                      message: shareMessage,
+                      url: roomUrl,
+                    });
+                  } catch (error) {
+                    console.error('Error sharing room link:', error);
+                  }
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Share2 color={COLORS.textMuted} size={14} />
+              </TouchableOpacity>
+
               {/* Copy URL */}
               <TouchableOpacity
+                testID={`copy-room-url-${room.url}`}
                 style={styles.roomActionBtn}
                 onPress={() => handleCopyUrl(room.url)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -450,6 +529,7 @@ export default function RoomsScreen() {
 
               {/* Start Room */}
               <TouchableOpacity
+                testID={`start-room-${room.url}`}
                 style={[styles.roomActionBtn, styles.roomActionBtnPrimary]}
                 onPress={() => handleStartRoom(room)}
                 disabled={isStarting}
@@ -583,7 +663,7 @@ export default function RoomsScreen() {
                     placeholder="my-room-name"
                     placeholderTextColor={COLORS.textMuted}
                     value={createForm.url}
-                    editable={false}
+                    editable={true}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
@@ -717,6 +797,7 @@ export default function RoomsScreen() {
         {/* Action buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity
+            testID="create-room-btn"
             style={styles.btnPrimary}
             activeOpacity={0.85}
             onPress={() => {
