@@ -82,7 +82,7 @@ import {
 } from "lucide-react-native";
 import { useAuthStore } from "../store/useAuthStore";
 import PipService from "../native/KonnPip";
-import MeetingService from "../native/MeetingService";
+import MeetingService, { FG_TYPE_MEDIA_PLAYBACK, FG_TYPE_MICROPHONE, FG_TYPE_CAMERA } from "../native/MeetingService";
 import { LinearGradient } from "expo-linear-gradient";
 import { meetingThemeTokens } from "../theme/meetingTheme";
 // Components
@@ -207,8 +207,6 @@ export default function MeetingScreen({ route, navigation }: Props) {
     if (PipService.isAvailable()) {
       // Tell native side a meeting is active — enables auto-PiP on Home press
       PipService.setMeetingActive(true);
-      // Start foreground service to keep WebSocket alive when minimized
-      MeetingService.start("Meeting in progress");
       pipListener = PipService.onModeChanged((isInPip: boolean) => {
         if (isMounted) {
           setIsPipMode(isInPip);
@@ -282,15 +280,6 @@ export default function MeetingScreen({ route, navigation }: Props) {
           };
           if (status === "active") {
             setIsConnected(true);
-            // Re-enable existing hardware tracks on reconnect
-            if (localStreamRef.current && serviceRef.current) {
-              const videoTrack = localStreamRef.current.getVideoTracks()[0];
-              const audioTrack = localStreamRef.current.getAudioTracks()[0];
-              if (videoTrack && videoTrack.enabled)
-                serviceRef.current.enableCamera(videoTrack);
-              if (audioTrack && audioTrack.enabled)
-                serviceRef.current.enableMic(audioTrack);
-            }
           } else if (status === "ended") {
             Alert.alert(
               "Meeting Ended",
@@ -329,6 +318,37 @@ export default function MeetingScreen({ route, navigation }: Props) {
           if (isMounted) {
             setIsReconnecting(false);
             // ReconnectionOverlay handles UI for failed state now
+          }
+        };
+
+        service.onMediaRestored = (replacementStream?: MediaStream) => {
+          console.log(`[MeetingScreen] Media restored, replacementStream=${!!replacementStream}`);
+          // If tracks were reacquired during recovery, update local stream references
+          if (replacementStream) {
+            const newAudioTrack = replacementStream.getAudioTracks()[0];
+            const newVideoTrack = replacementStream.getVideoTracks()[0];
+            if (newAudioTrack && localStreamRef.current) {
+              // Replace audio track in local stream
+              const oldAudioTracks = localStreamRef.current.getAudioTracks();
+              oldAudioTracks.forEach(t => localStreamRef.current?.removeTrack(t));
+              localStreamRef.current.addTrack(newAudioTrack);
+            }
+            if (newVideoTrack) {
+              // Replace video track and bump cameraKey to remount RTCView
+              if (localStreamRef.current) {
+                const oldVideoTracks = localStreamRef.current.getVideoTracks();
+                oldVideoTracks.forEach(t => localStreamRef.current?.removeTrack(t));
+                localStreamRef.current.addTrack(newVideoTrack);
+              }
+              setCameraKey(prev => prev + 1);
+            }
+            setLocalStream(localStreamRef.current);
+          }
+          // Reassert audio route
+          try {
+            InCallManager.setForceSpeakerphoneOn(false);
+          } catch (e) {
+            console.warn('[MeetingScreen] Failed to reassert audio route:', e);
           }
         };
 
@@ -556,6 +576,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
           if (!localStreamRef.current || !serviceRef.current || !isMounted)
             return;
 
+          let audioTrack = null;
           if (initialMicOn) {
             try {
               const audioStream = await mediaDevices.getUserMedia({
@@ -570,12 +591,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 localStreamRef.current.addTrack(track);
                 await serviceRef.current.enableMic(track);
                 setIsMicMuted(false);
+                audioTrack = track;
               }
             } catch (err) {
               console.error("Failed to get initial mic", err);
             }
           }
 
+          let videoTrack = null;
           if (initialCameraOn) {
             try {
               const videoStream = await mediaDevices.getUserMedia({
@@ -592,11 +615,18 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 await serviceRef.current.enableCamera(track);
                 setIsCameraOff(false);
                 setCameraKey((k) => k + 1);
+                videoTrack = track;
               }
             } catch (err) {
               console.error("Failed to get initial camera", err);
             }
           }
+
+          // Start foreground service with appropriate type flags
+          let serviceFlags = FG_TYPE_MEDIA_PLAYBACK;
+          if (audioTrack) serviceFlags |= FG_TYPE_MICROPHONE;
+          if (videoTrack) serviceFlags |= FG_TYPE_CAMERA;
+          MeetingService.start('Gov Conference', serviceFlags);
         };
 
         if (handedOffService) {

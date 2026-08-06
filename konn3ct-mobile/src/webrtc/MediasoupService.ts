@@ -50,12 +50,17 @@ export class MediasoupService {
   private _isReconnecting = false;
   private _intentionalDisconnect = false;
   private _lastMeetingToken?: string;
-  private _lastLocalStream?: MediaStream;
+  private _lastSignalUrl?: string;
   private _connectionState: ConnectionState = 'connected';
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _inCallManagerStarted = false;
   private _recoveryGeneration = 0;
   private _activeRecoveryId: string | null = null;
+
+  // Generation IDs — stale events from old sockets/transports are ignored
+  private _socketGeneration = 0;
+  private _sendTransportGeneration = 0;
+  // (Note: _recvTransportGeneration exists at line 75)
 
   // PiP lifecycle state — prevents false reconnects on PiP entry/exit
   private _isInPiP = false;
@@ -77,10 +82,22 @@ export class MediasoupService {
   // Authoritative snapshot of remote producers (updated on every getProducers response)
   private _remoteProducerSnapshot: Array<{producerId: string; userId: string; kind: string; appData: any}> = [];
 
-  // Media state preservation — retained across reconnection
+  // Authoritative desired media state — retained across reconnection.
+  // Updated by enableMic/disableMic/enableCamera/disableCamera.
+  // Recovery reads these to decide what to republish.
+  private _desiredMicEnabled = false;
+  private _desiredCameraEnabled = false;
+  private _lastAudioTrack: MediaStreamTrack | null = null;
+  private _lastVideoTrack: MediaStreamTrack | null = null;
+  // Legacy compat fields — preserveMediaState() writes these for MeetingScreen
   private _wasMicEnabled = false;
   private _wasCameraEnabled = false;
   private _lastAudioRoute: string | null = null;
+
+  // Mutex: only one rebuildMediaSession may run at a time
+  private _isRebuildingMedia = false;
+  // Handshake timeout for connect()
+  private _handshakeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Buffered one-shot events — cached during lobby handoff so MeetingScreen
   // can replay them after setting up its callbacks.
@@ -116,7 +133,7 @@ export class MediasoupService {
   public onReconnected?: () => void;
   public onReconnectFailed?: () => void;
   public onConnectionStateChanged?: (state: ConnectionState) => void;
-  public onMediaRestored?: () => void;
+  public onMediaRestored?: (replacementStream?: MediaStream) => void;
   public onRoomSettingsUpdated?: (settings: any) => void;
   public onMuteAllResult?: (success: boolean, message?: string) => void;
   public onRoomSettingsResult?: (success: boolean, message?: string) => void;
@@ -259,17 +276,23 @@ export class MediasoupService {
   }
 
   /** Preserve the current media state before backgrounding or disconnection.
-   * Uses actual producer track state — not UI booleans. */
+   * Uses actual producer track state — not UI booleans.
+   * Also captures track references for recovery reuse. */
   public preserveMediaState() {
-    this._wasMicEnabled =
-      this.localAudioProducer != null &&
-      !this.localAudioProducer.closed &&
-      (this.localAudioProducer.track as any)?.enabled === true;
-    this._wasCameraEnabled =
-      this.localVideoProducer != null &&
-      !this.localVideoProducer.closed &&
-      (this.localVideoProducer.track as any)?.enabled === true;
-    console.log(`[MediaState] Preserved: mic=${this._wasMicEnabled}, camera=${this._wasCameraEnabled}`);
+    // Authoritative desired state already tracked by enableMic/disableMic etc.
+    // Sync legacy _was* fields for MeetingScreen compat
+    this._wasMicEnabled = this._desiredMicEnabled;
+    this._wasCameraEnabled = this._desiredCameraEnabled;
+
+    // Ensure track references are captured from producers if not already set
+    if (!this._lastAudioTrack && this.localAudioProducer?.track) {
+      this._lastAudioTrack = this.localAudioProducer.track as unknown as MediaStreamTrack;
+    }
+    if (!this._lastVideoTrack && this.localVideoProducer?.track) {
+      this._lastVideoTrack = this.localVideoProducer.track as unknown as MediaStreamTrack;
+    }
+
+    console.log(`[MediaState] Preserved: mic=${this._desiredMicEnabled}, camera=${this._desiredCameraEnabled}, audioTrack=${!!this._lastAudioTrack}, videoTrack=${!!this._lastVideoTrack}`);
   }
 
   /** Get the preserved mic state (whether mic was active before disconnect) */
@@ -539,15 +562,27 @@ export class MediasoupService {
     });
   }
 
+  /** Reject and remove all pending requests — called on socket generation change. */
+  private _rejectAllPendingRequests(reason: string): void {
+    for (const [type, queue] of this.pendingRequests.entries()) {
+      for (const req of queue) {
+        clearTimeout(req.timeoutId);
+        req.reject(new Error(`${reason} (pending: ${type})`));
+      }
+    }
+    this.pendingRequests.clear();
+  }
+
   public async connect(meetingToken?: string, customSignalUrl?: string) {
     if (!meetingToken) {
       throw new Error(
-        'No meeting JWT provided – the signal server requires a JWT, not a Sanctum token. '
+        'No meeting JWT provided \u2013 the signal server requires a JWT, not a Sanctum token. '
         + 'Obtain one via getAttendeeToken() or startRoom() before calling connect().'
       );
     }
     const token = meetingToken;
     this._lastMeetingToken = meetingToken;
+    this._lastSignalUrl = customSignalUrl;
 
     let wsUrl = '';
     const encodedName = encodeURIComponent(useAuthStore.getState().user?.name || 'Mobile User');
@@ -573,54 +608,79 @@ export class MediasoupService {
       wsUrl = `wss://${BACKEND_DOMAIN}/signal?roomId=${this.roomId}&isMobile=true&token=${token}&name=${encodedName}&participantId=${this.participantId}`;
     }
     
-    console.log('--- WEBSOCKET CONNECTION INFO ---');
-    console.log('Signal URL Source:', customSignalUrl || BACKEND_DOMAIN);
-    console.log('Room ID:', this.roomId);
-    console.log('Token Length:', token ? token.length : 'NO TOKEN');
-    console.log('Full WS URL:', wsUrl);
-    console.log('---------------------------------');
+    // Log masked connection info \u2014 never expose the JWT
+    const maskedHost = customSignalUrl ? new URL(customSignalUrl.startsWith('ws') ? customSignalUrl.replace(/^ws/, 'http') : customSignalUrl).hostname : BACKEND_DOMAIN;
+    console.log(`[WS] Connecting: host=${maskedHost}, room=${this.roomId}, participantId=${this.participantId}, socketGen=${this._socketGeneration + 1}`);
     
-    this.ws = new WebSocket(wsUrl);
+    // Bump socket generation \u2014 stale events from old sockets will be ignored
+    const socketGen = ++this._socketGeneration;
+    this._rejectAllPendingRequests('Socket generation changed');
+
+    const newWs = new WebSocket(wsUrl);
+    this.ws = newWs;
 
     return new Promise<string>((resolve, reject) => {
-      this.ws!.onopen = () => {
-        console.log('Native WebSocket connected successfully!');
+      let settled = false;
+      const settle = (value: string | Error) => {
+        if (settled) return;
+        settled = true;
+        if (this._handshakeTimer) { clearTimeout(this._handshakeTimer); this._handshakeTimer = null; }
+        if (value instanceof Error) reject(value);
+        else resolve(value);
+      };
+
+      // 15-second handshake timeout
+      this._handshakeTimer = setTimeout(() => {
+        if (settled || socketGen !== this._socketGeneration) return;
+        console.error(`[WS] Handshake timeout (15s) for socketGen=${socketGen}`);
+        try { newWs.close(); } catch (_) {}
+        settle(new Error('Signalling handshake timeout (15s)'));
+      }, 15000);
+
+      newWs.onopen = () => {
+        if (socketGen !== this._socketGeneration) return;
+        console.log(`[WS] Connected (socketGen=${socketGen})`);
         const userName = useAuthStore.getState().user?.name || 'Mobile User';
-        this.ws!.send(JSON.stringify({ type: 'auth', token, name: userName }));
+        newWs.send(JSON.stringify({ type: 'auth', token, name: userName }));
 
         this._lastPongTime = Date.now();
 
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
-          if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'ping' }));
+          if (newWs.readyState === WebSocket.OPEN && socketGen === this._socketGeneration) {
+            newWs.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
           }
         }, 15000); // Reduced from 25s to 15s for better background survival
       };
 
-      this.ws!.onerror = (err) => {
+      newWs.onerror = (err) => {
+        if (socketGen !== this._socketGeneration) return;
         // Log as warn instead of error to prevent React Native red box during normal disconnection
         console.warn('WebSocket connection warning:', err);
         // Don't reject here - onclose fires right after with the actual reason
       };
       
-      this.ws!.onclose = (e) => {
+      newWs.onclose = (e) => {
+        if (socketGen !== this._socketGeneration) {
+          console.log(`[WS] Ignoring onclose from stale socketGen=${socketGen} (current=${this._socketGeneration})`);
+          return;
+        }
         console.log(`WebSocket closed: ${e.code} ${e.reason}`);
         if (this.pingInterval) clearInterval(this.pingInterval);
 
         // If this was an intentional disconnect (user left), don't reconnect
         if (this._intentionalDisconnect) {
-          reject(new Error(e.reason || `WebSocket closed with code ${e.code}`));
+          settle(new Error(e.reason || `WebSocket closed with code ${e.code}`));
           return;
         }
 
         // If already connected (mid-session drop), attempt reconnection
         if (this.device?.loaded && !this._isReconnecting) {
-          // If in PiP mode, DON'T burn reconnect attempts — the OS throttles
+          // If in PiP mode, DON\u2019T burn reconnect attempts \u2014 the OS throttles
           // network for PiP apps and attempts will likely fail.
           // Instead, set a flag so the user returns with full retry budget.
           if (this._isInPiP) {
-            console.log('[WS onclose] Mid-session drop while in PiP — deferring reconnect until foreground return');
+            console.log('[WS onclose] Mid-session drop while in PiP \u2014 deferring reconnect until foreground return');
             this._needsReconnectOnForeground = true;
             this.preserveMediaState();
             this._setConnectionState('temporarily_disconnected');
@@ -632,10 +692,13 @@ export class MediasoupService {
         }
 
         // Reject with the close reason so callers can detect 404 vs other errors
-        reject(new Error(e.reason || `WebSocket closed with code ${e.code}`));
+        settle(new Error(e.reason || `WebSocket closed with code ${e.code}`));
       };
 
-      this.ws!.onmessage = async (event) => {
+      newWs.onmessage = async (event) => {
+        // Ignore messages from stale sockets
+        if (socketGen !== this._socketGeneration) return;
+
         let msg: any;
         try {
           msg = JSON.parse(event.data);
@@ -689,111 +752,110 @@ export class MediasoupService {
               this.currentUserRole = msg.role;
               useMeetingStore.getState().setCurrentUser(msg.userId, msg.role);
             }
+
+            // Clear handshake timer immediately \u2014 server responded
+            if (this._handshakeTimer) { clearTimeout(this._handshakeTimer); this._handshakeTimer = null; }
             
-            if (msg.status === 'active' && !this.device?.loaded) {
+            if (msg.status === 'active') {
               try {
-                await this.initializeMediasoup();
+                if (!this.device?.loaded) {
+                  // Initial connection \u2014 full device + transport init
+                  await this.initializeMediasoup();
+                } else {
+                  // Reconnection \u2014 Device already loaded, rebuild media transports only
+                  console.log('[session_status] Device already loaded \u2014 rebuilding media session');
+                  const recoveryId = `${Date.now()}-${++this._recoveryGeneration}`;
+                  this._activeRecoveryId = recoveryId;
+                  await this.rebuildMediaSession('reconnect_session_status', recoveryId);
+                }
                 if (this.onSessionStatusChange) this.onSessionStatusChange('active');
-                resolve('active');
+                settle('active');
               } catch (e) {
-                console.error('Failed to init mediasoup:', e);
-                reject(e);
+                console.error('Failed to init/rebuild mediasoup:', e);
+                settle(e as Error);
               }
             } else if (msg.status === 'waiting') {
               console.log('Waiting for host to admit...');
               if (this.onSessionStatusChange) this.onSessionStatusChange('waiting');
-              resolve('waiting');
+              settle('waiting');
             } else if (msg.status === 'ended') {
               console.log('Meeting ended by host');
               if (this.onSessionStatusChange) this.onSessionStatusChange('ended');
               this.disconnect();
+              settle('ended');
             } else if (msg.status === 'kicked') {
               console.log('Kicked from meeting by host');
               if (this.onSessionStatusChange) this.onSessionStatusChange('kicked');
               this.disconnect();
+              settle('kicked');
             } else if (msg.status === 'denied') {
               console.log('Entry denied by host');
               if (this.onSessionStatusChange) this.onSessionStatusChange('denied');
               this.disconnect();
+              settle('denied');
             }
             break;
 
-          case 'participants_list':
+          case 'participants_list': {
+            const list = msg.participants || [];
             if (this.onParticipantsList) {
-              this.onParticipantsList(msg.participants || []);
-              // Seed isMuted for every participant already in the room
-              const store = useMeetingStore.getState();
-              (msg.participants || []).forEach((p: any) => {
-                if (p.userId) {
-                  store.updateParticipantMuteState(p.userId, p.isMuted ?? true);
-                }
-              });
-              setTimeout(() => this.notifyStreamUpdate(), 100);
+              this.onParticipantsList(list);
+              this._cachedParticipantsList = null;
             } else {
-              // Cache for replay when callback is set (lobby handoff)
-              this._cachedParticipantsList = msg.participants || [];
+              this._cachedParticipantsList = list;
             }
             break;
+          }
 
           case 'mute_state':
-            // Broadcast from the server when any other participant toggles their mic
             if (msg.userId && msg.userId !== this.currentUserId) {
               useMeetingStore.getState().updateParticipantMuteState(msg.userId, msg.isMuted);
               if (this.onMuteStateChange) this.onMuteStateChange(msg.userId, msg.isMuted);
             }
             break;
 
-          case 'user_joined':
+          case 'user_joined': {
+            const joinPayload = { userId: msg.userId, name: msg.name, role: msg.role, isMuted: true, isCameraOn: false };
+            if (msg.userId && msg.name) {
+              this.peerNames.set(msg.userId, msg.name);
+            }
             if (this.onUserJoined) {
-              this.onUserJoined(msg);
-              // Seed isMuted so the card shows the correct state on join
-              if (msg.userId) {
-                useMeetingStore.getState().updateParticipantMuteState(
-                  msg.userId,
-                  msg.isMuted ?? true // default to muted until they unmute
-                );
-              }
-              setTimeout(() => this.notifyStreamUpdate(), 100);
+              this.onUserJoined(joinPayload);
+              this._cachedUserJoined = [];
             } else {
-              // Cache for replay when MeetingScreen registers the callback (lobby handoff)
-              this._cachedUserJoined.push(msg);
+              this._cachedUserJoined.push(joinPayload);
             }
             break;
+          }
 
           case 'user_left':
+            // Clean up streams for the departed user
+            this.remoteStreams.delete(msg.userId);
+            this.remoteScreenStreams.delete(msg.userId);
+            this.notifyStreamUpdate();
             if (this.onUserLeft) this.onUserLeft(msg.userId);
-            const leftStream = this.remoteStreams.get(msg.userId);
-            const leftScreenStream = this.remoteScreenStreams.get(msg.userId);
-            if (leftStream || leftScreenStream) {
-              this.remoteStreams.delete(msg.userId);
-              this.remoteScreenStreams.delete(msg.userId);
-              this.notifyStreamUpdate();
-            }
             break;
 
           case 'role_changed':
-            // Update own role & isHost flag if this message targets the current user
+            useMeetingStore.getState().updateParticipantRole(msg.userId, msg.newRole);
             if (msg.userId === this.currentUserId) {
-              this.currentUserRole = msg.role;
-              useMeetingStore.getState().setCurrentUser(msg.userId, msg.role);
+              this.currentUserRole = msg.newRole;
+              useMeetingStore.getState().setCurrentUser(this.currentUserId!, msg.newRole);
             }
-            // Update the participant list entry for any user
-            useMeetingStore.getState().updateParticipantRole(msg.userId, msg.role);
-            if (this.onRoleChanged) this.onRoleChanged(msg.userId, msg.role);
+            if (this.onRoleChanged) this.onRoleChanged(msg.userId, msg.newRole);
             break;
 
           case 'chat_history':
             if (this.onChatHistory) {
               this.onChatHistory(msg.messages || []);
+              this._cachedChatHistory = null;
             } else {
               this._cachedChatHistory = msg.messages || [];
             }
             break;
-
           case 'chat':
             if (this.onChatMessage) this.onChatMessage(msg);
             break;
-
           case 'reaction':
             if (this.onReaction) this.onReaction(msg);
             break;
@@ -801,19 +863,17 @@ export class MediasoupService {
           case 'poll_history':
             if (this.onPollHistory) {
               this.onPollHistory(msg.polls || []);
+              this._cachedPollHistory = null;
             } else {
               this._cachedPollHistory = msg.polls || [];
             }
             break;
-
           case 'poll_create':
-            if (this.onPollCreate) this.onPollCreate(msg);
+            if (this.onPollCreate) this.onPollCreate(msg.poll);
             break;
-
           case 'poll_vote':
             if (this.onPollVote) this.onPollVote(msg);
             break;
-
           case 'poll_ended':
             if (this.onPollEnd) this.onPollEnd(msg);
             break;
@@ -821,11 +881,9 @@ export class MediasoupService {
           case 'waiting_room_request':
             if (this.onWaitingRoomRequest) this.onWaitingRoomRequest(msg);
             break;
-
           case 'caption':
             if (this.onCaptionReceived) this.onCaptionReceived(msg.userId, msg.text, msg.isFinal, msg.lang);
             break;
-
           case 'force_mute':
             if (this.onForceMute) this.onForceMute();
             break;
@@ -833,15 +891,9 @@ export class MediasoupService {
           case 'mute_all_result':
             if (this.onMuteAllResult) this.onMuteAllResult(msg.success, msg.message);
             break;
-
           case 'room_settings_updated':
-            console.log('[MediasoupService] Room settings updated:', msg);
-            if (msg.chatLocked !== undefined) {
-              useMeetingStore.getState().setChatLocked(msg.chatLocked);
-            }
             if (this.onRoomSettingsUpdated) this.onRoomSettingsUpdated(msg);
             break;
-
           case 'room_settings_result':
             if (this.onRoomSettingsResult) this.onRoomSettingsResult(msg.success, msg.message);
             break;
@@ -849,81 +901,74 @@ export class MediasoupService {
           case 'hand_raise':
             if (this.onHandRaise) this.onHandRaise(msg);
             break;
-            
           case 'active_speaker':
-            if (this.onActiveSpeaker) this.onActiveSpeaker(msg.userIds);
+            if (this.onActiveSpeaker) this.onActiveSpeaker(msg.userIds || []);
             break;
 
           case 'recording_started':
             if (this.onRecordingStarted) this.onRecordingStarted();
             break;
-
           case 'recording_stopped':
             if (this.onRecordingStopped) this.onRecordingStopped();
             break;
 
           case 'screen_share_started':
-            console.log(`[MediasoupService] screen_share_started from ${msg.userId}`);
-            if (this.onScreenShareStarted) this.onScreenShareStarted(msg.userId, msg.producerId);
+            if (this.onScreenShareStarted) {
+              this.onScreenShareStarted(msg.userId, msg.producerId);
+            }
             break;
-
           case 'screen_share_stopped':
-            console.log(`[MediasoupService] screen_share_stopped from ${msg.userId}`);
-            // Clean up the remote screen stream for the user who stopped sharing
-            if (msg.userId && this.remoteScreenStreams.has(msg.userId)) {
-              this.remoteScreenStreams.delete(msg.userId);
-              this.notifyStreamUpdate();
+            if (this.onScreenShareStopped) {
+              this.onScreenShareStopped(msg.userId, msg.producerId);
             }
-            if (this.onScreenShareStopped) this.onScreenShareStopped(msg.userId, msg.producerId);
             break;
 
-          case 'newProducer':
-            if (msg.userId === this.currentUserId || msg.participantId === this.participantId) {
-              console.log('Ignoring own producer broadcast');
-              break;
-            }
-            // Cache the participant name from the server (resolves race condition)
+          case 'newProducer': {
+            // Cache the producer name for stream labelling
             if (msg.name && msg.userId) {
               this.peerNames.set(msg.userId, msg.name);
             }
-            // Keep snapshot current so health checks reflect new producers
-            if (!this._remoteProducerSnapshot.some(p => p.producerId === msg.producerId)) {
+            // Update authoritative snapshot
+            const existing = this._remoteProducerSnapshot.find(p => p.producerId === msg.producerId);
+            if (!existing) {
               this._remoteProducerSnapshot.push({
                 producerId: msg.producerId,
                 userId: msg.userId,
                 kind: msg.kind,
-                appData: msg.appData
+                appData: msg.appData || {}
               });
             }
-            this.consumeRemote(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
+            // Create consumer for this new producer
+            await this.consumeRemote(msg.producerId, msg.userId, msg.kind, msg.appData);
             break;
+          }
 
-          case 'producer_closed':
-            // Match by producerId — server sends the producerId that was closed,
-            // and consumers track which producerId they correspond to.
+          case 'producer_closed': {
+            // Find consumers associated with this producer
             this.consumers.forEach((consumer, consumerId) => {
               if (consumer.producerId === msg.producerId) {
+                const peerId = this.consumerPeerIds.get(consumerId) || 'unknown';
                 const isScreen = this.screenConsumerIds.has(consumerId);
-                console.log(`[MediasoupService] producer_closed received. Closing consumer ${consumerId} (kind: ${consumer.kind}, isScreen: ${isScreen})`);
-                
-                // Remove the track from the correct map BEFORE closing the consumer
-                const peerId = msg.userId || this.consumerPeerIds.get(consumerId);
-                if (peerId) {
-                  const targetMap = isScreen ? this.remoteScreenStreams : this.remoteStreams;
-                  const stream = targetMap.get(peerId);
-                  if (stream) {
-                    const newTracks = stream.getTracks().filter(t => t.id !== consumer.track.id);
-                    if (newTracks.length > 0) {
-                      const newStream = new MediaStream(newTracks as any);
-                      targetMap.set(peerId, newStream);
-                      console.log(`[MediasoupService] Removed track from ${isScreen ? 'screen' : 'media'} stream for peer ${peerId}. Tracks left: ${newTracks.length}`);
-                    } else {
-                      targetMap.delete(peerId);
-                      console.log(`[MediasoupService] Removed empty ${isScreen ? 'screen' : 'media'} stream for peer ${peerId}`);
+                console.log(`[producer_closed] Removing consumer ${consumerId} (producer ${msg.producerId}, peer ${peerId}, isScreen=${isScreen})`);
+
+                // Remove from stream maps
+                if (isScreen) {
+                  this.remoteScreenStreams.delete(peerId);
+                } else {
+                  // Only remove from remote stream if this was the last consumer for this peer
+                  const hasOtherConsumers = Array.from(this.consumers.entries()).some(
+                    ([cid, c]) => cid !== consumerId && this.consumerPeerIds.get(cid) === peerId && !this.screenConsumerIds.has(cid)
+                  );
+                  if (!hasOtherConsumers) {
+                    this.remoteStreams.delete(peerId);
+                  } else {
+                    const stream = this.remoteStreams.get(peerId);
+                    if (stream && consumer.track) {
+                      try { stream.removeTrack(consumer.track as any); } catch (_) {}
                     }
                   }
                 }
-                
+
                 if (isScreen) this.screenConsumerIds.delete(consumerId);
                 this.consumerPeerIds.delete(consumerId);
                 consumer.close();
@@ -936,6 +981,7 @@ export class MediasoupService {
               p => p.producerId !== msg.producerId
             );
             break;
+          }
 
         }
       };
@@ -1053,11 +1099,283 @@ export class MediasoupService {
     } catch (e) { console.error('Failed to get existing producers', e); }
   }
 
+  /**
+   * Rebuild media transports on an already-loaded Device.
+   * Called during reconnection when the WebSocket is fresh but the Device
+   * is still loaded from the previous session.
+   *
+   * Sequence:
+   * 1. Request server-side cleanup of stale transports/producers
+   * 2. Close old local transports without stopping healthy tracks
+   * 3. Create new send + recv transports
+   * 4. Fetch current producers and recreate consumers
+   * 5. Republish local mic/camera based on desired state
+   */
+  public async rebuildMediaSession(reason: string, recoveryId: string): Promise<void> {
+    if (this._isRebuildingMedia) {
+      console.log(`[RebuildMedia] Already rebuilding, skipping (reason=${reason})`);
+      return;
+    }
+    this._isRebuildingMedia = true;
+    const socketGen = this._socketGeneration;
+
+    console.log(`[RebuildMedia] Starting: reason=${reason}, recoveryId=${recoveryId}, socketGen=${socketGen}`);
+    this._setConnectionState('recovering_media');
+
+    try {
+      // ── 1. Request server-side cleanup of old media state ────────────────
+      try {
+        console.log('[RebuildMedia] Requesting server-side media cleanup...');
+        await this.request('reset_webrtc_state', 'webrtc_state_reset');
+        console.log('[RebuildMedia] Server acknowledged media state reset');
+      } catch (e) {
+        // Server may not support this yet during staggered rollout — continue
+        console.warn('[RebuildMedia] Server reset_webrtc_state failed (may not be supported):', e);
+      }
+      if (socketGen !== this._socketGeneration || this._activeRecoveryId !== recoveryId) return;
+
+      // ── 2. Close old transports without stopping tracks ─────────────────
+      // Close producers without calling public disableMic/disableCamera
+      // (which would change desired state and stop tracks)
+      if (this.localVideoProducer) {
+        try { this.localVideoProducer.close(); } catch (_) {}
+        this.localVideoProducer = null;
+      }
+      if (this.localAudioProducer) {
+        try { this.localAudioProducer.close(); } catch (_) {}
+        this.localAudioProducer = null;
+      }
+      if (this.screenShareProducer) {
+        try { this.screenShareProducer.close(); } catch (_) {}
+        this.screenShareProducer = null;
+      }
+      if (this.screenAudioShareProducer) {
+        try { this.screenAudioShareProducer.close(); } catch (_) {}
+        this.screenAudioShareProducer = null;
+      }
+
+      // Close consumers
+      this.consumers.forEach(c => { try { c.close(); } catch (_) {} });
+      this.consumers.clear();
+      this.remoteStreams.clear();
+      this.remoteScreenStreams.clear();
+      this.screenConsumerIds.clear();
+      this.consumerPeerIds.clear();
+
+      // Close old transports
+      if (this.sendTransport) {
+        try { this.sendTransport.close(); } catch (_) {}
+        this.sendTransport = null;
+      }
+      if (this.recvTransport) {
+        try { this.recvTransport.close(); } catch (_) {}
+        this.recvTransport = null;
+      }
+
+      this.notifyStreamUpdate();
+      if (socketGen !== this._socketGeneration || this._activeRecoveryId !== recoveryId) return;
+
+      // ── 3. Create new send transport ────────────────────────────────────
+      const sendTransportGen = ++this._sendTransportGeneration;
+      const sendRes = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'send' });
+      if (socketGen !== this._socketGeneration || this._activeRecoveryId !== recoveryId) return;
+
+      this.sendTransport = this.device!.createSendTransport(sendRes.transportParams);
+
+      this.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+        if (this._sendTransportGeneration !== sendTransportGen) return;
+        try {
+          await this.request('connectWebRtcTransport', 'transportConnected', {
+            transportId: this.sendTransport!.id,
+            dtlsParameters
+          });
+          callback();
+        } catch (err) { errback(err as Error); }
+      });
+
+      this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
+        if (this._sendTransportGeneration !== sendTransportGen) return;
+        try {
+          const { id } = await this.request('produce', 'produced', {
+            transportId: this.sendTransport!.id,
+            kind,
+            rtpParameters,
+            appData
+          });
+          callback({ id });
+        } catch (err) { errback(err as Error); }
+      });
+
+      // Send transport ICE monitoring
+      this.sendTransport.on('connectionstatechange', (state: string) => {
+        if (this._sendTransportGeneration !== sendTransportGen) return;
+        console.log(`[Transport] Send transport ICE state: ${state} (gen=${sendTransportGen})`);
+        if (this._isInPiP) return;
+        if (state === 'disconnected' && this._connectionState === 'connected') {
+          this._setConnectionState('temporarily_disconnected');
+        } else if (state === 'failed' && !this._isReconnecting) {
+          this._setConnectionState('temporarily_disconnected');
+        } else if (state === 'connected' && this._connectionState === 'temporarily_disconnected') {
+          this._setConnectionState('connected');
+        }
+      });
+
+      // ── 4. Create new recv transport ────────────────────────────────────
+      this._recvTransportGeneration++;
+      const recvTransportGen = this._recvTransportGeneration;
+      const recvRes = await this.request('createWebRtcTransport', 'transportCreated', { direction: 'recv' });
+      if (socketGen !== this._socketGeneration || this._activeRecoveryId !== recoveryId) return;
+
+      this.recvTransport = this.device!.createRecvTransport(recvRes.transportParams);
+
+      this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+        if (this._recvTransportGeneration !== recvTransportGen) return;
+        try {
+          await this.request('connectWebRtcTransport', 'transportConnected', {
+            transportId: this.recvTransport!.id,
+            dtlsParameters
+          });
+          callback();
+        } catch (err) { errback(err as Error); }
+      });
+
+      // Recv transport ICE monitoring
+      this.recvTransport.on('connectionstatechange', (state: string) => {
+        if (this._recvTransportGeneration !== recvTransportGen) return;
+        console.log(`[Transport] Recv transport ICE state: ${state} (gen=${recvTransportGen})`);
+        if (this._isInPiP) return;
+        if (state === 'disconnected' && this._connectionState === 'connected') {
+          this._setConnectionState('temporarily_disconnected');
+        } else if (state === 'failed' && !this._isReconnecting) {
+          this._setConnectionState('temporarily_disconnected');
+        } else if (state === 'connected' && this._connectionState === 'temporarily_disconnected') {
+          this._setConnectionState('connected');
+        }
+      });
+
+      // ── 5. Fetch current producers and consume them ─────────────────────
+      try {
+        const prodRes = await this.request('getProducers', 'producersList');
+        if (socketGen !== this._socketGeneration || this._activeRecoveryId !== recoveryId) return;
+
+        const producers: any[] = prodRes.producers || [];
+        this._remoteProducerSnapshot = producers
+          .filter(p => p.userId !== this.currentUserId && p.participantId !== this.participantId)
+          .map(p => ({ producerId: p.producerId, userId: p.userId, kind: p.kind, appData: p.appData }));
+
+        for (const p of producers) {
+          if (p.userId === this.currentUserId || p.participantId === this.participantId) continue;
+          if (p.name && p.userId) this.peerNames.set(p.userId, p.name);
+          await this.consumeRemote(p.producerId, p.userId, p.kind, p.appData);
+        }
+      } catch (e) { console.error('[RebuildMedia] Failed to get existing producers:', e); }
+
+      if (socketGen !== this._socketGeneration || this._activeRecoveryId !== recoveryId) return;
+
+      // ── 6. Republish local media based on authoritative desired state ───
+      let replacementStream: MediaStream | undefined;
+
+      // Mic: republish only if desired and track is usable
+      if (this._desiredMicEnabled) {
+        let audioTrack = this._lastAudioTrack;
+        if (!audioTrack || audioTrack.readyState !== 'live') {
+          // Track ended during background — reacquire
+          console.log('[RebuildMedia] Audio track ended, reacquiring...');
+          try {
+            const stream = await (mediaDevices as any).getUserMedia({ audio: true });
+            audioTrack = stream.getAudioTracks()[0];
+            this._lastAudioTrack = audioTrack;
+            if (!replacementStream) replacementStream = new MediaStream();
+            replacementStream.addTrack(audioTrack);
+          } catch (e) {
+            console.error('[RebuildMedia] Failed to reacquire audio track:', e);
+            audioTrack = null;
+          }
+        }
+        if (audioTrack && audioTrack.readyState === 'live') {
+          await this.enableMic(audioTrack);
+        }
+      }
+
+      // Camera: republish only if desired and track is usable
+      if (this._desiredCameraEnabled) {
+        let videoTrack = this._lastVideoTrack;
+        if (!videoTrack || videoTrack.readyState !== 'live') {
+          // Track ended during background — reacquire
+          console.log('[RebuildMedia] Video track ended, reacquiring...');
+          try {
+            const stream = await (mediaDevices as any).getUserMedia({
+              video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+            });
+            videoTrack = stream.getVideoTracks()[0];
+            this._lastVideoTrack = videoTrack;
+            if (!replacementStream) replacementStream = new MediaStream();
+            replacementStream.addTrack(videoTrack);
+          } catch (e) {
+            console.error('[RebuildMedia] Failed to reacquire video track:', e);
+            videoTrack = null;
+          }
+        }
+        if (videoTrack && videoTrack.readyState === 'live') {
+          await this.enableCamera(videoTrack);
+        }
+      }
+
+      // Screen share: republish only if existing track is still live
+      if (this.localScreenTrack && this.localScreenTrack.readyState === 'live') {
+        console.log('[RebuildMedia] Re-publishing screen share...');
+        try {
+          const screenCodec = this.device?.rtpCapabilities.codecs?.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
+          ) || this.device?.rtpCapabilities.codecs?.find(
+            (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
+          );
+          this.screenShareProducer = await this.sendTransport!.produce({
+            track: this.localScreenTrack as any,
+            codec: screenCodec,
+            appData: { source: 'screen' },
+            encodings: [{ maxBitrate: 1500000, maxFramerate: 15 }],
+            codecOptions: { videoGoogleStartBitrate: 1000 },
+            stopTracks: false
+          });
+
+          if (this.localScreenAudioTrack && this.localScreenAudioTrack.readyState === 'live') {
+            this.screenAudioShareProducer = await this.sendTransport!.produce({
+              track: this.localScreenAudioTrack as any,
+              appData: { source: 'screen-audio' },
+              stopTracks: false
+            });
+          }
+        } catch (e) {
+          console.error('[RebuildMedia] Failed to re-publish screen share:', e);
+          this.localScreenTrack = null;
+          this.localScreenAudioTrack = null;
+        }
+      } else if (this.localScreenTrack) {
+        // Track ended during background
+        this.localScreenTrack = null;
+        this.localScreenAudioTrack = null;
+      }
+
+      console.log(`[RebuildMedia] Complete: reason=${reason}, replacementStream=${!!replacementStream}`);
+
+      // Notify MeetingScreen with any replacement stream
+      if (this.onMediaRestored) this.onMediaRestored(replacementStream);
+
+    } finally {
+      this._isRebuildingMedia = false;
+    }
+  }
+
   public async enableCamera(videoTrack: MediaStreamTrack) {
     if (!this.sendTransport) {
       console.error('[enableCamera] sendTransport is NULL — cannot produce.');
       return;
     }
+
+    // Update authoritative desired state
+    this._desiredCameraEnabled = true;
+    this._lastVideoTrack = videoTrack;
 
     if (this.localVideoProducer && !this.localVideoProducer.closed) {
       console.log('[enableCamera] Replacing track on existing video producer...');
@@ -1083,7 +1401,8 @@ export class MediasoupService {
         codec: videoCodec,
         appData: { source: 'camera' },
         encodings: [{ maxBitrate: 600000, maxFramerate: 30 }],
-        codecOptions: { videoGoogleStartBitrate: 1000 }
+        codecOptions: { videoGoogleStartBitrate: 1000 },
+        stopTracks: false  // Preserve track for reuse across recovery
       });
       console.log(`[enableCamera] Video producer created: id=${this.localVideoProducer.id}`);
       // Notify all other participants that our camera is now on.
@@ -1095,6 +1414,9 @@ export class MediasoupService {
   }
 
   public disableCamera() {
+    // Update authoritative desired state
+    this._desiredCameraEnabled = false;
+
     if (this.localVideoProducer) {
       console.log(`[disableCamera] Closing video producer id=${this.localVideoProducer.id}`);
       // Notify all other participants that our camera is now off BEFORE closing.
@@ -1109,6 +1431,11 @@ export class MediasoupService {
       }
       this.localVideoProducer = null;
     }
+    // User-initiated disable: stop the track to release the camera
+    if (this._lastVideoTrack && this._lastVideoTrack.readyState === 'live') {
+      this._lastVideoTrack.stop();
+    }
+    this._lastVideoTrack = null;
   }
 
   public async enableMic(audioTrack: MediaStreamTrack) {
@@ -1120,12 +1447,17 @@ export class MediasoupService {
       console.log('[enableMic] Mic is already producing');
       return;
     }
+
+    // Update authoritative desired state
+    this._desiredMicEnabled = true;
+    this._lastAudioTrack = audioTrack;
     
     console.log(`[enableMic] Producing audio track... readyState=${audioTrack.readyState}, enabled=${audioTrack.enabled}`);
     try {
       this.localAudioProducer = await this.sendTransport.produce({
         track: audioTrack as any,
-        appData: { source: 'mic' }
+        appData: { source: 'mic' },
+        stopTracks: false  // Preserve track for reuse across recovery
       });
       console.log(`[enableMic] Audio producer created: id=${this.localAudioProducer.id}`);
       // Notify all other participants that we are now unmuted.
@@ -1137,6 +1469,9 @@ export class MediasoupService {
   }
 
   public disableMic() {
+    // Update authoritative desired state
+    this._desiredMicEnabled = false;
+
     if (this.localAudioProducer) {
       console.log(`[disableMic] Closing audio producer id=${this.localAudioProducer.id}`);
       // Notify all other participants that we are now muted BEFORE closing.
@@ -1151,6 +1486,11 @@ export class MediasoupService {
       }
       this.localAudioProducer = null;
     }
+    // User-initiated disable: stop the track to release the microphone
+    if (this._lastAudioTrack && this._lastAudioTrack.readyState === 'live') {
+      this._lastAudioTrack.stop();
+    }
+    this._lastAudioTrack = null;
   }
 
   /**
@@ -1338,9 +1678,8 @@ export class MediasoupService {
           this.recvTransport = null;
         }
 
-        const recvRes = await this.request('createWebRtcTransport', 'webRtcTransportCreated', {
-          producing: false,
-          consuming: true
+        const recvRes = await this.request('createWebRtcTransport', 'transportCreated', {
+          direction: 'recv'
         });
         if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
 
@@ -1350,7 +1689,7 @@ export class MediasoupService {
         this.recvTransport = this.device!.createRecvTransport(recvRes.transportParams);
         this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
           try {
-            await this.request('connectWebRtcTransport', 'webRtcTransportConnected', {
+            await this.request('connectWebRtcTransport', 'transportConnected', {
               transportId: this.recvTransport!.id,
               dtlsParameters
             });
@@ -1478,9 +1817,9 @@ export class MediasoupService {
       `activeRecoveryId=${this._activeRecoveryId}`
     );
 
-    // 1. Check WebSocket health
-    const wsHealthy = this.ws?.readyState === WebSocket.OPEN && this.isAlive();
-    if (!wsHealthy) {
+    // 1. Probe WebSocket health — send ping and wait for response
+    const wsOpen = this.ws?.readyState === WebSocket.OPEN;
+    if (!wsOpen) {
       if (!this._isReconnecting) {
         console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=websocket_closed`);
         this.preserveMediaState();
@@ -1489,28 +1828,61 @@ export class MediasoupService {
       return;
     }
 
-    // Send immediate keepalive ping
+    // Send ping and wait 3s for pong proof-of-life (timers may have paused in background)
+    const preProbeTime = this._lastPongTime;
     try {
-      this.ws!.send(JSON.stringify({ type: 'ping' }));
+      this.ws!.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
     } catch (e) {
       console.warn('[AppState] Failed to send ping on foreground, triggering full reconnect');
-      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=ping_failed`);
+      this.preserveMediaState();
+      this._forceReconnect();
+      return;
+    }
+    await new Promise(r => setTimeout(r, 3000));
+    if (this._activeRecoveryId !== recoveryId) return;
+
+    if (this._lastPongTime <= preProbeTime) {
+      // No pong received in 3s — signal is dead
+      console.warn('[AppState] No pong received after 3s probe, triggering full reconnect');
+      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=no_pong_after_probe`);
       this.preserveMediaState();
       this._forceReconnect();
       return;
     }
 
-    // 2. Check Send Transport with strict health classification
+    // 2. Check Send Transport — but only if we have media to send
     const sendState = this._getSendTransportState();
     const sendClass = this._classifyTransportState(sendState);
-    if (sendClass === 'unhealthy') {
-      console.warn(`[AppState] Send transport unhealthy (${sendState}), triggering full reconnect`);
-      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=send_transport_failed`);
-      this.preserveMediaState();
-      this._forceReconnect();
-      return;
-    }
-    if (sendClass === 'transitional') {
+    const hasMediaToSend = this._desiredMicEnabled || this._desiredCameraEnabled ||
+      (this.localScreenTrack && this.localScreenTrack.readyState === 'live');
+
+    if (hasMediaToSend && sendClass === 'unhealthy') {
+      // Try ICE restart first
+      console.warn(`[AppState] Send transport unhealthy (${sendState}), attempting ICE restart...`);
+      try {
+        const iceRes = await this.request('restart_ice', 'ice_restarted', {
+          transportId: this.sendTransport!.id
+        });
+        await this.sendTransport!.restartIce({ iceParameters: iceRes.iceParameters });
+        console.log('[AppState] ICE restart succeeded for send transport');
+        await new Promise(r => setTimeout(r, 2000));
+        if (this._activeRecoveryId !== recoveryId) return;
+        const sendState2 = this._getSendTransportState();
+        if (this._classifyTransportState(sendState2) !== 'healthy') {
+          // ICE restart failed — acknowledged server reset + full rebuild
+          console.warn(`[AppState] Send transport still unhealthy after ICE restart, rebuilding...`);
+          const rebuildRecoveryId = `${Date.now()}-${++this._recoveryGeneration}`;
+          this._activeRecoveryId = rebuildRecoveryId;
+          await this.rebuildMediaSession('foreground_send_failed', rebuildRecoveryId);
+          return;
+        }
+      } catch (iceErr) {
+        console.warn('[AppState] ICE restart failed, triggering full reconnect:', iceErr);
+        this.preserveMediaState();
+        this._forceReconnect();
+        return;
+      }
+    } else if (hasMediaToSend && sendClass === 'transitional') {
       // Brief grace: wait up to 2s for it to settle before deciding
       console.log(`[AppState] Send transport transitional (${sendState}) — waiting 2s for ICE to settle`);
       await new Promise(r => setTimeout(r, 2000));
@@ -1523,6 +1895,7 @@ export class MediasoupService {
         return;
       }
     }
+    // If !hasMediaToSend and transport is new/null, that's expected — don't fail
 
     // 3. Check Recv Transport and audio consumer health using authoritative snapshot
     const recvState = this._getRecvTransportState();
@@ -1731,140 +2104,103 @@ export class MediasoupService {
     this._reconnectStartTime = Date.now();
     this._setConnectionState('reconnecting');
 
-    while (this._reconnectAttempts < this._maxReconnectAttempts) {
-      // Check total duration timeout
-      if (Date.now() - this._reconnectStartTime > this._maxReconnectDuration) {
-        console.error('[Reconnect] Total reconnection duration exceeded, giving up');
-        break;
-      }
+    // Absolute 60-second deadline — fires regardless of attempt state
+    let deadlineExceeded = false;
+    const deadlineTimer = setTimeout(() => {
+      deadlineExceeded = true;
+      console.error('[Reconnect] Absolute 60s deadline exceeded');
+    }, this._maxReconnectDuration);
 
-      this._reconnectAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), 10000);
-      console.log(`[Reconnect] Attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts} in ${delay}ms...`);
-      
-      if (this.onReconnecting) this.onReconnecting(this._reconnectAttempts);
+    try {
+      while (this._reconnectAttempts < this._maxReconnectAttempts && !deadlineExceeded) {
+        this._reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), 10000);
+        console.log(`[Reconnect] Attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts} in ${delay}ms...`);
+        
+        if (this.onReconnecting) this.onReconnecting(this._reconnectAttempts);
 
-      await new Promise(r => { this._reconnectTimer = setTimeout(r, delay); });
-      this._reconnectTimer = null;
+        await new Promise(r => { this._reconnectTimer = setTimeout(r, delay); });
+        this._reconnectTimer = null;
 
-      if (this._intentionalDisconnect) {
-        console.log('[Reconnect] Meeting ended during reconnect, aborting');
-        this._isReconnecting = false;
-        return;
-      }
-
-      try {
-        // Close stale transports before recreating — prevent duplicates
-        if (this.sendTransport) {
-          try { this.sendTransport.close(); } catch (_) {}
-          this.sendTransport = null;
+        // Check termination conditions after delay
+        if (this._intentionalDisconnect) {
+          console.log('[Reconnect] Meeting ended during reconnect, aborting');
+          return;
         }
-        if (this.recvTransport) {
-          try { this.recvTransport.close(); } catch (_) {}
-          this.recvTransport = null;
-        }
-        // Clear stale producer references (they belong to old transports)
-        this.localVideoProducer = null;
-        this.localAudioProducer = null;
-        // Close and clear all consumers
-        this.consumers.forEach(c => { try { c.close(); } catch (_) {} });
-        this.consumers.clear();
-        this.remoteStreams.clear();
-        this.remoteScreenStreams.clear();
-        this.screenConsumerIds.clear();
-        this.consumerPeerIds.clear();
+        if (deadlineExceeded) break;
 
-        // Reconnect WebSocket — this also re-authenticates and re-creates
-        // Device + transports + consumes existing producers via initializeMediasoup()
-        if (this._lastMeetingToken) {
-          await this.connect(this._lastMeetingToken);
-        }
-
-        // --- State: recovering_media ---
-        this._setConnectionState('recovering_media');
-
-        // Re-broadcast local stream if we had one.
-        // broadcast() only produces tracks that are still live and enabled,
-        // preserving the user's pre-disconnect mic/camera state.
-        if (this._lastLocalStream) {
-          await this.broadcast(this._lastLocalStream);
-          // Re-announce camera state if video track was active
-          if (this._lastLocalStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live')) {
-            this.sendCameraState(true);
-          }
-        }
-
-        // Re-publish local screen share if the track is still live
-        if (this.localScreenTrack && this.localScreenTrack.readyState === 'live') {
-          console.log('[Reconnect] Re-publishing screen share...');
-          try {
-            if (this.screenShareProducer) {
-              try { this.screenShareProducer.close(); } catch (_) {}
-              this.screenShareProducer = null;
-            }
-            const screenCodec = this.device?.rtpCapabilities.codecs?.find(
-              (c: any) => c.mimeType.toLowerCase() === 'video/vp8'
-            ) || this.device?.rtpCapabilities.codecs?.find(
-              (c: any) => c.mimeType.toLowerCase() === 'video/h264' && c.parameters?.['profile-level-id'] === '42e01f'
-            );
-            this.screenShareProducer = await this.sendTransport!.produce({
-              track: this.localScreenTrack as any,
-              codec: screenCodec,
-              appData: { source: 'screen' },
-              encodings: [{ maxBitrate: 1500000, maxFramerate: 15 }],
-              codecOptions: { videoGoogleStartBitrate: 1000 }
-            });
-            console.log(`[Reconnect] Screen share re-published: id=${this.screenShareProducer.id}`);
-
-            if (this.localScreenAudioTrack && this.localScreenAudioTrack.readyState === 'live') {
-              if (this.screenAudioShareProducer) {
-                try { this.screenAudioShareProducer.close(); } catch (_) {}
-                this.screenAudioShareProducer = null;
-              }
-              this.screenAudioShareProducer = await this.sendTransport!.produce({
-                track: this.localScreenAudioTrack as any,
-                appData: { source: 'screen-audio' }
+        try {
+          // Try ICE restart first if transports still exist and signal is healthy
+          if (this.ws?.readyState === WebSocket.OPEN && this.sendTransport) {
+            console.log('[Reconnect] Attempting ICE restart before full reconnect...');
+            try {
+              const iceRes = await this.request('restart_ice', 'ice_restarted', {
+                transportId: this.sendTransport.id
               });
-              console.log(`[Reconnect] Screen audio re-published: id=${this.screenAudioShareProducer.id}`);
+              if (iceRes && !deadlineExceeded) {
+                await this.sendTransport.restartIce({ iceParameters: iceRes.iceParameters });
+                console.log('[Reconnect] ICE restart succeeded');
+                this._reconnectAttempts = 0;
+                this._setConnectionState('reconnected');
+                if (this.onReconnected) this.onReconnected();
+                setTimeout(() => {
+                  if (this._connectionState === 'reconnected') {
+                    this._setConnectionState('connected');
+                  }
+                }, 3000);
+                return;
+              }
+            } catch (iceErr) {
+              console.warn('[Reconnect] ICE restart failed, proceeding with full reconnect:', iceErr);
             }
-          } catch (e) {
-            console.error('[Reconnect] Failed to re-publish screen share:', e);
-            this.localScreenTrack = null;
-            this.localScreenAudioTrack = null;
           }
-        } else if (this.localScreenTrack) {
-          // Track ended during reconnection, clean up
-          this.localScreenTrack = null;
-          this.localScreenAudioTrack = null;
-          this.screenShareProducer = null;
-          this.screenAudioShareProducer = null;
+
+          if (deadlineExceeded || this._intentionalDisconnect) break;
+
+          // Full reconnect: connect() will open new WS, and session_status 'active'
+          // handler will call rebuildMediaSession() (since device is already loaded)
+          if (this._lastMeetingToken) {
+            const result = await this.connect(this._lastMeetingToken, this._lastSignalUrl);
+            
+            if (result === 'active') {
+              // rebuildMediaSession was called inside connect's session_status handler
+              console.log('[Reconnect] Successfully reconnected!');
+              this._reconnectAttempts = 0;
+              this._setConnectionState('reconnected');
+              if (this.onReconnected) this.onReconnected();
+
+              // After brief UI feedback, transition to fully connected
+              setTimeout(() => {
+                if (this._connectionState === 'reconnected') {
+                  this._setConnectionState('connected');
+                }
+              }, 3000);
+              return;
+            } else if (result === 'ended' || result === 'kicked' || result === 'denied') {
+              console.log(`[Reconnect] Server returned ${result}, stopping reconnection`);
+              return;
+            }
+            // 'waiting' — keep trying
+          }
+        } catch (err) {
+          console.warn(`[Reconnect] Attempt ${this._reconnectAttempts} failed:`, err);
         }
+      }
 
-        // --- State: reconnected → then connected ---
-        console.log('[Reconnect] Successfully reconnected!');
-        this._reconnectAttempts = 0;
-        this._isReconnecting = false;
-        this._setConnectionState('reconnected');
-        if (this.onReconnected) this.onReconnected();
-        if (this.onMediaRestored) this.onMediaRestored();
-
-        // After brief UI feedback, transition to fully connected
-        setTimeout(() => {
-          if (this._connectionState === 'reconnected') {
-            this._setConnectionState('connected');
-          }
-        }, 3000);
-        return;
-      } catch (err) {
-        console.warn(`[Reconnect] Attempt ${this._reconnectAttempts} failed:`, err);
+      // All attempts exhausted or deadline exceeded
+      console.error('[Reconnect] All reconnection attempts failed');
+      this._setConnectionState('failed');
+      if (this.onReconnectFailed) this.onReconnectFailed();
+    } finally {
+      // GUARANTEED cleanup — _isReconnecting is always cleared
+      clearTimeout(deadlineTimer);
+      this._isReconnecting = false;
+      this._reconnectAttempts = 0;
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
       }
     }
-
-    // All attempts exhausted or duration exceeded
-    console.error('[Reconnect] All reconnection attempts failed');
-    this._isReconnecting = false;
-    this._setConnectionState('failed');
-    if (this.onReconnectFailed) this.onReconnectFailed();
   }
 
   /**
