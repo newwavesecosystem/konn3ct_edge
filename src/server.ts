@@ -124,7 +124,55 @@ app.get('/metrics', async (req, res) => {
 });
 
 
-// Basic 404 handler
+// Protected Admin Topology Endpoint for Phase 6B Observability
+app.get('/api/admin/room-topology/:roomId', async (req, res) => {
+  const adminSecret = process.env.ADMIN_API_KEY || 'konn3ct-internal-admin-secret';
+  const requestAdminKey = req.headers['x-admin-key'];
+  const userRole = (req as any).user?.role;
+
+  const isAuthorized = requestAdminKey === adminSecret || userRole === 'admin';
+
+  if (!isAuthorized) {
+    logger.warn(`Unauthorized admin topology snapshot request for room ${req.params.roomId} from IP ${req.ip}`);
+    return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
+  }
+
+  try {
+    const { RoomTopologyRegistry } = await import('./services/RoomTopologyRegistry');
+    const { PipeTransportRegistry } = await import('./services/PipeTransportRegistry');
+    const snapshot = await RoomTopologyRegistry.getRoomTopology(req.params.roomId);
+    const pipeTransports = await PipeTransportRegistry.getPipeSnapshot(req.params.roomId);
+
+    if (!snapshot) {
+      return res.status(404).json({ error: 'Topology not found for room' });
+    }
+
+    logger.info(JSON.stringify({
+      event: 'pipe_transport_admin_snapshot_requested',
+      roomId: req.params.roomId,
+      requestedBy: (req as any).user?.id || 'admin_api_key',
+    }));
+
+    // Redact raw internal pod IDs / IP addresses for security
+    const redactedRouters: Record<string, any> = {};
+    for (const [key, node] of Object.entries(snapshot.routers)) {
+      redactedRouters[key] = {
+        ...node,
+        mediaPodId: node.mediaPodId.replace(/\d+\.\d+\.\d+\.\d+/, '[REDACTED_POD_IP]'),
+      };
+    }
+
+    return res.json({
+      ...snapshot,
+      routers: redactedRouters,
+      pipeTransports,
+    });
+  } catch (err) {
+    logger.error(`Error fetching room topology for ${req.params.roomId}`, err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });

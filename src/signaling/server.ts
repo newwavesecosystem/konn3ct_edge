@@ -13,6 +13,15 @@ import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
 import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache, invalidateRoomHistoryCache } from './historyCache';
 import { monitorEventLoopDelay, PerformanceObserver } from 'perf_hooks';
+import { LARGE_ROOM_CONFIG, LargeRoomMode, LargeRoomSettings, validateLargeRoomConfig } from '../config/largeRoom';
+import {
+  isLargeRoomMode,
+  canParticipantPublishAudio,
+  canParticipantPublishVideo,
+  canParticipantShareScreen,
+  canPromoteParticipantToSpeaker,
+  getLargeRoomCapacityState,
+} from '../helpers/largeRoomHelpers';
 
 // --- Event Loop & GC Telemetry ---
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
@@ -254,7 +263,7 @@ export function getActiveRoomParticipants(roomId: string) {
 
 
 
-export interface RoomSettings {
+export interface RoomSettings extends LargeRoomSettings {
   micLocked: boolean;
   videoLocked: boolean;
   chatLocked: boolean;
@@ -265,6 +274,16 @@ export interface RoomSettings {
   poorNetworkJitterMs?: number;
   networkWindowSize?: number;
   networkMonitorIntervalMs?: number;
+}
+
+export function getDefaultRoomSettings(): RoomSettings {
+  return {
+    micLocked: false,
+    videoLocked: false,
+    chatLocked: false,
+    bypassWaitingRoom: false,
+    ...validateLargeRoomConfig({}),
+  };
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
@@ -539,6 +558,16 @@ export function initializeSignaling(server: Server) {
       }
 
       if (!roomSettingsMap.has(room.id)) {
+        const largeConfig = validateLargeRoomConfig({
+          largeRoomMode: (room.largeRoomMode as LargeRoomMode) || 'standard',
+          largeRoomEnabled: room.largeRoomEnabled,
+          maxActiveVideoPublishers: room.maxActiveVideoPublishers,
+          maxActiveAudioPublishers: room.maxActiveAudioPublishers,
+          maxScreenShares: room.maxScreenShares,
+          maxViewersPerRelayRouter: room.maxViewersPerRelayRouter,
+          relayProvisionThresholdPercent: room.relayProvisionThresholdPercent,
+        });
+
         roomSettingsMap.set(room.id, {
           micLocked: false,
           videoLocked: false,
@@ -550,6 +579,7 @@ export function initializeSignaling(server: Server) {
           poorNetworkJitterMs: room.poorNetworkJitterMs,
           networkWindowSize: room.networkWindowSize,
           networkMonitorIntervalMs: room.networkMonitorIntervalMs,
+          ...largeConfig,
         });
       }
 
@@ -1167,7 +1197,7 @@ export function initializeSignaling(server: Server) {
 
       case 'update_room_settings':
         if (client.role === 'host' || client.role === 'co-host') {
-          const currentSettings = roomSettingsMap.get(roomId) || { micLocked: false, videoLocked: false, chatLocked: false, bypassWaitingRoom: false };
+          const currentSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
           const d = data.settings || {};
           const newSettings = { ...currentSettings };
           
@@ -1242,6 +1272,171 @@ export function initializeSignaling(server: Server) {
           logger.warn(`network_detection_settings_update_rejected_permission: User ${client.userId} (${client.role}) attempted to update room settings in ${roomId}`);
         }
         break;
+
+      case 'update_large_room_settings': {
+        if (['host', 'co-host', 'admin'].includes(client.role)) {
+          const currentSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
+          const updatedConfig = validateLargeRoomConfig({
+            ...currentSettings,
+            ...data.settings,
+          });
+
+          const newSettings: RoomSettings = {
+            ...currentSettings,
+            ...updatedConfig,
+          };
+
+          roomSettingsMap.set(roomId, newSettings);
+
+          db.room.update({
+            where: { id: roomId },
+            data: {
+              largeRoomMode: newSettings.largeRoomMode,
+              largeRoomEnabled: newSettings.largeRoomEnabled,
+              maxActiveVideoPublishers: newSettings.maxActiveVideoPublishers,
+              maxActiveAudioPublishers: newSettings.maxActiveAudioPublishers,
+              maxScreenShares: newSettings.maxScreenShares,
+              maxViewersPerRelayRouter: newSettings.maxViewersPerRelayRouter,
+              relayProvisionThresholdPercent: newSettings.relayProvisionThresholdPercent,
+            }
+          }).catch((e: any) => logger.error("Failed to persist large room settings", e));
+
+          logger.info(JSON.stringify({
+            event: newSettings.largeRoomEnabled ? 'large_room_mode_enabled' : 'large_room_mode_disabled',
+            roomId,
+            participantId: client.participantId,
+            userRole: client.role,
+            largeRoomMode: newSettings.largeRoomMode,
+            maxActiveVideoPublishers: newSettings.maxActiveVideoPublishers,
+            maxActiveAudioPublishers: newSettings.maxActiveAudioPublishers,
+            maxScreenShares: newSettings.maxScreenShares,
+          }));
+
+          logger.info(JSON.stringify({
+            event: 'large_room_mode_updated',
+            roomId,
+            participantId: client.participantId,
+            userRole: client.role,
+            largeRoomMode: newSettings.largeRoomMode,
+            settings: newSettings,
+          }));
+
+          broadcastToRoom(roomId, {
+            type: 'large_room_settings_updated',
+            settings: newSettings,
+            updatedBy: client.name
+          });
+        } else {
+          logger.warn(`large_room_settings_update_rejected: User ${client.userId} (${client.role}) attempted to update large room settings in ${roomId}`);
+        }
+        break;
+      }
+
+      case 'speaker_promotion_requested': {
+        const currentSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
+        const speakerRequests = Array.from(new Set([...(currentSettings.speakerRequests || []), client.participantId]));
+        const updatedSettings: RoomSettings = { ...currentSettings, speakerRequests };
+        roomSettingsMap.set(roomId, updatedSettings);
+
+        logger.info(JSON.stringify({
+          event: 'large_room_speaker_request_created',
+          roomId,
+          participantId: client.participantId,
+          userRole: client.role,
+          largeRoomMode: currentSettings.largeRoomMode,
+        }));
+
+        broadcastToHosts(roomId, {
+          type: 'speaker_promotion_requested',
+          participantId: client.participantId,
+          userId: client.userId,
+          name: client.name,
+        });
+        break;
+      }
+
+      case 'speaker_promotion_approved': {
+        if (canPromoteParticipantToSpeaker(client.role, data.targetParticipantId, roomSettingsMap.get(roomId) || getDefaultRoomSettings())) {
+          const currentSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
+          const targetId = data.targetParticipantId;
+          const promotedSpeakers = Array.from(new Set([...(currentSettings.promotedSpeakers || []), targetId]));
+          const speakerRequests = (currentSettings.speakerRequests || []).filter((id) => id !== targetId);
+
+          const updatedSettings: RoomSettings = { ...currentSettings, promotedSpeakers, speakerRequests };
+          roomSettingsMap.set(roomId, updatedSettings);
+
+          logger.info(JSON.stringify({
+            event: 'large_room_speaker_request_approved',
+            roomId,
+            participantId: client.participantId,
+            targetParticipantId: targetId,
+            userRole: client.role,
+            largeRoomMode: currentSettings.largeRoomMode,
+          }));
+
+          broadcastToRoom(roomId, {
+            type: 'speaker_promotion_approved',
+            targetParticipantId: targetId,
+            approvedBy: client.name,
+          });
+        }
+        break;
+      }
+
+      case 'speaker_promotion_rejected': {
+        if (canPromoteParticipantToSpeaker(client.role, data.targetParticipantId, roomSettingsMap.get(roomId) || getDefaultRoomSettings())) {
+          const currentSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
+          const targetId = data.targetParticipantId;
+          const speakerRequests = (currentSettings.speakerRequests || []).filter((id) => id !== targetId);
+
+          const updatedSettings: RoomSettings = { ...currentSettings, speakerRequests };
+          roomSettingsMap.set(roomId, updatedSettings);
+
+          logger.info(JSON.stringify({
+            event: 'large_room_speaker_request_rejected',
+            roomId,
+            participantId: client.participantId,
+            targetParticipantId: targetId,
+            userRole: client.role,
+            largeRoomMode: currentSettings.largeRoomMode,
+            reason: 'host_rejected',
+          }));
+
+          broadcastToRoom(roomId, {
+            type: 'speaker_promotion_rejected',
+            targetParticipantId: targetId,
+            rejectedBy: client.name,
+          });
+        }
+        break;
+      }
+
+      case 'speaker_demoted': {
+        if (canPromoteParticipantToSpeaker(client.role, data.targetParticipantId, roomSettingsMap.get(roomId) || getDefaultRoomSettings())) {
+          const currentSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
+          const targetId = data.targetParticipantId;
+          const promotedSpeakers = (currentSettings.promotedSpeakers || []).filter((id) => id !== targetId);
+
+          const updatedSettings: RoomSettings = { ...currentSettings, promotedSpeakers };
+          roomSettingsMap.set(roomId, updatedSettings);
+
+          logger.info(JSON.stringify({
+            event: 'speaker_demoted',
+            roomId,
+            participantId: client.participantId,
+            targetParticipantId: targetId,
+            userRole: client.role,
+            largeRoomMode: currentSettings.largeRoomMode,
+          }));
+
+          broadcastToRoom(roomId, {
+            type: 'speaker_demoted',
+            targetParticipantId: targetId,
+            demotedBy: client.name,
+          });
+        }
+        break;
+      }
 
       case 'leave_meeting':
         logger.info(`User ${userId} explicitly left room ${roomId}. Skipping grace period.`);
@@ -2017,28 +2212,55 @@ export function initializeSignaling(server: Server) {
           return;
         }
         
-        const settings = roomSettingsMap.get(roomId);
-        if (data.kind === 'video' && data.appData?.source !== 'screen' && settings?.videoLocked && client.role === 'attendee') {
-          client.ws.send(JSON.stringify({ type: 'error', message: 'Cameras are locked by the host.' }));
-          return;
-        }
-        if (data.kind === 'audio' && settings?.micLocked && client.role === 'attendee' && !client.micExemption) {
-          client.ws.send(JSON.stringify({ type: 'error', message: 'Microphones are locked by the host.' }));
-          return;
-        }
+        const settings = roomSettingsMap.get(roomId) || validateLargeRoomConfig({ largeRoomMode: 'standard' });
+        const roomProducersList = await getRoomProducers(roomId);
+        const participantCtx = {
+          userId: client.userId,
+          participantId: client.participantId,
+          role: client.role,
+          micExemption: client.micExemption,
+        };
 
         const appData: Record<string, any> = data.appData || {};
         const source = appData.source || 'camera'; // 'camera' | 'screen'
 
-        // Camera cap only applies to actual cameras, NOT screen share producers
-        if (data.kind === 'video' && source !== 'screen') {
-          const roomProducersList = await getRoomProducers(roomId);
-          const cameraProducers = roomProducersList.filter((p: any) => p.kind === 'video' && p.appData?.source !== 'screen');
-          const maxCameras = client.maxActiveCameras ?? 15;
-          if (cameraProducers.length >= maxCameras) {
+        if (data.kind === 'audio') {
+          const audioCheck = canParticipantPublishAudio(participantCtx, settings, roomProducersList);
+          if (!audioCheck.allowed) {
             client.ws.send(JSON.stringify({
-              type: 'error',
-              message: `Maximum number of active cameras (${maxCameras}) reached in this room to preserve server stability.`
+              type: 'produce_failed',
+              errorCode: 'AUDIO_PUBLISH_LIMIT_REACHED',
+              clientEventId: data.clientEventId,
+              serverEventId: crypto.randomUUID(),
+              message: audioCheck.reason,
+            }));
+            return;
+          }
+        }
+
+        if (data.kind === 'video' && source !== 'screen') {
+          const videoCheck = canParticipantPublishVideo(participantCtx, settings, roomProducersList);
+          if (!videoCheck.allowed) {
+            client.ws.send(JSON.stringify({
+              type: 'produce_failed',
+              errorCode: 'VIDEO_PUBLISH_LIMIT_REACHED',
+              clientEventId: data.clientEventId,
+              serverEventId: crypto.randomUUID(),
+              message: videoCheck.reason,
+            }));
+            return;
+          }
+        }
+
+        if (data.kind === 'video' && source === 'screen') {
+          const screenCheck = canParticipantShareScreen(participantCtx, settings, roomProducersList);
+          if (!screenCheck.allowed) {
+            client.ws.send(JSON.stringify({
+              type: 'produce_failed',
+              errorCode: 'SCREEN_SHARE_LIMIT_REACHED',
+              clientEventId: data.clientEventId,
+              serverEventId: crypto.randomUUID(),
+              message: screenCheck.reason,
             }));
             return;
           }

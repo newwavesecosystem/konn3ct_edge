@@ -233,6 +233,18 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   }
 }
 
+export function getRouter(routerIdOrRoomId: string): Router | undefined {
+  if (routers.has(routerIdOrRoomId)) {
+    return routers.get(routerIdOrRoomId);
+  }
+  for (const router of routers.values()) {
+    if (router.id === routerIdOrRoomId) {
+      return router;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Close a Router and remove it from memory
  */
@@ -475,6 +487,28 @@ export async function resumeConsumer(consumerId: string, clientCleanupStarted?: 
 /**
  * Close a specific producer by ID (used when a client stops screen sharing)
  */
+export async function pauseProducer(producerId: string): Promise<void> {
+  const producer = producers.get(producerId);
+  if (producer && !producer.closed) {
+    await producer.pause();
+  }
+}
+
+export async function resumeProducer(producerId: string): Promise<void> {
+  const producer = producers.get(producerId);
+  if (producer && !producer.closed) {
+    await producer.resume();
+  }
+}
+
+export function closeConsumer(consumerId: string): void {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.closed) {
+    consumer.close();
+    consumers.delete(consumerId);
+  }
+}
+
 export function closeProducer(producerId: string) {
   const producer = producers.get(producerId);
   if (producer && !producer.closed) {
@@ -482,6 +516,7 @@ export function closeProducer(producerId: string) {
     producers.delete(producerId);
   }
 }
+
 
 /**
  * Create a Consumer with an optional producerclose callback so the signaling

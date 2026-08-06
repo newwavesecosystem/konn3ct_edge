@@ -51,24 +51,62 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
 
   private async getRoomMediaPod(roomId: string): Promise<string> {
     let podId = await redis.get(`room:${roomId}:mediaPodId`);
-    if (podId) return podId;
+    if (podId) {
+      const alive = await redis.exists(`media:node:${podId}:heartbeat`);
+      if (alive) {
+        return podId;
+      }
+      logger.warn(`Media Pod ${podId} for room ${roomId} is no longer alive. Re-assigning room to an active Media Pod.`);
+      await redis.del(`room:${roomId}:mediaPodId`);
+    }
 
-    // Pick a random active media pod
     const keys = await redis.keys('media:node:*:heartbeat');
     if (keys.length === 0) {
       logger.warn('No active Media Pods found! Falling back to local/default routing for now.');
       return 'media-default';
     }
     
-    // Quick random selection
-    podId = keys[Math.floor(Math.random() * keys.length)].split(':')[2];
+    const chosenKey = keys[Math.floor(Math.random() * keys.length)];
+    podId = chosenKey.replace('media:node:', '').replace(':heartbeat', '');
     
-    // SetNX to prevent race conditions
     const set = await redis.setnx(`room:${roomId}:mediaPodId`, podId);
     if (!set) {
-        return await redis.get(`room:${roomId}:mediaPodId`) as string;
+        return (await redis.get(`room:${roomId}:mediaPodId`)) as string;
     }
     return podId;
+  }
+
+  /**
+   * Directly sends an RPC call targeting a specific Media Pod ID.
+   */
+  public async rpcCallToPod(targetPodId: string, method: string, args: any[], timeoutMs = 5000): Promise<any> {
+    const requestId = uuidv4();
+
+    logger.info(JSON.stringify({
+      event: 'pipe_transport_rpc_target_selected',
+      targetPodId,
+      method,
+      requestId,
+    }));
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.responseWaiters.delete(requestId);
+        reject(new Error(`RPC Timeout for ${method} to pod ${targetPodId}`));
+      }, timeoutMs);
+
+      this.responseWaiters.set(requestId, { resolve, reject, timeout });
+
+      redis.publish(`media:rpc:request:${targetPodId}`, JSON.stringify({
+        requestId,
+        method,
+        args
+      })).catch((err: any) => {
+        clearTimeout(timeout);
+        this.responseWaiters.delete(requestId);
+        reject(err);
+      });
+    });
   }
 
   private async rpcCall(method: string, args: any[], roomId?: string): Promise<any> {
@@ -86,10 +124,9 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
     if (roomId) {
       podId = await this.getRoomMediaPod(roomId);
     } else {
-      // Fallback: Pick from active heartbeat keys if roomId wasn't provided by caller
       const keys = await redis.keys('media:node:*:heartbeat');
       if (keys.length > 0) {
-        podId = keys[0].split(':')[2];
+        podId = keys[0].replace('media:node:', '').replace(':heartbeat', '');
         logger.warn(`RPC call ${method} lacks roomId! Dynamically routed to active media pod: ${podId}`);
       } else {
         logger.warn(`RPC call ${method} lacks roomId and no active media pods found! Using default queue.`);
@@ -97,8 +134,11 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
     }
     
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const timeout = setTimeout(async () => {
         this.responseWaiters.delete(requestId);
+        if (roomId) {
+          redis.del(`room:${roomId}:mediaPodId`).catch(e => logger.warn('Failed to clear stale mediaPodId on RPC timeout', e));
+        }
         reject(new Error(`RPC Timeout for ${method}`));
       }, 5000);
 
