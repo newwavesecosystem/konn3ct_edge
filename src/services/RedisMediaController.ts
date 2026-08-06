@@ -86,9 +86,14 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
     if (roomId) {
       podId = await this.getRoomMediaPod(roomId);
     } else {
-      // If no roomId is provided (e.g., some closeProducer calls), we might have to broadcast
-      // or we must update all callers to pass roomId.
-      logger.warn(`RPC call ${method} lacks roomId! Routing might fail if multiple media pods exist.`);
+      // Fallback: Pick from active heartbeat keys if roomId wasn't provided by caller
+      const keys = await redis.keys('media:node:*:heartbeat');
+      if (keys.length > 0) {
+        podId = keys[0].split(':')[2];
+        logger.warn(`RPC call ${method} lacks roomId! Dynamically routed to active media pod: ${podId}`);
+      } else {
+        logger.warn(`RPC call ${method} lacks roomId and no active media pods found! Using default queue.`);
+      }
     }
     
     return new Promise((resolve, reject) => {
@@ -126,41 +131,39 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
   async createWebRtcTransport(roomId: string): Promise<{ id: string; iceParameters: any; iceCandidates: any[]; dtlsParameters: DtlsParameters; }> {
     return this.rpcCall('createWebRtcTransport', [roomId], roomId);
   }
-  async connectTransport(transportId: string, dtlsParameters: DtlsParameters): Promise<void> {
-    // Note: We don't have roomId here! We might need to map transportId -> roomId in Redis, 
-    // or update the caller to pass roomId. For now we just broadcast or rely on single media pod.
-    return this.rpcCall('connectTransport', [transportId, dtlsParameters]);
+  async connectTransport(transportId: string, dtlsParameters: DtlsParameters, roomId?: string): Promise<void> {
+    return this.rpcCall('connectTransport', [transportId, dtlsParameters], roomId);
   }
-  async closeTransport(transportId: string): Promise<void> {
-    return this.rpcCall('closeTransport', [transportId]);
+  async closeTransport(transportId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('closeTransport', [transportId], roomId);
   }
-  async restartIce(transportId: string): Promise<{ iceParameters: any }> {
-    return this.rpcCall('restartIce', [transportId]);
+  async restartIce(transportId: string, roomId?: string): Promise<{ iceParameters: any }> {
+    return this.rpcCall('restartIce', [transportId], roomId);
   }
 
   // --- Producers ---
   async createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }): Promise<{ id: string }> {
     return this.rpcCall('createProducer', [transportId, kind, rtpParameters, roomId, userId, userName, clientData], roomId);
   }
-  async closeProducer(producerId: string): Promise<void> {
-    return this.rpcCall('closeProducer', [producerId]);
+  async closeProducer(producerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('closeProducer', [producerId], roomId);
   }
-  async getProducer(producerId: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null> {
-    return this.rpcCall('getProducer', [producerId]);
+  async getProducer(producerId: string, roomId?: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null> {
+    return this.rpcCall('getProducer', [producerId], roomId);
   }
 
   // --- Consumers ---
   async createConsumer(transportId: string, producerId: string, rtpCapabilities: RtpCapabilities, roomId: string): Promise<{ id: string; producerId: string; kind: string; rtpParameters: RtpParameters; appData?: any; }> {
     return this.rpcCall('createConsumer', [transportId, producerId, rtpCapabilities, roomId], roomId);
   }
-  async resumeConsumer(consumerId: string): Promise<void> {
-    return this.rpcCall('resumeConsumer', [consumerId]);
+  async resumeConsumer(consumerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('resumeConsumer', [consumerId], roomId);
   }
-  async pauseConsumer(consumerId: string): Promise<void> {
-    return this.rpcCall('pauseConsumer', [consumerId]);
+  async pauseConsumer(consumerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('pauseConsumer', [consumerId], roomId);
   }
-  async requestConsumerKeyFrame(consumerId: string): Promise<void> {
-    return this.rpcCall('requestConsumerKeyFrame', [consumerId]);
+  async requestConsumerKeyFrame(consumerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('requestConsumerKeyFrame', [consumerId], roomId);
   }
 
   // --- Features ---

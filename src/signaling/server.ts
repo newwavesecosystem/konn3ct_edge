@@ -1986,7 +1986,7 @@ export function initializeSignaling(server: Server) {
           logger.warn(`User ${userId} tried to connect a transport they don't own: ${data.transportId}`);
           return;
         }
-        await mediaController.connectTransport(data.transportId, data.dtlsParameters);
+        await mediaController.connectTransport(data.transportId, data.dtlsParameters, roomId);
         client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
         break;
       }
