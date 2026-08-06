@@ -46,7 +46,7 @@ const COLORS = {
 };
 
 const GRID_ITEMS = [
-  { id: 'streaming', title: 'Streaming', subtitle: 'Go live now', icon: Cast, colors: ['#3b82f6', '#2563eb'] },
+  // { id: 'streaming', title: 'Streaming', subtitle: 'Go live now', icon: Cast, colors: ['#3b82f6', '#2563eb'] },
   { id: 'recordings', title: 'Recordings', subtitle: 'Past sessions', icon: Film, colors: ['#8b5cf6', '#7c3aed'] },
   { id: 'events', title: 'Events', subtitle: 'Schedule', icon: Calendar, colors: ['#ec4899', '#db2777'] },
   { id: 'attendance', title: 'Attendance', subtitle: 'Track metrics', icon: ClipboardCheck, colors: ['#14b8a6', '#0d9488'] },

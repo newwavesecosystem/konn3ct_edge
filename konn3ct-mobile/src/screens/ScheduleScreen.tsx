@@ -2,8 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, FlatList, 
   ActivityIndicator, Modal, TextInput, Alert, Platform,
-  ScrollView, KeyboardAvoidingView 
+  ScrollView 
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   Calendar, Plus, X, Clock, Video, MonitorPlay, 
@@ -147,14 +148,28 @@ export default function ScheduleScreen({ navigation, route }: Props) {
         timezone,
         guest: guests.length > 0 ? guests.join(',') : (user?.email || 'host@konn3ct.net'),
       });
-      
+
+      // Clean success path
       setModalVisible(false);
       resetForm();
       fetchData();
       Alert.alert("Success", "Session scheduled successfully!");
     } catch (e: any) {
-      console.error(e);
-      Alert.alert("Error", e.response?.data?.message || "Failed to schedule session.");
+      const status: number = e.response?.status ?? 0;
+
+      console.warn('[ScheduleScreen] createSchedule error:', {
+        status,
+        data: JSON.stringify(e.response?.data),
+        message: e.message,
+      });
+
+      // Show the specific error from the server
+      const msg =
+        e.response?.data?.message ||
+        e.response?.data?.error ||
+        e.message ||
+        "Failed to schedule session. Please try again.";
+      Alert.alert("Error", msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -328,10 +343,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
           resetForm();
         }}
       >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalContainer}
-        >
+        <View style={styles.modalContainer}>
           <View style={styles.modalHeaderTop}>
             <View>
               <Text style={styles.modalTitle}>Schedule Session</Text>
@@ -345,9 +357,13 @@ export default function ScheduleScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
+          <KeyboardAwareScrollView
             contentContainerStyle={styles.modalScrollContent}
             showsVerticalScrollIndicator={false}
+            enableOnAndroid={true}
+            extraScrollHeight={120}
+            keyboardShouldPersistTaps="handled"
+            enableAutomaticScroll={true}
           >
             {/* Mode Selection */}
             <View style={styles.modeContainer}>
@@ -598,32 +614,31 @@ export default function ScheduleScreen({ navigation, route }: Props) {
               </View>
             </View>
 
-            <View style={{height: 40}} />
-          </ScrollView>
-
-          {/* Action Footer */}
-          <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <TouchableOpacity 
-              style={styles.cancelBtn} 
-              onPress={() => {
-                setModalVisible(false);
-                resetForm();
-              }}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
-              onPress={handleSchedule}
-              disabled={isSubmitting}
-              testID="schedule-submit-btn"
-            >
-              <Text style={styles.submitBtnText}>
-                {isSubmitting ? 'Scheduling...' : 'Schedule Session'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+            {/* Action Footer inside scroll so it rises above keyboard */}
+            <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+              <TouchableOpacity 
+                style={styles.cancelBtn} 
+                onPress={() => {
+                  setModalVisible(false);
+                  resetForm();
+                }}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
+                onPress={handleSchedule}
+                disabled={isSubmitting}
+                testID="schedule-submit-btn"
+              >
+                <Text style={styles.submitBtnText}>
+                  {isSubmitting ? 'Scheduling...' : 'Schedule Session'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{height: 24}} />
+          </KeyboardAwareScrollView>
+        </View>
 
         {showDatePicker && (
           <DateTimePicker

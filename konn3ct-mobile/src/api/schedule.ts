@@ -20,11 +20,22 @@ export async function fetchSchedules() {
 }
 
 export async function createSchedule(data: SchedulePayload) {
-  const res = await apiClient.post('/schedule', data);
-  if (res.data && (res.data.status === false || res.data.success === false)) {
-    throw new Error(res.data.message || 'Failed to create schedule');
+  try {
+    const res = await apiClient.post('/schedule', data);
+    if (res.data && (res.data.status === false || res.data.success === false)) {
+      throw new Error(res.data.message || 'Failed to create schedule');
+    }
+    return res.data;
+  } catch (error: any) {
+    // Log full details so we can diagnose server-side failures precisely
+    console.error('[createSchedule] HTTP Error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: JSON.stringify(error.response?.data),
+      message: error.message,
+    });
+    throw error;
   }
-  return res.data;
 }
 
 export async function updateSchedule(id: string | number, data: Partial<SchedulePayload>) {

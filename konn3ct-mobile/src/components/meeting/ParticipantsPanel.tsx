@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, Platform, Modal, TouchableWithoutFeedback
+  StyleSheet, Platform, Modal, TouchableWithoutFeedback, Alert
 } from 'react-native';
 import { useMeetingStore } from '../../store/useMeetingStore';
 import { meetingThemeTokens } from '../../theme/meetingTheme';
 import { MediasoupService } from '../../webrtc/MediasoupService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, MicOff, Shield, ShieldOff, UserMinus, ChevronRight } from 'lucide-react-native';
+import { Mic, MicOff, Shield, ShieldOff, UserMinus, ChevronRight, Lock, MessageSquare } from 'lucide-react-native';
 
 interface ParticipantsPanelProps {
   service: MediasoupService | null;
@@ -29,8 +29,9 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const sendWs = (service: MediasoupService | null, payload: object) => {
-  if (service?.ws && service.ws.readyState === WebSocket.OPEN) {
-    service.ws.send(JSON.stringify(payload));
+  const ws = (service as any)?.ws;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
   }
 };
 
@@ -41,6 +42,7 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   const isHost        = useMeetingStore(state => state.isHost);
   const currentUserId = useMeetingStore(state => state.currentUserId);
   const currentUserRole = useMeetingStore(state => state.currentUserRole);
+  const chatLocked    = useMeetingStore(state => state.chatLocked);
 
   const theme  = useMeetingStore(state => state.theme);
   const tokens = meetingThemeTokens[theme];
@@ -53,12 +55,45 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
 
   // Whether the current user can manage others
   const canManage = currentUserRole === 'host' || currentUserRole === 'co-host';
+  const canManageChatLock = isHost || currentUserRole === 'co-host' || currentUserRole === 'moderator';
   const isActualHost = currentUserRole === 'host';
 
   /* ── handlers ─────────────────────────────────────────────────────────── */
   const handleAdmit = (userId: string) => { service?.admitUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
   const handleDeny  = (userId: string) => { service?.denyUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
-  const handleMuteAll = () => service?.forceMute();
+  
+  const handleMuteAll = () => {
+    Alert.alert(
+      'Mute All Participants',
+      'Mute all participants? Hosts, co-hosts and moderators will remain unmuted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Confirm', onPress: () => service?.muteAll('all_except_hosts') }
+      ]
+    );
+  };
+
+  const handleToggleChatLock = () => {
+    if (chatLocked) {
+      Alert.alert(
+        'Unlock Chat?',
+        'Unlock meeting chat?\n\nAll participants will be able to send messages again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Unlock', onPress: () => service?.updateRoomSettings({ chatLocked: false }) }
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Lock Chat?',
+        'Lock meeting chat?\n\nParticipants will no longer be able to send messages or files.\nHosts, co-hosts and moderators can continue sending messages.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Lock', style: 'destructive', onPress: () => service?.updateRoomSettings({ chatLocked: true }) }
+        ]
+      );
+    }
+  };
 
   const handleMuteUser = (userId: string) => {
     sendWs(service, { type: 'force_mute', userId });
@@ -244,12 +279,26 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
       </View>
 
       <ScrollView style={styles.listContainer} contentContainerStyle={{ paddingBottom: safeBottom + 16 }}>
-        {/* Mute All */}
-        {isHost && (
-          <TouchableOpacity style={styles.muteAllBtn} onPress={handleMuteAll}>
-            <MicOff size={16} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.muteAllText}>Mute All</Text>
-          </TouchableOpacity>
+        {/* Host & Moderator Controls: Mute All and Lock Chat */}
+        {canManageChatLock && (
+          <View style={styles.hostControlRow}>
+            {isHost && (
+              <TouchableOpacity style={styles.muteAllBtn} onPress={handleMuteAll}>
+                <MicOff size={16} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.muteAllText}>Mute All</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.lockChatBtn, chatLocked && styles.lockChatBtnActive]}
+              onPress={handleToggleChatLock}
+            >
+              <Lock size={16} color={chatLocked ? '#fff' : tokens.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.lockChatText, chatLocked && styles.lockChatTextActive]}>
+                {chatLocked ? 'Unlock Chat' : 'Lock Chat'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Waiting Room */}
@@ -334,16 +383,40 @@ const getStyles = (t: any) => StyleSheet.create({
   closeText: { color: t.textMuted, fontSize: 20 },
   listContainer: { flex: 1, padding: 16 },
 
-  muteAllBtn: {
-    backgroundColor: t.primary,
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  muteAllText: { color: '#fff', fontWeight: '700', fontSize: 14, fontFamily: 'Inter' },
+    hostControlRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 16,
+    },
+    muteAllBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: t.danger,
+      borderRadius: 12,
+    },
+    muteAllText: { color: '#fff', fontWeight: '700', fontSize: 14, fontFamily: 'Inter' },
+    lockChatBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: t.bgElevated,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: t.primary,
+    },
+    lockChatBtnActive: {
+      backgroundColor: t.primary,
+      borderColor: t.primary,
+    },
+    lockChatText: { color: t.primary, fontWeight: '700', fontSize: 14, fontFamily: 'Inter' },
+    lockChatTextActive: { color: '#fff' },
 
   section: { marginBottom: 20 },
   sectionTitle: {

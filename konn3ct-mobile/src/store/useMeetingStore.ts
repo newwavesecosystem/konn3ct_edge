@@ -48,6 +48,20 @@ export interface CaptionMessage {
   timestamp: number;
 }
 
+/** Reconnection state machine states */
+export type ConnectionState =
+  | 'connected'
+  | 'temporarily_disconnected'
+  | 'reconnecting'
+  | 'recovering_media'
+  | 'reconnected'
+  | 'failed';
+
+/** All possible side-panel panes (includes 'manage' for host controls) */
+export type ActivePane =
+  | 'none' | 'chat' | 'participants' | 'polls' | 'settings'
+  | 'streaming' | 'whiteboard' | 'docs' | 'donation' | 'manage';
+
 interface MeetingState {
   chatMessages: ChatMessage[];
   polls: Poll[];
@@ -64,8 +78,13 @@ interface MeetingState {
   isLocalUserSpeaking: boolean;
   screenSharingUserId: string | null;
 
+  /** Reconnection lifecycle state */
+  connectionState: ConnectionState;
+  /** Whether the host has locked chat for non-privileged participants */
+  chatLocked: boolean;
+
   // Active UI Panes
-  activePane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation';
+  activePane: ActivePane;
   theme: 'sage' | 'midnight';
   
   // Actions
@@ -89,10 +108,12 @@ interface MeetingState {
   addWaitingRoomUser: (user: Participant) => void;
   removeWaitingRoomUser: (userId: string) => void;
   setWaitingRoom: (users: Participant[]) => void;
-  setActivePane: (pane: 'none' | 'chat' | 'participants' | 'polls' | 'settings' | 'streaming' | 'whiteboard' | 'docs' | 'donation') => void;
+  setActivePane: (pane: ActivePane) => void;
   setTheme: (theme: 'sage' | 'midnight') => void;
   setCaptions: (updater: (curr: CaptionMessage[]) => CaptionMessage[]) => void;
   setScreenSharing: (userId: string | null) => void;
+  setConnectionState: (state: ConnectionState) => void;
+  setChatLocked: (locked: boolean) => void;
   reset: () => void;
 }
 
@@ -111,6 +132,8 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   isHost: false,
   isHandRaisedLocally: false,
   isLocalUserSpeaking: false,
+  connectionState: 'connected',
+  chatLocked: false,
   screenSharingUserId: null,
 
   setCurrentUser: (userId, role) => set({ 
@@ -236,6 +259,9 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     }))
   })),
 
+  setConnectionState: (connectionState) => set({ connectionState }),
+  setChatLocked: (chatLocked) => set({ chatLocked }),
+
   reset: () => set({
     chatMessages: [],
     polls: [],
@@ -245,6 +271,8 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     unreadChatCount: 0,
     activePane: 'none',
     theme: 'sage',
+    connectionState: 'connected',
+    chatLocked: false,
     currentUserRole: null,
     currentUserId: null,
     isHost: false,

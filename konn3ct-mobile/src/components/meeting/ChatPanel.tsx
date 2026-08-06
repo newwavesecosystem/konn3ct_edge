@@ -11,6 +11,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { meetingThemeTokens } from '../../theme/meetingTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ImagePreviewModal, ImagePreviewData, isPreviewableImage } from './ImagePreviewModal';
 
 interface ChatPanelProps {
   service: MediasoupService | null;
@@ -44,6 +45,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
   const [targetUserId, setTargetUserId] = useState<string>('everyone');
   const [showRecipientModal, setShowRecipientModal] = useState(false);
   const [recipientSearch, setRecipientSearch] = useState('');
+  const [previewImage, setPreviewImage] = useState<ImagePreviewData | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   const messages = useMeetingStore(state => state.chatMessages);
   const setActivePane = useMeetingStore(state => state.setActivePane);
@@ -53,6 +56,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
   const theme = useMeetingStore(state => state.theme);
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
+
+  const chatLocked = useMeetingStore(state => state.chatLocked);
+  const isHost = useMeetingStore(state => state.isHost);
+  const currentUserRole = useMeetingStore(state => state.currentUserRole);
+
+  const isPrivilegedRole = isHost || currentUserRole === 'co-host' || currentUserRole === 'moderator';
+  const isChatInputDisabled = chatLocked && !isPrivilegedRole;
 
   const insets = useSafeAreaInsets();
   const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
@@ -155,6 +165,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
     setRecipientSearch('');
   };
 
+  const handleImagePress = (fileUrl: string, fileName: string, senderName: string) => {
+    setPreviewImage({
+      uri: fileUrl,
+      fileName: fileName || 'image',
+      senderName: senderName || 'Unknown',
+    });
+    setShowImagePreview(true);
+  };
+
   return (
     <Animated.View style={[styles.container, { paddingBottom: keyboardHeightAnim }]}>
       {/* Header */}
@@ -204,8 +223,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
               <Text style={[styles.msgText, isMe && { color: 'white' }]}>{rawText}</Text>
               {parsedFileUrl && (
                 <View style={styles.attachmentBox}>
-                  {parsedFileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-                    <Image source={{ uri: parsedFileUrl }} style={styles.attachmentImage} />
+                  {isPreviewableImage(parsedFileUrl) ? (
+                    <TouchableOpacity
+                      onPress={() => handleImagePress(parsedFileUrl!, rawText || 'Shared image', msg.name)}
+                      accessibilityLabel={`Preview image from ${msg.name}`}
+                    >
+                      <Image source={{ uri: parsedFileUrl }} style={styles.attachmentImage} />
+                    </TouchableOpacity>
                   ) : (
                     <TouchableOpacity style={styles.downloadBtn} onPress={() => Linking.openURL(parsedFileUrl!)}>
                       <Download size={14} color={tokens.primary} />
@@ -235,12 +259,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
         </View>
       )}
 
+      {/* Chat Lock Banner */}
+      {isChatInputDisabled && (
+        <View style={styles.chatLockedBanner}>
+          <Lock size={14} color={tokens.textMuted} />
+          <Text style={styles.chatLockedText}>Chat is locked by the host</Text>
+        </View>
+      )}
+
       {/* Input Row */}
-      <View style={[styles.inputContainer, { paddingBottom: safeBottom + 12 }]}>
+      <View style={[styles.inputContainer, { paddingBottom: safeBottom + 12 }, isChatInputDisabled && { opacity: 0.5 }]}>
         {/* "To:" selector */}
         <TouchableOpacity
           style={[styles.toSelector, isPrivateMode && styles.toSelectorPrivate]}
           onPress={openRecipientModal}
+          disabled={isChatInputDisabled}
         >
           {isPrivateMode && <Lock size={10} color="#f87171" />}
           <Text style={[styles.toSelectorText, isPrivateMode && styles.toSelectorTextPrivate]} numberOfLines={1}>
@@ -250,26 +283,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
         </TouchableOpacity>
 
         <View style={styles.inputRow}>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleFileUpload} disabled={isUploading}>
-            <Paperclip size={20} color={isUploading ? tokens.textMuted : tokens.primary} />
+          <TouchableOpacity style={styles.iconBtn} onPress={handleFileUpload} disabled={isUploading || isChatInputDisabled}>
+            <Paperclip size={20} color={isUploading || isChatInputDisabled ? tokens.textMuted : tokens.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => setShowEmojis(v => !v)}>
-            <Smile size={20} color={tokens.primary} />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => setShowEmojis(v => !v)} disabled={isChatInputDisabled}>
+            <Smile size={20} color={isChatInputDisabled ? tokens.textMuted : tokens.primary} />
           </TouchableOpacity>
           <TextInput
             style={styles.input}
-            placeholder={isUploading ? "Uploading..." : isPrivateMode ? `Private to ${targetLabel}...` : "Type a message..."}
+            placeholder={isChatInputDisabled ? "Chat is locked" : isUploading ? "Uploading..." : isPrivateMode ? `Private to ${targetLabel}...` : "Type a message..."}
             placeholderTextColor={tokens.textMuted}
             value={message}
             onChangeText={setMessage}
             onSubmitEditing={handleSend}
-            editable={!isUploading}
+            editable={!isUploading && !isChatInputDisabled}
             testID="chat-input"
           />
           <TouchableOpacity
-            style={[styles.sendBtn, (!message.trim() || isUploading) && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, (!message.trim() || isUploading || isChatInputDisabled) && styles.sendBtnDisabled]}
             onPress={handleSend}
-            disabled={!message.trim() || isUploading}
+            disabled={!message.trim() || isUploading || isChatInputDisabled}
             testID="send-chat-button"
           >
             {isUploading ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color="white" />}
@@ -357,6 +390,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ service }) => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <ImagePreviewModal
+        visible={showImagePreview}
+        image={previewImage}
+        onClose={() => {
+          setShowImagePreview(false);
+          setPreviewImage(null);
+        }}
+      />
     </Animated.View>
   );
 };
@@ -393,6 +435,22 @@ const getStyles = (t: any) => StyleSheet.create({
   emojiGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 8 },
   emojiGridBtn: { width: '12.5%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center' },
   emojiGridText: { fontSize: 24 },
+  chatLockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: t.bgElevated,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.border,
+    gap: 6,
+  },
+  chatLockedText: {
+    color: t.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+  },
   inputContainer: { borderTopWidth: 1, borderTopColor: t.border, paddingTop: 8, paddingHorizontal: 12 },
   toSelector: {
     flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',

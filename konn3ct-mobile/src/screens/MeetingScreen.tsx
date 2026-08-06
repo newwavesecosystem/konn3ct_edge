@@ -19,6 +19,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   BackHandler,
+  AppState,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../App";
@@ -97,6 +98,12 @@ import { ReactionsLayer } from "../components/meeting/ReactionsLayer";
 import { CaptionsOverlay } from "../components/meeting/CaptionsOverlay";
 import { APP_CONFIG } from "../config/appConfig";
 import { useNetworkQuality } from "../hooks/useNetworkQuality";
+import { ReconnectionOverlay } from "../components/meeting/ReconnectionOverlay";
+import { ChatToast, ChatToastMessage } from "../components/meeting/ChatToast";
+import { ImagePreviewModal } from "../components/meeting/ImagePreviewModal";
+import NotificationSoundService from "../services/NotificationSoundService";
+import { useSettingsStore } from "../store/useSettingsStore";
+import { Shield } from "lucide-react-native";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Meeting">;
 
@@ -119,11 +126,19 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [chatToastMessages, setChatToastMessages] = useState<ChatToastMessage[]>([]);
+  const chatToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Settings store
+  const chatNotificationSound = useSettingsStore((s) => s.chatNotificationSound);
+  const chatToastEnabled = useSettingsStore((s) => s.chatToastEnabled);
 
   const insets = useSafeAreaInsets();
   const serviceRef = useRef<MediasoupService | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null); // Fix 10: ref for cleanup
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const toggleMicRef = useRef<(() => void) | null>(null);
+  const handleLeaveRef = useRef<(() => void) | null>(null);
 
   // Zustand Store
   const {
@@ -188,6 +203,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
     // Setup PiP Listener for Android
     let pipListener: any = null;
+    let pipActionListener: any = null;
     if (PipService.isAvailable()) {
       // Tell native side a meeting is active — enables auto-PiP on Home press
       PipService.setMeetingActive(true);
@@ -196,11 +212,26 @@ export default function MeetingScreen({ route, navigation }: Props) {
       pipListener = PipService.onModeChanged((isInPip: boolean) => {
         if (isMounted) {
           setIsPipMode(isInPip);
-          // Close any open overlay when entering PiP
           if (isInPip) {
+            // Notify service BEFORE setting PiP mode so the transition window is
+            // established before any AppState change events arrive
+            serviceRef.current?.notifyPipEntered();
             setIsMoreMenuVisible(false);
             setActivePane("none");
+          } else {
+            // Notify service of PiP exit so the next AppState-active event
+            // triggers a lightweight health check rather than a full reconnect
+            serviceRef.current?.notifyPipExited();
           }
+        }
+      });
+      // Listen for PiP action button presses (mute/unmute toggle and leave)
+      pipActionListener = PipService.onPipAction((data: { action: string }) => {
+        if (!isMounted) return;
+        if (data.action === 'toggle_mute') {
+          toggleMicRef.current?.();
+        } else if (data.action === 'leave') {
+          handleLeaveRef.current?.();
         }
       });
     }
@@ -208,6 +239,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
     // Default to Speakerphone
     InCallManager.start({ media: "video" });
     InCallManager.setForceSpeakerphoneOn(true);
+
+    if (PipService.isAvailable()) {
+      PipService.updateMuteState(isMicMuted);
+    }
 
     async function init() {
       try {
@@ -293,11 +328,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onReconnectFailed = () => {
           if (isMounted) {
             setIsReconnecting(false);
-            Alert.alert(
-              "Connection Lost",
-              "Unable to reconnect to the meeting. Please rejoin.",
-              [{ text: "OK", onPress: () => navigation.replace("MainTabs") }],
-            );
+            // ReconnectionOverlay handles UI for failed state now
           }
         };
 
@@ -305,8 +336,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onChatMessage = (msg) => {
           const state = useMeetingStore.getState();
           if (msg.userId === state.currentUserId) return;
+          const messageId = msg.serverEventId || msg.id || `m-${Date.now()}`;
           state.addChatMessage({
-            id: msg.serverEventId || msg.id || `m-${Date.now()}`,
+            id: messageId,
             userId: msg.userId,
             name: msg.name || msg.senderName || "Someone",
             message: msg.message || msg.content || "",
@@ -314,6 +346,25 @@ export default function MeetingScreen({ route, navigation }: Props) {
             isPrivate: !!msg.isPrivate,
             fileUrl: msg.fileUrl,
           });
+
+          // Chat toast notification (only when chat panel is closed)
+          const currentPane = useMeetingStore.getState().activePane;
+          if (currentPane !== 'chat' && isMounted) {
+            const toastMsg: ChatToastMessage = {
+              id: messageId,
+              senderName: msg.name || msg.senderName || 'Someone',
+              content: msg.message || msg.content || '',
+              isFile: !!msg.fileUrl && !msg.message,
+              isImage: false, // Will be determined by extension if needed
+              timestamp: Date.now(),
+            };
+            setChatToastMessages(prev => [toastMsg, ...prev].slice(0, 5));
+
+            // Play notification sound
+            if (useSettingsStore.getState().chatNotificationSound) {
+              NotificationSoundService.playNotificationSound();
+            }
+          }
         };
         service.onChatHistory = (msgs) =>
           useMeetingStore.getState().setChatHistory(msgs);
@@ -602,6 +653,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
     return () => {
       isMounted = false;
       InCallManager.stop();
+      NotificationSoundService.cleanup();
       if (serviceRef.current) {
         serviceRef.current.disconnect();
       }
@@ -610,6 +662,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
       }
       if (pipListener) {
         pipListener.remove();
+      }
+      if (pipActionListener) {
+        pipActionListener.remove();
       }
       // Tell native side meeting is no longer active — disables auto-PiP on Home
       PipService.setMeetingActive(false);
@@ -620,6 +675,33 @@ export default function MeetingScreen({ route, navigation }: Props) {
       }
       reset();
     };
+  }, []);
+
+  // ── AppState foreground/background handler ────────────────────────────────
+  // When the app comes back from background, the WebSocket may have been
+  // killed by the OS. This proactively checks and reconnects if needed.
+  // Preserves media state on background to restore after reconnection.
+  useEffect(() => {
+    const appStateRef = { current: AppState.currentState };
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (
+        appStateRef.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // Going to background — preserve media state
+        console.log('[MeetingScreen] App going to background, preserving media state...');
+        serviceRef.current?.preserveMediaState();
+      }
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('[MeetingScreen] App returned to foreground, checking WS...');
+        serviceRef.current?.handleAppForeground();
+      }
+      appStateRef.current = nextAppState;
+    });
+    return () => subscription.remove();
   }, []);
 
   const leavingRef = useRef(false);
@@ -678,6 +760,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
       );
     }
   }, [currentUserRole, doLeave]);
+
+  handleLeaveRef.current = handleLeave;
 
   // Intercept hardware back (Android) and swipe-back gesture to show leave dialog
   useEffect(() => {
@@ -747,6 +831,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
       setIsMicMuted(true);
     }
   };
+
+  // Keep PiP action handler ref up to date
+  toggleMicRef.current = toggleMic;
 
   const toggleCamera = async () => {
     if (!localStream) return;
@@ -1391,21 +1478,31 @@ export default function MeetingScreen({ route, navigation }: Props) {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted}
-              onPress={toggleCamera}
-              testID="toggle-camera"
-            >
-              {isCameraOff ? (
-                <VideoOff size={20} color={tokens.danger} />
-              ) : (
-                <VideoIcon
-                  size={20}
-                  color={tokens.textPrimary}
-                  strokeWidth={2}
-                />
-              )}
-            </TouchableOpacity>
+            {(() => {
+              const videoTrack = localStream?.getVideoTracks()?.[0];
+              const isCameraActive = !isCameraOff &&
+                (serviceRef.current?.isCameraProducerActive ?? false) &&
+                videoTrack?.readyState === 'live' &&
+                videoTrack?.enabled === true;
+
+              return (
+                <TouchableOpacity
+                  style={isCameraActive ? styles.toolBtnActive : styles.toolBtnMuted}
+                  onPress={toggleCamera}
+                  testID="toggle-camera"
+                >
+                  {!isCameraActive ? (
+                    <VideoOff size={20} color={tokens.danger} />
+                  ) : (
+                    <VideoIcon
+                      size={20}
+                      color={tokens.textInverse}
+                      strokeWidth={2.2}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })()}
 
             <TouchableOpacity
               style={
@@ -1499,17 +1596,37 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {/* Overlays */}
       {!isPipMode && <CaptionsOverlay />}
 
-      {/* Fix 11: Reconnecting overlay */}
-      {isReconnecting && (
-        <View style={styles.reconnectingOverlay}>
-          <View style={styles.reconnectingBox}>
-            <ActivityIndicator size="small" color={tokens.primary} />
-            <Text style={styles.reconnectingText}>
-              Reconnecting
-              {reconnectAttempt > 0 ? ` (${reconnectAttempt}/5)` : ""}...
-            </Text>
-          </View>
-        </View>
+      {/* Reconnection Overlay (state-machine driven) */}
+      <ReconnectionOverlay
+        isInPipMode={isPipMode}
+        onRejoin={() => {
+          // Attempt to rejoin by re-navigating to Meeting
+          navigation.replace('Meeting', route.params as any);
+        }}
+        onRestoreAudio={() => {
+          serviceRef.current?.restoreReceiveMedia();
+        }}
+        onLeave={() => {
+          const isGuest = !useAuthStore.getState().token;
+          if (isGuest) {
+            navigation.reset({ index: 0, routes: [{ name: 'GuestJoin' as any }] });
+          } else {
+            navigation.replace('MainTabs');
+          }
+        }}
+      />
+
+      {/* Chat Toast Notification */}
+      {chatToastMessages.length > 0 && chatToastEnabled && !isPipMode && (
+        <ChatToast
+          messages={chatToastMessages}
+          theme={theme}
+          onDismiss={() => setChatToastMessages([])}
+          onOpenChat={() => {
+            setChatToastMessages([]);
+            setActivePane('chat');
+          }}
+        />
       )}
 
       {/* More Options Modal Bottom Sheet */}
@@ -1712,6 +1829,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
                       </Text>
                     </TouchableOpacity>
                   )}
+
+                  {/* Options items */}
 
                   <TouchableOpacity
                     style={styles.gridOption}

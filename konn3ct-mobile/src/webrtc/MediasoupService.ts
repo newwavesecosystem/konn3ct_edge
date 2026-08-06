@@ -1,7 +1,7 @@
 import { Device, types } from 'mediasoup-client';
 import { MediaStream, mediaDevices } from 'react-native-webrtc';
 import { useAuthStore } from '../store/useAuthStore';
-import { useMeetingStore } from '../store/useMeetingStore';
+import { useMeetingStore, type ConnectionState } from '../store/useMeetingStore';
 
 // Signal server domain — read from EXPO_PUBLIC_BACKEND_DOMAIN.
 // Falls back to extracting the hostname from EXPO_PUBLIC_EDGE_FRONTEND_URL.
@@ -39,15 +39,48 @@ export class MediasoupService {
   private consumerPeerIds = new Map<string, string>(); // consumerId → peerId
   private peerNames = new Map<string, string>();  // userId → display name cache
   private pendingRequests = new Map<string, {resolve: Function, reject: Function, timeoutId: any}[]>();
-  private pingInterval: NodeJS.Timeout | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private _lastPongTime: number = Date.now();
 
-  // Reconnection state
+  // Reconnection state machine
   private _reconnectAttempts = 0;
   private _maxReconnectAttempts = 5;
+  private _maxReconnectDuration = 60000; // 60 seconds total timeout
+  private _reconnectStartTime = 0;
   private _isReconnecting = false;
   private _intentionalDisconnect = false;
   private _lastMeetingToken?: string;
   private _lastLocalStream?: MediaStream;
+  private _connectionState: ConnectionState = 'connected';
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private _inCallManagerStarted = false;
+  private _recoveryGeneration = 0;
+  private _activeRecoveryId: string | null = null;
+
+  // PiP lifecycle state — prevents false reconnects on PiP entry/exit
+  private _isInPiP = false;
+  private _wasInPiP = false;
+  private _pipTransitionUntil = 0;
+  private _foregroundHealthTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Receive-media restoration guard (idempotency)
+  private _isRestoringReceiveMedia = false;
+
+  // PiP-deferred reconnection: set when WS drops during PiP,
+  // so we can reconnect with full retry budget when the user returns.
+  private _needsReconnectOnForeground = false;
+
+  // Transport generation — incremented each time recvTransport is recreated;
+  // consumers from older generations are considered stale.
+  private _recvTransportGeneration = 0;
+
+  // Authoritative snapshot of remote producers (updated on every getProducers response)
+  private _remoteProducerSnapshot: Array<{producerId: string; userId: string; kind: string; appData: any}> = [];
+
+  // Media state preservation — retained across reconnection
+  private _wasMicEnabled = false;
+  private _wasCameraEnabled = false;
+  private _lastAudioRoute: string | null = null;
 
   // Buffered one-shot events — cached during lobby handoff so MeetingScreen
   // can replay them after setting up its callbacks.
@@ -82,6 +115,11 @@ export class MediasoupService {
   public onReconnecting?: (attempt: number) => void;
   public onReconnected?: () => void;
   public onReconnectFailed?: () => void;
+  public onConnectionStateChanged?: (state: ConnectionState) => void;
+  public onMediaRestored?: () => void;
+  public onRoomSettingsUpdated?: (settings: any) => void;
+  public onMuteAllResult?: (success: boolean, message?: string) => void;
+  public onRoomSettingsResult?: (success: boolean, message?: string) => void;
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
   public onRoleChanged?: (userId: string, newRole: string) => void;
@@ -167,6 +205,248 @@ export class MediasoupService {
       this.ws.send(JSON.stringify({ type: 'force_mute', userId }));
     }
   }
+
+  /**
+   * Mute all participants. Uses the backend's existing force_mute handler
+   * with a target group instead of a specific userId.
+   * @param target - 'all_except_hosts' (default) or 'all'
+   */
+  public muteAll(target: 'all' | 'all_except_hosts' = 'all_except_hosts') {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log(`[MediasoupService] Sending muteAll with target: ${target}`);
+      this.ws.send(JSON.stringify({ type: 'force_mute', target }));
+    }
+  }
+
+  /**
+   * Update room settings. Uses the backend's existing update_room_settings handler.
+   * @param settings - Partial room settings to update (e.g. { chatLocked: true })
+   */
+  public updateRoomSettings(settings: { chatLocked?: boolean; micLocked?: boolean; videoLocked?: boolean }) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log(`[MediasoupService] Sending updateRoomSettings:`, settings);
+      this.ws.send(JSON.stringify({ type: 'update_room_settings', ...settings }));
+    }
+  }
+
+  // --- Connection state machine ---
+
+  /** Get current connection state */
+  public getConnectionState(): ConnectionState {
+    return this._connectionState;
+  }
+
+  /** Transition to a new connection state with logging */
+  private _setConnectionState(newState: ConnectionState) {
+    if (this._connectionState === newState) return;
+    const prev = this._connectionState;
+    this._connectionState = newState;
+    console.log(`[Reconnect] State transition: ${prev} → ${newState}`);
+    useMeetingStore.getState().setConnectionState(newState);
+    if (this.onConnectionStateChanged) this.onConnectionStateChanged(newState);
+  }
+
+  // --- Media state getters (for UI to check actual track/producer state) ---
+
+  /** Returns true only if the audio producer exists and is not closed */
+  public get isMicProducerActive(): boolean {
+    return this.localAudioProducer != null && !this.localAudioProducer.closed;
+  }
+
+  /** Returns true only if the video producer exists and is not closed */
+  public get isCameraProducerActive(): boolean {
+    return this.localVideoProducer != null && !this.localVideoProducer.closed;
+  }
+
+  /** Preserve the current media state before backgrounding or disconnection.
+   * Uses actual producer track state — not UI booleans. */
+  public preserveMediaState() {
+    this._wasMicEnabled =
+      this.localAudioProducer != null &&
+      !this.localAudioProducer.closed &&
+      (this.localAudioProducer.track as any)?.enabled === true;
+    this._wasCameraEnabled =
+      this.localVideoProducer != null &&
+      !this.localVideoProducer.closed &&
+      (this.localVideoProducer.track as any)?.enabled === true;
+    console.log(`[MediaState] Preserved: mic=${this._wasMicEnabled}, camera=${this._wasCameraEnabled}`);
+  }
+
+  /** Get the preserved mic state (whether mic was active before disconnect) */
+  public get wasMicEnabled(): boolean { return this._wasMicEnabled; }
+  /** Get the preserved camera state (whether camera was active before disconnect) */
+  public get wasCameraEnabled(): boolean { return this._wasCameraEnabled; }
+
+  /** Track whether InCallManager has been started (for idempotent calls) */
+  public get isInCallManagerStarted(): boolean { return this._inCallManagerStarted; }
+  public set isInCallManagerStarted(v: boolean) { this._inCallManagerStarted = v; }
+
+  // ── PiP Lifecycle Notifications ────────────────────────────────────────────
+
+  /**
+   * Called by MeetingScreen when PiP mode is entered.
+   * Marks the PiP transition window so foreground health checks are not
+   * misclassified as genuine background disconnections.
+   */
+  public notifyPipEntered(): void {
+    console.log('[PiP] notifyPipEntered — marking PiP transition window');
+    this._isInPiP = true;
+    this._wasInPiP = true;
+    this._pipTransitionUntil = Date.now() + 1500;
+    // Cancel any pending deferred foreground health check
+    this._cancelDeferredForegroundHealthCheck();
+  }
+
+  /**
+   * Called by MeetingScreen when PiP mode is exited.
+   * Does NOT clear _wasInPiP — that is cleared only after the PiP-return
+   * health check completes successfully.
+   */
+  public notifyPipExited(): void {
+    console.log('[PiP] notifyPipExited — setting PiP exit transition window');
+    this._isInPiP = false;
+    this._pipTransitionUntil = Date.now() + 1500;
+  }
+
+  /** Returns true while Android lifecycle events related to PiP are still settling. */
+  public isPipTransitionActive(): boolean {
+    return Date.now() < this._pipTransitionUntil;
+  }
+
+  /** Cancel any pending deferred foreground health check timer. */
+  private _cancelDeferredForegroundHealthCheck(): void {
+    if (this._foregroundHealthTimer) {
+      clearTimeout(this._foregroundHealthTimer);
+      this._foregroundHealthTimer = null;
+    }
+  }
+
+  // ── Meeting Health Check ───────────────────────────────────────────────────
+
+  /**
+   * Authoritative meeting health snapshot.
+   * Does NOT mutate any state — safe to call at any time.
+   */
+  private _getMeetingHealth(): {
+    signallingHealthy: boolean;
+    sendTransportHealthy: boolean;
+    recvTransportHealthy: boolean;
+    expectedAudioProducerCount: number;
+    audioConsumerCount: number;
+    audioConsumersHealthy: boolean;
+    mediaHealthy: boolean;
+  } {
+    const wsOpen = this.ws?.readyState === WebSocket.OPEN;
+    const wsAlive = this.isAlive();
+    const sendState = this._getSendTransportState();
+    const recvState = this._getRecvTransportState();
+
+    // Transport is healthy only when ICE has fully connected.
+    const sendTransportHealthy = sendState === 'connected';
+    const recvTransportHealthy = recvState === 'connected';
+
+    // Expected audio consumers: producers currently in the remote snapshot that are not local.
+    const expectedAudioProducers = this._remoteProducerSnapshot.filter(
+      p => p.kind === 'audio' && p.userId !== this.currentUserId
+    );
+    const expectedAudioProducerCount = expectedAudioProducers.length;
+
+    const audioConsumers = Array.from(this.consumers.values()).filter(
+      c => c.kind === 'audio' && !c.closed
+    );
+
+    // Consumer is healthy when:
+    //   • not closed / paused
+    //   • track exists and is enabled
+    //   • producer ID is still in the current snapshot (not stale)
+    //   • consumer belongs to the current recv transport generation
+    const expectedProducerIds = new Set(expectedAudioProducers.map(p => p.producerId));
+    const audioConsumersHealthy =
+      expectedAudioProducerCount === 0 ||
+      (audioConsumers.length > 0 &&
+        expectedAudioProducers.every(ep =>
+          audioConsumers.some(c =>
+            c.producerId === ep.producerId &&
+            !c.closed &&
+            !c.paused &&
+            c.track != null &&
+            (c.track as any).enabled === true &&
+            expectedProducerIds.has(c.producerId) &&
+            (c as any)._transportGeneration === this._recvTransportGeneration
+          )
+        )
+      );
+
+    return {
+      signallingHealthy: wsOpen && wsAlive,
+      sendTransportHealthy,
+      recvTransportHealthy,
+      expectedAudioProducerCount,
+      audioConsumerCount: audioConsumers.length,
+      audioConsumersHealthy,
+      mediaHealthy: sendTransportHealthy && recvTransportHealthy && audioConsumersHealthy,
+    };
+  }
+
+  /** Classify a transport ICE connection state into healthy/transitional/unhealthy. */
+  private _classifyTransportState(state: string): 'healthy' | 'transitional' | 'unhealthy' {
+    if (state === 'connected') return 'healthy';
+    if (state === 'connecting' || state === 'new') return 'transitional';
+    return 'unhealthy'; // failed, closed, disconnected, unknown
+  }
+
+  // ── Clear Recovery State ───────────────────────────────────────────────────
+
+  /**
+   * Clear all reconnection timers and flags.
+   * Does NOT set the connection state — callers must first verify health
+   * via _completeRecoveryIfHealthy before calling this.
+   */
+  private _clearRecoveryState(reason: string): void {
+    const prev = this._connectionState;
+    this._isReconnecting = false;
+    this._activeRecoveryId = null;
+    this._reconnectAttempts = 0;
+    this._isRestoringReceiveMedia = false;
+
+    this._cancelDeferredForegroundHealthCheck();
+
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+
+    console.log(`[Recovery] State cleared (reason: ${reason}, prev: ${prev})`);
+  }
+
+  /**
+   * Verify meeting health, then clear recovery state and mark connected.
+   * Returns true only when health check passes AND recovery ID is still current.
+   */
+  private async _completeRecoveryIfHealthy(recoveryId: string, reason: string): Promise<boolean> {
+    if (this._activeRecoveryId !== recoveryId) {
+      console.log(`[Recovery] _completeRecoveryIfHealthy: stale recoveryId (${recoveryId})`);
+      return false;
+    }
+    const health = this._getMeetingHealth();
+    console.log(`[Recovery] Health check (${reason}):`, JSON.stringify(health));
+
+    if (!health.signallingHealthy) {
+      console.log(`[Recovery] Signalling not yet healthy — deferring clearRecoveryState`);
+      return false;
+    }
+
+    if (health.expectedAudioProducerCount > 0 && !health.audioConsumersHealthy) {
+      console.log(`[Recovery] Audio consumers not yet healthy — deferring clearRecoveryState`);
+      return false;
+    }
+
+    this._clearRecoveryState(reason);
+    this._setConnectionState('connected');
+    return true;
+  }
+
+
 
   public onStreamUpdate(callback: (streams: RemoteParticipant[]) => void) {
     this.onStreamUpdateCallback = callback;
@@ -308,12 +588,14 @@ export class MediasoupService {
         const userName = useAuthStore.getState().user?.name || 'Mobile User';
         this.ws!.send(JSON.stringify({ type: 'auth', token, name: userName }));
 
+        this._lastPongTime = Date.now();
+
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type: 'ping' }));
           }
-        }, 25000);
+        }, 15000); // Reduced from 25s to 15s for better background survival
       };
 
       this.ws!.onerror = (err) => {
@@ -334,6 +616,16 @@ export class MediasoupService {
 
         // If already connected (mid-session drop), attempt reconnection
         if (this.device?.loaded && !this._isReconnecting) {
+          // If in PiP mode, DON'T burn reconnect attempts — the OS throttles
+          // network for PiP apps and attempts will likely fail.
+          // Instead, set a flag so the user returns with full retry budget.
+          if (this._isInPiP) {
+            console.log('[WS onclose] Mid-session drop while in PiP — deferring reconnect until foreground return');
+            this._needsReconnectOnForeground = true;
+            this.preserveMediaState();
+            this._setConnectionState('temporarily_disconnected');
+            return;
+          }
           console.log('Mid-session WebSocket drop detected, attempting reconnection...');
           this.attemptReconnect();
           return;
@@ -348,6 +640,12 @@ export class MediasoupService {
         try {
           msg = JSON.parse(event.data);
         } catch (e) { return; }
+
+        // Any message from the server proves the connection is alive
+        this._lastPongTime = Date.now();
+
+        // Silently consume pong responses
+        if (msg.type === 'pong') return;
 
         if (this.pendingRequests.has(msg.type)) {
           const queue = this.pendingRequests.get(msg.type)!;
@@ -532,6 +830,22 @@ export class MediasoupService {
             if (this.onForceMute) this.onForceMute();
             break;
 
+          case 'mute_all_result':
+            if (this.onMuteAllResult) this.onMuteAllResult(msg.success, msg.message);
+            break;
+
+          case 'room_settings_updated':
+            console.log('[MediasoupService] Room settings updated:', msg);
+            if (msg.chatLocked !== undefined) {
+              useMeetingStore.getState().setChatLocked(msg.chatLocked);
+            }
+            if (this.onRoomSettingsUpdated) this.onRoomSettingsUpdated(msg);
+            break;
+
+          case 'room_settings_result':
+            if (this.onRoomSettingsResult) this.onRoomSettingsResult(msg.success, msg.message);
+            break;
+
           case 'hand_raise':
             if (this.onHandRaise) this.onHandRaise(msg);
             break;
@@ -572,6 +886,15 @@ export class MediasoupService {
             if (msg.name && msg.userId) {
               this.peerNames.set(msg.userId, msg.name);
             }
+            // Keep snapshot current so health checks reflect new producers
+            if (!this._remoteProducerSnapshot.some(p => p.producerId === msg.producerId)) {
+              this._remoteProducerSnapshot.push({
+                producerId: msg.producerId,
+                userId: msg.userId,
+                kind: msg.kind,
+                appData: msg.appData
+              });
+            }
             this.consumeRemote(msg.producerId, msg.userId, msg.kind, msg.appData).catch(console.error);
             break;
 
@@ -608,7 +931,12 @@ export class MediasoupService {
               }
             });
             this.notifyStreamUpdate();
+            // Remove from snapshot so health checks don't expect a consumer for closed producers
+            this._remoteProducerSnapshot = this._remoteProducerSnapshot.filter(
+              p => p.producerId !== msg.producerId
+            );
             break;
+
         }
       };
     });
@@ -653,13 +981,23 @@ export class MediasoupService {
       } catch (err) { errback(err as Error); }
     });
 
-    // Monitor Send Transport ICE connection state (log-only)
-    // NOTE: Do NOT trigger full reconnect on transport 'failed' — ICE failures
-    // are often transient (TURN/STUN negotiation, network switching) and
-    // mediasoup handles ICE restarts internally. Full reconnection should only
-    // be triggered by WebSocket close (signaling channel lost).
+    // Monitor Send Transport ICE connection state
+    // Log all transitions. If transport reaches 'failed' while WS is open,
+    // mark as temporarily disconnected — the WS close handler owns full reconnection.
     this.sendTransport.on('connectionstatechange', (state: string) => {
-      console.log(`Send transport connection state: ${state}`);
+      console.log(`[Transport] Send transport ICE state: ${state}`);
+      // Suppress state changes during PiP — banner is hidden anyway,
+      // and state changes here can corrupt the recovery flow.
+      if (this._isInPiP) return;
+      if (state === 'disconnected' && this._connectionState === 'connected') {
+        this._setConnectionState('temporarily_disconnected');
+      } else if (state === 'failed' && !this._isReconnecting) {
+        console.warn('[Transport] Send transport ICE failed — will wait for WS close or foreground check');
+        this._setConnectionState('temporarily_disconnected');
+      } else if (state === 'connected' && this._connectionState === 'temporarily_disconnected') {
+        // ICE recovered on its own
+        this._setConnectionState('connected');
+      }
     });
 
     // Recv Transport
@@ -676,15 +1014,35 @@ export class MediasoupService {
       } catch (err) { errback(err as Error); }
     });
 
-    // Monitor Recv Transport ICE connection state (log-only)
+    // Monitor Recv Transport ICE connection state
     this.recvTransport.on('connectionstatechange', (state: string) => {
-      console.log(`Recv transport connection state: ${state}`);
+      console.log(`[Transport] Recv transport ICE state: ${state}`);
+      // Suppress state changes during PiP — banner is hidden anyway,
+      // and state changes here can corrupt the recovery flow.
+      if (this._isInPiP) return;
+      if (state === 'disconnected' && this._connectionState === 'connected') {
+        this._setConnectionState('temporarily_disconnected');
+      } else if (state === 'failed' && !this._isReconnecting) {
+        console.warn('[Transport] Recv transport ICE failed — will wait for WS close or foreground check');
+        this._setConnectionState('temporarily_disconnected');
+      } else if (state === 'connected' && this._connectionState === 'temporarily_disconnected') {
+        this._setConnectionState('connected');
+      }
     });
 
-    // Fetch existing producers
+    // Fetch existing producers and populate authoritative remote snapshot
     try {
       const prodRes = await this.request('getProducers', 'producersList');
-      for (const p of prodRes.producers || []) {
+      const producers: any[] = prodRes.producers || [];
+      // Update authoritative snapshot (used by health checks)
+      this._remoteProducerSnapshot = producers
+        .filter(p => p.userId !== this.currentUserId && p.participantId !== this.participantId)
+        .map(p => ({ producerId: p.producerId, userId: p.userId, kind: p.kind, appData: p.appData }));
+
+      // Bump transport generation — new transport, new generation of consumers
+      this._recvTransportGeneration++;
+
+      for (const p of producers) {
         if (p.userId === this.currentUserId || p.participantId === this.participantId) continue;
         // Cache the participant name from the producer list
         if (p.name && p.userId) {
@@ -845,6 +1203,15 @@ export class MediasoupService {
   private async consumeRemote(producerId: string, peerId: string, kind: string, appData: any) {
     if (!this.device || !this.recvTransport) return;
 
+    // Deduplication: Skip if already consuming this producerId
+    const existingConsumer = Array.from(this.consumers.values()).find(
+      c => c.producerId === producerId
+    );
+    if (existingConsumer) {
+      console.log(`[MediasoupService] Already consuming producerId ${producerId}, skipping duplicate consume`);
+      return;
+    }
+
     try {
       const data = await this.request('consume', 'consumed', {
         producerId,
@@ -860,6 +1227,8 @@ export class MediasoupService {
       });
 
       const isScreen = appData?.source === 'screen';
+      // Stamp the transport generation so health checks can detect stale consumers
+      (consumer as any)._transportGeneration = this._recvTransportGeneration;
       this.consumers.set(consumer.id, consumer);
       this.consumerPeerIds.set(consumer.id, peerId);
       if (isScreen) this.screenConsumerIds.add(consumer.id);
@@ -911,54 +1280,516 @@ export class MediasoupService {
     this.notifyStreamUpdate();
   }
 
-  // ── Reconnection Logic ────────────────────────────────────────────────────
+  /**
+   * Check whether the WebSocket connection is alive.
+   * Returns true if the WS is open and has received a pong within the last 45s.
+   */
+  public isAlive(): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    // If we haven't heard a pong in 45s, consider it dead
+    return (Date.now() - this._lastPongTime) < 45000;
+  }
 
   /**
-   * Attempt WebSocket reconnection with exponential backoff.
-   * On success, re-initialises mediasoup transports and re-produces local tracks.
+   * Selective media recovery for receive transport and audio consumers.
+   * Repairs ONLY the broken components without rebuilding healthy connections.
+   * Includes recovery generation verification to ensure stale callbacks do not mutate state.
    */
-  private async attemptReconnect() {
-    if (this._isReconnecting || this._intentionalDisconnect) return;
-    this._isReconnecting = true;
+  public async restoreReceiveMedia(providedRecoveryId?: string): Promise<boolean> {
+    if (this._intentionalDisconnect) return false;
 
-    while (this._reconnectAttempts < this._maxReconnectAttempts) {
-      this._reconnectAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), 10000);
-      console.log(`Reconnect attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts} in ${delay}ms...`);
-      
-      if (this.onReconnecting) this.onReconnecting(this._reconnectAttempts);
+    // Idempotency guard — only one restoration at a time
+    if (this._isRestoringReceiveMedia) {
+      console.log('[MediaRecovery] Already restoring receive media, skipping concurrent call');
+      return false;
+    }
+    this._isRestoringReceiveMedia = true;
 
-      await new Promise(r => setTimeout(r, delay));
+    const recoveryId = providedRecoveryId || `${Date.now()}-${++this._recoveryGeneration}`;
+    this._activeRecoveryId = recoveryId;
+    console.log(`[MediaRecovery] Starting restoreReceiveMedia (recoveryId: ${recoveryId})...`);
 
-      if (this._intentionalDisconnect) {
-        this._isReconnecting = false;
-        return;
-      }
+    // NOTE: Do NOT set 'recovering_media' banner here immediately.
+    // We first verify whether recovery is actually needed.
 
-      try {
-        // Clean up old transports (silently)
-        try { this.sendTransport?.close(); } catch (_) {}
-        try { this.recvTransport?.close(); } catch (_) {}
-        this.sendTransport = null;
-        this.recvTransport = null;
-        this.localVideoProducer = null;
-        this.localAudioProducer = null;
+    try {
+      if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
+
+      // 1. Check if recv transport is missing or unhealthy
+      const recvState = this._getRecvTransportState();
+      const recvClass = this._classifyTransportState(recvState);
+
+      if (!this.recvTransport || recvClass === 'unhealthy') {
+        // Banner is now justified — genuine transport recovery needed
+        this._setConnectionState('recovering_media');
+        console.log(`[MediaRecovery] Recv transport is ${recvState}, creating new receive transport...`);
+
+        // Invalidate old transport generation — stale consumers from here will fail health checks
+        // Close stale consumers belonging to broken transport
+        this.consumers.forEach(c => { try { c.close(); } catch (_) {} });
         this.consumers.clear();
         this.remoteStreams.clear();
         this.remoteScreenStreams.clear();
         this.screenConsumerIds.clear();
         this.consumerPeerIds.clear();
 
-        // Reconnect WebSocket
+        if (this.recvTransport) {
+          try { this.recvTransport.close(); } catch (_) {}
+          this.recvTransport = null;
+        }
+
+        const recvRes = await this.request('createWebRtcTransport', 'webRtcTransportCreated', {
+          producing: false,
+          consuming: true
+        });
+        if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
+
+        // Bump transport generation — old consumer health checks will now fail correctly
+        this._recvTransportGeneration++;
+
+        this.recvTransport = this.device!.createRecvTransport(recvRes.transportParams);
+        this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+          try {
+            await this.request('connectWebRtcTransport', 'webRtcTransportConnected', {
+              transportId: this.recvTransport!.id,
+              dtlsParameters
+            });
+            callback();
+          } catch (e) {
+            errback(e as Error);
+          }
+        });
+      } else {
+        // Transport is present and transitional/connected — show banner only for actual consumer repair
+        const health = this._getMeetingHealth();
+        if (!health.audioConsumersHealthy && health.expectedAudioProducerCount > 0) {
+          this._setConnectionState('recovering_media');
+        }
+      }
+
+      if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
+
+      // 2. Fetch authoritative snapshot of current active producers on server
+      console.log('[MediaRecovery] Fetching producer snapshot from server...');
+      const prodRes = await this.request('getProducers', 'producersList');
+      if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
+
+      const producers: any[] = prodRes.producers || [];
+      console.log(`[MediaRecovery] Server returned ${producers.length} active producers`);
+
+      // Update authoritative snapshot
+      this._remoteProducerSnapshot = producers
+        .filter(p => p.userId !== this.currentUserId && p.participantId !== this.participantId)
+        .map(p => ({ producerId: p.producerId, userId: p.userId, kind: p.kind, appData: p.appData }));
+
+      // 3. Recreate missing consumers (consumeRemote handles deduplication)
+      for (const p of producers) {
+        if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
+        if (p.userId === this.currentUserId || p.participantId === this.participantId) continue;
+        await this.consumeRemote(p.producerId, p.userId, p.kind, p.appData);
+      }
+
+      // 4. Resume all remote audio consumers
+      this.consumers.forEach((consumer) => {
+        if (consumer.kind === 'audio') {
+          try {
+            consumer.resume();
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'resume', consumerId: consumer.id }));
+            }
+          } catch (err) {
+            console.warn(`[MediaRecovery] Error resuming consumer ${consumer.id}:`, err);
+          }
+        }
+      });
+
+      this.notifyStreamUpdate();
+
+      if (this._activeRecoveryId !== recoveryId) { this._isRestoringReceiveMedia = false; return false; }
+
+      // 5. Final health verification before marking recovered
+      const finalHealth = this._getMeetingHealth();
+      console.log(`[MediaRecovery] Final health check:`, JSON.stringify(finalHealth));
+
+      console.log('[MediaRecovery] Receive media restoration completed successfully!');
+      this._setConnectionState('reconnected');
+      if (this.onMediaRestored) this.onMediaRestored();
+
+      setTimeout(() => {
+        if (this._activeRecoveryId === recoveryId && this._connectionState === 'reconnected') {
+          this._setConnectionState('connected');
+        }
+      }, 2000);
+
+      this._isRestoringReceiveMedia = false;
+      return true;
+    } catch (err) {
+      console.error(`[MediaRecovery] Error during restoreReceiveMedia (recoveryId: ${recoveryId}):`, err);
+      if (this._activeRecoveryId === recoveryId) {
+        this._setConnectionState('failed');
+      }
+      this._isRestoringReceiveMedia = false;
+      return false;
+    }
+  }
+
+
+  /**
+   * Component-based health check on foreground return.
+   * Independently checks each connection component and recovers only what's broken.
+   * Runs an automatic 3-step retry sequence before setting state to failed.
+   */
+  public async handleAppForeground() {
+    if (this._intentionalDisconnect) return;
+
+    // Cancel any stale deferred check that might have been queued previously
+    this._cancelDeferredForegroundHealthCheck();
+
+    // ── PiP path ────────────────────────────────────────────────────────────
+    if (this._wasInPiP) {
+      // If the PiP transition window is still settling, defer by a small amount
+      // but do NOT stack multiple timers.
+      if (this.isPipTransitionActive()) {
+        const deferMs = this._pipTransitionUntil - Date.now() + 100;
+        console.log(`[AppState] PiP transition active — deferring PiP-return health check by ${deferMs}ms`);
+        this._foregroundHealthTimer = setTimeout(() => {
+          this._foregroundHealthTimer = null;
+          void this.handleAppForeground();
+        }, deferMs);
+        return;
+      }
+
+      // PiP is settled — perform lightweight check, never force-reconnect blindly
+      console.log('[AppState] Returning from PiP — running PiP-return health check');
+      void this._handlePipReturn();
+      return;
+    }
+
+    // ── Real background return path ─────────────────────────────────────────
+    // Clear deferred PiP reconnect flag if set — the background path handles all recovery.
+    this._needsReconnectOnForeground = false;
+    const recoveryId = `${Date.now()}-${++this._recoveryGeneration}`;
+    this._activeRecoveryId = recoveryId;
+
+    console.log(
+      `[FOREGROUND_RECOVERY_DECISION] source=real_background_return recoveryId=${recoveryId} ` +
+      `ws=${this.ws?.readyState} heartbeatAge=${Date.now() - this._lastPongTime} ` +
+      `sendTransport=${this._getSendTransportState()} recvTransport=${this._getRecvTransportState()} ` +
+      `activeRecoveryId=${this._activeRecoveryId}`
+    );
+
+    // 1. Check WebSocket health
+    const wsHealthy = this.ws?.readyState === WebSocket.OPEN && this.isAlive();
+    if (!wsHealthy) {
+      if (!this._isReconnecting) {
+        console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=websocket_closed`);
+        this.preserveMediaState();
+        this._forceReconnect();
+      }
+      return;
+    }
+
+    // Send immediate keepalive ping
+    try {
+      this.ws!.send(JSON.stringify({ type: 'ping' }));
+    } catch (e) {
+      console.warn('[AppState] Failed to send ping on foreground, triggering full reconnect');
+      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=ping_failed`);
+      this.preserveMediaState();
+      this._forceReconnect();
+      return;
+    }
+
+    // 2. Check Send Transport with strict health classification
+    const sendState = this._getSendTransportState();
+    const sendClass = this._classifyTransportState(sendState);
+    if (sendClass === 'unhealthy') {
+      console.warn(`[AppState] Send transport unhealthy (${sendState}), triggering full reconnect`);
+      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=full_recovery reason=send_transport_failed`);
+      this.preserveMediaState();
+      this._forceReconnect();
+      return;
+    }
+    if (sendClass === 'transitional') {
+      // Brief grace: wait up to 2s for it to settle before deciding
+      console.log(`[AppState] Send transport transitional (${sendState}) — waiting 2s for ICE to settle`);
+      await new Promise(r => setTimeout(r, 2000));
+      if (this._activeRecoveryId !== recoveryId) return;
+      const sendState2 = this._getSendTransportState();
+      if (this._classifyTransportState(sendState2) !== 'healthy') {
+        console.warn(`[AppState] Send transport still not connected (${sendState2}), full reconnect`);
+        this.preserveMediaState();
+        this._forceReconnect();
+        return;
+      }
+    }
+
+    // 3. Check Recv Transport and audio consumer health using authoritative snapshot
+    const recvState = this._getRecvTransportState();
+    const recvClass = this._classifyTransportState(recvState);
+    const health = this._getMeetingHealth();
+
+    console.log(
+      `[AppState] recv=${recvState} expectedAudio=${health.expectedAudioProducerCount} ` +
+      `audioConsumers=${health.audioConsumerCount} audioHealthy=${health.audioConsumersHealthy}`
+    );
+
+    const needsMediaRecovery =
+      recvClass === 'unhealthy' ||
+      (!health.audioConsumersHealthy && health.expectedAudioProducerCount > 0);
+
+    if (needsMediaRecovery) {
+      console.log('[AppState] Recv transport or audio consumers unhealthy — starting 3-step media recovery');
+      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=receive_media_only reason=remote_audio_unhealthy`);
+
+      const attempts = [0, 5000, 10000];
+      let restored = false;
+
+      for (let i = 0; i < attempts.length; i++) {
+        if (this._activeRecoveryId !== recoveryId) return;
+        if (attempts[i] > 0) {
+          console.log(`[AppState] Waiting ${attempts[i] / 1000}s before media recovery attempt ${i + 1}...`);
+          await new Promise(r => setTimeout(r, attempts[i]));
+        }
+        if (this._activeRecoveryId !== recoveryId) return;
+        console.log(`[AppState] Media recovery attempt ${i + 1}/3...`);
+        restored = await this.restoreReceiveMedia(recoveryId);
+        if (restored) break;
+      }
+
+      if (!restored && this._activeRecoveryId === recoveryId) {
+        console.error('[AppState] All 3 media recovery attempts failed');
+        this._setConnectionState('failed');
+      }
+    } else {
+      console.log(`[FOREGROUND_RECOVERY_DECISION] decision=no_action`);
+      // Everything healthy — ensure banner is cleared
+      if (this._connectionState !== 'connected') {
+        await this._completeRecoveryIfHealthy(recoveryId, 'real_background_healthy');
+      }
+    }
+  }
+
+  /**
+   * Lightweight health check performed on PiP return.
+   * Uses a bounded stabilisation sequence before deciding to repair.
+   * Never calls _forceReconnect() unless signalling is genuinely unhealthy.
+   */
+  private async _handlePipReturn(): Promise<void> {
+    console.log(
+      `[PiP Return] Entering PiP-return check — ` +
+      `_isReconnecting=${this._isReconnecting} connectionState=${this._connectionState} ` +
+      `_needsReconnectOnForeground=${this._needsReconnectOnForeground} ` +
+      `ws=${this.ws?.readyState}`
+    );
+
+    // ── GUARD 1: An existing reconnect is already in progress ──────────────
+    if (this._isReconnecting) {
+      console.log('[PiP Return] Reconnect already in progress — not interfering.');
+      this._wasInPiP = false;
+      this._needsReconnectOnForeground = false; // Already handled
+      return;
+    }
+
+    // ── GUARD 2: Service state already reports healthy ─────────────────────
+    if (
+      this._connectionState === 'connected' ||
+      this._connectionState === 'reconnected'
+    ) {
+      console.log(`[FOREGROUND_RECOVERY_DECISION] source=pip_return decision=no_action (service_state=${this._connectionState})`);
+      this._wasInPiP = false;
+      this._needsReconnectOnForeground = false;
+      return;
+    }
+
+    // ── GUARD 3: Already in a media-recovery cycle ─────────────────────────
+    if (this._isRestoringReceiveMedia) {
+      console.log('[PiP Return] Media restoration already running — not interfering.');
+      this._wasInPiP = false;
+      return;
+    }
+
+    // ── PRIMARY PATH: WS dropped during PiP, reconnect was deferred ────────
+    // This is the most common PiP-return scenario: the OS killed the WebSocket
+    // while the app was in PiP. We deferred reconnection to preserve retry budget.
+    // Now the user is back in the foreground with full network access.
+    if (this._needsReconnectOnForeground) {
+      console.log(`[FOREGROUND_RECOVERY_DECISION] source=pip_return decision=deferred_reconnect`);
+      this._needsReconnectOnForeground = false;
+      this._wasInPiP = false;
+
+      // Small settle delay for Android lifecycle events
+      await new Promise(r => setTimeout(r, 500));
+
+      // Re-check: maybe another path already started reconnecting
+      if (this._isReconnecting || this._connectionState === 'connected' || this._connectionState === 'reconnected') {
+        console.log(`[PiP Return] State changed during settle — ${this._connectionState}, no action needed`);
+        return;
+      }
+
+      // Start fresh reconnect with full retry budget
+      this._forceReconnect();
+      return;
+    }
+
+    // ── FALLBACK: No deferred flag, but state is not connected ──────────────
+    // This can happen if the WS dropped before notifyPipEntered() ran (race),
+    // or if transport ICE changed state for a non-WS reason.
+    // Wait briefly and re-check — the state may self-resolve.
+    console.log(`[PiP Return] No deferred reconnect flag, but state=${this._connectionState}. Waiting 1s for self-resolution.`);
+    this._wasInPiP = false;
+
+    await new Promise(r => setTimeout(r, 1000));
+
+    // If state recovered on its own (ICE restart, etc.), do nothing
+    if (this._connectionState === 'connected' || this._connectionState === 'reconnected') {
+      console.log(`[PiP Return] State self-resolved to ${this._connectionState}`);
+      return;
+    }
+
+    // If WS is still open and state is just 'temporarily_disconnected',
+    // give ICE more time rather than forcing a full reconnect
+    if (
+      this._connectionState === 'temporarily_disconnected' &&
+      this.ws?.readyState === WebSocket.OPEN
+    ) {
+      console.log('[PiP Return] WS open but transport temporarily disconnected — clearing state, no reconnect');
+      this._setConnectionState('connected');
+      return;
+    }
+
+    // WS is dead and we somehow missed setting the flag — do a fresh reconnect
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log(`[FOREGROUND_RECOVERY_DECISION] source=pip_return_fallback decision=full_recovery`);
+      this.preserveMediaState();
+      this._forceReconnect();
+      return;
+    }
+
+    // WS open, state is something unexpected (recovering_media, failed, etc.)
+    // Try targeted media recovery
+    console.log(`[FOREGROUND_RECOVERY_DECISION] source=pip_return_fallback decision=receive_media_only`);
+    const recoveryId = `${Date.now()}-${++this._recoveryGeneration}`;
+    this._activeRecoveryId = recoveryId;
+    await this.restoreReceiveMedia(recoveryId);
+  }
+
+
+
+
+  /** Get the ICE connection state of the send transport, or 'closed' if null */
+  private _getSendTransportState(): string {
+    if (!this.sendTransport) return 'closed';
+    try {
+      return (this.sendTransport as any).connectionState || 'unknown';
+    } catch { return 'unknown'; }
+  }
+
+  /** Get the ICE connection state of the recv transport, or 'closed' if null */
+  private _getRecvTransportState(): string {
+    if (!this.recvTransport) return 'closed';
+    try {
+      return (this.recvTransport as any).connectionState || 'unknown';
+    } catch { return 'unknown'; }
+  }
+
+  /**
+   * Force a clean reconnection by resetting attempt counters first.
+   * Preserves media state if not already preserved.
+   */
+  private _forceReconnect() {
+    if (this._isReconnecting) {
+      console.log('[Reconnect] Already reconnecting, skip _forceReconnect');
+      return;
+    }
+    this._reconnectAttempts = 0;
+    this._isReconnecting = false;
+    // Close stale socket if it's lingering in CLOSING state
+    try { this.ws?.close(); } catch (_) {}
+    this.ws = null;
+    if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    this.attemptReconnect();
+  }
+
+  // ── Reconnection Logic ────────────────────────────────────────────────────
+
+  /**
+   * Attempt WebSocket reconnection with exponential backoff.
+   * Uses the reconnection state machine: reconnecting → recovering_media → reconnected | failed.
+   * Prevents multiple simultaneous reconnect attempts via _isReconnecting mutex.
+   * Has a maximum total duration timeout (60s) and maximum retry count (5).
+   * Cancels if the meeting has ended (_intentionalDisconnect).
+   */
+  private async attemptReconnect() {
+    // Mutex guard: prevent concurrent reconnection
+    if (this._isReconnecting || this._intentionalDisconnect) {
+      console.log(`[Reconnect] Skipped: isReconnecting=${this._isReconnecting}, intentional=${this._intentionalDisconnect}`);
+      return;
+    }
+    this._isReconnecting = true;
+    this._reconnectStartTime = Date.now();
+    this._setConnectionState('reconnecting');
+
+    while (this._reconnectAttempts < this._maxReconnectAttempts) {
+      // Check total duration timeout
+      if (Date.now() - this._reconnectStartTime > this._maxReconnectDuration) {
+        console.error('[Reconnect] Total reconnection duration exceeded, giving up');
+        break;
+      }
+
+      this._reconnectAttempts++;
+      const delay = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), 10000);
+      console.log(`[Reconnect] Attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts} in ${delay}ms...`);
+      
+      if (this.onReconnecting) this.onReconnecting(this._reconnectAttempts);
+
+      await new Promise(r => { this._reconnectTimer = setTimeout(r, delay); });
+      this._reconnectTimer = null;
+
+      if (this._intentionalDisconnect) {
+        console.log('[Reconnect] Meeting ended during reconnect, aborting');
+        this._isReconnecting = false;
+        return;
+      }
+
+      try {
+        // Close stale transports before recreating — prevent duplicates
+        if (this.sendTransport) {
+          try { this.sendTransport.close(); } catch (_) {}
+          this.sendTransport = null;
+        }
+        if (this.recvTransport) {
+          try { this.recvTransport.close(); } catch (_) {}
+          this.recvTransport = null;
+        }
+        // Clear stale producer references (they belong to old transports)
+        this.localVideoProducer = null;
+        this.localAudioProducer = null;
+        // Close and clear all consumers
+        this.consumers.forEach(c => { try { c.close(); } catch (_) {} });
+        this.consumers.clear();
+        this.remoteStreams.clear();
+        this.remoteScreenStreams.clear();
+        this.screenConsumerIds.clear();
+        this.consumerPeerIds.clear();
+
+        // Reconnect WebSocket — this also re-authenticates and re-creates
+        // Device + transports + consumes existing producers via initializeMediasoup()
         if (this._lastMeetingToken) {
           await this.connect(this._lastMeetingToken);
         }
 
-        // Re-broadcast local stream if we had one
+        // --- State: recovering_media ---
+        this._setConnectionState('recovering_media');
+
+        // Re-broadcast local stream if we had one.
+        // broadcast() only produces tracks that are still live and enabled,
+        // preserving the user's pre-disconnect mic/camera state.
         if (this._lastLocalStream) {
           await this.broadcast(this._lastLocalStream);
-          // Also re-announce camera state after reconnect
-          if (this._lastLocalStream.getVideoTracks().some(t => t.enabled)) {
+          // Re-announce camera state if video track was active
+          if (this._lastLocalStream.getVideoTracks().some(t => t.enabled && t.readyState === 'live')) {
             this.sendCameraState(true);
           }
         }
@@ -1009,19 +1840,30 @@ export class MediasoupService {
           this.screenAudioShareProducer = null;
         }
 
-        console.log('Reconnected successfully!');
+        // --- State: reconnected → then connected ---
+        console.log('[Reconnect] Successfully reconnected!');
         this._reconnectAttempts = 0;
         this._isReconnecting = false;
+        this._setConnectionState('reconnected');
         if (this.onReconnected) this.onReconnected();
+        if (this.onMediaRestored) this.onMediaRestored();
+
+        // After brief UI feedback, transition to fully connected
+        setTimeout(() => {
+          if (this._connectionState === 'reconnected') {
+            this._setConnectionState('connected');
+          }
+        }, 3000);
         return;
       } catch (err) {
-        console.warn(`Reconnect attempt ${this._reconnectAttempts} failed:`, err);
+        console.warn(`[Reconnect] Attempt ${this._reconnectAttempts} failed:`, err);
       }
     }
 
-    // All attempts exhausted
-    console.error('All reconnection attempts failed');
+    // All attempts exhausted or duration exceeded
+    console.error('[Reconnect] All reconnection attempts failed');
     this._isReconnecting = false;
+    this._setConnectionState('failed');
     if (this.onReconnectFailed) this.onReconnectFailed();
   }
 
