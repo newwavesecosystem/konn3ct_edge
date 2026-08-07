@@ -19,6 +19,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   BackHandler,
+  AppState,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../App";
@@ -81,7 +82,7 @@ import {
 } from "lucide-react-native";
 import { useAuthStore } from "../store/useAuthStore";
 import PipService from "../native/KonnPip";
-import MeetingService from "../native/MeetingService";
+import MeetingService, { FG_TYPE_MEDIA_PLAYBACK, FG_TYPE_MICROPHONE, FG_TYPE_CAMERA } from "../native/MeetingService";
 import { LinearGradient } from "expo-linear-gradient";
 import { meetingThemeTokens } from "../theme/meetingTheme";
 // Components
@@ -97,6 +98,13 @@ import { ReactionsLayer } from "../components/meeting/ReactionsLayer";
 import { CaptionsOverlay } from "../components/meeting/CaptionsOverlay";
 import { APP_CONFIG } from "../config/appConfig";
 import { useNetworkQuality } from "../hooks/useNetworkQuality";
+import { ReconnectionOverlay } from "../components/meeting/ReconnectionOverlay";
+import { ChatToast, ChatToastMessage } from "../components/meeting/ChatToast";
+import { ImagePreviewModal } from "../components/meeting/ImagePreviewModal";
+import NotificationSoundService from "../services/NotificationSoundService";
+import { useSettingsStore } from "../store/useSettingsStore";
+import { Shield } from "lucide-react-native";
+import { SecurityControlsPanel } from "../components/meeting/SecurityControlsPanel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Meeting">;
 
@@ -119,11 +127,19 @@ export default function MeetingScreen({ route, navigation }: Props) {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [chatToastMessages, setChatToastMessages] = useState<ChatToastMessage[]>([]);
+  const chatToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Settings store
+  const chatNotificationSound = useSettingsStore((s) => s.chatNotificationSound);
+  const chatToastEnabled = useSettingsStore((s) => s.chatToastEnabled);
 
   const insets = useSafeAreaInsets();
   const serviceRef = useRef<MediasoupService | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null); // Fix 10: ref for cleanup
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const toggleMicRef = useRef<(() => void) | null>(null);
+  const handleLeaveRef = useRef<(() => void) | null>(null);
 
   // Zustand Store
   const {
@@ -188,19 +204,33 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
     // Setup PiP Listener for Android
     let pipListener: any = null;
+    let pipActionListener: any = null;
     if (PipService.isAvailable()) {
       // Tell native side a meeting is active — enables auto-PiP on Home press
       PipService.setMeetingActive(true);
-      // Start foreground service to keep WebSocket alive when minimized
-      MeetingService.start("Meeting in progress");
       pipListener = PipService.onModeChanged((isInPip: boolean) => {
         if (isMounted) {
           setIsPipMode(isInPip);
-          // Close any open overlay when entering PiP
           if (isInPip) {
+            // Notify service BEFORE setting PiP mode so the transition window is
+            // established before any AppState change events arrive
+            serviceRef.current?.notifyPipEntered();
             setIsMoreMenuVisible(false);
             setActivePane("none");
+          } else {
+            // Notify service of PiP exit so the next AppState-active event
+            // triggers a lightweight health check rather than a full reconnect
+            serviceRef.current?.notifyPipExited();
           }
+        }
+      });
+      // Listen for PiP action button presses (mute/unmute toggle and leave)
+      pipActionListener = PipService.onPipAction((data: { action: string }) => {
+        if (!isMounted) return;
+        if (data.action === 'toggle_mute') {
+          toggleMicRef.current?.();
+        } else if (data.action === 'leave') {
+          handleLeaveRef.current?.();
         }
       });
     }
@@ -208,6 +238,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
     // Default to Speakerphone
     InCallManager.start({ media: "video" });
     InCallManager.setForceSpeakerphoneOn(true);
+
+    if (PipService.isAvailable()) {
+      PipService.updateMuteState(isMicMuted);
+    }
 
     async function init() {
       try {
@@ -234,46 +268,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
         service.onSessionStatusChange = async (status) => {
           if (!isMounted) return;
-          const navigateAfterLeave = () => {
-            const isGuest = !useAuthStore.getState().token;
-            if (isGuest) {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "GuestJoin" as any }],
-              });
-            } else {
-              navigation.replace("MainTabs");
-            }
-          };
           if (status === "active") {
             setIsConnected(true);
-            // Re-enable existing hardware tracks on reconnect
-            if (localStreamRef.current && serviceRef.current) {
-              const videoTrack = localStreamRef.current.getVideoTracks()[0];
-              const audioTrack = localStreamRef.current.getAudioTracks()[0];
-              if (videoTrack && videoTrack.enabled)
-                serviceRef.current.enableCamera(videoTrack);
-              if (audioTrack && audioTrack.enabled)
-                serviceRef.current.enableMic(audioTrack);
-            }
-          } else if (status === "ended") {
-            Alert.alert(
-              "Meeting Ended",
-              "The host has ended this meeting for everyone.",
-              [{ text: "OK", onPress: navigateAfterLeave }],
-            );
-          } else if (status === "kicked") {
-            Alert.alert(
-              "Removed from Meeting",
-              "You have been removed from the meeting by the host.",
-              [{ text: "OK", onPress: navigateAfterLeave }],
-            );
-          } else if (status === "denied") {
-            Alert.alert(
-              "Entry Denied",
-              "Your request to join was denied by the host.",
-              [{ text: "OK", onPress: navigateAfterLeave }],
-            );
+          } else if (status === "ended" || status === "kicked" || status === "denied") {
+            forceExitMeetingRef.current?.(status);
           }
         };
 
@@ -293,11 +291,38 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onReconnectFailed = () => {
           if (isMounted) {
             setIsReconnecting(false);
-            Alert.alert(
-              "Connection Lost",
-              "Unable to reconnect to the meeting. Please rejoin.",
-              [{ text: "OK", onPress: () => navigation.replace("MainTabs") }],
-            );
+            // ReconnectionOverlay handles UI for failed state now
+          }
+        };
+
+        service.onMediaRestored = (replacementStream?: MediaStream) => {
+          console.log(`[MeetingScreen] Media restored, replacementStream=${!!replacementStream}`);
+          // If tracks were reacquired during recovery, update local stream references
+          if (replacementStream) {
+            const newAudioTrack = replacementStream.getAudioTracks()[0];
+            const newVideoTrack = replacementStream.getVideoTracks()[0];
+            if (newAudioTrack && localStreamRef.current) {
+              // Replace audio track in local stream
+              const oldAudioTracks = localStreamRef.current.getAudioTracks();
+              oldAudioTracks.forEach(t => localStreamRef.current?.removeTrack(t));
+              localStreamRef.current.addTrack(newAudioTrack);
+            }
+            if (newVideoTrack) {
+              // Replace video track and bump cameraKey to remount RTCView
+              if (localStreamRef.current) {
+                const oldVideoTracks = localStreamRef.current.getVideoTracks();
+                oldVideoTracks.forEach(t => localStreamRef.current?.removeTrack(t));
+                localStreamRef.current.addTrack(newVideoTrack);
+              }
+              setCameraKey(prev => prev + 1);
+            }
+            setLocalStream(localStreamRef.current);
+          }
+          // Reassert audio route
+          try {
+            InCallManager.setForceSpeakerphoneOn(false);
+          } catch (e) {
+            console.warn('[MeetingScreen] Failed to reassert audio route:', e);
           }
         };
 
@@ -305,8 +330,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
         service.onChatMessage = (msg) => {
           const state = useMeetingStore.getState();
           if (msg.userId === state.currentUserId) return;
+          const messageId = msg.serverEventId || msg.id || `m-${Date.now()}`;
           state.addChatMessage({
-            id: msg.serverEventId || msg.id || `m-${Date.now()}`,
+            id: messageId,
             userId: msg.userId,
             name: msg.name || msg.senderName || "Someone",
             message: msg.message || msg.content || "",
@@ -314,6 +340,25 @@ export default function MeetingScreen({ route, navigation }: Props) {
             isPrivate: !!msg.isPrivate,
             fileUrl: msg.fileUrl,
           });
+
+          // Chat toast notification (only when chat panel is closed)
+          const currentPane = useMeetingStore.getState().activePane;
+          if (currentPane !== 'chat' && isMounted) {
+            const toastMsg: ChatToastMessage = {
+              id: messageId,
+              senderName: msg.name || msg.senderName || 'Someone',
+              content: msg.message || msg.content || '',
+              isFile: !!msg.fileUrl && !msg.message,
+              isImage: false, // Will be determined by extension if needed
+              timestamp: Date.now(),
+            };
+            setChatToastMessages(prev => [toastMsg, ...prev].slice(0, 5));
+
+            // Play notification sound
+            if (useSettingsStore.getState().chatNotificationSound) {
+              NotificationSoundService.playNotificationSound();
+            }
+          }
         };
         service.onChatHistory = (msgs) =>
           useMeetingStore.getState().setChatHistory(msgs);
@@ -442,6 +487,22 @@ export default function MeetingScreen({ route, navigation }: Props) {
           if (serviceRef.current) serviceRef.current.disableMic();
           Alert.alert("Muted by Host", "The host has muted your microphone.");
         };
+        service.onForceVideoOff = () => {
+          setIsCameraOff(true);
+          if (localStreamRef.current) {
+            const track = localStreamRef.current.getVideoTracks()[0];
+            if (track) {
+              track.stop();
+              localStreamRef.current.removeTrack(track);
+            }
+          }
+          if (serviceRef.current) serviceRef.current.disableCamera();
+          setCameraKey((k) => k + 1);
+          Alert.alert("Camera Disabled", "The host has turned off your camera.");
+        };
+        service.onRoomSettingsUpdated = (settings) => {
+          useMeetingStore.getState().setRoomSettings(settings);
+        };
         service.onHandRaise = (msg) => {
           if (msg.userId) {
             useMeetingStore
@@ -505,6 +566,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
           if (!localStreamRef.current || !serviceRef.current || !isMounted)
             return;
 
+          let audioTrack = null;
           if (initialMicOn) {
             try {
               const audioStream = await mediaDevices.getUserMedia({
@@ -519,12 +581,14 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 localStreamRef.current.addTrack(track);
                 await serviceRef.current.enableMic(track);
                 setIsMicMuted(false);
+                audioTrack = track;
               }
             } catch (err) {
               console.error("Failed to get initial mic", err);
             }
           }
 
+          let videoTrack = null;
           if (initialCameraOn) {
             try {
               const videoStream = await mediaDevices.getUserMedia({
@@ -541,11 +605,18 @@ export default function MeetingScreen({ route, navigation }: Props) {
                 await serviceRef.current.enableCamera(track);
                 setIsCameraOff(false);
                 setCameraKey((k) => k + 1);
+                videoTrack = track;
               }
             } catch (err) {
               console.error("Failed to get initial camera", err);
             }
           }
+
+          // Start foreground service with appropriate type flags
+          let serviceFlags = FG_TYPE_MEDIA_PLAYBACK;
+          if (audioTrack) serviceFlags |= FG_TYPE_MICROPHONE;
+          if (videoTrack) serviceFlags |= FG_TYPE_CAMERA;
+          MeetingService.start('Gov Conference', serviceFlags);
         };
 
         if (handedOffService) {
@@ -602,6 +673,7 @@ export default function MeetingScreen({ route, navigation }: Props) {
     return () => {
       isMounted = false;
       InCallManager.stop();
+      NotificationSoundService.cleanup();
       if (serviceRef.current) {
         serviceRef.current.disconnect();
       }
@@ -610,6 +682,9 @@ export default function MeetingScreen({ route, navigation }: Props) {
       }
       if (pipListener) {
         pipListener.remove();
+      }
+      if (pipActionListener) {
+        pipActionListener.remove();
       }
       // Tell native side meeting is no longer active — disables auto-PiP on Home
       PipService.setMeetingActive(false);
@@ -622,7 +697,78 @@ export default function MeetingScreen({ route, navigation }: Props) {
     };
   }, []);
 
+  // ── AppState foreground/background handler ────────────────────────────────
+  // When the app comes back from background, the WebSocket may have been
+  // killed by the OS. This proactively checks and reconnects if needed.
+  // Preserves media state on background to restore after reconnection.
+  useEffect(() => {
+    const appStateRef = { current: AppState.currentState };
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (
+        appStateRef.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // Going to background — preserve media state
+        console.log('[MeetingScreen] App going to background, preserving media state...');
+        serviceRef.current?.preserveMediaState();
+      }
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('[MeetingScreen] App returned to foreground, checking WS...');
+        serviceRef.current?.handleAppForeground();
+      }
+      appStateRef.current = nextAppState;
+    });
+    return () => subscription.remove();
+  }, []);
+
   const leavingRef = useRef(false);
+  const hasForcedExitRef = useRef(false);
+  const forceExitMeetingRef = useRef<((reason: string) => void) | null>(null);
+
+  const forceExitMeeting = useCallback((reason: string) => {
+    if (hasForcedExitRef.current) return;
+    hasForcedExitRef.current = true;
+    leavingRef.current = true;
+    
+    setIsReconnecting(false);
+    setIsMoreMenuVisible(false);
+    useMeetingStore.getState().setActivePane("none");
+    if (PipService.isAvailable()) {
+      PipService.setMeetingActive(false);
+    }
+    
+    if (serviceRef.current) {
+      serviceRef.current.disconnect();
+      serviceRef.current = null;
+    }
+    MeetingService.stop();
+    
+    const isGuest = !useAuthStore.getState().token;
+    if (isGuest) {
+      navigation.reset({ index: 0, routes: [{ name: "GuestJoin" as any }] });
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: "MainTabs" as any }] });
+    }
+    
+    const messages: Record<string, string> = {
+      ended: "The host has ended this meeting for everyone.",
+      kicked: "You have been removed from the meeting by the host.",
+      denied: "Your request to join was denied by the host.",
+    };
+    
+    setTimeout(() => {
+      Alert.alert(
+        reason === 'ended' ? "Meeting Ended" : reason === 'kicked' ? "Removed from Meeting" : "Entry Denied",
+        messages[reason] || messages.ended,
+        [{ text: "OK" }]
+      );
+    }, 500);
+  }, [navigation]);
+
+  forceExitMeetingRef.current = forceExitMeeting;
 
   const doLeave = useCallback(() => {
     leavingRef.current = true; // signal the beforeRemove guard to allow this navigation
@@ -641,10 +787,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
   }, [navigation]);
 
   const handleLeave = useCallback(() => {
-    if (currentUserRole === "host") {
+    if (currentUserRole === "host" || currentUserRole === "co-host") {
       Alert.alert(
         "End or Leave Meeting?",
-        "As the host, you can end the meeting for everyone or just leave the meeting.",
+        "As a host or co-host, you can end the meeting for everyone or just leave the meeting.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -678,6 +824,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
       );
     }
   }, [currentUserRole, doLeave]);
+
+  handleLeaveRef.current = handleLeave;
 
   // Intercept hardware back (Android) and swipe-back gesture to show leave dialog
   useEffect(() => {
@@ -718,6 +866,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
     if (isMicMuted) {
       // Turning ON
+      const state = useMeetingStore.getState();
+      const isPrivileged = state.currentUserRole === "host" || state.currentUserRole === "co-host";
+      if (state.micLocked && !isPrivileged) {
+        Alert.alert("Microphones Locked", "Microphones are locked by the host.");
+        return;
+      }
+
       try {
         const stream = await mediaDevices.getUserMedia({
           audio: {
@@ -748,11 +903,21 @@ export default function MeetingScreen({ route, navigation }: Props) {
     }
   };
 
+  // Keep PiP action handler ref up to date
+  toggleMicRef.current = toggleMic;
+
   const toggleCamera = async () => {
     if (!localStream) return;
 
     if (isCameraOff) {
       // Turning ON
+      const state = useMeetingStore.getState();
+      const isPrivileged = state.currentUserRole === "host" || state.currentUserRole === "co-host";
+      if (state.videoLocked && !isPrivileged) {
+        Alert.alert("Cameras Locked", "Cameras are locked by the host.");
+        return;
+      }
+
       try {
         const stream = await mediaDevices.getUserMedia({
           video: {
@@ -1391,21 +1556,31 @@ export default function MeetingScreen({ route, navigation }: Props) {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={!isCameraOff ? styles.toolBtnNeutral : styles.toolBtnMuted}
-              onPress={toggleCamera}
-              testID="toggle-camera"
-            >
-              {isCameraOff ? (
-                <VideoOff size={20} color={tokens.danger} />
-              ) : (
-                <VideoIcon
-                  size={20}
-                  color={tokens.textPrimary}
-                  strokeWidth={2}
-                />
-              )}
-            </TouchableOpacity>
+            {(() => {
+              const videoTrack = localStream?.getVideoTracks()?.[0];
+              const isCameraActive = !isCameraOff &&
+                (serviceRef.current?.isCameraProducerActive ?? false) &&
+                videoTrack?.readyState === 'live' &&
+                videoTrack?.enabled === true;
+
+              return (
+                <TouchableOpacity
+                  style={isCameraActive ? styles.toolBtnActive : styles.toolBtnMuted}
+                  onPress={toggleCamera}
+                  testID="toggle-camera"
+                >
+                  {!isCameraActive ? (
+                    <VideoOff size={20} color={tokens.danger} />
+                  ) : (
+                    <VideoIcon
+                      size={20}
+                      color={tokens.textInverse}
+                      strokeWidth={2.2}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })()}
 
             <TouchableOpacity
               style={
@@ -1495,21 +1670,47 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {!isPipMode && activePane === "streaming" && (
         <StreamingPanel roomId={roomId} />
       )}
+      {!isPipMode && activePane === "security" && (
+        <SecurityControlsPanel 
+          service={serviceRef.current} 
+          onClose={() => setActivePane("none")} 
+        />
+      )}
 
       {/* Overlays */}
       {!isPipMode && <CaptionsOverlay />}
 
-      {/* Fix 11: Reconnecting overlay */}
-      {isReconnecting && (
-        <View style={styles.reconnectingOverlay}>
-          <View style={styles.reconnectingBox}>
-            <ActivityIndicator size="small" color={tokens.primary} />
-            <Text style={styles.reconnectingText}>
-              Reconnecting
-              {reconnectAttempt > 0 ? ` (${reconnectAttempt}/5)` : ""}...
-            </Text>
-          </View>
-        </View>
+      {/* Reconnection Overlay (state-machine driven) */}
+      <ReconnectionOverlay
+        isInPipMode={isPipMode}
+        onRejoin={() => {
+          // Attempt to rejoin by re-navigating to Meeting
+          navigation.replace('Meeting', route.params as any);
+        }}
+        onRestoreAudio={() => {
+          serviceRef.current?.restoreReceiveMedia();
+        }}
+        onLeave={() => {
+          const isGuest = !useAuthStore.getState().token;
+          if (isGuest) {
+            navigation.reset({ index: 0, routes: [{ name: 'GuestJoin' as any }] });
+          } else {
+            navigation.replace('MainTabs');
+          }
+        }}
+      />
+
+      {/* Chat Toast Notification */}
+      {chatToastMessages.length > 0 && chatToastEnabled && !isPipMode && (
+        <ChatToast
+          messages={chatToastMessages}
+          theme={theme}
+          onDismiss={() => setChatToastMessages([])}
+          onOpenChat={() => {
+            setChatToastMessages([]);
+            setActivePane('chat');
+          }}
+        />
       )}
 
       {/* More Options Modal Bottom Sheet */}
@@ -1713,6 +1914,8 @@ export default function MeetingScreen({ route, navigation }: Props) {
                     </TouchableOpacity>
                   )}
 
+                  {/* Options items */}
+
                   <TouchableOpacity
                     style={styles.gridOption}
                     onPress={() => {
@@ -1727,6 +1930,22 @@ export default function MeetingScreen({ route, navigation }: Props) {
                     </View>
                     <Text style={styles.optionLabel}>Streaming</Text>
                   </TouchableOpacity>
+
+                  {(currentUserRole === "host" || currentUserRole === "co-host") && (
+                    <TouchableOpacity
+                      style={styles.gridOption}
+                      onPress={() => {
+                        setIsMoreMenuVisible(false);
+                        setActivePane(activePane === "security" ? "none" : "security");
+                      }}
+                      testID="security-menu-btn"
+                    >
+                      <View style={styles.optionIconContainer}>
+                        <Shield size={22} color={tokens.textSecondary} />
+                      </View>
+                      <Text style={styles.optionLabel}>Security</Text>
+                    </TouchableOpacity>
+                  )}
 
                   {PipService.isAvailable() && (
                     <TouchableOpacity

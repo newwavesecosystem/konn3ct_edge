@@ -73,6 +73,8 @@ module.exports = {
       './plugins/withPiP',
       './plugins/withScreenShare',
       './plugins/withMeetingService',
+      './plugins/withNotificationSound',
+      'expo-audio',
     ],
     extra: {
           "eas": {
