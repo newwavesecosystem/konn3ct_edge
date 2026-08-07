@@ -104,6 +104,7 @@ import { ImagePreviewModal } from "../components/meeting/ImagePreviewModal";
 import NotificationSoundService from "../services/NotificationSoundService";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { Shield } from "lucide-react-native";
+import { SecurityControlsPanel } from "../components/meeting/SecurityControlsPanel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Meeting">;
 
@@ -267,37 +268,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
         service.onSessionStatusChange = async (status) => {
           if (!isMounted) return;
-          const navigateAfterLeave = () => {
-            const isGuest = !useAuthStore.getState().token;
-            if (isGuest) {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: "GuestJoin" as any }],
-              });
-            } else {
-              navigation.replace("MainTabs");
-            }
-          };
           if (status === "active") {
             setIsConnected(true);
-          } else if (status === "ended") {
-            Alert.alert(
-              "Meeting Ended",
-              "The host has ended this meeting for everyone.",
-              [{ text: "OK", onPress: navigateAfterLeave }],
-            );
-          } else if (status === "kicked") {
-            Alert.alert(
-              "Removed from Meeting",
-              "You have been removed from the meeting by the host.",
-              [{ text: "OK", onPress: navigateAfterLeave }],
-            );
-          } else if (status === "denied") {
-            Alert.alert(
-              "Entry Denied",
-              "Your request to join was denied by the host.",
-              [{ text: "OK", onPress: navigateAfterLeave }],
-            );
+          } else if (status === "ended" || status === "kicked" || status === "denied") {
+            forceExitMeetingRef.current?.(status);
           }
         };
 
@@ -512,6 +486,22 @@ export default function MeetingScreen({ route, navigation }: Props) {
           }
           if (serviceRef.current) serviceRef.current.disableMic();
           Alert.alert("Muted by Host", "The host has muted your microphone.");
+        };
+        service.onForceVideoOff = () => {
+          setIsCameraOff(true);
+          if (localStreamRef.current) {
+            const track = localStreamRef.current.getVideoTracks()[0];
+            if (track) {
+              track.stop();
+              localStreamRef.current.removeTrack(track);
+            }
+          }
+          if (serviceRef.current) serviceRef.current.disableCamera();
+          setCameraKey((k) => k + 1);
+          Alert.alert("Camera Disabled", "The host has turned off your camera.");
+        };
+        service.onRoomSettingsUpdated = (settings) => {
+          useMeetingStore.getState().setRoomSettings(settings);
         };
         service.onHandRaise = (msg) => {
           if (msg.userId) {
@@ -735,6 +725,50 @@ export default function MeetingScreen({ route, navigation }: Props) {
   }, []);
 
   const leavingRef = useRef(false);
+  const hasForcedExitRef = useRef(false);
+  const forceExitMeetingRef = useRef<((reason: string) => void) | null>(null);
+
+  const forceExitMeeting = useCallback((reason: string) => {
+    if (hasForcedExitRef.current) return;
+    hasForcedExitRef.current = true;
+    leavingRef.current = true;
+    
+    setIsReconnecting(false);
+    setIsMoreMenuVisible(false);
+    useMeetingStore.getState().setActivePane("none");
+    if (PipService.isAvailable()) {
+      PipService.setMeetingActive(false);
+    }
+    
+    if (serviceRef.current) {
+      serviceRef.current.disconnect();
+      serviceRef.current = null;
+    }
+    MeetingService.stop();
+    
+    const isGuest = !useAuthStore.getState().token;
+    if (isGuest) {
+      navigation.reset({ index: 0, routes: [{ name: "GuestJoin" as any }] });
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: "MainTabs" as any }] });
+    }
+    
+    const messages: Record<string, string> = {
+      ended: "The host has ended this meeting for everyone.",
+      kicked: "You have been removed from the meeting by the host.",
+      denied: "Your request to join was denied by the host.",
+    };
+    
+    setTimeout(() => {
+      Alert.alert(
+        reason === 'ended' ? "Meeting Ended" : reason === 'kicked' ? "Removed from Meeting" : "Entry Denied",
+        messages[reason] || messages.ended,
+        [{ text: "OK" }]
+      );
+    }, 500);
+  }, [navigation]);
+
+  forceExitMeetingRef.current = forceExitMeeting;
 
   const doLeave = useCallback(() => {
     leavingRef.current = true; // signal the beforeRemove guard to allow this navigation
@@ -753,10 +787,10 @@ export default function MeetingScreen({ route, navigation }: Props) {
   }, [navigation]);
 
   const handleLeave = useCallback(() => {
-    if (currentUserRole === "host") {
+    if (currentUserRole === "host" || currentUserRole === "co-host") {
       Alert.alert(
         "End or Leave Meeting?",
-        "As the host, you can end the meeting for everyone or just leave the meeting.",
+        "As a host or co-host, you can end the meeting for everyone or just leave the meeting.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -832,6 +866,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
     if (isMicMuted) {
       // Turning ON
+      const state = useMeetingStore.getState();
+      const isPrivileged = state.currentUserRole === "host" || state.currentUserRole === "co-host";
+      if (state.micLocked && !isPrivileged) {
+        Alert.alert("Microphones Locked", "Microphones are locked by the host.");
+        return;
+      }
+
       try {
         const stream = await mediaDevices.getUserMedia({
           audio: {
@@ -870,6 +911,13 @@ export default function MeetingScreen({ route, navigation }: Props) {
 
     if (isCameraOff) {
       // Turning ON
+      const state = useMeetingStore.getState();
+      const isPrivileged = state.currentUserRole === "host" || state.currentUserRole === "co-host";
+      if (state.videoLocked && !isPrivileged) {
+        Alert.alert("Cameras Locked", "Cameras are locked by the host.");
+        return;
+      }
+
       try {
         const stream = await mediaDevices.getUserMedia({
           video: {
@@ -1622,6 +1670,12 @@ export default function MeetingScreen({ route, navigation }: Props) {
       {!isPipMode && activePane === "streaming" && (
         <StreamingPanel roomId={roomId} />
       )}
+      {!isPipMode && activePane === "security" && (
+        <SecurityControlsPanel 
+          service={serviceRef.current} 
+          onClose={() => setActivePane("none")} 
+        />
+      )}
 
       {/* Overlays */}
       {!isPipMode && <CaptionsOverlay />}
@@ -1876,6 +1930,22 @@ export default function MeetingScreen({ route, navigation }: Props) {
                     </View>
                     <Text style={styles.optionLabel}>Streaming</Text>
                   </TouchableOpacity>
+
+                  {(currentUserRole === "host" || currentUserRole === "co-host") && (
+                    <TouchableOpacity
+                      style={styles.gridOption}
+                      onPress={() => {
+                        setIsMoreMenuVisible(false);
+                        setActivePane(activePane === "security" ? "none" : "security");
+                      }}
+                      testID="security-menu-btn"
+                    >
+                      <View style={styles.optionIconContainer}>
+                        <Shield size={22} color={tokens.textSecondary} />
+                      </View>
+                      <Text style={styles.optionLabel}>Security</Text>
+                    </TouchableOpacity>
+                  )}
 
                   {PipService.isAvailable() && (
                     <TouchableOpacity

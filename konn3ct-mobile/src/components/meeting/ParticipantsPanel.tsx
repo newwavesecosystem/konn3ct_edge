@@ -62,38 +62,6 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   const handleAdmit = (userId: string) => { service?.admitUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
   const handleDeny  = (userId: string) => { service?.denyUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
   
-  const handleMuteAll = () => {
-    Alert.alert(
-      'Mute All Participants',
-      'Mute all participants? Hosts, co-hosts and moderators will remain unmuted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Confirm', onPress: () => service?.muteAll('all_except_hosts') }
-      ]
-    );
-  };
-
-  const handleToggleChatLock = () => {
-    if (chatLocked) {
-      Alert.alert(
-        'Unlock Chat?',
-        'Unlock meeting chat?\n\nAll participants will be able to send messages again.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Unlock', onPress: () => service?.updateRoomSettings({ chatLocked: false }) }
-        ]
-      );
-    } else {
-      Alert.alert(
-        'Lock Chat?',
-        'Lock meeting chat?\n\nParticipants will no longer be able to send messages or files.\nHosts, co-hosts and moderators can continue sending messages.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Lock', style: 'destructive', onPress: () => service?.updateRoomSettings({ chatLocked: true }) }
-        ]
-      );
-    }
-  };
 
   const handleMuteUser = (userId: string) => {
     sendWs(service, { type: 'force_mute', userId });
@@ -279,27 +247,6 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
       </View>
 
       <ScrollView style={styles.listContainer} contentContainerStyle={{ paddingBottom: safeBottom + 16 }}>
-        {/* Host & Moderator Controls: Mute All and Lock Chat */}
-        {canManageChatLock && (
-          <View style={styles.hostControlRow}>
-            {isHost && (
-              <TouchableOpacity style={styles.muteAllBtn} onPress={handleMuteAll}>
-                <MicOff size={16} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.muteAllText}>Mute All</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[styles.lockChatBtn, chatLocked && styles.lockChatBtnActive]}
-              onPress={handleToggleChatLock}
-            >
-              <Lock size={16} color={chatLocked ? '#fff' : tokens.primary} style={{ marginRight: 8 }} />
-              <Text style={[styles.lockChatText, chatLocked && styles.lockChatTextActive]}>
-                {chatLocked ? 'Unlock Chat' : 'Lock Chat'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Waiting Room */}
         {isHost && waitingRoom.length > 0 && (

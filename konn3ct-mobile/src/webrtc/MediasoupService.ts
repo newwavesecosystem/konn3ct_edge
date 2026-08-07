@@ -127,13 +127,14 @@ export class MediasoupService {
   public onActiveSpeaker?: (userIds: string[]) => void;
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
-  public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
   public onSessionStatusChange?: (status: string) => void;
   public onReconnecting?: (attempt: number) => void;
   public onReconnected?: () => void;
   public onReconnectFailed?: () => void;
   public onConnectionStateChanged?: (state: ConnectionState) => void;
   public onMediaRestored?: (replacementStream?: MediaStream) => void;
+  public onCaptionReceived?: (userId: string, text: string, isFinal: boolean, lang: string) => void;
+  public onForceVideoOff?: () => void;
   public onRoomSettingsUpdated?: (settings: any) => void;
   public onMuteAllResult?: (success: boolean, message?: string) => void;
   public onRoomSettingsResult?: (success: boolean, message?: string) => void;
@@ -226,9 +227,9 @@ export class MediasoupService {
   /**
    * Mute all participants. Uses the backend's existing force_mute handler
    * with a target group instead of a specific userId.
-   * @param target - 'all_except_hosts' (default) or 'all'
+   * @param target - 'all_except_hosts' (default) or 'all_except_presenters' or 'all'
    */
-  public muteAll(target: 'all' | 'all_except_hosts' = 'all_except_hosts') {
+  public muteAll(target: 'all' | 'all_except_hosts' | 'all_except_presenters' = 'all_except_hosts') {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.log(`[MediasoupService] Sending muteAll with target: ${target}`);
       this.ws.send(JSON.stringify({ type: 'force_mute', target }));
@@ -239,10 +240,10 @@ export class MediasoupService {
    * Update room settings. Uses the backend's existing update_room_settings handler.
    * @param settings - Partial room settings to update (e.g. { chatLocked: true })
    */
-  public updateRoomSettings(settings: { chatLocked?: boolean; micLocked?: boolean; videoLocked?: boolean }) {
+  public updateRoomSettings(settings: { chatLocked?: boolean; micLocked?: boolean; videoLocked?: boolean; bypassWaitingRoom?: boolean }) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.log(`[MediasoupService] Sending updateRoomSettings:`, settings);
-      this.ws.send(JSON.stringify({ type: 'update_room_settings', ...settings }));
+      this.ws.send(JSON.stringify({ type: 'update_room_settings', settings }));
     }
   }
 
@@ -887,12 +888,23 @@ export class MediasoupService {
           case 'force_mute':
             if (this.onForceMute) this.onForceMute();
             break;
+          case 'force_video_off':
+            if (this.onForceVideoOff) this.onForceVideoOff();
+            break;
 
           case 'mute_all_result':
             if (this.onMuteAllResult) this.onMuteAllResult(msg.success, msg.message);
             break;
           case 'room_settings_updated':
-            if (this.onRoomSettingsUpdated) this.onRoomSettingsUpdated(msg);
+            if (this.onRoomSettingsUpdated) {
+              const settings = msg.settings || {};
+              this.onRoomSettingsUpdated({
+                chatLocked: !!settings.chatLocked,
+                micLocked: !!settings.micLocked,
+                videoLocked: !!settings.videoLocked,
+                bypassWaitingRoom: !!settings.bypassWaitingRoom,
+              });
+            }
             break;
           case 'room_settings_result':
             if (this.onRoomSettingsResult) this.onRoomSettingsResult(msg.success, msg.message);

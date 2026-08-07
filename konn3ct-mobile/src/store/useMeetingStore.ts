@@ -60,7 +60,7 @@ export type ConnectionState =
 /** All possible side-panel panes (includes 'manage' for host controls) */
 export type ActivePane =
   | 'none' | 'chat' | 'participants' | 'polls' | 'settings'
-  | 'streaming' | 'whiteboard' | 'docs' | 'donation' | 'manage';
+  | 'streaming' | 'whiteboard' | 'docs' | 'donation' | 'manage' | 'security';
 
 interface MeetingState {
   chatMessages: ChatMessage[];
@@ -82,6 +82,9 @@ interface MeetingState {
   connectionState: ConnectionState;
   /** Whether the host has locked chat for non-privileged participants */
   chatLocked: boolean;
+  micLocked: boolean;
+  videoLocked: boolean;
+  bypassWaitingRoom: boolean;
 
   // Active UI Panes
   activePane: ActivePane;
@@ -114,6 +117,7 @@ interface MeetingState {
   setScreenSharing: (userId: string | null) => void;
   setConnectionState: (state: ConnectionState) => void;
   setChatLocked: (locked: boolean) => void;
+  setRoomSettings: (settings: Partial<{ micLocked: boolean; videoLocked: boolean; chatLocked: boolean; bypassWaitingRoom: boolean }>) => void;
   reset: () => void;
 }
 
@@ -134,6 +138,9 @@ export const useMeetingStore = create<MeetingState>((set) => ({
   isLocalUserSpeaking: false,
   connectionState: 'connected',
   chatLocked: false,
+  micLocked: false,
+  videoLocked: false,
+  bypassWaitingRoom: false,
   screenSharingUserId: null,
 
   setCurrentUser: (userId, role) => set({ 
@@ -261,6 +268,7 @@ export const useMeetingStore = create<MeetingState>((set) => ({
 
   setConnectionState: (connectionState) => set({ connectionState }),
   setChatLocked: (chatLocked) => set({ chatLocked }),
+  setRoomSettings: (settings) => set((state) => ({ ...state, ...settings })),
 
   reset: () => set({
     chatMessages: [],
@@ -273,6 +281,9 @@ export const useMeetingStore = create<MeetingState>((set) => ({
     theme: 'sage',
     connectionState: 'connected',
     chatLocked: false,
+    micLocked: false,
+    videoLocked: false,
+    bypassWaitingRoom: false,
     currentUserRole: null,
     currentUserId: null,
     isHost: false,
