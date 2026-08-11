@@ -5,7 +5,7 @@ module.exports = {
   expo: {
     name: APP_NAME,
     slug: 'konn3ct',
-    version: '1.0.0',
+    version: '1.2.2',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
@@ -16,7 +16,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.onegov.govmeeting',
+      bundleIdentifier: 'com.konn3ct',
       buildNumber: '1',
       infoPlist: {
         NSCameraUsageDescription: `Allow ${APP_NAME} to access your camera for video meetings.`,
@@ -25,7 +25,7 @@ module.exports = {
       },
     },
     android: {
-      package: 'com.onegov.govmeeting',
+      package: 'com.konn3ct',
       versionCode: 1,
       adaptiveIcon: {
         backgroundColor: '#0a5c36',
