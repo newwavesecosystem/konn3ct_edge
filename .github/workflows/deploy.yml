@@ -145,7 +145,8 @@ jobs:
           # Only gracefully restart if we are in staging (since we use a floating tag 'staging-latest').
           # In production, the image tag explicitly changes to the commit hash, so kubectl apply automatically rolls it out!
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            kubectl rollout restart deployment conn3ct-backend
+            kubectl rollout restart deployment conn3ct-signaling
+            kubectl rollout restart deployment conn3ct-media
             kubectl rollout restart deployment conn3ct-frontend
             kubectl rollout restart deployment conn3ct-recorder
             # kubectl rollout restart deployment conn3ct-streaming-worker
