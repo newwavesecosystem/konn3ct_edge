@@ -2137,8 +2137,20 @@ export function initializeSignaling(server: Server) {
 
       // --- WebRTC Media Signaling ---
       case 'getRouterRtpCapabilities': {
-        const router = await mediaController.getOrCreateRouter(roomId);
-        client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: router.rtpCapabilities }));
+        try {
+          const routerObj = await mediaController.getOrCreateRouter(roomId);
+          const rtpCapabilities = (routerObj as any)?.rtpCapabilities?.rtpCapabilities 
+            || (routerObj as any)?.rtpCapabilities 
+            || ((routerObj as any)?.codecs ? routerObj : undefined);
+            
+          if (!rtpCapabilities || !rtpCapabilities.codecs) {
+            logger.error(`[SFU] getRouterRtpCapabilities: rtpCapabilities missing or invalid for room ${roomId}`);
+          }
+          client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities }));
+        } catch (err) {
+          logger.error(`[SFU] getRouterRtpCapabilities error for room ${roomId}:`, err);
+          client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: null, error: 'Failed to fetch router capabilities' }));
+        }
         break;
       }
 
@@ -2402,7 +2414,7 @@ export function initializeSignaling(server: Server) {
                   producerSource: targetProducer.appData?.source || "unknown",
                   producerCodec: sfuProducer?.rtpParameters?.codecs?.[0]?.mimeType || "unknown",
                   consumerCodecList: consumerCodecs.map((c: any) => c.mimeType),
-                  routerCodecList: router.rtpCapabilities.codecs?.map((c: any) => c.mimeType),
+                  routerCodecList: ((router as any)?.rtpCapabilities?.codecs || (router as any)?.codecs)?.map((c: any) => c.mimeType),
                   canConsume: false,
                   reason: preciseReason,
                   routerId: router.id,

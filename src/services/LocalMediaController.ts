@@ -14,7 +14,8 @@ export class LocalMediaController extends EventEmitter {
   }
 
   async getOrCreateRouter(roomId: string) {
-    return sfu.getOrCreateRouter(roomId);
+    const router = await sfu.getOrCreateRouter(roomId);
+    return { id: router.id, rtpCapabilities: router.rtpCapabilities };
   }
 
   async createWebRtcTransport(roomId: string) {
