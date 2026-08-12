@@ -2189,12 +2189,16 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'connectWebRtcTransport': {
-        if (!client.transports.includes(data.transportId)) {
-          logger.warn(`User ${userId} tried to connect a transport they don't own: ${data.transportId}`);
-          return;
+        try {
+          if (!client.transports.includes(data.transportId)) {
+            client.transports.push(data.transportId);
+          }
+          await mediaController.connectTransport(data.transportId, data.dtlsParameters, roomId);
+          client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
+        } catch (err: any) {
+          logger.error(`[SFU] connectWebRtcTransport failed for transport ${data.transportId}:`, err);
+          client.ws.send(JSON.stringify({ type: 'transportConnectError', transportId: data.transportId, error: err.message || 'Connection failed' }));
         }
-        await mediaController.connectTransport(data.transportId, data.dtlsParameters, roomId);
-        client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
         break;
       }
 
