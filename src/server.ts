@@ -212,16 +212,21 @@ async function boot() {
       });
 
       let publicIp = process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1';
-      try {
-        publicIp = await fetchDO();
-        logger.info(`Detected Public IP via DO Metadata: ${publicIp}`);
-      } catch (err) {
-        logger.warn('DO Metadata failed, falling back to ipify...');
+      const isPrivateOrLoopback = (ip: string) => 
+        !ip || ip === '127.0.0.1' || ip === '0.0.0.0' || ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip);
+
+      if (isPrivateOrLoopback(publicIp)) {
         try {
           publicIp = await fetchIpify();
           logger.info(`Detected Public IP via ipify: ${publicIp}`);
-        } catch (err2) {
-          logger.error('Failed to fetch public IP for WebRTC', err2);
+        } catch (err) {
+          logger.warn('ipify failed, falling back to DO Metadata...');
+          try {
+            publicIp = await fetchDO();
+            logger.info(`Detected Public IP via DO Metadata: ${publicIp}`);
+          } catch (err2) {
+            logger.error('Failed to fetch public IP for WebRTC', err2);
+          }
         }
       }
       config.mediasoup.webRtcTransport.listenIps[0].announcedIp = publicIp;
