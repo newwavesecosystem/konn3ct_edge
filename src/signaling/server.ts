@@ -2508,13 +2508,15 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({
             type: 'ice_restarted',
             transportId,
-            iceParameters
+            iceParameters,
+            requestId: data.requestId
           }));
         } catch (error) {
           logger.error(`Failed to restart ICE for transport ${transportId}: ${error}`);
           client.ws.send(JSON.stringify({
             type: 'error',
-            message: 'Failed to restart ICE'
+            message: 'Failed to restart ICE',
+            requestId: data.requestId
           }));
         }
         break;
