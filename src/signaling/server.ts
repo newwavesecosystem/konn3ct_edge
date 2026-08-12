@@ -2146,10 +2146,10 @@ export function initializeSignaling(server: Server) {
           if (!rtpCapabilities || !rtpCapabilities.codecs) {
             logger.error(`[SFU] getRouterRtpCapabilities: rtpCapabilities missing or invalid for room ${roomId}`);
           }
-          client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities }));
+          client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities, requestId: data.requestId }));
         } catch (err) {
           logger.error(`[SFU] getRouterRtpCapabilities error for room ${roomId}:`, err);
-          client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: null, error: 'Failed to fetch router capabilities' }));
+          client.ws.send(JSON.stringify({ type: 'routerCapabilities', rtpCapabilities: null, error: 'Failed to fetch router capabilities', requestId: data.requestId }));
         }
         break;
       }
@@ -2184,7 +2184,7 @@ export function initializeSignaling(server: Server) {
           iceServers
         };
 
-        client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams: fullTransportParams, direction: data.direction }));
+        client.ws.send(JSON.stringify({ type: 'transportCreated', transportParams: fullTransportParams, direction: data.direction, requestId: data.requestId }));
         break;
       }
 
@@ -2194,10 +2194,10 @@ export function initializeSignaling(server: Server) {
             client.transports.push(data.transportId);
           }
           await mediaController.connectTransport(data.transportId, data.dtlsParameters, roomId);
-          client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId }));
+          client.ws.send(JSON.stringify({ type: 'transportConnected', transportId: data.transportId, requestId: data.requestId }));
         } catch (err: any) {
           logger.error(`[SFU] connectWebRtcTransport failed for transport ${data.transportId}:`, err);
-          client.ws.send(JSON.stringify({ type: 'transportConnectError', transportId: data.transportId, error: err.message || 'Connection failed' }));
+          client.ws.send(JSON.stringify({ type: 'transportConnectError', transportId: data.transportId, error: err.message || 'Connection failed', requestId: data.requestId }));
         }
         break;
       }
@@ -2307,7 +2307,7 @@ export function initializeSignaling(server: Server) {
         const newProd = { producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData };
         await redis.hset(`room:${roomId}:producers`, producerId, JSON.stringify(newProd));
 
-        client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind }));
+        client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind, requestId: data.requestId }));
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
 
         // Broadcast to others — include appData.source so they render screen share correctly
