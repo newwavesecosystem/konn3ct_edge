@@ -22,8 +22,20 @@ export class LocalMediaController extends EventEmitter {
     return sfu.createWebRtcTransport(roomId);
   }
 
-  async connectWebRtcTransport(transportId: string, dtlsParameters: any) {
+  async connectTransport(transportId: string, dtlsParameters: any, roomId?: string) {
     return sfu.connectTransport(transportId, dtlsParameters);
+  }
+
+  async connectWebRtcTransport(transportId: string, dtlsParameters: any, roomId?: string) {
+    return sfu.connectTransport(transportId, dtlsParameters);
+  }
+
+  async closeTransport(transportId: string, roomId?: string) {
+    return sfu.closeTransport(transportId);
+  }
+
+  async restartIce(transportId: string, roomId?: string) {
+    return sfu.restartIce(transportId);
   }
 
   async createProducer(
