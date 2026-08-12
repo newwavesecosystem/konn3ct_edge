@@ -2282,7 +2282,8 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        const { id: producerId } = await mediaController.createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
+        const producerRes = await mediaController.createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
+        const producerId = typeof producerRes === 'string' ? producerRes : (producerRes?.id || (producerRes as any)?.producerId);
         
         logger.info(JSON.stringify({
           event: "producer_created",

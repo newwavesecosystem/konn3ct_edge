@@ -47,7 +47,8 @@ export class LocalMediaController extends EventEmitter {
     userName?: string,
     clientData?: { isBot?: boolean; role?: string }
   ) {
-    return sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData);
+    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData);
+    return { id: producerId };
   }
 
   async createConsumer(
