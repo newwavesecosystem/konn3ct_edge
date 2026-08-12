@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-signaling
 spec:
-  replicas: 1
+  replicas: 4
   strategy:
     type: Recreate
   selector:
@@ -31,7 +31,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
-          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:staging-latest
           command: ["npm", "run", "start:signaling"]
           imagePullPolicy: Always
           ports:
@@ -159,11 +159,11 @@ spec:
                   name: conn3ct-secrets
                   key: S3_FORCE_PATH_STYLE
             - name: NODE_OPTIONS
-              value: "--max-old-space-size=5120"
+              value: "--max-old-space-size=3584"
           resources:
             requests:
-              cpu: "1500m"
-              memory: "2Gi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
               cpu: "3500m"
               memory: "6Gi"

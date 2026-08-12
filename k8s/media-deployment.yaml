@@ -124,6 +124,20 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: PIPE_TRANSPORT_LISTEN_IP
+              value: "0.0.0.0"
+            - name: PIPE_TRANSPORT_ANNOUNCED_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: MAX_DEGRADATION_CPU_LOAD
               value: "85"
             - name: MAX_ACTIVE_CAMERAS

@@ -191,6 +191,7 @@ export class LocalMediaController extends EventEmitter {
     });
 
     relayPipeProducers.set(pipedProducer.id, pipedProducer);
+    sfu.producers.set(pipedProducer.id, pipedProducer);
 
     logger.info(JSON.stringify({
       event: 'producer_pipe_rpc_created_relay',

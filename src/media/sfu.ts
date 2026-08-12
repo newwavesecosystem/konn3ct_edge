@@ -28,8 +28,8 @@ const workers: Worker[] = [];
 let nextWorkerIdx = 0;
 
 const routers = new Map<string, Router>();
-const transports = new Map<string, Transport>();
-const producers = new Map<string, Producer>();
+export const transports = new Map<string, Transport>();
+export const producers = new Map<string, Producer>();
 const consumers = new Map<string, Consumer>();
 const audioObservers = new Map<string, AudioLevelObserver>();
 

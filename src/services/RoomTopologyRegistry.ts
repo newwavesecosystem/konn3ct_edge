@@ -533,6 +533,30 @@ export class RoomTopologyRegistry {
   }
 
   /**
+   * Increments currentConsumerCount for a router.
+   */
+  public static async incrementConsumerCount(roomId: string, routerKey: RouterKey, delta = 1): Promise<void> {
+    if (!roomId || !routerKey) return;
+    try {
+      await redis.hincrby(this.keyCapacity(roomId, routerKey), 'currentConsumerCount', delta);
+    } catch (err) {
+      logger.error(`Failed to increment consumer count for ${routerKey} in room ${roomId}`, err);
+    }
+  }
+
+  /**
+   * Decrements currentConsumerCount for a router.
+   */
+  public static async decrementConsumerCount(roomId: string, routerKey: RouterKey, delta = 1): Promise<void> {
+    if (!roomId || !routerKey) return;
+    try {
+      await redis.hincrby(this.keyCapacity(roomId, routerKey), 'currentConsumerCount', -delta);
+    } catch (err) {
+      logger.error(`Failed to decrement consumer count for ${routerKey} in room ${roomId}`, err);
+    }
+  }
+
+  /**
    * Registers a Producer ID in topology.
    */
   public static async registerProducerInTopology(

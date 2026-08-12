@@ -2616,10 +2616,19 @@ export function initializeSignaling(server: Server) {
     }
   }
 
+  const roomStateDebounceTimers = new Map<string, NodeJS.Timeout>();
+
   function broadcastRoomState(roomId: string) {
-    const activeParticipants = getActiveRoomParticipants(roomId);
-    logger.info(`[PRESENCE] Broadcasting authoritative room state for ${roomId}. Participants: ${activeParticipants.length}`);
-    broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
+    if (roomStateDebounceTimers.has(roomId)) return;
+
+    const timer = setTimeout(() => {
+      roomStateDebounceTimers.delete(roomId);
+      const activeParticipants = getActiveRoomParticipants(roomId);
+      logger.info(`[PRESENCE] Broadcasting authoritative room state for ${roomId}. Participants: ${activeParticipants.length}`);
+      broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
+    }, 1000);
+
+    roomStateDebounceTimers.set(roomId, timer);
   }
 
   function broadcastToRoom(roomId: string, message: any, excludeParticipantId?: string) {
