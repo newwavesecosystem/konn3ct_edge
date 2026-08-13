@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-media
 spec:
-  replicas: 1
+  replicas: 3
   strategy:
     type: Recreate
   selector:
@@ -33,7 +33,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
-          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:staging-latest
           command: ["npm", "run", "start:media"]
           imagePullPolicy: Always
           ports:
@@ -172,6 +172,22 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: S3_FORCE_PATH_STYLE
+            - name: LARGE_ROOM_MODE_ENABLED
+              value: "true"
+            - name: PIPE_TRANSPORT_MVP_ENABLED
+              value: "true"
+            - name: PIPE_TRANSPORT_MULTI_RELAY_ENABLED
+              value: "true"
+            - name: MAX_CONSUMERS_PER_RELAY
+              value: "25"
+            - name: MAX_VIEWERS_PER_RELAY
+              value: "5"
+            - name: MAX_RELAY_ROUTERS_PER_ROOM
+              value: "10"
+            - name: RELAY_PROVISION_THRESHOLD_PERCENT
+              value: "75"
+            - name: CONSUMER_COST_PER_VIEWER
+              value: "5"
             - name: NODE_OPTIONS
               value: "--max-old-space-size=5120"
           resources:

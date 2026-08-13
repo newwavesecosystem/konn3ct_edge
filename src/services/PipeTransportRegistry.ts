@@ -1,7 +1,7 @@
 import { redis } from '../redis';
 import { logger } from '../logger';
 import { RouterKey } from '../types/topology';
-import { PipePairMetadata, PipedProducerMetadata, PipeTransportResult } from '../types/pipeTransport';
+import { PipePairMetadata, PipedProducerMetadata, PipeTransportResult, PipeHealthState, PipeHealthRecord } from '../types/pipeTransport';
 
 export class PipeTransportRegistry {
   private static keyPipeSet(roomId: string): string {
@@ -10,11 +10,59 @@ export class PipeTransportRegistry {
   private static keyPipePair(roomId: string, primaryKey: RouterKey, relayKey: RouterKey): string {
     return `room:${roomId}:pipe:${primaryKey}:${relayKey}`;
   }
+  private static keyPipeLock(roomId: string, primaryKey: RouterKey, relayKey: RouterKey): string {
+    return `room:${roomId}:pipe:${primaryKey}:${relayKey}:lock`;
+  }
   private static keyPipedProducerMap(roomId: string): string {
     return `room:${roomId}:pipedProducers`;
   }
   private static pipedProducerField(originalProducerId: string, relayRouterKey: RouterKey): string {
     return `${originalProducerId}:${relayRouterKey}`;
+  }
+  private static keyPipeHealth(roomId: string, primaryKey: RouterKey, relayKey: RouterKey): string {
+    return `room:${roomId}:pipeHealth:${primaryKey}:${relayKey}`;
+  }
+
+  /**
+   * Acquire owner-safe distributed lock for pipe failover/recovery.
+   */
+  public static async acquirePipeLock(
+    roomId: string,
+    primaryRouterKey: RouterKey,
+    relayRouterKey: RouterKey,
+    ttlMs = 5000
+  ): Promise<string | null> {
+    if (!roomId) return null;
+    const lockToken = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const lockKey = this.keyPipeLock(roomId, primaryRouterKey, relayRouterKey);
+
+    const acquired = await redis.set(lockKey, lockToken, 'PX', ttlMs, 'NX');
+    if (acquired === 'OK') {
+      return lockToken;
+    }
+    return null;
+  }
+
+  /**
+   * Release owner-safe distributed lock.
+   */
+  public static async releasePipeLock(
+    roomId: string,
+    primaryRouterKey: RouterKey,
+    relayRouterKey: RouterKey,
+    lockToken: string
+  ): Promise<boolean> {
+    if (!roomId || !lockToken) return false;
+    const lockKey = this.keyPipeLock(roomId, primaryRouterKey, relayRouterKey);
+    const script = `
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+      else
+        return 0
+      end
+    `;
+    const res = await redis.eval(script, 1, lockKey, lockToken);
+    return res === 1;
   }
 
   /**
@@ -35,12 +83,16 @@ export class PipeTransportRegistry {
         roomId: data.roomId,
         primaryRouterKey: data.primaryRouterKey,
         relayRouterKey: data.relayRouterKey,
+        primaryGeneration: data.primaryGeneration ? parseInt(data.primaryGeneration, 10) : undefined,
+        relayGeneration: data.relayGeneration ? parseInt(data.relayGeneration, 10) : undefined,
+        pipeGeneration: data.pipeGeneration ? parseInt(data.pipeGeneration, 10) : 1,
         primaryPipeTransportId: data.primaryPipeTransportId,
         relayPipeTransportId: data.relayPipeTransportId,
         connected: data.connected === 'true',
         pipedProducerIds: data.pipedProducerIds ? JSON.parse(data.pipedProducerIds) : [],
         createdAt: parseInt(data.createdAt || '0', 10),
         updatedAt: parseInt(data.updatedAt || '0', 10),
+        state: (data.state as PipeHealthState) || 'HEALTHY',
       };
     } catch (err) {
       logger.error(`Failed to fetch PipeTransport pair for room ${roomId}`, err);
@@ -49,7 +101,7 @@ export class PipeTransportRegistry {
   }
 
   /**
-   * Registers a new PipeTransport pair in Redis idempotently.
+   * Registers a new PipeTransport pair in Redis idempotently with strict pipeGeneration validation.
    */
   public static async registerPipePair(
     roomId: string,
@@ -61,15 +113,34 @@ export class PipeTransportRegistry {
 
     try {
       const existing = await this.getPipePair(roomId, primaryRouterKey, relayRouterKey);
+      const requestedGen = meta.pipeGeneration || 1;
+
       if (existing) {
-        logger.info(JSON.stringify({
-          event: 'pipe_transport_pair_reused',
-          roomId,
-          primaryRouterKey,
-          relayRouterKey,
-          pipePairId: existing.pipePairId,
-        }));
-        return { success: true, pipePairId: existing.pipePairId, data: existing };
+        const existingGen = existing.pipeGeneration || 1;
+        if (existing.pipePairId === meta.pipePairId) {
+          logger.info(JSON.stringify({
+            event: 'pipe_transport_pair_reused',
+            roomId,
+            primaryRouterKey,
+            relayRouterKey,
+            pipePairId: existing.pipePairId,
+            pipeGeneration: existingGen,
+          }));
+          return { success: true, pipePairId: existing.pipePairId, pipeGeneration: existingGen, data: existing };
+        }
+
+        // Fencing check: reject stale pipe generation
+        if (requestedGen < existingGen) {
+          logger.warn(JSON.stringify({
+            event: 'stale_pipe_generation_rejected',
+            roomId,
+            requestedGen,
+            existingGen,
+            primaryRouterKey,
+            relayRouterKey,
+          }));
+          return { success: false, error: 'stale_pipe_generation' };
+        }
       }
 
       const pairKey = this.keyPipePair(roomId, primaryRouterKey, relayRouterKey);
@@ -81,15 +152,22 @@ export class PipeTransportRegistry {
         roomId: meta.roomId,
         primaryRouterKey: meta.primaryRouterKey,
         relayRouterKey: meta.relayRouterKey,
+        primaryGeneration: (meta.primaryGeneration || 1).toString(),
+        relayGeneration: (meta.relayGeneration || 1).toString(),
+        pipeGeneration: requestedGen.toString(),
         primaryPipeTransportId: meta.primaryPipeTransportId,
         relayPipeTransportId: meta.relayPipeTransportId,
         connected: meta.connected ? 'true' : 'false',
         pipedProducerIds: JSON.stringify(meta.pipedProducerIds || []),
         createdAt: meta.createdAt.toString(),
         updatedAt: meta.updatedAt.toString(),
+        state: meta.state || 'HEALTHY',
       });
 
       await multi.exec();
+
+      // Update pipe health state to HEALTHY
+      await this.markPipeHealth(roomId, primaryRouterKey, relayRouterKey, 'HEALTHY', requestedGen);
 
       logger.info(JSON.stringify({
         event: 'pipe_transport_pair_created',
@@ -97,12 +175,126 @@ export class PipeTransportRegistry {
         primaryRouterKey,
         relayRouterKey,
         pipePairId: meta.pipePairId,
+        pipeGeneration: requestedGen,
       }));
 
-      return { success: true, pipePairId: meta.pipePairId, data: meta };
+      return { success: true, pipePairId: meta.pipePairId, pipeGeneration: requestedGen, data: meta };
     } catch (err) {
       logger.error(`Failed to register PipeTransport pair for room ${roomId}`, err);
       return { success: false, error: 'Redis failure' };
+    }
+  }
+
+  /**
+   * Update explicit pipe health state in Redis.
+   */
+  public static async markPipeHealth(
+    roomId: string,
+    primaryRouterKey: RouterKey,
+    relayRouterKey: RouterKey,
+    state: PipeHealthState,
+    pipeGeneration: number,
+    reason?: string
+  ): Promise<PipeHealthRecord> {
+    const key = this.keyPipeHealth(roomId, primaryRouterKey, relayRouterKey);
+    const now = Date.now();
+    const existingRaw = await redis.get(key);
+    let record: PipeHealthRecord = existingRaw
+      ? JSON.parse(existingRaw)
+      : {
+          roomId,
+          primaryRouterKey,
+          relayRouterKey,
+          pipePairId: '',
+          pipeGeneration,
+          pipeHealthState: 'HEALTHY',
+          lastHealthyAt: now,
+          updatedAt: now,
+        };
+
+    record.pipeHealthState = state;
+    record.pipeGeneration = pipeGeneration;
+    record.updatedAt = now;
+    if (reason) record.failureReason = reason;
+
+    if (state === 'HEALTHY') {
+      record.lastHealthyAt = now;
+    } else if (state === 'PIPE_SUSPECT') {
+      record.suspectAt = record.suspectAt || now;
+    } else if (state === 'PIPE_FAILED') {
+      record.failedAt = record.failedAt || now;
+    }
+
+    await redis.set(key, JSON.stringify(record));
+    await redis.hset(this.keyPipePair(roomId, primaryRouterKey, relayRouterKey), 'state', state);
+
+    logger.info(JSON.stringify({
+      event: 'pipe_health_state_changed',
+      roomId,
+      primaryRouterKey,
+      relayRouterKey,
+      state,
+      pipeGeneration,
+      reason,
+    }));
+
+    return record;
+  }
+
+  /**
+   * Get pipe health record.
+   */
+  public static async getPipeHealth(
+    roomId: string,
+    primaryRouterKey: RouterKey,
+    relayRouterKey: RouterKey
+  ): Promise<PipeHealthRecord | null> {
+    const raw = await redis.get(this.keyPipeHealth(roomId, primaryRouterKey, relayRouterKey));
+    if (!raw) return null;
+    return JSON.parse(raw) as PipeHealthRecord;
+  }
+
+  /**
+   * Explicitly close/retire an old-generation pipe pair and its piped producers on both Primary and Relay sides.
+   */
+  public static async retireOldGenerationPipe(
+    roomId: string,
+    primaryRouterKey: RouterKey,
+    relayRouterKey: RouterKey,
+    oldGeneration: number
+  ): Promise<{ success: boolean; retiredProducersCount: number }> {
+    if (!roomId) return { success: false, retiredProducersCount: 0 };
+    try {
+      const pipedMap = await redis.hgetall(this.keyPipedProducerMap(roomId));
+      let retiredProducersCount = 0;
+
+      for (const [field, raw] of Object.entries(pipedMap)) {
+        try {
+          const meta = JSON.parse(raw) as PipedProducerMetadata;
+          if (meta.relayRouterKey === relayRouterKey && (meta.pipeGeneration || 1) <= oldGeneration) {
+            await redis.hdel(this.keyPipedProducerMap(roomId), field);
+            retiredProducersCount++;
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+
+      logger.info(JSON.stringify({
+        event: 'old_pipe_generation_retired',
+        roomId,
+        primaryRouterKey,
+        relayRouterKey,
+        oldGeneration,
+        retiredProducersCount,
+        oldPrimaryPipeTransportClosed: true,
+        oldRelayPipeTransportClosed: true,
+      }));
+
+      return { success: true, retiredProducersCount };
+    } catch (err) {
+      logger.error(`Failed to retire old pipe generation ${oldGeneration} for room ${roomId}`, err);
+      return { success: false, retiredProducersCount: 0 };
     }
   }
 
@@ -147,6 +339,7 @@ export class PipeTransportRegistry {
           originalProducerId: meta.originalProducerId,
           relayRouterKey: meta.relayRouterKey,
           pipedProducerId: meta.pipedProducerId,
+          pipeGeneration: meta.pipeGeneration,
         }));
         return { success: true, data: existing };
       }
@@ -159,6 +352,7 @@ export class PipeTransportRegistry {
         originalProducerId: meta.originalProducerId,
         relayRouterKey: meta.relayRouterKey,
         pipedProducerId: meta.pipedProducerId,
+        pipeGeneration: meta.pipeGeneration,
       }));
 
       return { success: true, data: meta };
@@ -231,6 +425,8 @@ export class PipeTransportRegistry {
 
       for (const k of pairKeys) {
         multi.del(k);
+        const healthKey = k.replace(':pipe:', ':pipeHealth:');
+        multi.del(healthKey);
       }
 
       await multi.exec();
@@ -276,9 +472,13 @@ export class PipeTransportRegistry {
             pipePairId: data.pipePairId,
             primaryRouterKey: data.primaryRouterKey,
             relayRouterKey: data.relayRouterKey,
+            primaryGeneration: data.primaryGeneration ? parseInt(data.primaryGeneration, 10) : 1,
+            relayGeneration: data.relayGeneration ? parseInt(data.relayGeneration, 10) : 1,
+            pipeGeneration: data.pipeGeneration ? parseInt(data.pipeGeneration, 10) : 1,
             primaryPipeTransportId: data.primaryPipeTransportId,
             relayPipeTransportId: data.relayPipeTransportId,
             connected: data.connected === 'true',
+            state: data.state || 'HEALTHY',
             pipedProducers: pipedListByPair.get(data.pipePairId) || [],
             createdAt: parseInt(data.createdAt || '0', 10),
             updatedAt: parseInt(data.updatedAt || '0', 10),

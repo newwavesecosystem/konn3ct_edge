@@ -152,9 +152,40 @@ jobs:
             # kubectl rollout restart deployment conn3ct-streaming-worker
           fi
 
-      # - name: Debugging - Print Pod Logs
-      #   run: |
-      #     echo "Waiting up to 3 minutes for the new pod to download the Docker image and start up..."
-      #     kubectl rollout status deployment/conn3ct-backend --timeout=180s
-      #     echo "Pod is successfully running! Fetching logs..."
-      #     kubectl logs -l app=conn3ct-backend --all-containers=true --tail=100
+      - name: Setup Node.js for Odoo Integration
+        if: always()
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Post Evidence to Odoo
+        if: always()
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action post_evidence \
+            --branch-name "${{ github.ref_name }}" \
+            --build-status "${{ job.status }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}"
+            
+      - name: Automated Defect Creation
+        if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action create_defect \
+            --branch-name "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --author "${{ github.actor }}"

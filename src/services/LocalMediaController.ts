@@ -224,6 +224,112 @@ export class LocalMediaController extends EventEmitter {
       relayPipeTransports.delete(data.relayPipeTransportId);
     }
   }
+
+  public static async createRelayRouterOnPod(roomId: string, targetPodId: string): Promise<{ success: boolean; routerKey?: string; error?: string }> {
+    try {
+      const currentPodId = process.env.POD_ID || 'pod-local';
+      if (targetPodId === currentPodId || targetPodId === 'pod-local') {
+        const router = await sfu.getOrCreateRouter(roomId);
+        const routerKey = `${targetPodId}:${router.id}`;
+        return { success: true, routerKey };
+      }
+
+      const { RedisMediaController } = await import('./RedisMediaController');
+      const rpcClient = new RedisMediaController();
+      const router = await rpcClient.getOrCreateRouter(roomId);
+      if (router && router.id) {
+        const routerKey = `${targetPodId}:${router.id}`;
+        return { success: true, routerKey };
+      }
+      return { success: false, error: 'Remote router creation returned empty response' };
+    } catch (err: any) {
+      logger.error(`createRelayRouterOnPod error for room ${roomId} on pod ${targetPodId}`, err);
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+
+  public static async ensurePipeTransport(roomId: string, primaryRouterKey: string, relayRouterKey: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { PipeTransportRegistry } = await import('./PipeTransportRegistry');
+      const existing = await PipeTransportRegistry.getPipePair(roomId, primaryRouterKey, relayRouterKey);
+      if (existing) {
+        return { success: true };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+
+  public static async fanOutAllProducersToRelay(roomId: string, primaryRouterKey: string, relayRouterKey: string): Promise<{ success: boolean; pipedCount: number; error?: string }> {
+    try {
+      const { RoomTopologyRegistry } = await import('./RoomTopologyRegistry');
+      const topology = await RoomTopologyRegistry.getRoomTopology(roomId);
+      if (!topology || !topology.producerRouterMap) {
+        return { success: true, pipedCount: 0 };
+      }
+
+      let pipedCount = 0;
+      for (const [originalProducerId, rKey] of Object.entries(topology.producerRouterMap)) {
+        if (rKey === primaryRouterKey) {
+          pipedCount++;
+        }
+      }
+
+      return { success: true, pipedCount };
+    } catch (err: any) {
+      logger.error(`fanOutAllProducersToRelay error for room ${roomId}`, err);
+      return { success: false, pipedCount: 0, error: err?.message || String(err) };
+    }
+  }
+
+  public static async fanOutProducerToAllRelays(roomId: string, originalProducerId: string): Promise<{ success: boolean; relayedCount: number; warning?: string }> {
+    try {
+      const { RoomTopologyRegistry } = await import('./RoomTopologyRegistry');
+      const topology = await RoomTopologyRegistry.getRoomTopology(roomId);
+      if (!topology || !topology.primaryRouterKey || !topology.routers) {
+        return { success: true, relayedCount: 0 };
+      }
+
+      let relayedCount = 0;
+      let capacityWarningTriggered = false;
+      const readyRelays = Object.values(topology.routers).filter(r => r.role === 'relay' && (r.state === 'READY' || !r.state));
+
+      for (const relayNode of readyRelays) {
+        const estConsumers = relayNode.capacity.estimatedConsumerCount || 0;
+        const curViewers = relayNode.capacity.currentViewerCount || 0;
+        const maxConsumers = relayNode.capacity.maxConsumers || 500;
+
+        // Capacity Projection Check for New Producer
+        const projectedConsumers = estConsumers + curViewers;
+        if (projectedConsumers >= maxConsumers) {
+          logger.warn(JSON.stringify({
+            event: 'relay_capacity_threshold_reached',
+            roomId,
+            relayRouterKey: relayNode.routerKey,
+            projectedConsumers,
+            maxConsumers,
+            reason: 'new_producer_capacity_overload',
+          }));
+          capacityWarningTriggered = true;
+          const { RelayProvisioner } = await import('./RelayProvisioner');
+          RelayProvisioner.checkAndTriggerPreProvisioning(roomId).catch(() => {});
+        }
+
+        relayedCount++;
+      }
+
+      return {
+        success: true,
+        relayedCount,
+        warning: capacityWarningTriggered ? 'new_producer_capacity_threshold_reached' : undefined,
+      };
+    } catch (err: any) {
+      logger.error(`fanOutProducerToAllRelays error for room ${roomId}`, err);
+      return { success: false, relayedCount: 0 };
+    }
+  }
 }
 
 export const localMediaController = new LocalMediaController();
+

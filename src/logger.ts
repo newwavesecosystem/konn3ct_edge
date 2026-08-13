@@ -39,3 +39,5 @@ if (process.env.NODE_ENV !== 'test') {
     process.exit(1);
   });
 }
+
+export default logger;
