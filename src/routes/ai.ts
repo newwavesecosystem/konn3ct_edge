@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { db } from '../db';
 import { logger } from '../logger';
 import { requireAuth } from '../middleware/auth';
+import { roomTranscripts, rooms } from '../signaling/server';
 
 export const aiRouter = Router();
 
@@ -21,6 +22,11 @@ aiRouter.get('/transcription/:roomId', async (req: Request, res: Response) => {
     });
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
 
     let hasAccess = room.ownerId === userId;
     if (!hasAccess && room.team) {
@@ -40,17 +46,75 @@ aiRouter.get('/transcription/:roomId', async (req: Request, res: Response) => {
   }
 });
 
-// --- 2. Generate/Get AI Summary ---
+// --- 2. Get All AI Summaries (Past Meetings) ---
+aiRouter.get('/summaries', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Find all rooms the user owns or is a team member of
+    const rooms = await db.room.findMany({
+      where: {
+        OR: [
+          { ownerId: userId },
+          { team: { members: { some: { userId } } } }
+        ],
+        aiFeaturesEnabled: true
+      },
+      select: { id: true, name: true, slug: true }
+    });
+    
+    const roomIds = rooms.map((r: any) => r.id);
+    
+    // Fetch all summaries for those rooms
+    const summaries = await db.meetingSummary.findMany({
+      where: { roomId: { in: roomIds } },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    // Attach room details
+    const pastMeetings = summaries.map((s: any) => {
+      const room = rooms.find((r: any) => r.id === s.roomId);
+      return {
+        ...s,
+        roomName: room?.name || 'Unknown Room',
+        roomSlug: room?.slug || ''
+      };
+    });
+    
+    res.status(200).json(pastMeetings);
+  } catch (error) {
+    logger.error('Error fetching summaries', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// --- 3. Generate/Get AI Summary ---
 aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
   try {
+    if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: 'AI summarisation is not configured on this server.' });
+    }
+
     const roomId = req.params.roomId as string;
     const userId = req.user!.userId;
 
     // Verify ownership (only owners/admins should generate expensive AI summaries)
     const room = await db.room.findUnique({ where: { id: roomId } });
-    if (!room || room.ownerId !== userId) {
-      return res.status(403).json({ error: 'Forbidden. Only room owners can generate AI summaries.' });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
     }
+    const roomWithTeam = await db.room.findUnique({
+      where: { id: roomId },
+      include: { team: { include: { members: true } } }
+    });
+    let hasAccess = room.ownerId === userId;
+    if (!hasAccess && roomWithTeam?.team) {
+      hasAccess = roomWithTeam.team.members.some((m: any) => m.userId === userId && ['owner', 'admin'].includes(m.role));
+    }
+    if (!hasAccess) return res.status(403).json({ error: 'Forbidden. Only room owners and team admins can generate AI summaries.' });
 
     // Fetch all transcriptions for this room
     const transcriptions = await db.transcription.findMany({ 
@@ -62,28 +126,12 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No transcriptions found to summarize.' });
     }
 
-    const fullText = transcriptions.map(t => t.content).join('\n');
+    const fullText = transcriptions.map((t: { content: string }) => t.content).join('\n');
 
-    let actionItems = "[]";
-    let summaryText = "Summary could not be generated.";
+    const { generateMeetingSummaryData } = require('../ai/summarizer');
+    const { summary: summaryText, actionItems } = await generateMeetingSummaryData(fullText);
 
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Analyze the following meeting transcript and provide a brief overall summary and a JSON array of string action items.\n\nTranscript:\n${fullText}\n\nPlease format your response strictly as a JSON object with two fields: "summary" (string) and "actionItems" (array of strings). Do not include markdown formatting.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
-      if (response.text) {
-        const cleanedText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(cleanedText);
-        summaryText = parsed.summary || summaryText;
-        actionItems = JSON.stringify(parsed.actionItems || []);
-      }
-    } catch (aiError) {
-      logger.error('Failed to call Gemini API', aiError);
+    if (summaryText === "Summary could not be generated.") {
       return res.status(502).json({ error: 'AI processing failed' });
     }
 
@@ -109,6 +157,112 @@ aiRouter.post('/summary/:roomId', async (req: Request, res: Response) => {
   }
 });
 
+// --- 4. Live Konn3ct AI Chat ---
+aiRouter.post('/chat/:roomSlug', async (req: Request, res: Response) => {
+  try {
+    const { question, userName } = req.body;
+    const roomSlugOrId = req.params.roomSlug as string;
+    const userId = req.user!.userId;
+
+    if (!question) {
+      return res.status(400).json({ error: "Missing question" });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: "OpenAI API Key is missing on the server." });
+    }
+
+    // Verify room access (try by ID first, then fallback to slug)
+    let room = await db.room.findUnique({
+      where: { id: roomSlugOrId },
+      include: { 
+        team: { include: { members: true } },
+        owner: { select: { name: true } }
+      }
+    });
+
+    if (!room) {
+      room = await db.room.findUnique({
+        where: { slug: roomSlugOrId },
+        include: { 
+          team: { include: { members: true } },
+          owner: { select: { name: true } }
+        }
+      });
+    }
+
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomSlugOrId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
+
+    const roomId = room.id;
+
+    let hasAccess = room.ownerId === userId;
+    if (!hasAccess && room.team) {
+      hasAccess = room.team.members.some((m: any) => m.userId === userId);
+    }
+    if (!hasAccess && ((req.user as any).roomId === roomId || (req.user as any).roomId === room.slug)) {
+      hasAccess = true;
+    }
+    if (!hasAccess) return res.status(403).json({ error: 'Forbidden' });
+
+    // Fetch live transcript from memory
+    const transcripts = roomTranscripts.get(roomId) || roomTranscripts.get(room.slug) || [];
+    const transcriptText = transcripts
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(t => `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.name}: ${t.text}`)
+      .join('\n');
+
+    const roomClients = rooms.get(roomId);
+    const activeAttendeesCount = roomClients ? roomClients.size : 0;
+    const hostName = (room.owner as any)?.name || 'Unknown Host';
+    const requesterName = userName || 'Unknown Participant';
+
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are Konn3ct AI, a helpful, polite, and intelligent in-meeting assistant. 
+          Your job is to answer the user's question based strictly on the provided meeting transcript and meeting metadata.
+          If the answer is not in the transcript or metadata, politely say that you don't have that information.
+          If the transcript is completely empty, politely inform the user that nobody has spoken yet or transcription just started.
+          Keep your answers concise, formatting them with markdown if helpful (bullet points, bold text).
+          
+          Meeting Metadata:
+          - The Host (owner) of this meeting is: ${hostName}.
+          - Current active attendees in the room: ${activeAttendeesCount}.
+          - The user asking you this question is named: ${requesterName}. If the user asks about "me" or "my name", they are referring to ${requesterName}.
+
+          Here is the meeting transcript so far:
+          ---
+          ${transcriptText || "[No transcript available yet. The meeting just started or nobody has spoken.]"}
+          ---
+          `,
+        },
+        {
+          role: "user",
+          content: question,
+        },
+      ],
+      temperature: 0.2,
+    });
+
+    const answer = response.choices[0]?.message?.content?.trim();
+    res.status(200).json({ answer });
+  } catch (error: any) {
+    logger.error("Konn3ct AI error:", error);
+    res.status(500).json({ error: "Failed to generate AI response" });
+  }
+});
+
 aiRouter.get('/summary/:roomId', async (req: Request, res: Response) => {
   try {
     const roomId = req.params.roomId as string;
@@ -121,6 +275,11 @@ aiRouter.get('/summary/:roomId', async (req: Request, res: Response) => {
     });
 
     if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    if (room.aiFeaturesEnabled === false) {
+      logger.info(`ai_disabled_for_room: room ${roomId}`);
+      return res.status(403).json({ error: 'AI features are disabled for this room.' });
+    }
 
     let hasAccess = room.ownerId === userId;
     if (!hasAccess && room.team) {

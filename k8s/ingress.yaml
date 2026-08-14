@@ -19,10 +19,10 @@ metadata:
     # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
   rules:
-  - host: konn3ctedge.konn3ct.net # Change to your actual domain
+  - host: __NEXT_PUBLIC_BACKEND_DOMAIN__ # Replaced dynamically by GitHub Actions
     http:
       paths:
-      - path: /signal
+      - path: /
         pathType: Prefix
         backend:
           service:

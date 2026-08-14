@@ -6,11 +6,11 @@ import { motion } from "framer-motion";
 import {
   Video, Calendar, Users, Clock,
   ArrowRight, Play, MoreVertical,
-  Link2, Copy, CalendarDays, Share2, Globe, Lock
+  Link2, Copy, CalendarDays, Share2, Globe, Lock, Brain
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { apiClient, DashboardStats, ScheduledMeeting } from "@/lib/api-client";
+import { apiClient, DashboardStats, ScheduledMeeting, Room } from "@/lib/api-client";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
@@ -19,10 +19,12 @@ export default function DashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [meetings, setMeetings] = useState<ScheduledMeeting[]>([]);
+  const [pastRooms, setPastRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{name: string} | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [selectedRecording, setSelectedRecording] = useState<{title: string, date: string, duration: string} | null>(null);
+  const [selectedRecording, setSelectedRecording] = useState<{id: string, title: string, date: string, duration: string} | null>(null);
   const [accessLevel, setAccessLevel] = useState("anyone");
   const [specificUsers, setSpecificUsers] = useState("");
   const [generatedLink, setGeneratedLink] = useState("");
@@ -36,15 +38,27 @@ export default function DashboardPage() {
   };
 
   const handleGenerateLink = () => {
-    // Simulate link generation
-    const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
-    setGeneratedLink(link);
+    if (selectedRecording?.id) {
+      const link = `${window.location.origin}/recordings/${selectedRecording.id}`;
+      setGeneratedLink(link);
+    } else {
+      const link = `${window.location.origin}/recordings/rec_${Math.random().toString(36).substr(2, 9)}`;
+      setGeneratedLink(link);
+    }
+  };
+
+  const handleCopyPersonalLink = () => {
+    if (currentUser) {
+      const link = `${window.location.origin}/meeting/${currentUser.name.toLowerCase().replace(/\s+/g, '-')}`;
+      navigator.clipboard.writeText(link);
+      alert("Personal link copied!"); // using alert for simplicity, could use toast
+    }
   };
 
   const handleStartInstantMeeting = async () => {
     try {
       setIsCreatingRoom(true);
-      const room = await apiClient.rooms.create("Instant Meeting");
+      const room = await apiClient.rooms.create({ name: "Instant Meeting" });
       router.push(`/meeting/${room.slug}`);
     } catch (error) {
       console.error(error);
@@ -55,11 +69,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([
+      apiClient.auth.getMe().catch(() => null),
       apiClient.dashboard.getStats().catch(() => null),
-      apiClient.scheduling.getUpcoming().catch(() => [])
-    ]).then(([s, m]) => {
+      apiClient.scheduling.getUpcoming().catch(() => []),
+      apiClient.rooms.getAll().catch(() => [])
+    ]).then(([u, s, m, r]) => {
+      setCurrentUser(u);
       setStats(s);
       setMeetings(m);
+      setPastRooms(r.slice(0, 5)); // Just take the latest 5 rooms for the dashboard
       setIsLoading(false);
     });
   }, []);
@@ -83,14 +101,14 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-text-primary">
-            Welcome back, Alex 👋
+            Welcome back, {currentUser?.name || "Alex"} 👋
           </h1>
           <p className="text-text-muted mt-1 text-lg">
-            Here's what's happening with your meetings today.
+            Here&apos;s what&apos;s happening with your meetings today.
           </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <Button variant="outline" className="flex-1 md:flex-none h-12 rounded-xl px-4 border-border-strong/20 hover:border-brand-blue hover:text-brand-blue transition-colors bg-surface shadow-sm">
+          <Button onClick={handleCopyPersonalLink} variant="outline" className="flex-1 md:flex-none h-12 rounded-xl px-4 border-border-strong/20 hover:border-brand-blue hover:text-brand-blue transition-colors bg-surface shadow-sm">
             <Link2 className="w-5 h-5 mr-2" />
             Copy Personal Link
           </Button>
@@ -115,7 +133,7 @@ export default function DashboardPage() {
           { title: "Total Rooms", value: stats?.totalRooms || "0", icon: Users, color: "text-brand-blue", bg: "bg-brand-blue/10" },
           { title: "Upcoming Meetings", value: stats?.upcomingMeetings || "0", icon: Calendar, color: "text-brand-green", bg: "bg-brand-green/10" },
           { title: "Recordings", value: stats?.totalRecordings || "0", icon: Play, color: "text-[#CC505C]", bg: "bg-[#CC505C]/10" },
-          { title: "Total Minutes", value: "0", icon: Clock, color: "text-amber-500", bg: "bg-amber-500/10" }
+          { title: "Virtual Events", value: "0", icon: Globe, color: "text-amber-500", bg: "bg-amber-500/10" }
         ].map((stat, i) => (
           <motion.div key={i} variants={itemVariants}>
             <Card className="rounded-2xl border-none shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.1)] transition-all duration-300 overflow-hidden relative group h-full">
@@ -149,7 +167,7 @@ export default function DashboardPage() {
           className="lg:col-span-2 space-y-6"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-text-primary">Today's Schedule</h2>
+            <h2 className="text-xl font-bold text-text-primary">Today&apos;s Schedule</h2>
             <Button variant="ghost" className="text-brand-green hover:text-brand-green-soft hover:bg-brand-green/10 rounded-lg">
               View Calendar <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
@@ -233,41 +251,53 @@ export default function DashboardPage() {
 
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-text-primary">Recent Recordings</h2>
+              <h2 className="text-lg font-bold text-text-primary">Past Meetings Intelligence</h2>
             </div>
             <div className="space-y-3">
-              {[
-                { title: "Q3 Planning Session", date: "Today, 11:00 AM", duration: "1h 15m" },
-                { title: "Weekly All Hands", date: "Yesterday", duration: "45m" },
-                { title: "Design Sync", date: "Mon, 2:00 PM", duration: "30m" }
-              ].map((rec, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-border bg-surface hover:border-brand-blue/40 hover:shadow-sm transition-all group">
-                  <div className="w-12 h-12 rounded-lg bg-meeting-bg flex items-center justify-center shrink-0 group-hover:bg-brand-blue/10 transition-colors">
-                    <Play className="w-5 h-5 text-brand-blue" />
+              {isLoading ? (
+                <div className="p-3 text-center text-text-muted text-sm">Loading past meetings...</div>
+              ) : pastRooms.length === 0 ? (
+                <div className="p-3 text-center text-text-muted text-sm border border-border rounded-xl">No past meetings found.</div>
+              ) : (
+                pastRooms.map((room, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-xl border border-border bg-surface hover:border-brand-blue/40 hover:shadow-sm transition-all group cursor-pointer" onClick={() => router.push(`/dashboard/meetings/${room.id}`)}>
+                    <div className="w-12 h-12 rounded-lg bg-meeting-bg flex items-center justify-center shrink-0 group-hover:bg-brand-blue/10 transition-colors">
+                      <Brain className="w-5 h-5 text-brand-blue" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-text-primary truncate">{room.name}</h4>
+                      <p className="text-xs text-text-muted mt-0.5">ID: {room.slug}</p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-brand-blue"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-text-primary truncate">{rec.title}</h4>
-                    <p className="text-xs text-text-muted mt-0.5">{rec.date} • {rec.duration}</p>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleShareRecording(rec)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-text-muted hover:text-brand-blue"
-                  >
-                    <Share2 className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-text-muted"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
+          
+          {/* Virtual Events & eCinema Promo */}
+          <Card className="rounded-2xl border-border bg-surface mt-6">
+            <CardContent className="p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-text-primary text-sm">Monetize with Virtual Events</h4>
+                  <p className="text-xs text-text-muted">Host paid webinars and collect payments via Paystack.</p>
+                </div>
+              </div>
+              <Button onClick={() => router.push('/dashboard/rooms/new?type=webinar')} className="w-full h-10 bg-surface border border-border text-text-primary hover:bg-black/[0.02]">
+                Create Webinar
+              </Button>
+            </CardContent>
+          </Card>
         </motion.div>
       </div>
 
@@ -277,7 +307,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-xl font-bold text-text-primary">Share Recording</h2>
             <p className="text-sm text-text-muted mt-1">
-              Configure access settings for "{selectedRecording?.title}"
+              Configure access settings for &quot;{selectedRecording?.title}&quot;
             </p>
           </div>
 
@@ -311,7 +341,11 @@ export default function DashboardPage() {
             <div className="p-4 rounded-xl border border-brand-green/20 bg-brand-green/5 space-y-3">
               <p className="text-sm font-medium text-brand-green">Link generated successfully!</p>
               <div className="flex gap-2">
-                <Input value={generatedLink} readOnly className="h-10 bg-white" />
+                <input 
+                  value={generatedLink} 
+                  readOnly 
+                  className="flex-1 px-4 py-2 rounded-xl border outline-none bg-white text-slate-900 border-brand-green/20" 
+                />
                 <Button 
                   onClick={() => navigator.clipboard.writeText(generatedLink)}
                   className="h-10 bg-brand-green hover:bg-[#287854] shrink-0"

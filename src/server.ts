@@ -2,13 +2,24 @@ import 'dotenv/config';
 import { createServer } from 'http';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import path from 'path';
+import client from 'prom-client';
 import { initializeSignaling } from './signaling/server';
-import { initializeWorkers } from './media/sfu';
+import { startDeepTelemetry } from './telemetry';
+
+// Initialize default prometheus metrics
+client.collectDefaultMetrics();
+startDeepTelemetry();
+
+
+
 import { config } from './media/config';
 import { logger } from './logger';
+import { generalLimiter } from './middleware/rateLimiter';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { teamsRouter } from './routes/teams';
@@ -20,24 +31,72 @@ import { dashboardRouter } from './routes/dashboard';
 import { telephonyRouter } from './routes/telephony';
 import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
+import { streamingRouter } from './routes/streaming';
+import { internalRecordingsRouter } from './routes/internalRecordings';
+
+if (process.env.NODE_ENV === 'production') {
+  const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
+  for (const key of required) {
+    if (!process.env[key]) {
+      throw new Error(`[FATAL] Environment variable ${key} must be set in production`);
+    }
+  }
+}
 
 export const app = express();
 const PORT = process.env.PORT || 3000;
 
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: Buffer;
+    }
+  }
+}
+
 // Middleware
-app.use(express.json());
+app.use(express.json({
+  limit: '50kb',
+  verify: (req: express.Request, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Security headers
+app.use(helmet());
+
+// CORS - allow only the frontend domain
+const allowedOrigins = [
+  process.env.NEXT_PUBLIC_FRONTEND_URL,
+  process.env.NEXT_PUBLIC_FRONTEND_DOMAIN ? `https://${process.env.NEXT_PUBLIC_FRONTEND_DOMAIN}` : null,
+  'http://localhost:3000',
+  'http://localhost:3001',
+].filter(Boolean) as string[];
+app.use(cors({
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+
 // Request logging middleware
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.url}`);
+  const safeUrl = req.url.replace(/([?&])token=[^&]*/g, '$1token=[REDACTED]');
+  logger.info(`${req.method} ${safeUrl}`);
   next();
 });
 
-// Swagger Documentation
-const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Global rate limiter — 100 req/min per IP (skips /health automatically)
+app.use(generalLimiter);
+
+// Swagger Documentation (non-production only)
+if (process.env.NODE_ENV !== 'production') {
+  const swaggerDocument = YAML.load(path.join(__dirname, '../swagger.yaml'));
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
 
 // Routes
 app.use('/health', healthRouter);
@@ -51,8 +110,69 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/telephony', telephonyRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/external/v1', externalRouter);
+app.use('/api/streaming', streamingRouter);
+app.use('/api/internal/recordings', internalRecordingsRouter);
 
-// Basic 404 handler
+// Prometheus metrics endpoint for Phase 0 Baseline
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (ex) {
+    res.status(500).end(String(ex));
+  }
+});
+
+
+// Protected Admin Topology Endpoint for Phase 6B Observability
+app.get('/api/admin/room-topology/:roomId', async (req, res) => {
+  const adminSecret = process.env.ADMIN_API_KEY || 'konn3ct-internal-admin-secret';
+  const requestAdminKey = req.headers['x-admin-key'];
+  const userRole = (req as any).user?.role;
+
+  const isAuthorized = requestAdminKey === adminSecret || userRole === 'admin';
+
+  if (!isAuthorized) {
+    logger.warn(`Unauthorized admin topology snapshot request for room ${req.params.roomId} from IP ${req.ip}`);
+    return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
+  }
+
+  try {
+    const { RoomTopologyRegistry } = await import('./services/RoomTopologyRegistry');
+    const { PipeTransportRegistry } = await import('./services/PipeTransportRegistry');
+    const snapshot = await RoomTopologyRegistry.getRoomTopology(req.params.roomId);
+    const pipeTransports = await PipeTransportRegistry.getPipeSnapshot(req.params.roomId);
+
+    if (!snapshot) {
+      return res.status(404).json({ error: 'Topology not found for room' });
+    }
+
+    logger.info(JSON.stringify({
+      event: 'pipe_transport_admin_snapshot_requested',
+      roomId: req.params.roomId,
+      requestedBy: (req as any).user?.id || 'admin_api_key',
+    }));
+
+    // Redact raw internal pod IDs / IP addresses for security
+    const redactedRouters: Record<string, any> = {};
+    for (const [key, node] of Object.entries(snapshot.routers)) {
+      redactedRouters[key] = {
+        ...node,
+        mediaPodId: node.mediaPodId.replace(/\d+\.\d+\.\d+\.\d+/, '[REDACTED_POD_IP]'),
+      };
+    }
+
+    return res.json({
+      ...snapshot,
+      routers: redactedRouters,
+      pipeTransports,
+    });
+  } catch (err) {
+    logger.error(`Error fetching room topology for ${req.params.roomId}`, err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
@@ -67,25 +187,54 @@ async function boot() {
   try {
     // In production (Kubernetes), dynamically fetch the true public IP for WebRTC routing
     if (process.env.NODE_ENV === 'production') {
+      const http = require('http');
       const https = require('https');
-      const publicIp = await new Promise<string>((resolve) => {
-        https.get('https://api.ipify.org', (res: any) => {
+      
+      const fetchDO = () => new Promise<string>((resolve, reject) => {
+        const req = http.get('http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address', { timeout: 2000 }, (res: any) => {
+          if (res.statusCode !== 200) return reject(new Error('DO Metadata not found'));
           let data = '';
           res.on('data', (chunk: string) => data += chunk);
           res.on('end', () => resolve(data.trim()));
-        }).on('error', (err: any) => {
-          logger.error('Failed to fetch public IP for WebRTC', err);
-          resolve(process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1');
         });
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('timeout')));
       });
-      logger.info(`Dynamically detected Public IP for WebRTC: ${publicIp}`);
+
+      const fetchIpify = () => new Promise<string>((resolve, reject) => {
+        const req = https.get('https://api.ipify.org', { timeout: 3000 }, (res: any) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve(data.trim()));
+        });
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('timeout')));
+      });
+
+      let publicIp = process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1';
+      const isPrivateOrLoopback = (ip: string) => 
+        !ip || ip === '127.0.0.1' || ip === '0.0.0.0' || ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip);
+
+      if (isPrivateOrLoopback(publicIp)) {
+        try {
+          publicIp = await fetchIpify();
+          logger.info(`Detected Public IP via ipify: ${publicIp}`);
+        } catch (err) {
+          logger.warn('ipify failed, falling back to DO Metadata...');
+          try {
+            publicIp = await fetchDO();
+            logger.info(`Detected Public IP via DO Metadata: ${publicIp}`);
+          } catch (err2) {
+            logger.error('Failed to fetch public IP for WebRTC', err2);
+          }
+        }
+      }
       config.mediasoup.webRtcTransport.listenIps[0].announcedIp = publicIp;
     }
 
-    await initializeWorkers();
-    logger.info('Mediasoup workers initialized successfully.');
-  } catch (err) {
-    logger.warn('Failed to initialize mediasoup workers. Running in REST-only mode.', err);
+    // Mediasoup workers are no longer initialized here in Phase 4.
+    // They run in the dedicated media-server.ts entrypoint.
+    logger.info('Signaling server booting without local Mediasoup workers.');
   } finally {
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);

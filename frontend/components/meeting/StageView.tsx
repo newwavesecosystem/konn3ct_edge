@@ -6,6 +6,7 @@ import { useMeeting } from "@/lib/meeting-context";
 import { ParticipantTile } from "./ParticipantTile";
 import { cn } from "@/lib/utils";
 import type { Participant } from "@/lib/types/meeting";
+import { computeDynamicGrid, type GridSolution } from "@/lib/grid-layout";
 import {
   MonitorOff,
   MonitorUp,
@@ -15,20 +16,33 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
+import { useVideoHealth } from "@/hooks/useVideoHealth";
 
 import YouTube from "react-youtube";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function StageView() {
-  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink } =
+  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef } =
     useMeeting();
 
-  const screenSharer = participants.find((p) => p.isScreenSharing);
+  const screenSharers = participants.filter((p) => p.isScreenSharing);
+  const [activeScreenSharerId, setActiveScreenSharerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeScreenSharerId && !screenSharers.find((p) => p.id === activeScreenSharerId)) {
+      setActiveScreenSharerId(null);
+    }
+  }, [screenSharers, activeScreenSharerId]);
+
+  const screenSharer = screenSharers.find(p => p.id === activeScreenSharerId) || screenSharers[0];
   const isSomeoneSharing = !!screenSharer || isScreenSharing;
 
   // Grid view sorting (no active speaker rearranging)
   const gridSorted = useMemo(() => {
-    return [...participants].sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot' && p.role !== 'recorder').sort((a, b) => {
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
     });
@@ -36,7 +50,7 @@ export function StageView() {
 
   // Speaker view sorting (uses active speaker)
   const speakerSorted = useMemo(() => {
-    return [...participants].sort((a, b) => {
+    return [...participants].filter(p => p.role !== 'bot' && p.role !== 'recorder').sort((a, b) => {
       if (a.isSpeaking !== b.isSpeaking) return a.isSpeaking ? -1 : 1;
       if (a.isCameraOn !== b.isCameraOn) return a.isCameraOn ? -1 : 1;
       return 0;
@@ -52,6 +66,9 @@ export function StageView() {
       <ScreenShareLayout
         participants={gridSorted}
         screenSharer={screenSharer}
+        screenSharers={screenSharers}
+        activeScreenSharerId={activeScreenSharerId || screenSharer?.id}
+        setActiveScreenSharerId={setActiveScreenSharerId}
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
         currentUserId={currentUser.id}
@@ -60,7 +77,7 @@ export function StageView() {
   }
 
   const activeSpeaker = speakerSorted[0] || gridSorted[0];
-  const others = gridSorted.filter((p) => p.id !== activeSpeaker?.id);
+  const others = gridSorted; // Keep all participants in the strip to prevent swapping/rearranging
 
   if (layoutMode === "grid") {
     return <GridLayout participants={gridSorted} />;
@@ -130,12 +147,7 @@ const TILE_PADDING_Y = 16;
 const IDEAL_TILE_WIDTH = 220;
 const IDEAL_TILE_HEIGHT = 160;
 
-interface GridSolution {
-  cols: number;
-  rows: number;
-  tileW: number;
-  tileH: number;
-}
+
 
 function computeBestGrid(
   count: number,
@@ -197,6 +209,19 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
   const [containerSize, setContainerSize] = useState({ w: 960, h: 540 });
+
+  // Hoist hooks for scroll mode to avoid conditional hook call errors
+  const { cols, tileH } = computeScrollableGrid(containerSize.w);
+  const rowCount = Math.ceil(count / cols);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => tileH + TILE_GAP,
+    overscan: 2,
+  });
 
   // Measure container
   useEffect(() => {
@@ -321,11 +346,12 @@ function GridLayout({ participants }: { participants: Participant[] }) {
   // ═══════════════════════════════════════════════════════
   // ── SCROLL mode (default) ─────────────────────────────
   // ═══════════════════════════════════════════════════════
-  const { cols, tileH } = computeScrollableGrid(containerSize.w);
+  // (Hooks hoisted to top to avoid conditional call errors)
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden" ref={containerRef}>
       <div
+        ref={scrollContainerRef}
         className="flex-1 min-h-0 overflow-y-auto"
         style={{
           scrollbarWidth: "thin",
@@ -333,22 +359,40 @@ function GridLayout({ participants }: { participants: Participant[] }) {
           paddingRight: 4,
         }}
       >
-        <motion.div
-          layout
-          className="grid"
+        <div
           style={{
-            gridTemplateColumns: `repeat(${cols}, 1fr)`,
-            gridAutoRows: `${tileH}px`,
-            gap: `${TILE_GAP}px`,
-            padding: `${TILE_PADDING_Y}px ${TILE_PADDING_X}px`,
+            height: `${virtualizer.getTotalSize() + TILE_PADDING_Y * 2}px`,
+            width: "100%",
+            position: "relative",
           }}
         >
-          <AnimatePresence>
-            {participants.map((p) => (
-              <MotionTile key={p.id} participant={p} />
-            ))}
-          </AnimatePresence>
-        </motion.div>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const rowStartIndex = virtualRow.index * cols;
+            const rowParticipants = participants.slice(rowStartIndex, rowStartIndex + cols);
+            
+            return (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${tileH}px`,
+                  transform: `translateY(${virtualRow.start + TILE_PADDING_Y}px)`,
+                  padding: `0 ${TILE_PADDING_X}px`,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  gap: `${TILE_GAP}px`,
+                }}
+              >
+                {rowParticipants.map((p) => (
+                  <MotionTile key={p.id} participant={p} />
+                ))}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Bottom breathing room */}
         <div className="h-2 shrink-0" />
@@ -378,12 +422,16 @@ function GridInner({
   containerW: number;
   containerH: number;
 }) {
+  const { currentUser } = useMeeting();
   const count = participants.length;
+  const paddingX = TILE_PADDING_X;
+  const paddingY = TILE_PADDING_Y;
+  const gap = TILE_GAP;
 
   // Hooks always run.
   const solution = useMemo(
-    () => computeBestGrid(count, containerW, containerH),
-    [count, containerW, containerH],
+    () => computeDynamicGrid(count, containerW, containerH, paddingX, paddingY, gap),
+    [count, containerW, containerH, paddingX, paddingY, gap],
   );
 
   if (count === 0) {
@@ -394,9 +442,11 @@ function GridInner({
 
   // ── 1 participant: hero ─────────────────────────────────
   if (count === 1) {
+
+
     return (
       <div className="absolute inset-0 p-3 sm:p-4 flex items-center justify-center">
-        <div className="w-full h-full max-w-5xl">
+        <div className="w-full aspect-video max-h-full flex justify-center">
           <MotionTile participant={participants[0]} isLarge />
         </div>
       </div>
@@ -407,62 +457,21 @@ function GridInner({
   if (count === 2) {
     const isPortrait = containerW < containerH * 1.1;
     return (
-      <div className="absolute inset-0 p-3 sm:p-4">
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4">
         <div
           className={cn(
-            "w-full h-full flex gap-2.5 sm:gap-3",
-            isPortrait ? "flex-col" : "flex-row",
+            "w-full flex gap-2.5 sm:gap-3",
+            isPortrait ? "flex-col h-full items-center" : "flex-row items-center",
           )}
         >
           <AnimatePresence>
             {participants.map((p) => (
-              <div key={p.id} className="flex-1 min-w-0 min-h-0">
-                <MotionTile participant={p} isLarge />
+              <div key={p.id} className="flex-1 min-w-0 min-h-0 w-full flex justify-center">
+                <div className="w-full max-h-full aspect-video">
+                  <MotionTile participant={p} isLarge />
+                </div>
               </div>
             ))}
-          </AnimatePresence>
-        </div>
-      </div>
-    );
-  }
-
-  // ── 3 participants: 3 tall columns (Google Meet's signature) ──
-  if (count === 3 && containerW > containerH * 0.9) {
-    return (
-      <div className="absolute inset-0 p-3 sm:p-4">
-        <div className="w-full h-full flex gap-2.5 sm:gap-3">
-          <AnimatePresence>
-            {participants.map((p) => (
-              <div key={p.id} className="flex-1 min-w-0 min-h-0">
-                <MotionTile participant={p} />
-              </div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
-    );
-  }
-
-  // ── 5 participants: 3 top + 2 bottom, both rows equal height ──
-  if (count === 5 && containerW > containerH) {
-    return (
-      <div className="absolute inset-0 p-3 sm:p-4">
-        <div className="w-full h-full flex flex-col gap-2.5 sm:gap-3">
-          <AnimatePresence>
-            <div className="flex-1 min-h-0 flex gap-2.5 sm:gap-3">
-              {participants.slice(0, 3).map((p) => (
-                <div key={p.id} className="flex-1 min-w-0 min-h-0">
-                  <MotionTile participant={p} />
-                </div>
-              ))}
-            </div>
-            <div className="flex-1 min-h-0 flex gap-2.5 sm:gap-3 justify-center">
-              {participants.slice(3, 5).map((p) => (
-                <div key={p.id} className="flex-1 min-w-0 min-h-0 max-w-[calc(33.333%-7px)]">
-                  <MotionTile participant={p} />
-                </div>
-              ))}
-            </div>
           </AnimatePresence>
         </div>
       </div>
@@ -473,14 +482,14 @@ function GridInner({
   const { cols, tileW, tileH } = solution;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center" style={{ padding: TILE_PADDING_Y }}>
+    <div className="absolute inset-0 flex items-center justify-center" style={{ padding: paddingY }}>
       <motion.div
         layout
         className="grid"
         style={{
           gridTemplateColumns: `repeat(${cols}, ${tileW}px)`,
           gridAutoRows: `${tileH}px`,
-          gap: `${TILE_GAP}px`,
+          gap: `${gap}px`,
         }}
       >
         <AnimatePresence>
@@ -537,16 +546,19 @@ function SpeakerLayout({
   return (
     <div className="flex-1 flex flex-col gap-2 p-2 sm:p-3 overflow-hidden">
       {/* Main speaker */}
-      <div className="flex-1 min-h-0">
-        <motion.div
-          key={activeSpeaker.id}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-          className="w-full h-full"
-        >
-          <ParticipantTile participant={activeSpeaker} isLarge />
-        </motion.div>
+      <div className="flex-1 min-h-0 relative">
+        <AnimatePresence>
+          <motion.div
+            key={activeSpeaker.id}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+            className="absolute inset-0 w-full h-full"
+          >
+            <ParticipantTile participant={activeSpeaker} isLarge />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Filmstrip — clean avatar cards */}
@@ -569,12 +581,6 @@ function SpeakerLayout({
           <div ref={stripRef} className="flex gap-2.5 overflow-x-auto no-scrollbar py-1.5 px-1 scroll-smooth">
             <AnimatePresence>
               {others.map((p) => {
-                const initials = p.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase();
                 return (
                   <motion.div
                     key={p.id}
@@ -582,41 +588,9 @@ function SpeakerLayout({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.92 }}
                     transition={TILE_TRANSITION}
-                    className="shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-xl transition-shadow hover:shadow-md"
-                    style={{
-                      backgroundColor: "var(--mt-bg-tile)",
-                      border: "1px solid var(--mt-border)",
-                    }}
+                    className="shrink-0 w-40 h-24 rounded-xl overflow-hidden shadow-sm"
                   >
-                    {/* Avatar circle */}
-                    <div
-                      className="relative w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                      style={{
-                        backgroundColor: "var(--mt-avatar-bg, var(--mt-bg-tile-alt))",
-                        color: "var(--mt-avatar-text, var(--mt-text))",
-                      }}
-                    >
-                      {initials}
-                      {/* Speaking ring */}
-                      {p.isSpeaking && (
-                        <span className="absolute inset-0 rounded-full ring-2 ring-brand-green animate-pulse" />
-                      )}
-                    </div>
-                    {/* Name + status */}
-                    <div className="flex flex-col min-w-0">
-                      <span
-                        className="text-[11px] font-medium truncate max-w-[72px]"
-                        style={{ color: "var(--mt-text)" }}
-                      >
-                        {p.name.split(" ")[0]}
-                      </span>
-                      <span
-                        className="text-[9px] truncate"
-                        style={{ color: p.isMuted ? "var(--mt-text-faint)" : "var(--color-brand-green)" }}
-                      >
-                        {p.isMuted ? "Muted" : "Speaking"}
-                      </span>
-                    </div>
+                    <ParticipantTile participant={p} fixedAspect />
                   </motion.div>
                 );
               })}
@@ -686,7 +660,7 @@ function SpotlightLayout({ participants }: { participants: Participant[] }) {
         <motion.div
           layout
           layoutId={`tile-${focused.id}`}
-          className="w-full h-full max-w-6xl"
+          className="w-full aspect-video max-h-full max-w-6xl"
         >
           <ParticipantTile participant={focused} isLarge />
         </motion.div>
@@ -787,35 +761,156 @@ function SpotlightLayout({ participants }: { participants: Participant[] }) {
 function ScreenShareLayout({
   participants,
   screenSharer,
+  screenSharers,
+  activeScreenSharerId,
+  setActiveScreenSharerId,
   isCurrentUserSharing,
   onStopSharing,
   currentUserId,
 }: {
   participants: Participant[];
   screenSharer: Participant | undefined;
+  screenSharers: Participant[];
+  activeScreenSharerId: string | undefined;
+  setActiveScreenSharerId: (id: string) => void;
   isCurrentUserSharing: boolean;
   onStopSharing: () => void;
   currentUserId: string;
 }) {
+  const { webrtcClientRef } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const sharerName = screenSharer?.name ?? "You";
-  const isMe = isCurrentUserSharing || screenSharer?.id === currentUserId;
+  const isMe = screenSharer?.id === currentUserId;
 
-  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
-  React.useEffect(() => {
-    if (videoRef.current && screenSharer?.screenTrack) {
-      if (videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        if (stream.getVideoTracks()[0] === screenSharer.screenTrack) return;
+  const { health, remountKey } = useVideoHealth({
+    videoRef,
+    track: screenSharer?.screenTrack,
+    isVisible: true
+  });
+
+  const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
+
+  const videoCallbackRef = React.useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
+      if (el) {
+        lastVideoElRef.current = el;
+        const attemptPlay = () => {
+          if (!el) return;
+          el.play().then(() => {
+            if (screenSharer && screenSharer.screenStats) {
+              screenSharer.screenStats.lastVideoPlayResult = 'success';
+              screenSharer.screenStats.lastVideoError = undefined;
+            }
+          }).catch((e) => {
+            if (screenSharer && screenSharer.screenStats) {
+              screenSharer.screenStats.lastVideoPlayResult = 'error';
+              if (e.name !== 'AbortError') {
+                console.warn("Screen share play failed:", e);
+                (el as any)._lastError = e.message || e.name;
+                screenSharer.screenStats.lastVideoError = e.message || e.name;
+              }
+            }
+          });
+        };
+
+        el.onloadedmetadata = attemptPlay;
+        el.onloadeddata = () => {
+          if (screenSharer && screenSharer.screenStats) {
+            screenSharer.screenStats.firstFrameRendered = true;
+          }
+          attemptPlay();
+        };
+        el.onplaying = () => {
+          if (screenSharer && screenSharer.screenStats) {
+            screenSharer.screenStats.firstFrameRendered = true;
+          }
+        };
+        el.oncanplay = attemptPlay;
+
+        if (screenSharer?.screenTrack) {
+          if (el.srcObject) {
+            const stream = el.srcObject as MediaStream;
+            if (stream.getVideoTracks()[0] === screenSharer.screenTrack) {
+              attemptPlay();
+              return;
+            }
+            stream.getTracks().forEach(t => stream.removeTrack(t));
+            stream.addTrack(screenSharer.screenTrack);
+          } else {
+            el.srcObject = new MediaStream([screenSharer.screenTrack]);
+          }
+          attemptPlay();
+        } else {
+          el.srcObject = null;
+        }
+      } else {
+        if (lastVideoElRef.current) lastVideoElRef.current.srcObject = null;
+        lastVideoElRef.current = null;
       }
-      videoRef.current.srcObject = new MediaStream([screenSharer.screenTrack]);
-      videoRef.current.play().catch((e) => {
-        if (e.name !== 'AbortError') console.warn("Screen share play failed:", e);
-      });
-    }
+    },
+    [screenSharer?.screenTrack]
+  );
+
+  // Auto-retry play on visibility changes
+  React.useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && videoRef.current && screenSharer?.screenTrack) {
+        videoRef.current.play().catch(e => {
+          if (e.name !== 'AbortError') console.warn('Safari rebind screen-share play failed', e);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, [screenSharer?.screenTrack]);
 
+  // SCREEN-002: Screen share first frame timeout and keyframe request
+  const [screenTimeoutState, setScreenTimeoutState] = useState<'normal' | 'recovering' | 'failed'>('normal');
+  React.useEffect(() => {
+    if (isMe || !screenSharer?.screenConsumerId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setScreenTimeoutState('normal');
+      return;
+    }
+
+    if (screenSharer?.screenTrack && screenSharer?.screenStats?.firstFrameRendered) {
+      setScreenTimeoutState('normal');
+      return;
+    }
+
+    webrtcClientRef?.current?.emitTelemetry('screen_first_frame_wait_started');
+
+    const timeout1 = setTimeout(() => {
+      // 10 seconds: request keyframe
+      if (!screenSharer?.screenStats?.firstFrameRendered) {
+        setScreenTimeoutState('recovering');
+        webrtcClientRef?.current?.emitTelemetry('screen_keyframe_requested');
+        webrtcClientRef?.current?.requestScreenKeyframe(screenSharer.screenConsumerId!);
+      }
+    }, 10000);
+
+    const timeout2 = setTimeout(() => {
+      // 25 seconds: fail
+      if (!screenSharer?.screenStats?.firstFrameRendered) {
+        setScreenTimeoutState('failed');
+        webrtcClientRef?.current?.emitTelemetry('screen_first_frame_timeout');
+      }
+    }, 25000);
+
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+    };
+  }, [isMe, screenSharer?.screenConsumerId, screenSharer?.screenTrack, screenSharer?.screenStats?.firstFrameRendered]);
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
       <div
@@ -828,6 +923,26 @@ function ScreenShareLayout({
           border: "1px solid var(--mt-border)",
         }}
       >
+        {screenSharers.length > 1 && (
+          <div className="absolute top-4 left-0 right-0 z-30 px-4 flex justify-center pointer-events-none">
+            <div className="flex items-center gap-2 p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-xl overflow-x-auto w-max max-w-full no-scrollbar pointer-events-auto snap-x">
+              {screenSharers.map((sharer) => (
+                <button
+                  key={sharer.id}
+                  onClick={() => setActiveScreenSharerId(sharer.id)}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
+                    activeScreenSharerId === sharer.id
+                      ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
+                      : "bg-white/10 text-white hover:bg-white/20"
+                  )}
+                >
+                  <span className="truncate block">{sharer.name}&apos;s Screen</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="absolute inset-0 flex flex-col">
           <div
             className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 backdrop-blur-sm shrink-0 z-10"
@@ -917,34 +1032,85 @@ function ScreenShareLayout({
               </div>
             ) : (
               // Show actual video feed for viewers
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-contain"
-              />
+              <div className="relative w-full h-full">
+                {(!screenSharer?.screenStats?.consumerExists || !screenSharer?.screenTrack) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
+                    <div className="flex flex-col items-center gap-3 text-white">
+                      <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
+                      <span className="text-sm font-medium">Connecting screen share...</span>
+                    </div>
+                  </div>
+                )}
+                {screenSharer?.screenTrack && (health === 'recovering' || screenTimeoutState === 'recovering') && screenTimeoutState !== 'failed' && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                      <span className="text-sm font-medium drop-shadow-md">
+                        Recovering screen share...
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {screenSharer?.screenTrack && screenTimeoutState === 'failed' && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-red-900/80 backdrop-blur-md rounded-lg text-white border border-red-500/50">
+                      <span className="text-sm font-medium drop-shadow-md">
+                        Screen share failed to load. Please ask the presenter to restart it.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <video
+                  key={remountKey}
+                  ref={videoCallbackRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={cn(
+                    "w-full h-full object-contain",
+                    health === 'recovering' && "opacity-50"
+                  )}
+                />
+                
+                {health === 'stalled' && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-900/80 border border-yellow-500/50 rounded-lg text-yellow-100 shadow-lg">
+                      <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                      <span className="text-xs font-medium">Screen share connection is slow</span>
+                    </div>
+                  </div>
+                )}
+                
+                {health === 'black' && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/80">
+                    <div className="flex flex-col items-center gap-2 px-6 py-4 bg-red-900/40 rounded-lg text-white border border-red-500/50">
+                      <AlertTriangle className="w-6 h-6 text-red-500" />
+                      <span className="text-sm font-medium drop-shadow-md">
+                        Screen share feed failed (Black Screen).
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
       </div>
 
       {/* Participant filmstrip */}
-      <div className={cn("shrink-0 overflow-hidden no-scrollbar", isFullscreen && "hidden")}>
-        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
-          {participants.map((p) => (
-            <div key={p.id} className="w-24 sm:w-32 shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
-        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
-          {participants.map((p) => (
-            <div key={p.id} className="w-full shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
+      <div className={cn(
+        "shrink-0 overflow-auto no-scrollbar",
+        isFullscreen && "hidden",
+        "flex lg:flex-col gap-1.5 sm:gap-2",
+        "w-full lg:w-44 xl:w-52",
+        "py-1 lg:py-0 h-auto lg:h-full"
+      )}>
+        {participants.map((p) => (
+          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+            <ParticipantTile participant={p} fixedAspect />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -956,6 +1122,7 @@ function ScreenShareLayout({
 
 function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; participants: Participant[] }) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isPlayerReady, setIsPlayerReady] = React.useState(false);
   const { broadcastECinema, currentUser, sendECinemaAction, ecinemaAction } = useMeeting();
   const playerRef = React.useRef<any>(null);
 
@@ -977,7 +1144,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
 
   // Sync player when receiving actions
   React.useEffect(() => {
-    if (ecinemaAction && playerRef.current) {
+    if (isPlayerReady && ecinemaAction && playerRef.current) {
       if (ecinemaAction.action === 'play') {
         playerRef.current.playVideo();
       } else if (ecinemaAction.action === 'pause') {
@@ -985,10 +1152,10 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
       }
       if (ecinemaAction.time !== undefined) {
         // Optional: seekTo if you want to sync time later, but sticking to play/pause for now
-        // playerRef.current.seekTo(ecinemaAction.time, true);
+        playerRef.current.seekTo(ecinemaAction.time, true);
       }
     }
-  }, [ecinemaAction]);
+  }, [ecinemaAction, isPlayerReady]);
 
   const handlePlay = (e: any) => {
     if (currentUser.role === 'host' || currentUser.role === 'co-host') {
@@ -1057,7 +1224,10 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               }}
               className="w-full h-full"
               iframeClassName="w-full h-full border-0 pointer-events-auto"
-              onReady={(e) => { playerRef.current = e.target; }}
+              onReady={(e) => { 
+                playerRef.current = e.target; 
+                setIsPlayerReady(true);
+              }}
               onPlay={handlePlay}
               onPause={handlePause}
             />
@@ -1069,21 +1239,18 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
         </div>
       </div>
 
-      <div className={cn("shrink-0 overflow-hidden no-scrollbar", isFullscreen && "hidden")}>
-        <div className="flex lg:hidden gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
-          {participants.map((p) => (
-            <div key={p.id} className="w-24 sm:w-32 shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
-        <div className="hidden lg:flex flex-col gap-2 w-44 xl:w-52 overflow-y-auto no-scrollbar h-full">
-          {participants.map((p) => (
-            <div key={p.id} className="w-full shrink-0">
-              <ParticipantTile participant={p} fixedAspect />
-            </div>
-          ))}
-        </div>
+      <div className={cn(
+        "shrink-0 overflow-auto no-scrollbar",
+        isFullscreen && "hidden",
+        "flex lg:flex-col gap-1.5 sm:gap-2",
+        "w-full lg:w-44 xl:w-52",
+        "py-1 lg:py-0 h-auto lg:h-full"
+      )}>
+        {participants.map((p) => (
+          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+            <ParticipantTile participant={p} fixedAspect />
+          </div>
+        ))}
       </div>
     </div>
   );

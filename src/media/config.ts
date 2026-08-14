@@ -7,8 +7,8 @@ export const config = {
   mediasoup: {
     numWorkers: Object.keys(os.cpus()).length,
     worker: {
-      rtcMinPort: 10000,
-      rtcMaxPort: 10100,
+      rtcMinPort: parseInt(process.env.RTC_MIN_PORT || '10000', 10),
+      rtcMaxPort: parseInt(process.env.RTC_MAX_PORT || '20000', 10),
       logLevel: 'warn' as const,
       logTags: ['info', 'ice', 'dtls', 'rtp', 'srtp', 'rtcp'] as any[]
     },
@@ -18,14 +18,10 @@ export const config = {
           kind: 'audio' as const,
           mimeType: 'audio/opus',
           clockRate: 48000,
-          channels: 2
-        },
-        {
-          kind: 'video' as const,
-          mimeType: 'video/VP8',
-          clockRate: 90000,
+          channels: 2,
           parameters: {
-            'x-google-start-bitrate': 1000
+            useinbandfec: 1,
+            usedtx: 1
           }
         },
         {
@@ -38,7 +34,33 @@ export const config = {
             'level-asymmetry-allowed': 1,
             'x-google-start-bitrate': 1000
           }
+        },
+        {
+          kind: 'video' as const,
+          mimeType: 'video/VP8',
+          clockRate: 90000,
+          parameters: {
+            'x-google-start-bitrate': 1000
+          }
+        },
+        {
+          kind: 'video' as const,
+          mimeType: 'video/VP9',
+          clockRate: 90000,
+          parameters: {
+            'profile-id': 2,
+            'x-google-start-bitrate': 1000
+          }
+        },
+        {
+          kind: 'video' as const,
+          mimeType: 'video/AV1',
+          clockRate: 90000,
+          parameters: {
+            'x-google-start-bitrate': 1000
+          }
         }
+
       ]
     },
     webRtcTransport: {
@@ -48,8 +70,8 @@ export const config = {
           announcedIp: process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1' // Update this in prod
         }
       ],
-      maxIncomingBitrate: 1500000,
-      initialAvailableOutgoingBitrate: 1000000
+      maxIncomingBitrate: parseInt(process.env.MAX_INCOMING_BITRATE || '5000000', 10),
+      initialAvailableOutgoingBitrate: parseInt(process.env.INITIAL_OUTGOING_BITRATE || '5000000', 10)
     }
   }
 };

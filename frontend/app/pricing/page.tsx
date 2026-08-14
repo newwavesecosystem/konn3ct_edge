@@ -113,7 +113,7 @@ export default function PricingPage() {
               transition={{ delay: 0.1 }}
               className="text-lg text-text-secondary leading-relaxed max-w-2xl mx-auto"
             >
-              Whether you're hosting quick 1:1s or large-scale paid webinars, we have a plan that scales with your needs.
+              Whether you&apos;re hosting quick 1:1s or large-scale paid webinars, we have a plan that scales with your needs.
             </motion.p>
           </div>
         </section>
@@ -160,7 +160,7 @@ export default function PricingPage() {
                   </Link>
 
                   <div className="space-y-4 flex-1">
-                    <p className="text-sm font-semibold text-text-primary uppercase tracking-wider">What's included</p>
+                    <p className="text-sm font-semibold text-text-primary uppercase tracking-wider">What&apos;s included</p>
                     <ul className="space-y-3">
                       {plan.features.map((feature, j) => (
                         <li key={j} className="flex items-start gap-3 text-sm text-text-secondary">
@@ -281,7 +281,7 @@ export default function PricingPage() {
           <div className="container mx-auto px-4 relative z-10">
             <h2 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl mb-6">Ready to get started?</h2>
             <p className="text-xl text-white/80 mb-10 max-w-2xl mx-auto">
-              Start with the free plan — no credit card required. Upgrade when you're ready.
+              Start with the free plan — no credit card required. Upgrade when you&apos;re ready.
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-4 justify-center">
               <Link href="/signup">

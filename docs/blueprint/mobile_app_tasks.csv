@@ -1,0 +1,141 @@
+id,name,Description,start Date,Deadline,Priority,Tags,Assignees
+MOB-001,MOB-001 - Mobile App Project Setup & WebRTC Native SDK Integration,"Initialize React Native / Expo mobile project for iOS and Android. Expectation: App builds cleanly on iOS Simulator and Android Emulator with WebRTC native library linked.
+
+Acceptance Criteria:
+- Cross-platform Expo SDK 56 project initialized with TypeScript
+- `react-native-webrtc` and `mediasoup-client` successfully linked
+- Base app navigation structure configured using `@react-navigation/native`
+- Setup Playwright (`@playwright/test`) for E2E testing framework",8/10/2026,8/15/2026,High,"Mobile, Setup, WebRTC, Expo",Johnson Kayode
+MOB-002,MOB-002 - Secure Token Storage & Biometric Auth Setup,"Implement secure token storage using `expo-secure-store` and `@react-native-async-storage/async-storage` with biometric login via `expo-local-authentication`. Expectation: Secure token persistence.
+
+Acceptance Criteria:
+- Encrypted storage for refresh tokens and session keys
+- Biometric authentication prompt (Face ID / Fingerprint) for returning users
+- Automatic token refresh logic executing before token expiry
+- Logout action securely wipes all local credentials",8/15/2026,8/20/2026,High,"Mobile, Auth, Security",Johnson Kayode
+MOB-003,MOB-003 - Deep Linking Handler (WhatsApp  SMS  QR Codes),"Implement universal deep link handlers for `konn3ct://join/{roomId}` and `https://konn3ct.com/join/{roomId}`. Expectation: Tapping link in WhatsApp opens app directly to pre-meeting lobby.
+
+Acceptance Criteria:
+- Configured Android Intent Filters and iOS Universal Links via Expo config
+- Extracts `roomId`, `passcode`, and `referralCode` query parameters from deep link URL
+- Routes user directly to Pre-Meeting Lobby screen if app is installed
+- Fallback redirect to App Store / Play Store if app is not installed",8/20/2026,8/25/2026,High,"Mobile, Deep Links",Johnson Kayode
+MOB-004,MOB-004 - Push Notifications Integration (FCM & APNs),"Configure push notifications using `expo-notifications` for Android (FCM) and iOS (APNs). Expectation: Displays interactive push notification banners.
+
+Acceptance Criteria:
+- Handles background, foreground, and killed state push notifications
+- Displays notification banners for 'Meeting Starting', 'Host Admitted You', 'Replay Ready'
+- One-tap 'Join Now' action button on notification directly launches target meeting room
+- Registers mobile device token to Kay's backend API",8/25/2026,8/30/2026,High,"Mobile, Push Notifications",Johnson Kayode
+MOB-005,MOB-005 - Mobile Hardware Permissions & Camera/Mic Selector,"Build native permission request screens for Camera and Microphone with front/rear camera selection. Expectation: Graceful handling of denied permissions.
+
+Acceptance Criteria:
+- Prompts native iOS/Android camera and mic permission requests using Expo permissions APIs
+- Provides clear explanation dialog if user previously denied permission with button to open OS Settings
+- Camera toggle button switching between Front and Rear facing cameras
+- Remembers preferred camera choice using Zustand global state",8/30/2026,9/4/2026,High,"Mobile, Permissions",Johnson Kayode
+MOB-006,MOB-006 - Bluetooth Headset & Audio Output Router,"Implement dynamic audio routing component using `react-native-incall-manager` handling automatic switching between Speakerphone, Earpiece, and Bluetooth headsets. Expectation: Seamless audio transition.
+
+Acceptance Criteria:
+- Listens to Bluetooth headset connection/disconnection events (SCO/A2DP)
+- Audio output selector modal allowing manual choice: 'Speaker', 'Earpiece', 'Bluetooth'
+- Automatically routes audio to Bluetooth headset when connected mid-call
+- Handles incoming phone call interruptions gracefully (pausing WebRTC audio)",9/4/2026,9/9/2026,Medium,"Mobile, Audio",Johnson Kayode
+MOB-007,MOB-007 - Mobile Pre-Meeting Self-View & Audio Level Meter,"Build mobile pre-meeting preview screen showing camera self-view and mic volume level bar styled with NativeWind/TailwindCSS. Expectation: Mobile users can verify audio/video before entering room.
+
+Acceptance Criteria:
+- Renders 16:9 self-view preview video container using NativeWind styling
+- Audio volume level bar reflecting live microphone input
+- Mute Mic and Video Off toggle buttons in preview
+- 'Join Session' button triggering Kay's `validate-join` API",9/9/2026,9/14/2026,Medium,"Mobile, Pre-Meeting",Johnson Kayode
+MOB-008,MOB-008 - Mobile Waiting Room Screen & Admission Listener,"Build mobile waiting room UI displayed when host has enabled waiting room. Expectation: Displays animated waiting screen until host admits mobile user.
+
+Acceptance Criteria:
+- Clean branded mobile screen showing Meeting Title and Host Name
+- Listens to WebSocket event from host (`ADMIT_USER`) via `socket.io-client` to auto-transition into meeting room
+- 'Leave Queue' button returning user to app home screen
+- Displays notification if host rejects entry",9/14/2026,9/19/2026,Medium,"Mobile, Waiting Room",Johnson Kayode
+MOB-009,MOB-009 - Mobile Live Meeting Grid & Active Speaker Canvas,"Build mobile meeting room canvas optimized for portrait and landscape screen orientations using NativeWind. Expectation: Smooth WebRTC stream rendering.
+
+Acceptance Criteria:
+- Portrait Mode: Active Speaker video on top half, 2x2 scrollable grid on bottom half
+- Landscape Mode: Full screen video with auto-hiding controls
+- Active speaker tile highlighted with green border
+- Automatic orientation sensor listener updating layout seamlessly",9/19/2026,9/24/2026,High,"Mobile, WebRTC, UI",Johnson Kayode
+MOB-010,MOB-010 - Mobile Bottom Control Bar & Gesture Controls,"Build mobile control bar with gesture shortcuts. Expectation: Compact control bar for mobile.
+
+Acceptance Criteria:
+- Buttons: Mic Mute, Video Toggle, Raise Hand, Chat Badge, More Options, Leave
+- Auto-hides control bar after 5 seconds of inactivity in full screen
+- Tap screen anywhere to reveal controls
+- 'Leave Room' modal prompting for confirmation",9/24/2026,9/29/2026,High,"Mobile, UI Controls",Johnson Kayode
+MOB-011,MOB-011 - Mobile In-Meeting Chat Drawer Component,"Build mobile chat slide-up drawer for live text messaging. Expectation: Non-intrusive chat drawer on mobile screens.
+
+Acceptance Criteria:
+- Slide-up bottom sheet for chat without disconnecting video stream
+- Switch between 'Public Chat' and 'Host Private Chat'
+- Keyboard avoiding view ensuring input field remains visible when typing
+- Unread message badge on bottom bar chat icon",9/29/2026,10/4/2026,Medium,"Mobile, Chat",Johnson Kayode
+MOB-012,MOB-012 - Mobile Participant List & Raise Hand Queue,"Build mobile participant list modal showing connected users, audio/video status, and raise-hand queue. Expectation: Clean mobile participant management.
+
+Acceptance Criteria:
+- List of connected participants sorted with Raised Hands at the top managed by Zustand state
+- Host controls if logged in as host: 'Mute Participant', 'Lower Hand', 'Remove'
+- Search bar filtering participants by name
+- Real-time updates as participants join/leave",10/4/2026,10/9/2026,Medium,"Mobile, Participants",Johnson Kayode
+MOB-013,MOB-013 - Mobile Low-Bandwidth Mode & Data Saver Toggle,"Build mobile data saver mode automatically muting incoming video tracks when on weak 3G/4G connections. Expectation: Reduces mobile data usage significantly.
+
+Acceptance Criteria:
+- Data Saver toggle in mobile room settings
+- When enabled, stops rendering incoming participant video and switches to Audio-Only mode with avatar badges
+- Displays toast: 'Data Saver Active - Incoming Video Muted'
+- Reduces battery consumption and network packet drop rate",10/9/2026,10/14/2026,High,"Mobile, Data Saver",Johnson Kayode
+MOB-014,MOB-014 - Mobile Screen Share Viewer Canvas,"Build mobile viewer screen for presenter screen sharing. Expectation: Pinch-to-zoom support for shared presentation slides.
+
+Acceptance Criteria:
+- Renders presenter screen share stream in high resolution
+- Pinch-to-zoom and pan gesture support on mobile display stage
+- Picture-in-Picture (PiP) mode support via `react-native-pip-android` when app goes to background
+- Floating active speaker thumbnail in corner",10/14/2026,10/19/2026,High,"Mobile, Screen Share",Johnson Kayode
+MOB-015,MOB-015 - Mobile TrustLock Watermark & Security Badges,"Build mobile rendering for TrustLock dynamic video watermarks and verified identity badges (Volume 10). Expectation: Renders participant email watermark overlay on mobile video.
+
+Acceptance Criteria:
+- Renders semi-transparent floating text watermark (email + IP) across mobile video canvas
+- Verified checkmark badge on mobile participant tiles for enterprise users
+- Pulsing red 'REC' badge on top status bar during active recordings
+- Prevents Android OS screenshot capture via `FLAG_SECURE` when room security policy mandates",10/19/2026,10/24/2026,High,"Mobile, TrustLock, Security",Johnson Kayode
+MOB-016,MOB-016 - Mobile Replay Player & AI Chapter Index,"Build native mobile video player for recorded sessions with interactive AI summary chapters. Expectation: Smooth mobile replay playback.
+
+Acceptance Criteria:
+- Mobile video controls: Play/Pause, 10s Skip, Playback Speed, Fullscreen
+- Interactive AI summary list below player with clickable timestamp jump links
+- Tapping timestamp jumps video head to specified position
+- Supports portrait and landscape video playback",10/24/2026,10/29/2026,Medium,"Mobile, Replay Player",Johnson Kayode
+MOB-017,MOB-017 - Mobile Synchronized Transcript Viewer,"Build mobile transcript slide-up sheet displaying synchronized meeting text. Expectation: Auto-scrolls with video playback.
+
+Acceptance Criteria:
+- Search input to filter transcript keywords
+- Auto-scrolls to active sentence as video plays
+- Tapping any transcript sentence jumps video playback to that exact timestamp
+- Copy transcript text action button",10/29/2026,11/3/2026,Low,"Mobile, Transcript",Johnson Kayode
+MOB-018,MOB-018 - Mobile PayGate Checkout & Ticket Purchase Flow,"Build mobile ticket purchase flow using `react-native-webview` for paid webinars and paid replays (Volume 8). Expectation: Seamless in-app payment experience.
+
+Acceptance Criteria:
+- Renders event pricing summary and payment gateway selection
+- In-App Browser / Webview container executing secure Paystack/Stripe checkout
+- Listens to payment completion callback to instantly unlock video stream access
+- Displays digital ticket receipt with QR code",11/3/2026,11/8/2026,High,"Mobile, Checkout, PayGate",Johnson Kayode
+MOB-019,MOB-019 - Mobile Network Telemetry & Offline Recovery,"Implement mobile network state listener capturing RTT latency and packet loss logs. Expectation: Auto-reconnects when moving between WiFi and Cellular data.
+
+Acceptance Criteria:
+- Listens to network interface changes (WiFi to 4G/5G handoff)
+- Automatically triggers WebRTC transport reconnection without dropping meeting session
+- Sends background telemetry batch to Kay's API (`API-049`) via Axios
+- Displays banner when device loses internet connection",11/8/2026,11/13/2026,Medium,"Mobile, Telemetry",Johnson Kayode
+MOB-020,MOB-020 - App Store & Play Store Build Package Prep,"Configure EAS (Expo Application Services) build profiles and bundle signing for Google Play and Apple App Store. Expectation: Production-ready APK/AAB and IPA release builds.
+
+Acceptance Criteria:
+- Android AAB bundle compiled via EAS Build
+- iOS IPA release build signed with Production Distribution Certificate
+- App icons and splash screens configured via Expo config
+- App Store privacy labels and permissions strings configured",11/13/2026,11/18/2026,High,"Mobile, Release, DevOps",Johnson Kayode

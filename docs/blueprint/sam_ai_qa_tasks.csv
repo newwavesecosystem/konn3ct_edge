@@ -1,0 +1,49 @@
+id,name,Description,start Date,Deadline,Priority,Tags
+AI-001,AI-001 - Audio Transcription Pipeline Worker,"Implement a background queue worker that processes finished audio recordings and generates VTT transcripts. Expectation: Automated, accurate speech-to-text.
+
+Acceptance Criteria:
+- Worker pulls raw audio from Digital Ocean Spaces
+- Transmits audio to Whisper API (or self-hosted transcription engine)
+- Parses response into timestamped VTT/SRT format
+- Saves transcript data to the database associated with the meeting ID",08/10/2026,08/14/2026,High,"AI, Audio, Worker"
+AI-002,AI-002 - LLM Meeting Summarization & Chapter Extraction,"Implement LLM prompt chain to generate meeting summaries and chapter markers from the raw transcript. Expectation: High-quality, readable meeting minutes.
+
+Acceptance Criteria:
+- Pushes transcript text to GPT-4o or Claude 3.5 Sonnet via API
+- Prompt engineered to extract: Executive Summary, Decisions Made, and timestamped Chapters
+- Sanitizes and stores the LLM output in the database
+- Triggers 'Summary Ready' webhook to notify Kay's core backend",08/14/2026,08/19/2026,High,"AI, LLM, Data"
+AI-003,AI-003 - Automated Action Item Extraction,"Enhance the LLM pipeline to identify action items and assignees from conversational text. Expectation: Smart task extraction from meetings.
+
+Acceptance Criteria:
+- LLM prompt specifically targets phrases like 'I will do X by tomorrow'
+- Extracts Action Item string and maps it to a participant name if possible
+- Saves Action Items as distinct relational rows in the database linked to the meeting
+- Output format supports future integration with Jira/Trello via Kay's APIs",08/19/2026,08/23/2026,Medium,"AI, LLM, Tasks"
+AI-004,AI-004 - Independent AI QA Test Engine Setup,"Initialize the automated QA test suite using Playwright. Expectation: A headless test suite capable of simulating full user journeys.
+
+Acceptance Criteria:
+- Playwright project configured with multiple browser contexts (Chromium, Firefox, WebKit)
+- Test suite structure created (Auth tests, Meeting Room tests, Host Dashboard tests)
+- Can execute headless tests locally and generate HTML reports
+- Mock media devices (fake camera/microphone feeds) configured for WebRTC testing",08/23/2026,08/27/2026,High,"QA, Playwright, Automation"
+AI-005,AI-005 - Core E2E Journey Tests (Login to Meeting End),"Write automated Playwright scripts testing the primary Konn3ct 'Happy Path'. Expectation: Verifies the most critical business flow.
+
+Acceptance Criteria:
+- Script logs in as Host, creates an instant meeting, and copies the join link
+- Spawns a second browser context (Guest) joining via the link
+- Asserts that both users appear in each other's participant lists
+- Asserts that text chat messages are delivered successfully between contexts
+- Asserts that ending the meeting successfully kicks the Guest",08/27/2026,09/01/2026,High,"QA, Playwright, E2E"
+AI-006,AI-006 - SLA Verification Checks (Performance QA),"Write QA scripts that measure actual performance metrics against Blueprint SLAs (Volume 7). Expectation: Ensures the app doesn't just work, but works fast.
+
+Acceptance Criteria:
+- Test measures time elapsed between clicking 'Join' and the video canvas rendering (Must be < 1.5s)
+- Test measures API response times for authentication and meeting creation (Must be < 200ms)
+- Fails the QA run if SLA thresholds are breached, even if the functional test passes",09/01/2026,09/06/2026,High,"QA, Performance, SLA"
+AI-007,AI-007 - Support Ticket to Test Loop Integration,"Create a standard template and process for converting bug reports into regression tests. Expectation: A bug never happens twice.
+
+Acceptance Criteria:
+- Documentation created for Support team on how to report reproducible steps to QA
+- Script template for `regression.spec.ts` files
+- CI/CD pipeline configured to run the `regression` test suite on every PR to ensure previously fixed bugs remain fixed",09/06/2026,09/10/2026,High,"QA, Process, Regression"

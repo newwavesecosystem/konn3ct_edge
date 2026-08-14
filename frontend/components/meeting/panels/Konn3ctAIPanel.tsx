@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useMeeting } from "@/lib/meeting-context";
 import { Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
 
 interface AIMessage {
   role: "user" | "ai";
@@ -18,10 +19,7 @@ const COMMON_QUESTIONS = [
 ];
 
 export function Konn3ctAIPanel() {
-  const { captions, currentUser } = useMeeting();
-  const [messages, setMessages] = useState<AIMessage[]>([
-    { role: "ai", content: "Hi! I am Konn3ct AI. I am actively reading the live meeting transcript. Ask me anything about what has been discussed!" }
-  ]);
+  const { captions, currentUser, meetingInfo, aiMessages, setAiMessages } = useMeeting();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,36 +29,35 @@ export function Konn3ctAIPanel() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [aiMessages, isLoading]);
 
   const askKonn3ctAI = async (question: string) => {
     if (!question.trim() || isLoading) return;
 
-    // Build the transcript from captions
-    const transcript = captions
-      .map(c => `[${new Date(c.timestamp).toLocaleTimeString()}] ${c.name}: ${c.text}`)
-      .join("\n");
-
     const userMsg = question;
-    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    setAiMessages(prev => [...prev, { role: "user", content: userMsg }]);
     setInput("");
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/konn3ct-ai", {
+      const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+      const res = await fetch(`/api/ai/chat/${meetingInfo.roomSlug}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMsg, transcript })
+        headers: { 
+          "Content-Type": "application/json",
+          ...(sessionToken && { "Authorization": `Bearer ${sessionToken}` })
+        },
+        body: JSON.stringify({ question: userMsg, userName: currentUser?.name || 'Unknown' })
       });
 
       const data = await res.json();
       if (data.answer) {
-        setMessages(prev => [...prev, { role: "ai", content: data.answer }]);
+        setAiMessages(prev => [...prev, { role: "ai", content: data.answer }]);
       } else {
-        setMessages(prev => [...prev, { role: "ai", content: "Sorry, I encountered an error." }]);
+        setAiMessages(prev => [...prev, { role: "ai", content: "Sorry, I encountered an error." }]);
       }
     } catch (e) {
-      setMessages(prev => [...prev, { role: "ai", content: "Sorry, I am unable to process your request right now." }]);
+      setAiMessages(prev => [...prev, { role: "ai", content: "Sorry, I am unable to process your request right now." }]);
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +83,7 @@ export function Konn3ctAIPanel() {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg, i) => (
+        {aiMessages.map((msg, i) => (
           <div key={i} className={cn("flex gap-3", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
             <div className={cn(
               "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
@@ -98,9 +95,13 @@ export function Konn3ctAIPanel() {
               "px-4 py-2.5 rounded-2xl max-w-[85%] text-sm",
               msg.role === "user" 
                 ? "bg-[var(--mt-bg-hover)] text-[var(--mt-text)] rounded-tr-sm" 
-                : "bg-brand-green/10 text-[var(--mt-text)] rounded-tl-sm"
+                : "bg-brand-green/10 text-[var(--mt-text)] rounded-tl-sm prose prose-sm max-w-none prose-p:text-current prose-strong:text-[var(--mt-text-strong,var(--mt-text))] prose-li:text-current prose-headings:text-current"
             )}>
-              {msg.content}
+              {msg.role === "ai" ? (
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              ) : (
+                msg.content
+              )}
             </div>
           </div>
         ))}

@@ -142,7 +142,7 @@ export default function Home() {
                 Everything you need for productive meetings
               </h2>
               <p className="mt-4 text-lg text-text-secondary">
-                konn3ct is built to make collaboration seamless, whether you're hosting a 1:1, a large webinar, or sharing a recorded session.
+                konn3ct is built to make collaboration seamless, whether you&apos;re hosting a 1:1, a large webinar, or sharing a recorded session.
               </p>
             </div>
 
@@ -354,7 +354,7 @@ export default function Home() {
                 Plans that scale with you
               </h2>
               <p className="mt-4 text-lg text-text-secondary">
-                Start free, upgrade when you're ready. No hidden fees.
+                Start free, upgrade when you&apos;re ready. No hidden fees.
               </p>
             </div>
             <div className="grid md:grid-cols-3 gap-8">
@@ -490,7 +490,7 @@ export default function Home() {
                       <Star key={j} className="w-5 h-5 fill-[#FFD400] text-[#FFD400]" />
                     ))}
                   </div>
-                  <p className="text-text-secondary leading-relaxed italic">"{testimonial.quote}"</p>
+                  <p className="text-text-secondary leading-relaxed italic">&quot;{testimonial.quote}&quot;</p>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#002C88' }}>
                       {testimonial.name.split(" ").map(n => n[0]).join("")}

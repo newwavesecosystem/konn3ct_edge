@@ -1,0 +1,169 @@
+id,name,Description,start Date,Deadline,Priority,Tags,Assignees
+WEB-001,WEB-001 - Host Workspace Shell & Upcoming Meetings View,"Build page shell for Host Workspace featuring upcoming scheduled meetings, instant meeting triggers, and invite link copier. Expectation: Responsive layout allowing hosts to manage sessions easily.
+
+Acceptance Criteria:
+- Displays list of upcoming meetings with Title, Date, Time, Duration, and Host controls
+- 'Start Meeting' button launches live room route with host entitlements
+- 'Copy Invite Link' button copies clean room URL (/join/{roomId}) to clipboard
+- Filter tabs for 'Upcoming', 'Past Sessions', and 'Replays'",8/10/2026,8/12/2026,High,"Frontend, Host Workspace",Olarewaju Feranmi
+WEB-002,WEB-002 - Meeting & Webinar Scheduler Modal Component,"Build modal for scheduling new meetings or webinars with date/time selectors, recurring meeting options, and passcode settings. Expectation: Submits schedule payload to Kay's API.
+
+Acceptance Criteria:
+- Form inputs for Title, Description, Start Date, Time, Duration, and Timezone
+- Toggle for 'Require Waiting Room' and 'Require Passcode'
+- Option for Recurring Session (Daily, Weekly, Monthly)
+- Form validation preventing past date selection and emitting API schedule payload",8/12/2026,8/14/2026,High,"Frontend, Scheduling",Olarewaju Feranmi
+WEB-003,WEB-003 - Paid Event & Ticket Pricing Setup Component,"Build scheduling form extension for Paid Events allowing hosts to set ticket price, currency, and maximum attendee capacity. Expectation: Formats paid event metadata for Odoo and PayGate Shield integration.
+
+Acceptance Criteria:
+- Toggle for 'Paid Webinar Event'
+- Input fields for Ticket Price, Currency selection (USD, NGN, KES), and Max Capacity
+- Configures instant replay access entitlement option for ticket buyers
+- Submits paid event configuration to backend API",8/14/2026,8/17/2026,Medium,"Frontend, Paid Events",Olarewaju Feranmi
+WEB-004,WEB-004 - Replay Publishing & Media Manager UI,"Build media manager view in Host Workspace displaying recorded sessions with visibility controls (Public, Private, Paid Replay). Expectation: Host can set pricing or publish replay links.
+
+Acceptance Criteria:
+- Table listing recorded sessions with thumbnail, duration, file size, and creation date
+- Visibility dropdown: 'Private', 'Public Free', 'Paid Replay'
+- Price input field enabled when 'Paid Replay' is selected
+- 'Publish Replay' toggle button updating backend state dynamically",8/17/2026,8/19/2026,Medium,"Frontend, Replays",Olarewaju Feranmi
+WEB-005,WEB-005 - Pre-Meeting Lobby Device Permission & Selector,"Build pre-meeting lobby screen checking camera/mic browser permissions and rendering hardware dropdown selectors. Expectation: Users can test devices before joining room.
+
+Acceptance Criteria:
+- Prompts browser media permission request if not granted
+- Dropdown selector for Video Cameras with live self-view preview box
+- Dropdown selector for Microphones and Audio Output Speakers
+- Remember device selection in local storage for returning users",8/19/2026,8/21/2026,High,"Frontend, Pre-Meeting Lobby",Olarewaju Feranmi
+WEB-006,WEB-006 - Pre-Meeting Audio Input Level Meter & Test Component,"Build visual audio level meter component in pre-meeting lobby showing live microphone volume input. Expectation: Green audio bar bounces when user speaks.
+
+Acceptance Criteria:
+- Real-time Web Audio API analyzer measuring mic input volume
+- Dynamic green/amber/red audio volume bar component
+- 'Test Speaker' button playing sample audio chime to verify output device
+- Mute/Unmute microphone toggle button in lobby view",8/21/2026,8/23/2026,Medium,"Frontend, Audio Diagnostics",Olarewaju Feranmi
+WEB-007,WEB-007 - Waiting Room Admission Screen Component,"Build waiting room UI displayed to participants when host has enabled waiting room. Expectation: Displays branded waiting animation until host admits user.
+
+Acceptance Criteria:
+- Renders clean, branded waiting screen displaying Meeting Title and Host Name
+- Displays animated 'Waiting for Host to Admit You' loader
+- Listens to WebSocket event from host (ADMIT_USER) to automatically transition participant into live room
+- 'Leave Waiting Room' button returning user to home page",8/23/2026,8/25/2026,Medium,"Frontend, Live Room",Olarewaju Feranmi
+WEB-008,WEB-008 - Live Room WebRTC Canvas Layout Switcher (Grid vs Speaker),"Build dynamic video canvas switcher supporting Grid View (2x2, 3x3 tiles) and Active Speaker View. Expectation: Smooth layout transitions without video flickering.
+
+Acceptance Criteria:
+- Grid View rendering participant video tiles with active speaker green border highlight
+- Active Speaker View rendering large main speaker box with horizontal filmstrip of attendees
+- Responsive layout adjustment based on active participant count
+- Seamless WebRTC <video> stream binding to DOM elements",8/25/2026,8/28/2026,High,"Frontend, WebRTC, Live Room",Olarewaju Feranmi
+WEB-009,WEB-009 - Screen Share Canvas & Floating Speaker Overlay Component,"Build presenter screen share view rendering shared display stream in large stage canvas with floating speaker video overlay. Expectation: High-resolution screen rendering.
+
+Acceptance Criteria:
+- Full-width screen share display stage with zoom controls
+- Draggable floating video overlay window for active speaker camera
+- 'Stop Sharing' floating control bar for presenter
+- Automatically switches all room participants to Screen Share layout when signal received",8/28/2026,8/31/2026,High,"Frontend, WebRTC, Screen Share",Olarewaju Feranmi
+WEB-010,WEB-010 - Meeting Room Bottom Control Bar Component,"Build main in-meeting control bar with essential action buttons. Expectation: Fixed bottom bar with auto-hide capability in full screen mode.
+
+Acceptance Criteria:
+- Control buttons: Mute/Unmute Mic, Video On/Off, Screen Share, Raise Hand, Reactions, Chat, Participants, Security, Leave
+- Mute and Video buttons reflect current hardware state accurately
+- 'Leave Meeting' button opens confirmation modal ('Leave' vs 'End Meeting for All' if host)
+- Tooltip labels displayed on hover for all control buttons",8/31/2026,9/2/2026,High,"Frontend, UI Controls",Olarewaju Feranmi
+WEB-011,WEB-011 - In-Meeting Chat Drawer (Public & Host Private Chat),"Build side-drawer for live text chat supporting Public Room Chat and Private Messages to Host. Expectation: Real-time text display with timestamp and sender badge.
+
+Acceptance Criteria:
+- Side-drawer toggles cleanly without obscuring main video canvas
+- Tab 1: 'Everyone' (Public Chat room)
+- Tab 2: 'Host Only' (Private messages to session host/co-hosts)
+- Auto-scroll to latest message with unread message badge on bottom bar",9/2/2026,9/4/2026,Medium,"Frontend, Live Chat",Olarewaju Feranmi
+WEB-012,WEB-012 - Participant List & Moderation Actions Drawer Component,"Build participant list drawer showing all connected attendees and host moderation tools. Expectation: Host can mute participants or lower hands.
+
+Acceptance Criteria:
+- Searchable list of connected participants with audio/video/hand-raised indicators
+- Host Controls: 'Mute All', 'Lower All Hands', 'Lock Room'
+- Individual Participant Actions dropdown: 'Mute Participant', 'Lower Hand', 'Make Co-Host', 'Remove from Room'
+- Real-time list updates when participants join or leave",9/4/2026,9/7/2026,High,"Frontend, Moderation",Olarewaju Feranmi
+WEB-013,WEB-013 - Webinar Q&A Submission & Upvoting Panel UI,"Build Q&A module drawer for webinar sessions allowing attendees to submit text questions and upvote questions from others. Expectation: Organized Q&A list.
+
+Acceptance Criteria:
+- Attendees can submit text questions with option to post anonymously
+- Attendees can click 'Upvote' button on open questions
+- Host view shows 'Open Questions' (sorted by votes) and 'Answered Questions'
+- Host can click 'Answer Live' or type text response",9/7/2026,9/9/2026,Medium,"Frontend, Webinar Q&A",Olarewaju Feranmi
+WEB-014,WEB-014 - Presenter Elevation Action Modal & Host Controls,"Build modal allowing webinar host to promote a view-only attendee to a live Presenter. Expectation: Prompts attendee for consent before enabling camera/mic.
+
+Acceptance Criteria:
+- Host selects 'Promote to Presenter' from participant list
+- Sends WebSocket invitation to target attendee ('Host invites you to become a Presenter')
+- Upon attendee acceptance, WebRTC media stream renegotiates to enable audio/video publishing
+- Host can demote Presenter back to view-only Attendee",9/9/2026,9/11/2026,Medium,"Frontend, Webinar Moderation",Olarewaju Feranmi
+WEB-015,WEB-015 - In-Meeting TrustLock Shield & E2EE Security Status Badge,"Build top-bar security indicators showing TrustLock status badge, E2EE encryption status, and Active Recording indicators. Expectation: Clear privacy and security visibility.
+
+Acceptance Criteria:
+- Red pulsing 'REC' badge displayed when session recording is active
+- TrustLock shield icon indicating active security policy profile
+- 'E2EE Active' indicator showing encrypted session status
+- Tooltip on shield icon displaying session security parameters",9/11/2026,9/13/2026,Low,"Frontend, Security Badges",Olarewaju Feranmi
+WEB-016,WEB-016 - Interactive Replay Video Player Component,"Build custom HTML5 video player component for watching recorded sessions and replays. Expectation: Smooth playback with custom controls and chapter markers.
+
+Acceptance Criteria:
+- Custom video controls: Play/Pause, Timeline Scrubber, Volume, Playback Speed (0.75x to 2x), Fullscreen
+- Chapter markers rendered on timeline scrubber matching AI summary takeaways
+- Responsive video container supporting 16:9 aspect ratio
+- Buffer progress indicator and error handling for expired stream URLs",9/13/2026,9/15/2026,High,"Frontend, Replay Player",Olarewaju Feranmi
+WEB-017,WEB-017 - AI Summary Chapter Index & Timestamp Jump Component,"Build AI Summary panel alongside replay video player displaying key takeaways with clickable timestamp links. Expectation: Clicking timestamp jumps video playback.
+
+Acceptance Criteria:
+- Displays AI Summary overview, key points, and action items
+- Each key takeaway includes clickable timestamp link (e.g. '04:15 - Product Architecture')
+- Clicking timestamp jumps video player playback head directly to 04:15
+- Highlights current active chapter based on current video playback position",9/15/2026,9/17/2026,Medium,"Frontend, AI Replay",Olarewaju Feranmi
+WEB-018,WEB-018 - Synchronized Interactive Transcript Sidebar Component,"Build transcript sidebar displaying full meeting transcript synchronized with video playback. Expectation: Text auto-scrolls to follow video speaker.
+
+Acceptance Criteria:
+- Search input to filter transcript by keyword
+- Displays speaker name, avatar, timestamp, and spoken text
+- Auto-scrolls transcript box to keep current video playback position highlighted
+- Clicking any transcript sentence jumps video playback to that exact timestamp",9/17/2026,9/19/2026,Medium,"Frontend, Transcript UI",Olarewaju Feranmi
+WEB-019,WEB-019 - PayGate Shield Ticket Purchase Checkout Modal Component,"Build checkout modal rendered when attempting to watch a paid webinar or paid replay without entitlement. Expectation: Handles payment gateway checkout redirect.
+
+Acceptance Criteria:
+- Displays Event/Replay Title, Host Name, and Ticket Price
+- Paystack / Stripe payment selection options
+- Submits checkout intent to backend and launches secure payment gateway modal
+- Upon payment confirmation webhook, unlocks replay video player immediately without page refresh",9/19/2026,9/22/2026,High,"Frontend, Checkout, PayGate",Olarewaju Feranmi
+WEB-020,WEB-020 - Low-Bandwidth Mode & Network Quality Toast Indicators,"Build network quality monitoring indicator rendering warning toast when participant connection degrades. Expectation: Option to switch to Audio-Only low bandwidth mode.
+
+Acceptance Criteria:
+- Listens to WebRTC connection state changes (High packet loss / Latency spikes)
+- Displays warning toast: 'Poor Network Connection Detected'
+- Provides 'Switch to Audio-Only Mode' button (disables incoming video streams to save data)
+- Restores video streams automatically or on user toggle when network recovers",9/22/2026,9/24/2026,Low,"Frontend, UX Optimization",Olarewaju Feranmi
+WEB-021,WEB-021 - TrustLock Dynamic Video Watermarking Overlay Component,"Build dynamic semi-transparent watermark overlay component rendered on participant video tiles (Volume 10). Expectation: Displays viewing user's email and IP address to deter leaks.
+
+Acceptance Criteria:
+- Renders semi-transparent, floating text overlay across WebRTC video canvas
+- Displays viewing participant's email address and masked IP address
+- Watermark position periodically shifts slightly (jitter) to prevent static cropping
+- Controlled by host security toggle or room TrustLock policy setting",9/24/2026,9/26/2026,High,"Frontend, TrustLock, Security",Olarewaju Feranmi
+WEB-022,WEB-022 - TrustLock Verified Participant Identity Badges,"Build visual identity verification badges displayed on participant tiles in grid and participant list. Expectation: Distinguishes authenticated enterprise users from unverified guest joins.
+
+Acceptance Criteria:
+- Green verified checkmark badge rendered next to authenticated enterprise user names
+- Amber 'Guest' badge rendered next to unauthenticated join users
+- Tooltip on badge displaying verification issuer (e.g. 'Verified by Konn3ct Enterprise SSO')
+- Filter in participant list for 'Verified Members Only'",9/26/2026,9/28/2026,Medium,"Frontend, TrustLock, Identity",Olarewaju Feranmi
+WEB-023,WEB-023 - TrustLock Host Room Security Control Panel Modal,"Build dedicated Host Security Control Panel modal accessible from the bottom bar control bar (Volume 10). Expectation: One-stop security controls for session host.
+
+Acceptance Criteria:
+- Host Security modal options: 'Lock Room' (block new joins), 'Enable Dynamic Watermarking', 'Disable Screen Share for Participants', 'Disable Chat', 'Mute All on Entry'
+- Toggles execute immediate state changes via Redis pub-sub WebSocket events
+- Visual status indicators showing active room security enforcement
+- Confirmation toast notification displayed upon security parameter updates",9/28/2026,9/30/2026,High,"Frontend, TrustLock, Host Controls",Olarewaju Feranmi
+WEB-024,WEB-024 - TrustLock Anti-Leak Screen Share Protection Overlay,"Build anti-leak screen share protection overlay component applying protective CSS blur when window loses focus during sensitive presentations. Expectation: Prevents casual background recording.
+
+Acceptance Criteria:
+- Listens to browser `visibilitychange` and `blur` window events
+- When presenter flags presentation as 'Confidential Screen Share', applies protective blur overlay if user switches tabs
+- Renders notice: 'Screen Share Paused Due to TrustLock Privacy Policy'
+- Automatically restores clear view when window regains active focus",9/30/2026,10/2/2026,Medium,"Frontend, TrustLock, Privacy",Olarewaju Feranmi

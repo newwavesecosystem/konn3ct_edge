@@ -1,0 +1,760 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
+  Image,
+  Animated,
+  Platform,
+  Dimensions,
+} from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { useAuthStore } from '../store/useAuthStore';
+import { apiClient, IS_DEV } from '../api/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from '../store/secureStore';
+import { Fingerprint, Eye, EyeOff, Mail, Lock, Square, CheckSquare, Building2, Smartphone, ShieldCheck } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
+import { APP_CONFIG, APP_LOGO } from '../config/appConfig';
+
+const { width } = Dimensions.get('window');
+
+const COLORS = {
+  pageBg: '#ffffff',
+  brandBlue: '#012E89',
+  brandBlueDark: '#001D5C',
+  brandGreen: '#207450',
+  textPrimary: '#1a1a1a',
+  textSecondary: '#666666',
+  textMuted: '#a0a0a0',
+  inputBorder: '#e6e6e6',
+  inputFocus: '#207450',
+  dangerBg: '#fef2f2',
+  danger: '#cc505c',
+  successBg: '#f0fdf4',
+  success: '#207450',
+  white: '#ffffff',
+};
+
+export default function LoginScreen() {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const route = useRoute<any>();
+
+  // Standard fields
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mda, setMda] = useState(''); // MDA = tenantId (gov1 only)
+
+  // 2FA state (gov1 only)
+  const [twoFAPending, setTwoFAPending] = useState(false);
+  // 'select' = choosing method, 'enter' = typing code
+  const [twoFAStep, setTwoFAStep] = useState<'select' | 'enter'>('select');
+  const [twoFAMedium, setTwoFAMedium] = useState('EMAIL');
+  const [availableMediums, setAvailableMediums] = useState<string[]>(['EMAIL']);
+  const [otpCode, setOtpCode] = useState('');
+  const [twoFALoading, setTwoFALoading] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [otpFocused, setOtpFocused] = useState(false);
+  const [mdaFocused, setMdaFocused] = useState(false);
+
+  const { login } = useAuthStore();
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  useEffect(() => {
+    if (route.params?.successMessage) {
+      setError('');
+      setSuccess(route.params.successMessage);
+      navigation.setParams({ successMessage: undefined });
+    }
+  }, [route.params?.successMessage]);
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        const savedEmail = await AsyncStorage.getItem('@konn3ct_email');
+        if (savedEmail) { setEmail(savedEmail); setRememberMe(true); }
+
+        const compatible = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = await LocalAuthentication.isEnrolledAsync();
+        setIsBiometricSupported(compatible && enrolled);
+
+        // Use the dedicated biometric token (never cleared on logout)
+        // so the button stays available even after the user logs out.
+        const biometricToken = await SecureStore.getItemAsync('konn3ct_biometric_token');
+        if (biometricToken) setHasSavedCredentials(true);
+      } catch (e) {
+        console.error('Init error:', e);
+      }
+    };
+    initApp();
+  }, []);
+
+  // ── Finalise login after receiving token ─────────────────────────────────────
+  const finaliseLogin = async (token: string, userData: any) => {
+    const userObj = {
+      id: String(userData?.id || 'unknown-id'),
+      email: userData?.email || email,
+      name: userData?.firstname
+        ? `${userData.lastname || ''} ${userData.firstname}`.trim()
+        : (userData?.name || email.split('@')[0]),
+      role: userData?.roles?.[0]?.name || userData?.role || undefined,
+    };
+
+    if (rememberMe) {
+      await AsyncStorage.setItem('@konn3ct_email', email);
+    } else {
+      await AsyncStorage.removeItem('@konn3ct_email');
+    }
+
+    await SecureStore.setItemAsync('konn3ct_token', token);
+    await SecureStore.setItemAsync('konn3ct_user', JSON.stringify(userObj));
+    // konn3ct_biometric_token is a persistent copy kept for biometric re-login.
+    // It is intentionally NOT deleted on logout so the biometric button remains
+    // available the next time the user opens the login screen.
+    await SecureStore.setItemAsync('konn3ct_biometric_token', token);
+    await SecureStore.setItemAsync('konn3ct_biometric_user', JSON.stringify(userObj));
+    login(userObj, token);
+  };
+
+  // ── Standard konn3ct login ───────────────────────────────────────────────────
+  const handleKonn3ctLogin = async () => {
+    if (!email || !password) { setError('Please fill in all fields'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const endpoint = IS_DEV ? '/login' : '/auth/login';
+      const payload = IS_DEV ? { username: email, password } : { email, password };
+      const response = await apiClient.post(endpoint, payload);
+      const resData = response.data;
+      const isSuccess = IS_DEV
+        ? (resData?.success && resData?.token)
+        : (resData?.token);
+
+      if (isSuccess) {
+        const userData = IS_DEV ? (resData.data || {}) : (resData.user || {});
+        await finaliseLogin(resData.token, userData);
+      } else {
+        setError(resData?.message || 'Login failed. Please try again.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to login. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 1Gov login (step 1) ──────────────────────────────────────────────────────
+  const handleGovLogin = async () => {
+    if (!mda || !email || !password) { setError('Please fill in all fields'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const response = await apiClient.post('/1gov/login', {
+        tenantId: mda.trim(),
+        username: email,
+        password,
+      });
+      const resData = response.data;
+
+      if (!resData?.success) {
+        setError(resData?.message || 'Login failed. Please check your credentials.');
+        return;
+      }
+
+      await AsyncStorage.setItem('@1gov_mda', mda.trim());
+
+      // 2FA required
+      if (resData.twoFactorAuth) {
+        const defaultMedium = resData.twoFactorMedium || 'EMAIL';
+        // Parse comma-separated list of available mediums e.g. "AUTHENTICATOR_APP,EMAIL"
+        const mediumsRaw: string = resData.twoFactorMediums || defaultMedium;
+        const parsedMediums = mediumsRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
+        const mediums = parsedMediums.length > 0 ? parsedMediums : [defaultMedium];
+
+        setAvailableMediums(mediums);
+        setTwoFAMedium(defaultMedium);
+
+        if (mediums.length > 1) {
+          // Multiple methods available — let user choose
+          setTwoFAStep('select');
+          setTwoFAPending(true);
+          setSuccess('');
+        } else {
+          // Only one method — go straight to code entry
+          setTwoFAStep('enter');
+          setTwoFAPending(true);
+          if (defaultMedium === 'EMAIL') {
+            setSuccess('A verification code has been sent to your email.');
+          }
+        }
+        return;
+      }
+
+      // No 2FA — login directly
+      if (resData.token) {
+        await finaliseLogin(resData.token, resData.data);
+      } else {
+        setError('Login failed. No token received.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Failed to login. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 1Gov 2FA: user selects method ─────────────────────────────────────────
+  const handleSelectMedium = (medium: string) => {
+    setTwoFAMedium(medium);
+    setOtpCode('');
+    setError('');
+    setSuccess(medium === 'EMAIL' ? 'A verification code has been sent to your email.' : '');
+    setTwoFAStep('enter');
+  };
+
+  // ── 1Gov 2FA verification (step 2) ──────────────────────────────────────────
+  const handleGovTwoFactor = async () => {
+    const minLength = twoFAMedium === 'AUTHENTICATOR_APP' ? 6 : 4;
+    if (!otpCode || otpCode.length < minLength) {
+      setError(`Please enter the ${twoFAMedium === 'AUTHENTICATOR_APP' ? '6-digit' : 'verification'} code.`);
+      return;
+    }
+    setTwoFALoading(true); setError(''); setSuccess('');
+    try {
+      const response = await apiClient.post('/1gov/login/2fa', {
+        tenantId: mda.trim(),
+        username: email,
+        otpCode,
+        authType: twoFAMedium,
+      });
+      const resData = response.data;
+      if (resData?.success && resData?.token) {
+        await finaliseLogin(resData.token, resData.data);
+      } else {
+        setError(resData?.message || 'Verification failed. Please try again.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Verification failed.');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const handleLogin = APP_CONFIG.GOV_LOGIN ? handleGovLogin : handleKonn3ctLogin;
+
+  // ── Biometric ────────────────────────────────────────────────────────────────
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Login to ${APP_CONFIG.APP_NAME}`,
+        fallbackLabel: 'Use Password',
+      });
+      if (result.success) {
+        // Read from the persistent biometric store (survives logout)
+        const savedToken = await SecureStore.getItemAsync('konn3ct_biometric_token');
+        const savedUserStr = await SecureStore.getItemAsync('konn3ct_biometric_user');
+        if (savedToken && savedUserStr) {
+          const parsed = JSON.parse(savedUserStr);
+          // Coerce id to string — old saves may have stored a numeric id from the API
+          const safeUser = {
+            id: String(parsed?.id || 'unknown-id'),
+            email: parsed?.email || '',
+            name: parsed?.name || parsed?.email || 'User',
+          };
+          // Restore the session token so API calls work
+          await SecureStore.setItemAsync('konn3ct_token', savedToken);
+          await SecureStore.setItemAsync('konn3ct_user', savedUserStr);
+          login(safeUser, savedToken);
+        } else {
+          Alert.alert('Error', 'No saved credentials found. Please login with password first.');
+        }
+      }
+    } catch (err) {
+      console.error('Biometric error:', err);
+      Alert.alert('Error', 'Biometric authentication failed. Please try again.');
+    }
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  return (
+    <View style={styles.pageContainer}>
+      {/* Green Wave Header */}
+      <View style={styles.svgContainer}>
+        <Svg width={width} height={280} viewBox={`0 0 ${width} 280`}>
+          <Path
+            fill={COLORS.brandGreen}
+            d={`M0,0 L${width},0 L${width},180 C${width * 0.75},280 ${width * 0.25},120 0,220 Z`}
+          />
+        </Svg>
+      </View>
+
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
+        <View style={styles.logoContainer}>
+          <Image source={APP_LOGO} style={styles.logo} resizeMode="contain" />
+        </View>
+        <Animated.View style={[styles.titleSection, { opacity: fadeAnim }]}>
+          <Text style={[styles.title, { color: COLORS.white }]}>Sign in</Text>
+          <View style={[styles.titleUnderline, { backgroundColor: COLORS.white }]} />
+        </Animated.View>
+      </View>
+
+      <KeyboardAwareScrollView
+        style={[styles.scrollView, { marginBottom: insets.bottom }]}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        showsVerticalScrollIndicator={false}
+        enableOnAndroid={true}
+        scrollEnabled={true}
+        extraScrollHeight={Platform.OS === 'ios' ? 60 : 80}
+      >
+        <Animated.View
+          style={[styles.formCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          {/* Error */}
+          {error ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {/* Success */}
+          {success ? (
+            <View style={styles.successBox}>
+              <Text style={styles.successText}>{success}</Text>
+            </View>
+          ) : null}
+
+          {/* ── 2FA Pending (gov1 only) ── */}
+          {twoFAPending ? (
+            <>
+              {twoFAStep === 'select' ? (
+                /* ── Step 1: Choose 2FA Method ── */
+                <>
+                  <View style={styles.twoFAHeaderRow}>
+                    <ShieldCheck color={COLORS.brandGreen} size={28} />
+                    <Text style={styles.twoFATitle}>Two-Factor Authentication</Text>
+                  </View>
+                  <Text style={styles.twoFAHint}>
+                    Your account has 2FA enabled. Choose how you'd like to verify your identity.
+                  </Text>
+
+                  {availableMediums.includes('AUTHENTICATOR_APP') && (
+                    <TouchableOpacity
+                      style={styles.methodCard}
+                      onPress={() => handleSelectMedium('AUTHENTICATOR_APP')}
+                      activeOpacity={0.8}
+                      testID="select-authenticator-app"
+                    >
+                      <View style={styles.methodCardIcon}>
+                        <Smartphone color={COLORS.brandGreen} size={24} />
+                      </View>
+                      <View style={styles.methodCardText}>
+                        <Text style={styles.methodCardTitle}>Gov OTP</Text>
+                        <Text style={styles.methodCardDesc}>Use the 6-digit code from your Gov OTP app</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  {availableMediums.includes('EMAIL') && (
+                    <TouchableOpacity
+                      style={styles.methodCard}
+                      onPress={() => handleSelectMedium('EMAIL')}
+                      activeOpacity={0.8}
+                      testID="select-email-2fa"
+                    >
+                      <View style={styles.methodCardIcon}>
+                        <Mail color={COLORS.brandGreen} size={24} />
+                      </View>
+                      <View style={styles.methodCardText}>
+                        <Text style={styles.methodCardTitle}>Email</Text>
+                        <Text style={styles.methodCardDesc}>Receive a verification code sent to your registered email address</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.backToLoginBtn}
+                    onPress={() => { setTwoFAPending(false); setOtpCode(''); setError(''); setSuccess(''); }}
+                    testID="back-to-login-button"
+                  >
+                    <Text style={styles.backToLoginText}>← Back to Login</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                /* ── Step 2: Enter Code ── */
+                <>
+                  <View style={styles.twoFAHeaderRow}>
+                    {twoFAMedium === 'AUTHENTICATOR_APP'
+                      ? <Smartphone color={COLORS.brandGreen} size={24} />
+                      : <Mail color={COLORS.brandGreen} size={24} />}
+                    <Text style={styles.twoFAMethodLabel}>
+                      {twoFAMedium === 'AUTHENTICATOR_APP' ? 'Gov OTP' : 'Email Verification'}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.twoFAHint}>
+                    {twoFAMedium === 'AUTHENTICATOR_APP'
+                      ? 'Open your Gov OTP app and enter the 6-digit code shown for this account.'
+                      : 'Enter the verification code sent to your email address.'}
+                  </Text>
+
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>Verification Code</Text>
+                    <View style={[styles.inputWrapper, otpFocused && styles.inputWrapperFocused]}>
+                      <TextInput
+                        style={[styles.input, { textAlign: 'center', letterSpacing: 6, fontSize: 20 }]}
+                        placeholder={twoFAMedium === 'AUTHENTICATOR_APP' ? '000000' : '------'}
+                        placeholderTextColor={COLORS.textMuted}
+                        value={otpCode}
+                        onChangeText={setOtpCode}
+                        keyboardType="number-pad"
+                        maxLength={twoFAMedium === 'AUTHENTICATOR_APP' ? 6 : 8}
+                        onFocus={() => setOtpFocused(true)}
+                        onBlur={() => setOtpFocused(false)}
+                        autoFocus
+                      />
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.loginButton, twoFALoading && styles.loginButtonDisabled]}
+                    onPress={handleGovTwoFactor}
+                    disabled={twoFALoading}
+                    activeOpacity={0.85}
+                    testID="verify-code-button"
+                  >
+                    {twoFALoading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
+                    <Text style={styles.loginButtonText}>
+                      {twoFALoading ? 'Verifying...' : 'Verify Code'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Go back to method selection if multiple methods are available */}
+                  {availableMediums.length > 1 && (
+                    <TouchableOpacity
+                      style={styles.backToLoginBtn}
+                      onPress={() => { setTwoFAStep('select'); setOtpCode(''); setError(''); setSuccess(''); }}
+                      testID="back-to-method-select-button"
+                    >
+                      <Text style={styles.backToLoginText}>← Choose a different method</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.backToLoginBtn, availableMediums.length > 1 && { marginTop: 0 }]}
+                    onPress={() => { setTwoFAPending(false); setOtpCode(''); setError(''); setSuccess(''); }}
+                    testID="back-to-login-button"
+                  >
+                    <Text style={[styles.backToLoginText, { color: COLORS.textMuted }]}>← Back to Login</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {/* ── MDA Field (gov1 only) ── */}
+              {APP_CONFIG.GOV_LOGIN && (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>MDA</Text>
+                  <View style={[styles.inputWrapper, mdaFocused && styles.inputWrapperFocused]}>
+                    <Building2
+                      color={mdaFocused ? COLORS.inputFocus : COLORS.textMuted}
+                      size={18}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter your MDA"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={mda}
+                      onChangeText={setMda}
+                      autoCapitalize="none"
+                      onFocus={() => setMdaFocused(true)}
+                      onBlur={() => setMdaFocused(false)}
+                      testID="mda-input"
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* ── Email Field ── */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.label}>Email</Text>
+                <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
+                  <Mail
+                    color={emailFocused ? COLORS.inputFocus : COLORS.textMuted}
+                    size={18}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder={APP_CONFIG.GOV_LOGIN ? 'Your@email.com' : 'Demo@email.com'}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    onFocus={() => setEmailFocused(true)}
+                    onBlur={() => setEmailFocused(false)}
+                    testID="email-input"
+                  />
+                </View>
+              </View>
+
+              {/* ── Password Field ── */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.label}>Password</Text>
+                <View style={[styles.inputWrapper, passwordFocused && styles.inputWrapperFocused]}>
+                  <Lock
+                    color={passwordFocused ? COLORS.inputFocus : COLORS.textMuted}
+                    size={18}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your password"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    testID="password-input"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    testID="toggle-password-visibility"
+                  >
+                    {showPassword
+                      ? <EyeOff color={COLORS.textMuted} size={18} />
+                      : <Eye color={COLORS.textMuted} size={18} />}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* ── Options Row (Forgot Password) ── */}
+              <View style={[styles.optionsRow, { justifyContent: 'flex-end' }]}>
+                {APP_CONFIG.SHOW_FORGOT_PASSWORD && (
+                  <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} testID="forgot-password-link">
+                    <Text style={styles.forgotText}>Forgot Password?</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* ── Login Button ── */}
+              <TouchableOpacity
+                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
+                activeOpacity={0.85}
+                testID="login-button"
+              >
+                {loading ? <ActivityIndicator color={COLORS.white} style={styles.spinner} /> : null}
+                <Text style={styles.loginButtonText}>
+                  {loading ? 'Signing in...' : 'Login'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* ── Biometric ── */}
+              {isBiometricSupported && hasSavedCredentials && (
+                <TouchableOpacity
+                  style={styles.biometricButton}
+                  onPress={handleBiometricLogin}
+                  activeOpacity={0.8}
+                  testID="biometric-login-button"
+                >
+                  <Fingerprint color={COLORS.brandGreen} size={20} style={{ marginRight: 8 }} />
+                  <Text style={styles.biometricButtonText}>Login with Biometrics</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* ── Sign Up Link ── */}
+              {APP_CONFIG.SHOW_SIGNUP_LINK && (
+                <View style={styles.footerRow}>
+                  <Text style={styles.footerText}>Don't have an Account? </Text>
+                  <TouchableOpacity
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    onPress={() => navigation.navigate('Signup')}
+                    testID="signup-link"
+                  >
+                    <Text style={styles.signUpText}>Sign up</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* ── Guest join link ── */}
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Just want to join a meeting? </Text>
+                <TouchableOpacity
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => navigation.navigate('GuestJoin')}
+                  testID="guest-link"
+                >
+                  <Text style={styles.signUpText}>Join as Guest</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </Animated.View>
+      </KeyboardAwareScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  pageContainer: { flex: 1, backgroundColor: COLORS.pageBg },
+  svgContainer: { position: 'absolute', top: 0, width: '100%', height: 280 },
+  scrollView: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingTop: 200,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  fixedHeader: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    paddingHorizontal: 30,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    zIndex: 10,
+  },
+  logoContainer: { alignItems: 'center', marginTop: 10, marginBottom: 12 },
+  logo: { height: 50, width: 180 },
+  formCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+  titleSection: { marginBottom: 16, alignItems: 'center' },
+  title: { fontSize: 28, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8 },
+  titleUnderline: { width: 35, height: 4, backgroundColor: COLORS.brandGreen, borderRadius: 2 },
+  errorBox: {
+    backgroundColor: COLORS.dangerBg,
+    padding: 12, borderRadius: 8, marginBottom: 20,
+    borderLeftWidth: 4, borderLeftColor: COLORS.danger,
+  },
+  errorText: { color: COLORS.danger, fontSize: 13 },
+  successBox: {
+    backgroundColor: COLORS.successBg,
+    padding: 12, borderRadius: 8, marginBottom: 20,
+    borderLeftWidth: 4, borderLeftColor: COLORS.success,
+  },
+  successText: { color: COLORS.success, fontSize: 13 },
+  twoFAHint: {
+    fontSize: 14, color: COLORS.textSecondary,
+    textAlign: 'center', marginBottom: 20, lineHeight: 20,
+  },
+  twoFAHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginBottom: 10, gap: 8,
+  },
+  twoFATitle: {
+    fontSize: 17, fontWeight: '700', color: COLORS.textPrimary,
+  },
+  twoFAMethodLabel: {
+    fontSize: 15, fontWeight: '700', color: COLORS.brandGreen,
+  },
+  methodCard: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: COLORS.inputBorder,
+    borderRadius: 14, padding: 16, marginBottom: 14,
+    backgroundColor: COLORS.white,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+  },
+  methodCardIcon: {
+    width: 48, height: 48, borderRadius: 12,
+    backgroundColor: '#f0fdf4', alignItems: 'center', justifyContent: 'center',
+    marginRight: 14,
+  },
+  methodCardText: { flex: 1 },
+  methodCardTitle: {
+    fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 3,
+  },
+  methodCardDesc: {
+    fontSize: 12, color: COLORS.textSecondary, lineHeight: 17,
+  },
+  fieldContainer: { marginBottom: 24 },
+  label: { color: COLORS.textSecondary, fontWeight: '600', fontSize: 13, marginBottom: 8 },
+  inputWrapper: {
+    flexDirection: 'row', alignItems: 'center',
+    borderBottomWidth: 1.5, borderBottomColor: COLORS.inputBorder,
+    paddingVertical: 8,
+  },
+  inputWrapperFocused: { borderBottomColor: COLORS.inputFocus },
+  inputIcon: { marginRight: 12 },
+  input: { flex: 1, fontSize: 15, color: COLORS.textPrimary, paddingVertical: 4 },
+  eyeButton: { padding: 4 },
+  optionsRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 25,
+  },
+  rememberBtn: { flexDirection: 'row', alignItems: 'center' },
+  rememberText: { marginLeft: 8, fontSize: 13, color: COLORS.textPrimary, fontWeight: '600' },
+  forgotText: { fontSize: 13, color: COLORS.brandGreen, fontWeight: '700' },
+  loginButton: {
+    backgroundColor: COLORS.brandGreen,
+    borderRadius: 12, height: 52,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.brandGreen,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8,
+    elevation: 5, marginBottom: 16,
+  },
+  loginButtonDisabled: { opacity: 0.7 },
+  loginButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 16, letterSpacing: 0.5 },
+  spinner: { marginRight: 10 },
+  biometricButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 52, borderRadius: 12, borderWidth: 1.5,
+    borderColor: COLORS.inputBorder, backgroundColor: COLORS.white,
+    marginBottom: 16,
+  },
+  biometricButtonText: { color: COLORS.brandGreen, fontWeight: '700', fontSize: 15 },
+  footerRow: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    marginTop: 8, paddingTop: 10, paddingBottom: 16,
+  },
+  footerText: { color: COLORS.textMuted, fontSize: 14 },
+  signUpText: { color: COLORS.brandGreen, fontWeight: '700', fontSize: 14 },
+  backToLoginBtn: { alignItems: 'center', paddingVertical: 12 },
+  backToLoginText: { color: COLORS.brandGreen, fontWeight: '600', fontSize: 14 },
+});

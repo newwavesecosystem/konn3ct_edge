@@ -24,7 +24,12 @@ spec:
             - containerPort: 3000
           env:
             - name: NEXT_PUBLIC_BACKEND_DOMAIN
-              value: "konn3ctedge.konn3ct.net"
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_BACKEND_DOMAIN
+            - name: BACKEND_URL
+              value: "http://conn3ct-backend-service"
             - name: PORT
               value: "3000"
             - name: JWT_SECRET
@@ -59,6 +64,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: DO_SPACES_BUCKET
+            - name: TELEMETRY_S3_BUCKET_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: TELEMETRY_S3_BUCKET_NAME
             - name: MAX_REJECTION_CPU_LOAD
               value: "90"
             - name: OPENAI_API_KEY
@@ -71,6 +81,21 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY
+            - name: BOT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: BOT_SECRET
+            - name: NEXT_PUBLIC_MEETING_ONLY_MODE
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_MEETING_ONLY_MODE
+            - name: S3_FORCE_PATH_STYLE
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: S3_FORCE_PATH_STYLE
           resources:
             requests:
               cpu: "100m"

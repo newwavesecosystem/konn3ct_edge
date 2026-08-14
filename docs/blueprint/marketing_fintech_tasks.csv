@@ -1,0 +1,71 @@
+id,name,Description,start Date,Deadline,Priority,Tags
+FIN-001,FIN-001 - Geo-Routing & Country Detection Framework,"Implement Cloudflare header or IP-based detection to route users to localized landing pages. Expectation: A user in Kenya visiting konn3ct.com is seamlessly redirected to the Kenyan localized experience.
+
+Acceptance Criteria:
+- Middleware intercepts incoming traffic and reads 'CF-IPCountry' or MaxMind DB
+- Routes user to `/ng`, `/ke`, `/za`, or `/global` based on location
+- Sets user's default currency preference in cookie/local storage
+- Allows manual country override via a footer dropdown",08/10/2026,08/13/2026,High,"Marketing, Web, Geo-Routing"
+FIN-002,FIN-002 - Localized Landing Page Templates (Next.js),"Build the frontend Next.js templates for the country-specific landing pages (Volume 2). Expectation: High-converting, SEO-optimized pages.
+
+Acceptance Criteria:
+- Content Management architecture allowing different copy/testimonials per country
+- Pricing tables dynamically reflecting local currencies (NGN, KES, ZAR, USD)
+- Strict adherence to Core Web Vitals for fast loading (LCP < 2.5s)
+- Next.js Server-Side Rendering (SSR) or Static Site Generation (SSG) for SEO",08/13/2026,08/17/2026,High,"Marketing, Next.js, SEO"
+FIN-003,FIN-003 - Marketing Funnel Tracking & Analytics Sync,"Integrate Meta Pixel, Google Tag Manager, and PostHog for granular funnel tracking. Expectation: Marketing teams can track CAC and conversion rates from WhatsApp ads to signups.
+
+Acceptance Criteria:
+- GTM data layer pushes events for 'Landing Page View', 'Signup Started', and 'Ticket Purchased'
+- PostHog integration capturing anonymous-to-identified user journeys
+- Privacy-compliant cookie consent banner implemented
+- Clean UTM parameter extraction and storage in user's session",08/17/2026,08/21/2026,High,"Marketing, Analytics, Tracking"
+FIN-004,FIN-004 - Paystack & Flutterwave Integration,"Integrate Paystack and/or Flutterwave APIs for West/East African payment processing. Expectation: Users can pay for webinars/subscriptions using local cards, bank transfers, and USSD.
+
+Acceptance Criteria:
+- Implementation of Paystack Popup / Flutterwave Checkout on the frontend
+- Backend API routes to initialize transactions and fetch payment links
+- Support for one-time webinar tickets and recurring monthly subscriptions
+- Correct handling of NGN and GHS currencies",08/21/2026,08/25/2026,High,"FinTech, Payments, Africa"
+FIN-005,FIN-005 - M-Pesa Mobile Money Integration API,"Integrate Safaricom M-Pesa Daraja API for frictionless mobile money payments in East Africa. Expectation: Kenyan users can purchase access via STK Push.
+
+Acceptance Criteria:
+- M-Pesa Express (STK Push) integration triggering a pin prompt on user's phone
+- Background polling or webhook listener for M-Pesa transaction confirmation
+- Error handling for timeouts, insufficient funds, or cancelled prompts
+- Correct handling of KES currency",08/25/2026,08/29/2026,High,"FinTech, Mobile Money, Kenya"
+FIN-006,FIN-006 - PayGate Shield Webhook Verification (Critical),"Implement strict, cryptographically secure webhook endpoints to process payment successes (Volume 8). Expectation: Users cannot spoof client-side payment success to gain access.
+
+Acceptance Criteria:
+- Webhook endpoints verify HMAC SHA512/SHA256 signatures from Paystack/Stripe/M-Pesa
+- Idempotent processing ensures a webhook fired twice doesn't double-provision access
+- Never trusts client-side API calls claiming 'Payment Successful'
+- Updates Database `Ticket` or `Subscription` status to 'PAID'",08/29/2026,09/02/2026,High,"FinTech, Security, Webhooks"
+FIN-007,FIN-007 - Stripe Integration (International Tier),"Integrate Stripe Checkout for Rest-of-World (USD/EUR/GBP) transactions. Expectation: Global users have a standard card payment gateway.
+
+Acceptance Criteria:
+- Stripe Checkout Session initialization on the backend
+- Handling of Stripe Webhooks (`checkout.session.completed`)
+- Syncing Stripe Customer IDs to the Konn3ct database
+- Proper handling of 3D Secure authentication flow",09/02/2026,09/06/2026,Medium,"FinTech, Payments, Global"
+FIN-008,FIN-008 - Digital Ticketing & Receipt Generation,"Generate and email digital PDF receipts and webinar tickets upon successful payment. Expectation: Professional post-purchase experience.
+
+Acceptance Criteria:
+- PDF generation service rendering ticket with QR Code, Event Name, and Date
+- Email integration (SendGrid/Postmark) dispatching the receipt instantly
+- Odoo 19 ERP webhook triggered to log the invoice for accounting (Volume 11)
+- User dashboard updated to display 'Purchased Tickets'",09/06/2026,09/10/2026,Medium,"FinTech, Receipts, UX"
+FIN-009,FIN-009 - Paid Replay & Video Monetization Unlock,"Link the payment success webhooks to the Replay Library video player. Expectation: Users cannot watch a paid replay until their transaction clears.
+
+Acceptance Criteria:
+- Video player component checks backend entitlement API before loading HLS stream
+- Paywall overlay displayed on video player for unauthenticated or unpaid users
+- Instant unlock mechanism via WebSocket pushing 'Access Granted' immediately after webhook fires
+- Anti-sharing token generation to prevent users from sharing direct video URLs",09/10/2026,09/14/2026,High,"FinTech, PayGate, Video"
+FIN-010,FIN-010 - Currency Conversion & Pricing Engine,"Build a dynamic pricing engine that fetches exchange rates or reads fixed localized pricing tiers. Expectation: A $10 ticket displays appropriately in NGN based on config.
+
+Acceptance Criteria:
+- Database schema supporting fixed localized pricing (e.g., $10 but fixed at 10,000 NGN)
+- Fallback dynamic exchange rate fetching via API (e.g., OpenExchangeRates)
+- Admin dashboard interface allowing Feranmi/Host to set custom prices per region
+- Prevents VPN abuse by enforcing payment gateway currency alignment with geo-location",09/14/2026,09/18/2026,Medium,"FinTech, Pricing, Data"

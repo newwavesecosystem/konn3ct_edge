@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-backend
 spec:
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate
   selector:
@@ -18,6 +18,17 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - conn3ct-recorder
+                - conn3ct-backend
+            topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
           image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:latest
@@ -56,6 +67,16 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: GEMINI_API_KEY
+            - name: EXTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: EXTERNAL_API_KEY
+            - name: DEEPGRAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: DEEPGRAM_API_KEY
             - name: PAYSTACK_SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -86,8 +107,16 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: DO_SPACES_BUCKET
+            - name: TELEMETRY_S3_BUCKET_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: TELEMETRY_S3_BUCKET_NAME
             - name: NEXT_PUBLIC_FRONTEND_URL
-              value: "https://edge.konn3ct.net"
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_FRONTEND_URL
             - name: REDIS_URL
               value: "redis://redis-service:6379"
             - name: POD_ID
@@ -112,6 +141,24 @@ spec:
               value: "turnedge.konn3ct.net"
             - name: TURN_SECRET
               value: "my-super-strong-conn3ct-secret-123"
+            - name: BOT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: BOT_SECRET
+                  optional: true
+            - name: NEXT_PUBLIC_FRONTEND_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: NEXT_PUBLIC_FRONTEND_DOMAIN
+            - name: S3_FORCE_PATH_STYLE
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: S3_FORCE_PATH_STYLE
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=5120"
           resources:
             requests:
               cpu: "1500m"

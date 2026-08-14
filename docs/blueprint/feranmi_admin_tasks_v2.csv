@@ -1,0 +1,215 @@
+id,name,Description,start Date,Deadline,Priority,Tags,Assignees
+TSK-001,TSK-001 - Next.js App Router & TypeScript Project Initialization,"Set up fresh Next.js project using App Router and TypeScript with strict linting rules. Expectation: Project compiles cleanly with no warnings and includes base folder structure (/app, /components, /lib, /hooks, /types).
+
+Acceptance Criteria:
+- Next.js 14+ App Router initialized with TypeScript
+- Strict ESLint and Prettier configuration established
+- Core folder directory structured (/app/(dashboard), /components/ui, /lib/api)
+- Zero build errors or lint warnings on initial run",8/7/2026,8/9/2026,High,"Frontend, Setup, Next.js",Olanrewaju Feranmi
+TSK-002,TSK-002 - Base UI Theme Tokens & Global Provider Setup,"Configure global CSS, theme tokens, typography, and color palette matching Konn3ct design system. Expectation: Dark/Light mode support setup with reusable theme variables.
+
+Acceptance Criteria:
+- Color palette tokens (Primary, Neutral, Danger, Warning, Success) configured
+- Typography scales and font families imported and configured
+- Global CSS reset and Tailwind/CSS variables initialized
+- Theme Provider wrapper components created and verified",8/9/2026,8/10/2026,High,"Frontend, Design System",Olanrewaju Feranmi
+TSK-003,TSK-003 - Dashboard Shell & Navigation Layout Components,"Build responsive admin dashboard shell including sidebar navigation, top header, breadcrumbs, and user badge. Expectation: Sidebar collapses cleanly on smaller screens (tablet view) without breaking layout.
+
+Acceptance Criteria:
+- Responsive sidebar with active route highlighting
+- Top bar with admin profile dropdown and notification indicator
+- Dynamic breadcrumb navigation matching current App Router route
+- Mobile/Tablet drawer collapse toggle implemented and smooth transition verified",8/10/2026,8/12/2026,High,"Frontend, UI Layout",Olanrewaju Feranmi
+TSK-004,TSK-004 - Auth Session Context & State Provider,"Create authentication state provider to store current admin session details, access tokens, and role entitlements. Expectation: Auth state persists properly and auto-refreshes tokens safely.
+
+Acceptance Criteria:
+- Auth Context Provider wrapping App root
+- Support for token storage (HTTP-only cookies / secure memory)
+- Helper hooks (useAdminAuth, useHasPermission) exposed for components
+- Automatic session timeout listener configured",8/12/2026,8/13/2026,High,"Frontend, Auth",Olanrewaju Feranmi
+TSK-005,TSK-005 - Next.js Middleware for Admin Route & RBAC Protection,"Write Next.js middleware to intercept unauthorized requests and enforce role-based route access. Expectation: Unauthenticated users redirected to login; non-super-admins blocked from restricted routes.
+
+Acceptance Criteria:
+- Next.js middleware checking session token on all /admin/* routes
+- Unauthenticated users redirected to /login with return URL query param
+- RBAC permission check blocking access to /admin/audit-logs if role != SuperAdmin
+- 403 Forbidden page rendered gracefully for unauthorized routes",8/13/2026,8/14/2026,High,"Security, Middleware, Next.js",Olanrewaju Feranmi
+TSK-006,TSK-006 - Users List Page Shell & Filter Bar UI,"Build page shell for User Management including search input, status filters (Active, Suspended, Banned), and role dropdowns. Expectation: Responsive filter bar with clean debounced inputs.
+
+Acceptance Criteria:
+- Search input with 300ms debounce handler
+- Role filter dropdown (Host, Participant, Moderator, OrgAdmin)
+- Account status filter tabs (All, Active, Suspended, Banned)
+- Clear filters button resetting form state",8/14/2026,8/16/2026,Medium,"Frontend, User Management",Olanrewaju Feranmi
+TSK-007,TSK-007 - Users Paginated Data Table Component,"Build reusable server-side paginated table component for user listing. Expectation: Smooth loading skeletons, sorting controls, and error states.
+
+Acceptance Criteria:
+- Data table renders Name, Email, Role, Status Badge, Join Date, and Actions button
+- Server-side pagination controls (Page size selector: 10, 25, 50, 100)
+- Column sorting headers (Name, Join Date, Status) triggering API refetch
+- Empty state and loading skeleton loaders implemented",8/16/2026,8/18/2026,High,"Frontend, UI Components",Olanrewaju Feranmi
+TSK-008,TSK-008 - User Profile Details Slide-Over Drawer Component,"Build slide-over drawer component displaying comprehensive user details when clicking a table row. Expectation: Shows profile summary, meeting history list, and active subscriptions.
+
+Acceptance Criteria:
+- Drawer opens smoothly when user row is selected
+- Displays User ID, Full Name, Email, Verification Status, and Registration Date
+- Tabbed interface within drawer: Overview, Meeting History, Subscriptions
+- Close button and background backdrop click-to-close behavior verified",8/18/2026,8/20/2026,Medium,"Frontend, UI Drawer",Olanrewaju Feranmi
+TSK-009,TSK-009 - User Suspend & Unsuspend Modal Component,"Build modal component to handle user suspension/unsuspension with compulsory reason input field. Expectation: Prevents action until reason is provided.
+
+Acceptance Criteria:
+- Modal opens on selecting Suspend Account action
+- Displays warning notice with user name and email
+- Compulsory text area for Reason for Suspension (min 10 characters)
+- Submit button disabled until valid reason is entered
+- API call executes and updates user badge status in table dynamically",8/20/2026,8/21/2026,Medium,"Frontend, User Actions",Olanrewaju Feranmi
+TSK-010,TSK-010 - User Ban & Force Logout Action Modal,"Build confirmation modal for severe action: Ban User & Invalidate Sessions. Expectation: Requires explicit confirmation typing (e.g. type BAN) before executing.
+
+Acceptance Criteria:
+- Modal triggers for Ban User & Force Logout
+- Requires admin to type CONFIRM BAN into text field to enable action button
+- Submits API request to revoke all active tokens and mark user banned
+- Success notification toast displayed and table row state refreshed",8/21/2026,8/23/2026,High,"Frontend, Security Actions",Olanrewaju Feranmi
+TSK-011,TSK-011 - Organizations List & Detail View Page,"Build Organization Management page displaying enterprise/institutional accounts. Expectation: Shows Org Name, Admin Owner, Seat Count, Plan Tier, and Status.
+
+Acceptance Criteria:
+- Paginated list of registered Organizations
+- Org detail drawer showing seat allocation and admin contact
+- Option to edit allocated seat limits or plan tier
+- Filter by plan type (Enterprise, School, Community)",8/23/2026,8/25/2026,Medium,"Frontend, Org Management",Olanrewaju Feranmi
+TSK-012,TSK-012 - Payment Transaction Log Table UI,"Build transaction table for viewing all payment attempts (Subscriptions, Events, Replays). Expectation: Table shows Transaction Ref, User, Amount, Currency, Gateway, Status, and Timestamp.
+
+Acceptance Criteria:
+- Server-side paginated table for transactions
+- Status badges: Success (green), Pending (amber), Failed (red)
+- Filter by Payment Type (Subscription, Paid Event, Paid Replay)
+- Filter by Gateway (Paystack, Stripe, Direct Transfer)",8/25/2026,8/27/2026,High,"Frontend, Billing",Olanrewaju Feranmi
+TSK-013,TSK-013 - Transaction Detail Drawer & Webhook Payload Viewer,"Create slide-over drawer to inspect a specific transaction and its gateway webhook log. Expectation: Displays JSON payload of gateway responses for troubleshooting failed payments.
+
+Acceptance Criteria:
+- Slide-over opens on row click
+- Displays Gateway Transaction Reference, Error Codes, and Raw Webhook JSON response
+- Syntax-highlighted JSON viewer component for webhook logs
+- Copy-to-clipboard button for Reference ID and Error Code",8/27/2026,8/29/2026,Medium,"Frontend, Diagnostics",Olanrewaju Feranmi
+TSK-014,TSK-014 - Manual Comp Access Grant Modal Component,"Build modal allowing admins to manually grant complimentary access to a Paid Event or Paid Replay. Expectation: Compulsory selection of Event/Replay ID and Audit Reason.
+
+Acceptance Criteria:
+- Searchable dropdown for Paid Events and Paid Replay videos
+- Expiry date selector for granted access
+- Mandatory Reason for Grant text field
+- Triggers entitlement API call and emits audit log event",8/29/2026,8/31/2026,Medium,"Frontend, Financial Overrides",Olanrewaju Feranmi
+TSK-015,TSK-015 - Entitlement Revocation Action Modal Component,"Build modal to revoke a granted entitlement or paid replay access from a user. Expectation: Prompts for confirmation and immediate revocation.
+
+Acceptance Criteria:
+- Displays active entitlement details to be revoked
+- Mandatory Reason for Revocation text area
+- Action button invalidates user access token for that specific media
+- Success toast notification displayed",8/31/2026,9/2/2026,Medium,"Frontend, Financial Overrides",Olanrewaju Feranmi
+TSK-016,TSK-016 - Active Meetings Real-Time Summary Grid,"Build real-time overview grid showing count of Active Rooms, Total Live Participants, and SFU Server Load. Expectation: Auto-refreshes data every 10 seconds.
+
+Acceptance Criteria:
+- Overview KPI metrics cards (Active Meetings, Total Participants, Total Bandwidth)
+- Grid layout displaying live room cards with host info and duration
+- Polling mechanism (10s interval) or WebSocket connection for live data
+- Visual indicator showing Live Data Auto-Refreshing",9/2/2026,9/4/2026,High,"Frontend, Monitoring",Olanrewaju Feranmi
+TSK-017,TSK-017 - WebRTC Stream Quality Diagnostics Inspector Component,"Build detailed WebRTC inspection modal for a specific live meeting. Expectation: Charts showing bitrate, packet loss percentage, and jitter stats.
+
+Acceptance Criteria:
+- Modal opens when selecting a live meeting room
+- Real-time line chart for Audio/Video Bitrate
+- Packet Loss percentage meter (Flags amber > 2%, red > 5%)
+- Jitter metric display and server node connection status",9/4/2026,9/6/2026,High,"Frontend, WebRTC Diagnostics",Olanrewaju Feranmi
+TSK-018,TSK-018 - Live Meeting Participant List & Connection State Inspector,"Build table inside meeting inspector showing list of connected participants and their individual media states. Expectation: Shows client type, network quality indicator, and audio/video state.
+
+Acceptance Criteria:
+- Table listing participant Name, Join Time, Network Quality (1-5 bars), Audio (Muted/Unmuted), Video (On/Off)
+- Indicates client platform (Web, Android, iOS)
+- Option to trigger remote reconnect command for troubleshooting",9/6/2026,9/8/2026,Medium,"Frontend, WebRTC",Olanrewaju Feranmi
+TSK-019,TSK-019 - AI Services Job Queue Monitor UI,"Build dashboard view monitoring background AI processing jobs (Transcripts, Meeting Summaries, Action Points). Expectation: Clear status indicators for Pending, Processing, Failed, and Completed jobs.
+
+Acceptance Criteria:
+- Job queue table showing Job ID, Meeting ID, Job Type, Status, Duration, and Error Message
+- Filter jobs by Status (Failed, Pending, Processing)
+- Retry Job action button for failed AI summary tasks",9/8/2026,9/10/2026,Medium,"Frontend, AI Services",Olanrewaju Feranmi
+TSK-020,TSK-020 - Diagnostic Snapshot Export Action,"Implement feature to package current meeting metrics, WebRTC stats, and error logs into a JSON file download. Expectation: One-click export for developer handoff.
+
+Acceptance Criteria:
+- Export Diagnostic Snapshot button on meeting inspector
+- Generates sanitized JSON payload containing room state, server logs, and WebRTC metrics
+- Downloads .json file named konn3ct-diag-{meetingId}-{timestamp}.json",9/10/2026,9/11/2026,Low,"Frontend, Utilities",Olanrewaju Feranmi
+TSK-021,TSK-021 - Recording Storage Table & Metadata Inspector,"Build table listing all platform recordings with file size, duration, host ID, and storage tier (Active / Archived). Expectation: Shows lifecycle status and total storage consumed.
+
+Acceptance Criteria:
+- Paginated table of recordings with search by Meeting Title or Host ID
+- Displays Storage Tier badge (Hot/Cold Storage) and Expiry Date
+- Storage usage banner showing total GB consumed across system",9/11/2026,9/13/2026,Medium,"Frontend, Content Governance",Olanrewaju Feranmi
+TSK-022,TSK-022 - Break Glass Recording Access Security Protocol Modal,"Build modal to handle emergency admin viewing of private recordings under strict audit controls (Volume 10). Expectation: Requires 2FA confirmation or explicit justification before generating temporary stream URL.
+
+Acceptance Criteria:
+- Request Access button triggers Break Glass Security Protocol modal
+- Requires entering mandatory legal/support justification ticket ID
+- Prompts admin for password re-verification
+- Emits high-priority Audit Event (AUDIT_BREAK_GLASS_RECORDING_ACCESS)
+- Generates 15-minute expiring signed URL for playback",9/13/2026,9/15/2026,High,"Security, Governance",Olanrewaju Feranmi
+TSK-023,TSK-023 - GDPR Data Deletion & Storage Lifecycle Action Modal,"Build action modal for hard-deleting recordings and associated media files. Expectation: Double-confirmation modal with file size recovery calculation.
+
+Acceptance Criteria:
+- Modal confirms permanent deletion of recording, transcript, and AI summary
+- Requires typing DELETE RECORDING to enable execution
+- Calls purge API and removes object storage file
+- Updates UI and table state immediately",9/15/2026,9/16/2026,Medium,"Frontend, Compliance",Olanrewaju Feranmi
+TSK-024,TSK-024 - AI Summary & Transcript Moderation Panel,"Build panel to review and moderate AI-generated meeting summaries attached to public/paid replays. Expectation: Editable summary text area and publish status toggle.
+
+Acceptance Criteria:
+- Displays AI Summary text, Key Takeaways list, and Action Items
+- Admin can edit text to fix errors before public replay publishing
+- Approve & Publish Replay Summary toggle button
+- Flag summary content as inappropriate action",9/16/2026,9/18/2026,Low,"Frontend, Content Moderation",Olanrewaju Feranmi
+TSK-025,TSK-025 - Primary KPI Dashboard Header Component,"Build executive KPI cards component displaying headline metrics: Free Users and Paid Users (Volume 5 Doctrine). Expectation: Visual cards with period-over-period percentage growth.
+
+Acceptance Criteria:
+- Card 1: Total Free Users + MTD Growth % + Trend Sparkline
+- Card 2: Total Paid Users + MTD Growth % + Trend Sparkline
+- Visual badge indicating North Star Metric
+- Tooltip explaining metric definition on hover",9/18/2026,9/20/2026,High,"Frontend, Data Viz",Olanrewaju Feranmi
+TSK-026,TSK-026 - Usage Trend Charts (Meetings  Replays  Subscriptions),"Integrate charting library (e.g. Recharts) to render line and bar charts for key activity drivers. Expectation: Interactive charts with tooltip data inspection.
+
+Acceptance Criteria:
+- Line Chart: Meetings Hosted vs Participant Join Trends (Daily/Weekly/Monthly)
+- Bar Chart: Subscription Upgrades vs Cancelation Trends
+- Area Chart: Paid Replay Revenue Trends
+- Empty data state handling and loading indicators verified",9/20/2026,9/22/2026,Medium,"Frontend, Data Viz",Olanrewaju Feranmi
+TSK-027,TSK-027 - Country Growth Breakdown Widget,"Build widget displaying user distribution and conversion rate by country. Expectation: Table and map view for international expansion tracking.
+
+Acceptance Criteria:
+- Country list showing Free Users, Paid Users, and Free-to-Paid % per country
+- Search/filter by country code
+- Visual status indicator for Country Hub readiness",9/22/2026,9/24/2026,Low,"Frontend, Analytics",Olanrewaju Feranmi
+TSK-028,TSK-028 - Analytics Global Date & Region Filter Toolbar,"Build sticky top filter toolbar for adjusting date ranges and regions across all dashboard analytics. Expectation: Changes update all charts simultaneously.
+
+Acceptance Criteria:
+- Preset date range buttons (Last 7 Days, Last 30 Days, Year to Date, Custom Range)
+- Geographic region dropdown filter (Global, Africa, Europe, North America)
+- Custom Date Picker modal
+- URL query parameter sync for bookmarking report views",9/24/2026,9/25/2026,Medium,"Frontend, Analytics",Olanrewaju Feranmi
+TSK-029,TSK-029 - Immutable Audit Log Table View UI,"Build read-only Audit Log table for Super Admins. Expectation: Strict read-only table displaying all system state modifications.
+
+Acceptance Criteria:
+- Table displays Timestamp, Admin Email/ID, Action Type, Target Entity, IP Address, and Status
+- No edit or delete action buttons exist anywhere in this view
+- Export to CSV button for compliance auditing
+- Color-coded action badges (USER_BAN, PAYMENT_OVERRIDE, BREAK_GLASS)",9/25/2026,9/27/2026,High,"Frontend, Security",Olanrewaju Feranmi
+TSK-030,TSK-030 - Audit Log Advanced Search & Filter Toolbar,"Build search and filter bar for the Audit Log view. Expectation: Filter by Admin ID, Action Category, Date Range, and Keyword search.
+
+Acceptance Criteria:
+- Admin user autocomplete search input
+- Action Category filter dropdown (User Management, Financial Overrides, Content Access, System Security)
+- Search payload text input
+- Reset filter controls",9/27/2026,9/29/2026,Medium,"Frontend, Security",Olanrewaju Feranmi
+TSK-031,TSK-031 - Audit Log Payload Event Details Modal Component,"Build modal component to view full JSON event payload of an audit log entry. Expectation: Displays exact metadata captured at the time of admin action.
+
+Acceptance Criteria:
+- Opens when clicking an audit log entry row
+- Displays formatted JSON of pre-action and post-action state
+- Displays User Agent string, Request IP, and Request Session ID
+- Copy payload string button",9/29/2026,9/30/2026,Low,"Frontend, Utilities",Olanrewaju Feranmi

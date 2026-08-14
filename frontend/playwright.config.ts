@@ -44,10 +44,8 @@ export default defineConfig({
         '--use-fake-device-for-media-stream',
       ],
       env: {
-        // This is picked up by Next.js at runtime as NEXT_PUBLIC_BACKEND_DOMAIN
-        // Ensures WebSocket connects to local backend (ws://localhost:3000)
-        // instead of the production edge server.
-        NEXT_PUBLIC_BACKEND_DOMAIN: 'localhost:3000',
+        // Run tests against the actual staging/production WebRTC edge server
+        NEXT_PUBLIC_BACKEND_DOMAIN: 'konn3ctedge.konn3ct.net',
       },
     },
   },
@@ -69,6 +67,9 @@ export default defineConfig({
       port: 3001,
       timeout: 120 * 1000,
       reuseExistingServer: !process.env.CI,
+      env: {
+        NEXT_PUBLIC_BACKEND_DOMAIN: 'konn3ctedge.konn3ct.net',
+      },
     }
   ],
 });

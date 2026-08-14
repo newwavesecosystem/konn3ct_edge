@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import { useMeeting } from "@/lib/meeting-context";
-import { Copy, Check, Link2, Clock, Users, Shield, Radio } from "lucide-react";
+import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift } from "lucide-react";
 
 export function MeetingInfoPanel() {
-  const { meetingInfo, participants, meetingDuration } = useMeeting();
+  const { meetingInfo, participants, meetingDuration, totalDonations, currentUser, roomFeatureFlags, roomSettings } = useMeeting();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -49,31 +49,29 @@ export function MeetingInfoPanel() {
             border: "1px solid var(--mt-border)",
           }}
         >
-          <p
-            className="text-[11px] uppercase tracking-wider font-semibold mb-2"
-            style={{ color: "var(--mt-text-faint)" }}
-          >
-            Meeting Link
+          <p className="text-[10px] uppercase font-semibold mb-1" style={{ color: "var(--mt-text-faint)" }}>
+            Share Link
           </p>
           <div className="flex items-center gap-2">
-            <Link2 className="w-4 h-4 text-brand-green-soft shrink-0" />
-            <span className="text-xs truncate flex-1" style={{ color: "var(--mt-text-muted)" }}>
-              {dynamicLink}
-            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs truncate" style={{ color: "var(--mt-text)" }}>
+                {dynamicLink}
+              </p>
+            </div>
             <button
               onClick={handleCopy}
-              className="p-1.5 rounded-lg transition-colors shrink-0"
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-colors shrink-0"
             >
               {copied ? (
                 <Check className="w-3.5 h-3.5 text-brand-green" />
               ) : (
-                <Copy className="w-3.5 h-3.5" style={{ color: "var(--mt-text-faint)" }} />
+                <Copy className="w-3.5 h-3.5" style={{ color: "var(--mt-text-secondary)" }} />
               )}
             </button>
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats row */}
         <div className="grid grid-cols-2 gap-3">
           <InfoStat
             icon={<Clock className="w-4 h-4" />}
@@ -88,7 +86,7 @@ export function MeetingInfoPanel() {
           <InfoStat
             icon={<Shield className="w-4 h-4" />}
             label="Waiting Room"
-            value={meetingInfo.isWaitingRoomEnabled ? "Enabled" : "Disabled"}
+            value={(meetingInfo.isWaitingRoomEnabled && !roomSettings?.bypassWaitingRoom) ? "Enabled" : "Disabled"}
           />
           <InfoStat
             icon={<Radio className="w-4 h-4" />}
@@ -107,6 +105,21 @@ export function MeetingInfoPanel() {
           </p>
           <p className="text-sm" style={{ color: "var(--mt-text-secondary)" }}>{hostName}</p>
         </div>
+
+        {/* Donations */}
+        {roomFeatureFlags.donationsEnabled && (currentUser.role === 'host' || currentUser.role === 'co-host') && (
+          <div>
+            <p
+              className="text-[11px] uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5"
+              style={{ color: "var(--mt-text-faint)" }}
+            >
+              <Gift className="w-3.5 h-3.5" /> Total Donations
+            </p>
+            <p className="text-xl font-bold text-brand-green">
+              ${totalDonations.toFixed(2)}
+            </p>
+          </div>
+        )}
 
         {/* Access code */}
         {meetingInfo.accessCode && (

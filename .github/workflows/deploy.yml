@@ -4,13 +4,18 @@ on:
   push:
     branches:
       - main
-      - master
+      - prod
+      - 1gov_stag
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref == 'refs/heads/1gov_stag' && '1gov_stag' || (github.ref == 'refs/heads/main' && 'staging' || 'production') }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # For staging, replace ':latest' with 'staging-latest'. For production, replace with the exact commit hash.
+      TARGET_TAG: ${{ github.ref == 'refs/heads/main' && 'staging-latest' || github.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,62 +29,163 @@ jobs:
         run: docker login registry.digitalocean.com -u ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} -p ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Build and Push Backend Docker Image
+        if: github.ref != 'refs/heads/1gov_stag'
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
           docker build -t $IMAGE_NAME:${{ github.sha }} .
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+            docker push $IMAGE_NAME:prod-latest
+          fi
 
       - name: Build and Push Frontend Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
-          docker build --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} -t $IMAGE_NAME:${{ github.sha }} ./frontend
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+          docker build \
+            --build-arg NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }} \
+            --build-arg NEXT_PUBLIC_BACKEND_DOMAIN=${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }} \
+            --build-arg NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
+            --build-arg NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+            --build-arg NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
+            --build-arg NEXT_PUBLIC_POOR_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_RTT }}" \
+            --build-arg NEXT_PUBLIC_POOR_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_LOSS }}" \
+            --build-arg NEXT_PUBLIC_POOR_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_POOR_NETWORK_JITTER }}" \
+            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_RTT="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_RTT }}" \
+            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_LOSS }}" \
+            --build-arg NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER="${{ secrets.NEXT_PUBLIC_UNSTABLE_NETWORK_JITTER }}" \
+            --build-arg NEXT_PUBLIC_NETWORK_WINDOW_SIZE="${{ secrets.NEXT_PUBLIC_NETWORK_WINDOW_SIZE }}" \
+            --build-arg NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL="${{ secrets.NEXT_PUBLIC_NETWORK_MONITOR_INTERVAL }}" \
+            --build-arg NEXT_PUBLIC_HIDE_SIGNUP_BUTTON="${{ vars.NEXT_PUBLIC_HIDE_SIGNUP_BUTTON }}" \
+            --build-arg NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
+            --build-arg NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL="${{ vars.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL }}" \
+            --build-arg NEXT_PUBLIC_SIGNIN_URL="${{ vars.NEXT_PUBLIC_SIGNIN_URL }}" \
+            -t $IMAGE_NAME:${{ github.sha }} ./frontend
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+            docker push $IMAGE_NAME:prod-latest
+          elif [ "${{ github.ref }}" = "refs/heads/1gov_stag" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:1gov_stag
+            docker push $IMAGE_NAME:1gov_stag
+          fi
 
       - name: Build and Push Recorder Docker Image
+        if: github.ref != 'refs/heads/1gov_stag'
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-recorder"
           docker build -t $IMAGE_NAME:${{ github.sha }} ./recorder
-          docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
           docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+            docker push $IMAGE_NAME:staging-latest
+          fi
+
+      # - name: Build and Push Streaming Worker Docker Image
+      #   run: |
+      #     IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-streaming-worker"
+      #     docker build -t $IMAGE_NAME:${{ github.sha }} ./streaming-worker
+      #     docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
+      #     docker push $IMAGE_NAME:${{ github.sha }}
+      #     docker push $IMAGE_NAME:latest
 
       - name: Authenticate with Kubernetes Cluster
+        if: github.ref != 'refs/heads/1gov_stag'
         run: |
-          # IMPORTANT: Update 'conn3ct-cluster' to match the exact name of your cluster in DigitalOcean
-          doctl kubernetes cluster kubeconfig save k8s-1-35-1-do-5-atl1-newkonn3ct
+          # The cluster name is now pulled from the environment-specific secrets
+          doctl kubernetes cluster kubeconfig save ${{ secrets.DO_CLUSTER_NAME }}
 
       - name: Deploy Manifests to Kubernetes
+        if: github.ref != 'refs/heads/1gov_stag'
         run: |
+          # Replace :latest with the environment-specific tag in all k8s manifests
+          sed -i "s/:latest/:${{ env.TARGET_TAG }}/g" k8s/*.yaml
+          
+          # Inject dynamic backend domain into ingress manifest
+          sed -i "s/__NEXT_PUBLIC_BACKEND_DOMAIN__/${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}/g" k8s/ingress.yaml
+          
           # Safely inject GitHub Secrets into a Kubernetes Secret called 'conn3ct-secrets'
           kubectl create secret generic conn3ct-secrets \
             --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             --from-literal=JWT_SECRET="${{ secrets.JWT_SECRET }}" \
             --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
             --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --from-literal=DEEPGRAM_API_KEY="${{ secrets.DEEPGRAM_API_KEY }}" \
+            --from-literal=EXTERNAL_API_KEY="${{ secrets.EXTERNAL_API_KEY }}" \
+            --from-literal=BOT_SECRET="${{ secrets.BOT_SECRET }}" \
+            --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}" \
+            --from-literal=NEXT_PUBLIC_FRONTEND_DOMAIN="${{ secrets.NEXT_PUBLIC_FRONTEND_DOMAIN }}" \
+            --from-literal=NEXT_PUBLIC_FRONTEND_URL="${{ secrets.NEXT_PUBLIC_FRONTEND_URL }}" \
+            --from-literal=NEXT_PUBLIC_APP_NAME="${{ secrets.NEXT_PUBLIC_APP_NAME }}" \
+            --from-literal=NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL="${{ vars.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL }}" \
+            --from-literal=NEXT_PUBLIC_SIGNIN_URL="${{ vars.NEXT_PUBLIC_SIGNIN_URL }}" \
             --from-literal=PAYSTACK_SECRET_KEY="${{ secrets.PAYSTACK_SECRET_KEY }}" \
             --from-literal=NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY="${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" \
             --from-literal=DO_SPACES_ENDPOINT="${{ secrets.DO_SPACES_ENDPOINT }}" \
             --from-literal=DO_SPACES_REGION="${{ secrets.DO_SPACES_REGION }}" \
             --from-literal=DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
             --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
-            --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
+            --from-literal=DO_SPACES_BUCKET="${{ vars.DO_SPACES_BUCKET }}" \
+            --from-literal=S3_FORCE_PATH_STYLE="${{ vars.S3_FORCE_PATH_STYLE }}" \
+            --from-literal=TELEMETRY_S3_BUCKET_NAME="${{ vars.TELEMETRY_S3_BUCKET_NAME }}" \
+            --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
+            --from-literal=NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
+            --from-literal=NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
           # Apply all our deployment, service, and redis yaml files
           kubectl apply -f k8s/
           
-          # Tell Kubernetes to gracefully restart the pods so they download the new image we just pushed
-          kubectl rollout restart deployment conn3ct-backend
-          kubectl rollout restart deployment conn3ct-frontend
-          kubectl rollout restart deployment conn3ct-recorder
+          # Only gracefully restart if we are in staging (since we use a floating tag 'staging-latest').
+          # In production, the image tag explicitly changes to the commit hash, so kubectl apply automatically rolls it out!
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            kubectl rollout restart deployment conn3ct-signaling
+            kubectl rollout restart deployment conn3ct-media
+            kubectl rollout restart deployment conn3ct-frontend
+            kubectl rollout restart deployment conn3ct-recorder
+            # kubectl rollout restart deployment conn3ct-streaming-worker
+          fi
 
-      # - name: Debugging - Print Pod Logs
-      #   run: |
-      #     echo "Waiting up to 3 minutes for the new pod to download the Docker image and start up..."
-      #     kubectl rollout status deployment/conn3ct-backend --timeout=180s
-      #     echo "Pod is successfully running! Fetching logs..."
-      #     kubectl logs -l app=conn3ct-backend --all-containers=true --tail=100
+      - name: Setup Node.js for Odoo Integration
+        if: always()
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Post Evidence to Odoo
+        if: always()
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action post_evidence \
+            --branch-name "${{ github.ref_name }}" \
+            --build-status "${{ job.status }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}"
+            
+      - name: Automated Defect Creation
+        if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action create_defect \
+            --branch-name "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --author "${{ github.actor }}"

@@ -13,6 +13,7 @@ const BASE_TIME = 1714838400000; // Fixed static timestamp to prevent Next.js hy
 export const mockParticipants: Participant[] = [
   {
     id: "p1",
+    userId: "p1",
     name: "Adaeze Okafor",
     role: "host",
     isMuted: false,
@@ -24,6 +25,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p2",
+    userId: "p2",
     name: "Chidi Nwosu",
     role: "co-host",
     isMuted: false,
@@ -35,6 +37,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p3",
+    userId: "p3",
     name: "Fatima Bello",
     role: "presenter",
     isMuted: true,
@@ -46,6 +49,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p4",
+    userId: "p4",
     name: "Emeka Eze",
     role: "attendee",
     isMuted: true,
@@ -57,6 +61,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p5",
+    userId: "p5",
     name: "Ngozi Ibe",
     role: "attendee",
     isMuted: true,
@@ -68,6 +73,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p6",
+    userId: "p6",
     name: "Yusuf Ahmed",
     role: "attendee",
     isMuted: false,
@@ -79,6 +85,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p7",
+    userId: "p7",
     name: "Amina Lawal",
     role: "guest",
     isMuted: true,
@@ -90,6 +97,7 @@ export const mockParticipants: Participant[] = [
   },
   {
     id: "p8",
+    userId: "p8",
     name: "Tunde Bakare",
     role: "attendee",
     isMuted: true,
@@ -153,7 +161,7 @@ export const mockMeetingInfo: MeetingInfo = {
   roomSlug: "q3-product-review",
   roomName: "Q3 Product Review",
   roomType: "meeting",
-  hostName: "Adaeze Okafor",
+  hostName: "Host",
   startedAt: new Date(BASE_TIME - 1000 * 60 * 45).toISOString(),
   meetingLink: "https://konn3ct.app/join/q3-product-review",
   isRecording: false,

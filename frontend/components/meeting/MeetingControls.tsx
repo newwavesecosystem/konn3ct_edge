@@ -23,6 +23,7 @@ import {
   LogOut,
   Circle,
   LayoutGrid,
+  Radio,
   Presentation,
   Sparkles,
   Focus,
@@ -38,6 +39,8 @@ import {
   MoreVertical,
   Cloudy,
   PhoneOff,
+  HelpCircle,
+  Shield,
 } from "lucide-react";
 
 export function MeetingControls() {
@@ -46,6 +49,7 @@ export function MeetingControls() {
     isCameraOn,
     isScreenSharing,
     isRecording,
+    recordingStatus,
     isHandRaised,
     activePanel,
     layoutMode,
@@ -76,6 +80,10 @@ export function MeetingControls() {
     meetingInfo,
     eCinemaLink,
     hasUnreadChat,
+    roomSettings,
+    roomFeatureFlags,
+    isAlwaysMuteOnJoin,
+    micExempted,
   } = useMeeting();
 
   const { theme, toggleTheme } = useMeetingTheme();
@@ -148,31 +156,23 @@ export function MeetingControls() {
             {meetingInfo.roomName}
           </span>
 
-          {/* 
-          <ControlBtn
-            icon={<Subtitles className="w-5 h-5" />}
-            active={isCaptionsEnabled}
-            onClick={toggleCaptions}
-            tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-          />
-
-          {isHost && (
+          {roomFeatureFlags.captionsEnabled && (
             <ControlBtn
-              icon={<Gift className={cn("w-5 h-5", isDonationActive && "text-brand-green")} />}
-              active={isDonationActive}
-              onClick={() => toggleDonation()}
-              tooltip={isDonationActive ? "Stop Offering" : "Start Offering"}
+              icon={<Subtitles className="w-5 h-5" />}
+              active={isCaptionsEnabled}
+              onClick={toggleCaptions}
+              tooltip={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
             />
           )}
-          {isDonationActive && (
+
+          {roomFeatureFlags.donationsEnabled && isDonationActive && (
             <ControlBtn
               icon={<Gift className="w-5 h-5" />}
               highlight
               onClick={() => setShowDonationModal(true)}
               tooltip="Donate"
             />
-          )} 
-          */}
+          )}
         </div>
 
         {/* ── Center: Controls pill ─────────────────── */}
@@ -187,33 +187,49 @@ export function MeetingControls() {
           <ControlBtn
             icon={isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             danger={isMuted}
-            onClick={toggleMute}
+            disabled={roomSettings.micLocked && !isHost && !micExempted}
+            onClick={() => {
+              if (roomSettings.micLocked && !isHost && !micExempted) {
+                toast.error("Microphones are locked by the host.");
+                return;
+              }
+              toggleMute();
+            }}
             tooltip={isMuted ? "Unmute" : "Mute"}
+            className={(!isMuted && currentUser.isSpeaking) ? "shadow-[0_0_12px_rgba(34,197,94,0.6)] ring-2 ring-brand-green/50 bg-brand-green/10 text-brand-green transition-all duration-75" : ""}
           />
+          
+          <div className="w-2 sm:w-3" />
+          
           {/* Camera */}
           <ControlBtn
             icon={isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
             danger={!isCameraOn}
-            onClick={toggleCamera}
+            disabled={roomSettings.videoLocked && !isHost}
+            onClick={() => {
+              if (roomSettings.videoLocked && !isHost) {
+                toast.error("Cameras are locked by the host.");
+                return;
+              }
+              toggleCamera();
+            }}
             tooltip={isCameraOn ? "Camera off" : "Camera on"}
           />
 
           <PillDivider className="hidden sm:block" />
 
           {/* Screen share */}
-          <ControlBtn
-            icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
-            active={isScreenSharing}
-            onClick={() => {
-              if (currentUser.isMobile) {
-                toast.error("Screen sharing is not supported on mobile. Please join with a PC to share your screen.");
-                return;
-              }
-              toggleScreenShare();
-            }}
-            tooltip="Share screen"
-            className="hidden sm:flex"
-          />
+          {!currentUser.isMobile && (
+            <ControlBtn
+              icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
+              active={isScreenSharing}
+              onClick={() => {
+                toggleScreenShare();
+              }}
+              tooltip="Share screen"
+              className="hidden sm:flex"
+            />
+          )}
           {/* React */}
           <ControlBtn
             icon={<SmilePlus className="w-5 h-5" />}
@@ -261,26 +277,28 @@ export function MeetingControls() {
                     label={isHandRaised ? "Lower Hand" : "Raise Hand"}
                     onClick={() => { toggleHandRaise(); setShowMoreMenu(false); }}
                   />
-                  <MoreMenuItem
-                    icon={isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <MonitorUp className="w-4 h-4" />}
-                    label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                    onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
-                  />
-                  {/* 
-                  <MoreMenuItem
-                    icon={<Subtitles className="w-4 h-4" />}
-                    label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-                    onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
-                  />
-                  {isHost && (
+                  {!currentUser.isMobile && (
+                    <MoreMenuItem
+                      icon={isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <MonitorUp className="w-4 h-4" />}
+                      label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                      onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  {roomFeatureFlags.captionsEnabled && (
+                    <MoreMenuItem
+                      icon={<Subtitles className="w-4 h-4" />}
+                      label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+                      onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  {roomFeatureFlags.donationsEnabled && isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
-                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
-                  )} 
-                  */}
-                  {isDonationActive && (
+                  )}
+                  {roomFeatureFlags.donationsEnabled && isDonationActive && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
                       label="Donate"
@@ -310,29 +328,43 @@ export function MeetingControls() {
                     onClick={() => { setShowECinemaDialog(true); setShowMoreMenu(false); }}
                   />
                 )}
+                {/* {isHost && (
+                  <MoreMenuItem
+                    icon={<Radio className="w-4 h-4" />}
+                    label="Live Streaming"
+                    onClick={() => { setActivePanel("streaming"); setShowMoreMenu(false); }}
+                  />
+                )} */}
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
-                <MoreMenuItem
-                  icon={<Circle className={cn("w-4 h-4", isRecording && "fill-red-400 text-red-400")} />}
-                  label={isRecording ? "Stop Recording" : "Record Meeting"}
-                  danger={isRecording}
-                  onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
-                />
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Circle className={cn("w-4 h-4", (recordingStatus === 'recording' || recordingStatus === 'starting' || recordingStatus === 'processing') && "fill-red-400 text-red-400")} />}
+                    label={
+                      recordingStatus === 'starting' ? "Starting recording..." :
+                      recordingStatus === 'recording' ? "Stop Recording" :
+                      recordingStatus === 'processing' ? "Processing recording..." :
+                      "Record Meeting"
+                    }
+                    danger={recordingStatus === 'recording'}
+                    onClick={() => { toggleRecording(); setShowMoreMenu(false); }}
+                  />
+                )}
                 {/* Desktop-only: captions & donation already shown above on mobile */}
                 <div className="hidden sm:block">
-                  {/* 
-                  <MoreMenuItem
-                    icon={<Subtitles className="w-4 h-4" />}
-                    label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
-                    onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
-                  />
-                  {isHost && (
+                  {roomFeatureFlags.captionsEnabled && (
+                    <MoreMenuItem
+                      icon={<Subtitles className="w-4 h-4" />}
+                      label={isCaptionsEnabled ? "Disable Captions" : "Enable Captions"}
+                      onClick={() => { toggleCaptions(); setShowMoreMenu(false); }}
+                    />
+                  )}
+                  {roomFeatureFlags.donationsEnabled && isHost && (
                     <MoreMenuItem
                       icon={<Gift className="w-4 h-4" />}
-                      label={isDonationActive ? "Stop Offering" : "Start Offering"}
+                      label={isDonationActive ? "Stop Donation" : "Start Donation"}
                       onClick={() => { toggleDonation(); setShowMoreMenu(false); }}
                     />
-                  )} 
-                  */}
+                  )}
                 </div>
                 <div className="my-1" style={{ borderTop: "1px solid var(--mt-border)" }} />
                 <MoreMenuItem
@@ -387,14 +419,15 @@ export function MeetingControls() {
             ))}
           </div>
 
-          {/* Konn3ct AI panel toggle 
-          <PanelBtn
-            icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
-            active={activePanel === "ai"}
-            onClick={() => setActivePanel("ai")}
-            tooltip="Konn3ct AI"
-          />
-          */}
+          {/* Konn3ct AI panel toggle */}
+          {roomFeatureFlags.aiFeaturesEnabled && (
+            <PanelBtn
+              icon={<Sparkles className="w-4 h-4 sm:w-[18px] sm:h-[18px] text-brand-green" />}
+              active={activePanel === "ai"}
+              onClick={() => setActivePanel("ai")}
+              tooltip="Konn3ct AI"
+            />
+          )}
           <PanelBtn
             icon={<MessageSquare className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "chat"}
@@ -402,12 +435,28 @@ export function MeetingControls() {
             tooltip="Chat"
             hasNotification={hasUnreadChat}
           />
+          {meetingInfo.roomType === "webinar" && (
+            <PanelBtn
+              icon={<HelpCircle className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
+              active={activePanel === "qa"}
+              onClick={() => setActivePanel("qa")}
+              tooltip="Q&A"
+            />
+          )}
           <PanelBtn
             icon={<Users className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
             active={activePanel === "participants"}
             onClick={() => setActivePanel("participants")}
             tooltip="People"
           />
+          {isHost && (
+            <PanelBtn
+              icon={<Shield className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />}
+              active={activePanel === "security"}
+              onClick={() => setActivePanel("security")}
+              tooltip="Security"
+            />
+          )}
         </div>
       </div>
 
@@ -418,10 +467,10 @@ export function MeetingControls() {
 
 /* ── Control Button (center pill) ──────────────────── */
 function ControlBtn({
-  icon, danger, active, highlight, onClick, tooltip, className,
+  icon, danger, active, highlight, onClick, tooltip, className, disabled
 }: {
   icon: React.ReactNode; danger?: boolean; active?: boolean;
-  highlight?: boolean; onClick: () => void; tooltip: string; className?: string;
+  highlight?: boolean; onClick: () => void; tooltip: string; className?: string; disabled?: boolean;
 }) {
   // Derive a stable data-testid from the tooltip text (lowercase, hyphened)
   const testId = `ctrl-${tooltip.toLowerCase().replace(/\s+/g, '-')}`;
@@ -432,8 +481,9 @@ function ControlBtn({
       data-testid={testId}
       className={cn(
         "relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 active:scale-90",
-        danger && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
-        highlight && "ring-2 ring-yellow-400/50",
+        danger && !disabled && "bg-red-500/20 text-red-400 hover:bg-red-500/30",
+        highlight && !disabled && "ring-2 ring-yellow-400/50",
+        disabled && "opacity-50 cursor-not-allowed",
         className
       )}
       style={
@@ -444,8 +494,8 @@ function ControlBtn({
             }
           : undefined
       }
-      onMouseEnter={(e) => { if (!danger) e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"; }}
-      onMouseLeave={(e) => { if (!danger) e.currentTarget.style.backgroundColor = active ? "var(--mt-bg-active)" : "transparent"; }}
+      onMouseEnter={(e) => { if (!danger && !disabled) e.currentTarget.style.backgroundColor = "var(--mt-bg-hover)"; }}
+      onMouseLeave={(e) => { if (!danger && !disabled) e.currentTarget.style.backgroundColor = active ? "var(--mt-bg-active)" : "transparent"; }}
     >
       {icon}
     </button>
@@ -519,6 +569,7 @@ function ECinemaDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => vo
   const [linkInput, setLinkInput] = React.useState(eCinemaLink || "");
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isOpen) setLinkInput(eCinemaLink || "");
   }, [isOpen, eCinemaLink]);
 

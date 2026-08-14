@@ -12,15 +12,16 @@ dashboardRouter.get('/', async (req: Request, res: Response) => {
     const userId = req.user!.userId;
 
     // Fetch aggregates concurrently for performance
-    const [roomsCount, teamsCount, recentRecordings, upcomingSessions] = await Promise.all([
-      db.room.count({
-        where: { OR: [{ ownerId: userId }, { team: { members: { some: { userId } } } }] }
-      }),
-      db.teamMember.count({
-        where: { userId }
-      }),
+    const results = await Promise.allSettled([
+      db.room.count({ where: { OR: [{ ownerId: userId }, { team: { members: { some: { userId } } } }] } }),
+      db.teamMember.count({ where: { userId } }),
       db.recording.findMany({
-        where: { ownerId: userId },
+        where: {
+          OR: [
+            { ownerId: userId },
+            { room: { OR: [{ ownerId: userId }, { team: { members: { some: { userId } } } }] } }
+          ]
+        },
         orderBy: { createdAt: 'desc' },
         take: 5
       }),
@@ -34,6 +35,11 @@ dashboardRouter.get('/', async (req: Request, res: Response) => {
         include: { room: { select: { name: true, slug: true } } }
       })
     ]);
+
+    const roomsCount = results[0].status === 'fulfilled' ? results[0].value : 0;
+    const teamsCount = results[1].status === 'fulfilled' ? results[1].value : 0;
+    const recentRecordings = results[2].status === 'fulfilled' ? results[2].value : [];
+    const upcomingSessions = results[3].status === 'fulfilled' ? results[3].value : [];
 
     res.status(200).json({
       stats: {

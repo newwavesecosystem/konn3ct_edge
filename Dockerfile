@@ -1,11 +1,17 @@
 FROM node:20-bullseye-slim AS builder
 
-# Install build dependencies for mediasoup (Python 3, C++ compiler)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies for mediasoup (Python 3, C++ compiler) with retries
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends apt-transport-https ca-certificates; \
+    for i in 1 2 3 4 5; do \
+      apt-get update && DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends -o Acquire::Retries=3 --fix-missing \
+          python3 \
+          python3-pip \
+          build-essential && break || sleep $((i*2)); \
+    done; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -21,10 +27,17 @@ RUN npm run build
 # --- Production Image ---
 FROM node:20-bullseye-slim
 
-# Mediasoup requires python3 runtime for some internal tasks
-RUN apt-get update && apt-get install -y \
-    python3 \
-    && rm -rf /var/lib/apt/lists/*
+# Mediasoup requires python3 runtime for some internal tasks, ffmpeg for transcription
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends apt-transport-https ca-certificates; \
+    for i in 1 2 3 4 5; do \
+      apt-get update && DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends -o Acquire::Retries=3 --fix-missing \
+          python3 \
+          ffmpeg && break || sleep $((i*2)); \
+    done; \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -41,7 +54,7 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Expose WebRTC UDP/TCP Ports for Mediasoup
-EXPOSE 10000-10100/udp
-EXPOSE 10000-10100/tcp
+EXPOSE 10000-59999/udp
+EXPOSE 10000-59999/tcp
 
 CMD ["node", "dist/server.js"]

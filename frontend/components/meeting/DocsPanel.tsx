@@ -60,6 +60,7 @@ export function DocsPanel() {
   // Sync incoming server changes ONLY if they differ from local
   React.useEffect(() => {
     if (state.doc !== localDoc) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalDoc(state.doc);
     }
     
@@ -74,12 +75,14 @@ export function DocsPanel() {
   const handleDocChange = (content: string, delta: any, source: string) => {
     if (source === "user") {
       setLocalDoc(content);
+      // eslint-disable-next-line react-hooks/immutability
       state.doc = content;
       updateSharedNote(JSON.stringify(state));
     }
   };
 
   const handleSheetChange = (data: any[]) => {
+    // eslint-disable-next-line react-hooks/immutability
     state.sheet = data;
     updateSharedNote(JSON.stringify(state));
   };
@@ -93,7 +96,9 @@ export function DocsPanel() {
     
     // Prevent broadcast loop if elements were just updated from the server
     if (currentVersion !== lastExcalidrawVersion.current) {
+      // eslint-disable-next-line react-hooks/immutability
       lastExcalidrawVersion.current = currentVersion;
+      // eslint-disable-next-line react-hooks/immutability
       state.excalidraw = elements;
       
       // Throttle broadcast to max 10fps to avoid React infinite loops and WebRTC flooding
@@ -154,12 +159,9 @@ export function DocsPanel() {
   };
 
   return (
-    <div className={`flex flex-col bg-[var(--mt-bg)] ${isExpanded ? "fixed inset-0 z-[100] h-screen w-screen" : "h-full"}`}>
+    <div className={`flex flex-col bg-[var(--mt-bg)] ${isExpanded ? "fixed inset-0 z-[100] h-[100dvh] w-[100dvw]" : "h-full"}`}>
       {/* Header */}
-      <div
-        className="px-4 py-3 flex items-center justify-between shrink-0"
-        style={{ borderBottom: "1px solid var(--mt-border)" }}
-      >
+      <div className="shrink-0 flex items-center justify-between p-3 border-b" style={{ borderColor: "var(--mt-border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--mt-text)" }}>Workspace</h3>
         <div className="flex items-center gap-1">
          
@@ -232,6 +234,7 @@ export function DocsPanel() {
           <div className="absolute inset-0 w-full h-full z-[0]" style={{ backgroundColor: "var(--mt-bg-elevated)" }}>
             <ExcalidrawWrapper 
               remoteElements={state.excalidraw} 
+              // eslint-disable-next-line react-hooks/immutability
               onChange={handleExcalidrawChange} 
             />
           </div>

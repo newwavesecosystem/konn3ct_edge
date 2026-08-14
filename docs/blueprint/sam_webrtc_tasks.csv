@@ -1,0 +1,57 @@
+id,name,Description,start Date,Deadline,Priority,Tags
+RTC-001,RTC-001 - Mediasoup SFU Worker Initialization,"Set up the core Mediasoup C++ worker processes wrapped in a Node.js API. Expectation: Media workers can successfully spawn and listen for WebRTC transports.
+
+Acceptance Criteria:
+- Node.js service running `mediasoup` installed
+- Dynamic port allocation for WebRTC UDP/TCP traffic (e.g., 40000-49999) configured
+- Worker processes scale based on CPU cores available in the container
+- API endpoint to health-check worker load",08/10/2026,08/14/2026,High,"WebRTC, SFU, Mediasoup"
+RTC-002,RTC-002 - WebRTC Transport & Signaling Integration,"Integrate the SFU with the existing Socket.io signaling layer built by Kay. Expectation: Clients can successfully exchange SDP offers/answers.
+
+Acceptance Criteria:
+- WebSocket event handlers for `createWebRtcTransport`, `connectWebRtcTransport`, `produce`, and `consume`
+- Secure DTLS fingerprint exchange between client and SFU
+- Implementation of Producer (sending media) and Consumer (receiving media) logic
+- Handles WebRTC connection state changes (connecting, connected, disconnected)",08/14/2026,08/18/2026,High,"WebRTC, Signaling, Sockets"
+RTC-003,RTC-003 - Global Coturn (TURN/STUN) Deployment,"Deploy and configure Coturn servers in India, South America, and North America. Expectation: Clients behind strict firewalls can relay media.
+
+Acceptance Criteria:
+- Coturn installed on isolated VMs in Mumbai, São Paulo, and N. Virginia
+- Configured with ephemeral short-term credentials via REST API secret
+- Supports both UDP and TCP relaying (TLS port 443 fallback)
+- SFU returns the optimal TURN server array based on the client's geolocation",08/18/2026,08/22/2026,High,"WebRTC, TURN, Infrastructure"
+RTC-004,RTC-004 - Simulcast Configuration & Publisher Logic,"Configure Mediasoup to accept Simulcast streams from publishers (multiple video qualities). Expectation: A single publisher sends 3 spatial layers.
+
+Acceptance Criteria:
+- SFU accepts `low`, `medium`, and `high` spatial layers from a single video track
+- Temporal layers (fps scaling) enabled
+- Codec preference order configured (VP8, H.264, VP9)
+- Logs verify that the server is receiving multiple bitrates for the same track",08/22/2026,08/26/2026,High,"WebRTC, Simulcast, Video"
+RTC-005,RTC-005 - Adaptive Bitrate (ABR) & Consumer Routing,"Implement dynamic consumer routing to switch spatial layers based on consumer network conditions. Expectation: Consumers on bad networks get lower quality video instead of freezing.
+
+Acceptance Criteria:
+- SFU monitors consumer RTCP Receiver Reports for packet loss and jitter
+- Automatically drops the consumer to the `low` spatial layer if packet loss > 5%
+- Automatically upgrades to `high` spatial layer when network stabilizes
+- Implements active speaker detection to give high resolution only to the speaker",08/26/2026,08/30/2026,High,"WebRTC, ABR, Network"
+RTC-006,RTC-006 - Audio-First Fallback Mechanism,"Implement strict audio-first fallback logic for severe network degradation. Expectation: Audio never drops even if video fails completely.
+
+Acceptance Criteria:
+- If packet loss exceeds critical threshold (e.g., >15%), SFU temporarily pauses forwarding all video tracks to that consumer
+- Audio track forwarding remains prioritized and uninterrupted
+- Emits WebSocket event `video_paused_network` to the client so UI can show a 'Poor Network' avatar
+- Auto-resumes video forwarding when RTCP reports improve",08/30/2026,09/03/2026,High,"WebRTC, Resilience, Audio"
+RTC-007,RTC-007 - SFU Horizontal Scaling & Router Piping,"Implement router piping to allow meetings to span multiple SFU worker processes or distinct servers. Expectation: A room can hold 1,000+ people by distributing load.
+
+Acceptance Criteria:
+- Logic to detect when a single Mediasoup router hits capacity (~500 consumers)
+- Automatically spawns a secondary router on a different worker/node
+- Establishes `PipeTransport` between the two routers to share Producer tracks
+- Clients seamlessly consume tracks regardless of which specific worker they connected to",09/03/2026,09/08/2026,High,"WebRTC, Scaling, Architecture"
+RTC-008,RTC-008 - Media Recording Endpoint & GStreamer Integration,"Implement raw media extraction from the SFU to pipe into a recording microservice. Expectation: Server-side recording of video/audio.
+
+Acceptance Criteria:
+- Consumes Producer tracks server-side using PlainTransport
+- Pipes RTP packets into GStreamer or FFmpeg processes
+- Mixes audio and video tracks into a unified MP4 or WebM file
+- Uploads final recording file to Digital Ocean Spaces upon meeting end",09/08/2026,09/14/2026,High,"WebRTC, Recording, Media"
