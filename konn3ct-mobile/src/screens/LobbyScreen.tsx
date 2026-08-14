@@ -30,6 +30,7 @@ import { MediasoupService } from '../webrtc/MediasoupService';
 import { setActiveMeetingService } from '../webrtc/activeMeetingService';
 import { useAuthStore } from '../store/useAuthStore';
 import { getAttendeeToken } from '../api/edgeApi';
+import { fetchMyRooms, startRoom } from '../api/rooms';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Props = NativeStackScreenProps<RootStackParamList, 'Lobby'>;
@@ -179,15 +180,41 @@ export default function LobbyScreen({ route, navigation }: Props) {
         let signalUrlToUse = initialSignalUrl;
         if (!tokenToUse) {
           const authUser = useAuthStore.getState().user;
-          const tokenRes = await getAttendeeToken(
-            roomId,
-            authUser?.name || 'Guest',
-            authUser?.email || 'guest@conn3ct.com',
-            cameraOn,
-            micOn
-          );
-          tokenToUse = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
-          signalUrlToUse = typeof tokenRes === 'string' ? initialSignalUrl : (tokenRes.signalUrl || initialSignalUrl);
+
+          // Check if authenticated user is the owner of this room
+          if (authUser) {
+            try {
+              const myRooms = await fetchMyRooms();
+              const matchedRoom = (myRooms || []).find((r: any) => 
+                String(r.url) === String(roomId) || 
+                String(r.slug) === String(roomId) || 
+                String(r.id) === String(roomId)
+              );
+              if (matchedRoom && matchedRoom.id) {
+                console.log('[LobbyScreen] Authenticated user owns room', matchedRoom.id, '-> Starting room as host');
+                const startRes = await startRoom(matchedRoom.id);
+                if (startRes?.sessionToken) {
+                  tokenToUse = startRes.sessionToken;
+                  signalUrlToUse = startRes.signalUrl || startRes.signal_url || initialSignalUrl;
+                  console.log('[LobbyScreen] Successfully obtained HOST sessionToken for room owner');
+                }
+              }
+            } catch (hostErr) {
+              console.warn('[LobbyScreen] Auto-host check error, using attendee fallback:', hostErr);
+            }
+          }
+
+          if (!tokenToUse) {
+            const tokenRes = await getAttendeeToken(
+              roomId,
+              authUser?.name || 'Guest',
+              authUser?.email || 'guest@conn3ct.com',
+              cameraOn,
+              micOn
+            );
+            tokenToUse = typeof tokenRes === 'string' ? tokenRes : tokenRes.token;
+            signalUrlToUse = typeof tokenRes === 'string' ? initialSignalUrl : (tokenRes.signalUrl || initialSignalUrl);
+          }
         }
         const initialStatus = await service.connect(tokenToUse, signalUrlToUse);
         if (!isMountedRef.current) return;

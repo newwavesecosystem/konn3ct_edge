@@ -2,12 +2,13 @@ import React, { useState, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, TouchableOpacity, FlatList, 
   ActivityIndicator, Modal, TextInput, Alert, Platform,
-  ScrollView, KeyboardAvoidingView 
+  ScrollView 
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   Calendar, Plus, X, Clock, Video, MonitorPlay, 
-  AlignLeft, Globe, Mail, Check, Users, ChevronDown 
+  AlignLeft, Globe, Mail, Check, Users, ChevronDown, Search 
 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
@@ -46,6 +47,13 @@ export default function ScheduleScreen({ navigation, route }: Props) {
   const [rooms, setRooms] = useState<any[]>([]);
   const [roomId, setRoomId] = useState('');
   const [showRoomSelect, setShowRoomSelect] = useState(false);
+  const [roomSearch, setRoomSearch] = useState('');
+
+  const filteredRooms = React.useMemo(() => {
+    if (!roomSearch.trim()) return rooms;
+    const q = roomSearch.toLowerCase();
+    return rooms.filter(r => (r.name || `Room ${r.id}`).toLowerCase().includes(q));
+  }, [rooms, roomSearch]);
 
   const [timezone] = useState(() => {
     try {
@@ -130,6 +138,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
 
       await createSchedule({
         title: title.trim(),
+        hostname: hostname.trim(),
         description: additional.trim(),
         room_id: roomId,
         recurrence: recurrence,
@@ -139,14 +148,28 @@ export default function ScheduleScreen({ navigation, route }: Props) {
         timezone,
         guest: guests.length > 0 ? guests.join(',') : (user?.email || 'host@konn3ct.net'),
       });
-      
+
+      // Clean success path
       setModalVisible(false);
       resetForm();
       fetchData();
       Alert.alert("Success", "Session scheduled successfully!");
     } catch (e: any) {
-      console.error(e);
-      Alert.alert("Error", e.response?.data?.message || "Failed to schedule session.");
+      const status: number = e.response?.status ?? 0;
+
+      console.warn('[ScheduleScreen] createSchedule error:', {
+        status,
+        data: JSON.stringify(e.response?.data),
+        message: e.message,
+      });
+
+      // Show the specific error from the server
+      const msg =
+        e.response?.data?.message ||
+        e.response?.data?.error ||
+        e.message ||
+        "Failed to schedule session. Please try again.";
+      Alert.alert("Error", msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -181,6 +204,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
     setMode('meeting');
     setRecurrence('once');
     setShowRoomSelect(false);
+    setRoomSearch('');
   };
 
   const renderMeetingItem = ({ item }: { item: any }) => {
@@ -222,7 +246,9 @@ export default function ScheduleScreen({ navigation, route }: Props) {
       }
     }
 
-    const roomSlug = item.roomlink ? item.roomlink.split('/').pop() : (item.room?.slug || item.roomId || item.room_id);
+    const roomSlug = (item.roomlink && typeof item.roomlink === 'string') 
+      ? item.roomlink.split('/').pop() 
+      : (item.room?.url || item.room?.slug || item.url || item.slug || String(item.room_id || item.roomId || item.id));
 
     return (
       <View style={styles.card}>
@@ -317,10 +343,7 @@ export default function ScheduleScreen({ navigation, route }: Props) {
           resetForm();
         }}
       >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.modalContainer}
-        >
+        <View style={styles.modalContainer}>
           <View style={styles.modalHeaderTop}>
             <View>
               <Text style={styles.modalTitle}>Schedule Session</Text>
@@ -334,9 +357,13 @@ export default function ScheduleScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView 
+          <KeyboardAwareScrollView
             contentContainerStyle={styles.modalScrollContent}
             showsVerticalScrollIndicator={false}
+            enableOnAndroid={true}
+            extraScrollHeight={120}
+            keyboardShouldPersistTaps="handled"
+            enableAutomaticScroll={true}
           >
             {/* Mode Selection */}
             <View style={styles.modeContainer}>
@@ -428,25 +455,54 @@ export default function ScheduleScreen({ navigation, route }: Props) {
 
                 {showRoomSelect && (
                   <View style={styles.dropdownList}>
-                    {rooms.length === 0 ? (
-                      <Text style={styles.dropdownEmpty}>No rooms found.</Text>
-                    ) : (
-                      rooms.map(r => (
-                        <TouchableOpacity 
-                          key={r.id} 
-                          style={[styles.dropdownItem, roomId === r.id && styles.dropdownItemActive]}
-                          onPress={() => {
-                            setRoomId(r.id);
-                            setShowRoomSelect(false);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, roomId === r.id && {color: '#207450', fontWeight: 'bold'}]}>
-                            {r.name}
-                          </Text>
-                          {roomId === r.id && <Check size={16} color="#207450" />}
+                    {/* Search bar */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f8fafc' }}>
+                      <Search size={16} color="#64748b" style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={{ flex: 1, fontSize: 14, color: '#0f172a', paddingVertical: 6, paddingHorizontal: 4 }}
+                        placeholder="Search rooms..."
+                        value={roomSearch}
+                        onChangeText={setRoomSearch}
+                        placeholderTextColor="#94a3b8"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      {roomSearch.length > 0 && (
+                        <TouchableOpacity onPress={() => setRoomSearch('')} style={{ padding: 4 }}>
+                          <X size={14} color="#64748b" />
                         </TouchableOpacity>
-                      ))
-                    )}
+                      )}
+                    </View>
+
+                    <ScrollView
+                      nestedScrollEnabled={true}
+                      style={{ maxHeight: 200 }}
+                      showsVerticalScrollIndicator={true}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {filteredRooms.length === 0 ? (
+                        <Text style={styles.dropdownEmpty}>
+                          {rooms.length === 0 ? "No rooms found." : "No matching rooms found."}
+                        </Text>
+                      ) : (
+                        filteredRooms.map(r => (
+                          <TouchableOpacity 
+                            key={r.id} 
+                            style={[styles.dropdownItem, roomId === r.id && styles.dropdownItemActive]}
+                            onPress={() => {
+                              setRoomId(r.id);
+                              setShowRoomSelect(false);
+                              setRoomSearch('');
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, roomId === r.id && {color: '#207450', fontWeight: 'bold'}]}>
+                              {r.name}
+                            </Text>
+                            {roomId === r.id && <Check size={16} color="#207450" />}
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </ScrollView>
                   </View>
                 )}
               </View>
@@ -558,32 +614,31 @@ export default function ScheduleScreen({ navigation, route }: Props) {
               </View>
             </View>
 
-            <View style={{height: 40}} />
-          </ScrollView>
-
-          {/* Action Footer */}
-          <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <TouchableOpacity 
-              style={styles.cancelBtn} 
-              onPress={() => {
-                setModalVisible(false);
-                resetForm();
-              }}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
-              onPress={handleSchedule}
-              disabled={isSubmitting}
-              testID="schedule-submit-btn"
-            >
-              <Text style={styles.submitBtnText}>
-                {isSubmitting ? 'Scheduling...' : 'Schedule Session'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+            {/* Action Footer inside scroll so it rises above keyboard */}
+            <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+              <TouchableOpacity 
+                style={styles.cancelBtn} 
+                onPress={() => {
+                  setModalVisible(false);
+                  resetForm();
+                }}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
+                onPress={handleSchedule}
+                disabled={isSubmitting}
+                testID="schedule-submit-btn"
+              >
+                <Text style={styles.submitBtnText}>
+                  {isSubmitting ? 'Scheduling...' : 'Schedule Session'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{height: 24}} />
+          </KeyboardAwareScrollView>
+        </View>
 
         {showDatePicker && (
           <DateTimePicker

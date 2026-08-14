@@ -646,6 +646,9 @@ export function initializeSignaling(server: Server) {
           disconnectTimeouts.delete(timeoutKey);
         }
 
+        // Clean up stale WebRTC state from the old connection before terminating
+        cleanupParticipantMedia(existingClient, room.id);
+
         try {
           existingClient.ws.terminate();
         } catch(e) {}
@@ -717,6 +720,12 @@ export function initializeSignaling(server: Server) {
       clearTimeout(disconnectTimeouts.get(`${participantId}:${roomId}`)!);
       disconnectTimeouts.delete(`${participantId}:${roomId}`);
       logger.info(`Participant ${participantId} (User ${userId}) reconnected to room ${roomId} during grace period`);
+
+      // Clean up stale WebRTC state from the previous connection
+      if (existingClient) {
+        cleanupParticipantMedia(existingClient, roomId);
+      }
+
       ws.send(JSON.stringify({ 
         type: 'session_status', 
         recovered: true, 
@@ -1001,6 +1010,38 @@ export function initializeSignaling(server: Server) {
       status,
       errorCode
     }));
+  }
+
+  /**
+   * Idempotent cleanup of all WebRTC media state for a participant.
+   * Closes transports, removes producers and consumer references.
+   * Safe to call multiple times.
+   */
+  function cleanupParticipantMedia(client: Client, roomId: string) {
+    // Close all transports owned by this client
+    for (const tId of client.transports) {
+      try {
+        closeTransport(tId);
+      } catch (e) {
+        logger.warn(`[cleanupParticipantMedia] Failed to close transport ${tId}`, e);
+      }
+    }
+    client.transports = [];
+
+    // Remove all producers belonging to this client from the room's producer list
+    const producers = roomProducers.get(roomId);
+    if (producers) {
+      roomProducers.set(roomId, producers.filter(p => p.participantId !== client.participantId));
+    }
+
+    // Remove all consumer references owned by this client
+    for (const [consumerId, owner] of consumerOwners.entries()) {
+      if (owner === client) {
+        consumerOwners.delete(consumerId);
+      }
+    }
+
+    logger.info(`[cleanupParticipantMedia] Cleaned up media state for user ${client.userId} (participant ${client.participantId}) in room ${roomId}`);
   }
 
   async function handleMessage(client: Client, data: any) {
@@ -2604,8 +2645,15 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'ping':
-        // Silently ignore ping messages used for keep-alive
+        client.ws.send(JSON.stringify({ type: 'pong', timestamp: data.timestamp ?? Date.now() }));
         break;
+
+      case 'reset_webrtc_state': {
+        logger.info(`[ResetWebRTC] Room ${roomId} | User ${client.userId}: Cleaning up old media state`);
+        await cleanupParticipantMedia(client, roomId);
+        client.ws.send(JSON.stringify({ type: 'webrtc_state_reset', timestamp: Date.now() }));
+        break;
+      }
 
       case 'webrtc_client_stats':
         logger.info(`[ClientStats] Room ${roomId} | User ${client.userId}: RTT=${data.roundTripTime || 0}ms, Jitter=${data.jitter || 0}, Loss=${data.packetsLost || 0}`);

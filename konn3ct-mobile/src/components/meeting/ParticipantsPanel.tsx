@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, Platform, Modal, TouchableWithoutFeedback
+  StyleSheet, Platform, Modal, TouchableWithoutFeedback, Alert
 } from 'react-native';
 import { useMeetingStore } from '../../store/useMeetingStore';
 import { meetingThemeTokens } from '../../theme/meetingTheme';
 import { MediasoupService } from '../../webrtc/MediasoupService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, MicOff, Shield, ShieldOff, UserMinus, ChevronRight } from 'lucide-react-native';
+import { Mic, MicOff, Shield, ShieldOff, UserMinus, ChevronRight, Lock, MessageSquare } from 'lucide-react-native';
 
 interface ParticipantsPanelProps {
   service: MediasoupService | null;
@@ -29,8 +29,9 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const sendWs = (service: MediasoupService | null, payload: object) => {
-  if (service?.ws && service.ws.readyState === WebSocket.OPEN) {
-    service.ws.send(JSON.stringify(payload));
+  const ws = (service as any)?.ws;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
   }
 };
 
@@ -41,6 +42,7 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
   const isHost        = useMeetingStore(state => state.isHost);
   const currentUserId = useMeetingStore(state => state.currentUserId);
   const currentUserRole = useMeetingStore(state => state.currentUserRole);
+  const chatLocked    = useMeetingStore(state => state.chatLocked);
 
   const theme  = useMeetingStore(state => state.theme);
   const tokens = meetingThemeTokens[theme];
@@ -53,12 +55,13 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
 
   // Whether the current user can manage others
   const canManage = currentUserRole === 'host' || currentUserRole === 'co-host';
+  const canManageChatLock = isHost || currentUserRole === 'co-host' || currentUserRole === 'moderator';
   const isActualHost = currentUserRole === 'host';
 
   /* ── handlers ─────────────────────────────────────────────────────────── */
   const handleAdmit = (userId: string) => { service?.admitUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
   const handleDeny  = (userId: string) => { service?.denyUser(userId); useMeetingStore.getState().removeWaitingRoomUser(userId); };
-  const handleMuteAll = () => service?.forceMute();
+  
 
   const handleMuteUser = (userId: string) => {
     sendWs(service, { type: 'force_mute', userId });
@@ -244,13 +247,6 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ service })
       </View>
 
       <ScrollView style={styles.listContainer} contentContainerStyle={{ paddingBottom: safeBottom + 16 }}>
-        {/* Mute All */}
-        {isHost && (
-          <TouchableOpacity style={styles.muteAllBtn} onPress={handleMuteAll}>
-            <MicOff size={16} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.muteAllText}>Mute All</Text>
-          </TouchableOpacity>
-        )}
 
         {/* Waiting Room */}
         {isHost && waitingRoom.length > 0 && (
@@ -334,16 +330,40 @@ const getStyles = (t: any) => StyleSheet.create({
   closeText: { color: t.textMuted, fontSize: 20 },
   listContainer: { flex: 1, padding: 16 },
 
-  muteAllBtn: {
-    backgroundColor: t.primary,
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  muteAllText: { color: '#fff', fontWeight: '700', fontSize: 14, fontFamily: 'Inter' },
+    hostControlRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 16,
+    },
+    muteAllBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: t.danger,
+      borderRadius: 12,
+    },
+    muteAllText: { color: '#fff', fontWeight: '700', fontSize: 14, fontFamily: 'Inter' },
+    lockChatBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: t.bgElevated,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: t.primary,
+    },
+    lockChatBtnActive: {
+      backgroundColor: t.primary,
+      borderColor: t.primary,
+    },
+    lockChatText: { color: t.primary, fontWeight: '700', fontSize: 14, fontFamily: 'Inter' },
+    lockChatTextActive: { color: '#fff' },
 
   section: { marginBottom: 20 },
   sectionTitle: {

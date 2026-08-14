@@ -17,7 +17,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.onegov.govmeeting',
-      buildNumber: '1',
+      buildNumber: '3',
       infoPlist: {
         NSCameraUsageDescription: `Allow ${APP_NAME} to access your camera for video meetings.`,
         NSMicrophoneUsageDescription: `Allow ${APP_NAME} to access your microphone for video meetings.`,
@@ -26,7 +26,7 @@ module.exports = {
     },
     android: {
       package: 'com.onegov.govmeeting',
-      versionCode: 1,
+      versionCode: 3,
       adaptiveIcon: {
         backgroundColor: '#0a5c36',
         foregroundImage: './assets/adaptive-icon.png',
@@ -73,6 +73,8 @@ module.exports = {
       './plugins/withPiP',
       './plugins/withScreenShare',
       './plugins/withMeetingService',
+      './plugins/withNotificationSound',
+      'expo-audio',
     ],
     extra: {
           "eas": {
