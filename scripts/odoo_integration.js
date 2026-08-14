@@ -22,13 +22,14 @@ const buildStatus = argv['build-status'] || '';
 const repo = argv['repo'] || '';
 const runId = argv['run-id'] || '';
 const commitSha = argv['commit-sha'] || '';
+const commitMessage = argv['commit-message'] || '';
 const author = argv['author'] || 'Unknown';
 
 // The pattern matching the Blueprint Traceability IDs (e.g., KE-V06-MEDIA-REQ-001)
 const ID_REGEX = /KE-[A-Z0-9]+-[A-Z]+-[A-Z]+-\d+/i;
 
-function extractId(text1, text2) {
-  const match = (text1 || '').match(ID_REGEX) || (text2 || '').match(ID_REGEX);
+function extractId(text1, text2, text3) {
+  const match = (text1 || '').match(ID_REGEX) || (text2 || '').match(ID_REGEX) || (text3 || '').match(ID_REGEX);
   return match ? match[0].toUpperCase() : null;
 }
 
@@ -70,7 +71,7 @@ async function authenticate() {
 }
 
 async function verifyPr() {
-  const id = extractId(prTitle, branchName);
+  const id = extractId(prTitle, branchName, commitMessage);
   if (!id) {
     console.error(`❌ PR Verification Failed: No valid Odoo Traceability ID found in branch (${branchName}) or title (${prTitle}).`);
     console.error(`Expected format: KE-VXX-DOMAIN-TYPE-000 (e.g., KE-V06-MEDIA-REQ-001)`);
@@ -81,7 +82,7 @@ async function verifyPr() {
 }
 
 async function postEvidence() {
-  const id = extractId(prTitle, branchName);
+  const id = extractId(prTitle, branchName, commitMessage);
   if (!id) {
     console.log("No Traceability ID found. Skipping evidence post.");
     return;

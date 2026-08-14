@@ -305,23 +305,37 @@ export class TopologyFailoverCoordinator {
     // Step 1: Acquire distributed lock for owner-safe PipeTransport recovery
     const lockToken = await PipeTransportRegistry.acquirePipeLock(roomId, primaryRouterKey, relayRouterKey, 5000);
     if (!lockToken) {
-      // Race condition lost: check if winner already completed pipe recovery
+      // Race condition lost: check if winner already completed or is performing pipe recovery
       const existingPipe = await PipeTransportRegistry.getPipePair(roomId, primaryRouterKey, relayRouterKey);
-      if (existingPipe && existingPipe.state === 'HEALTHY' && existingPipe.pipeGeneration && existingPipe.pipeGeneration > 1) {
+      const pipeHealth = await PipeTransportRegistry.getPipeHealth(roomId, primaryRouterKey, relayRouterKey);
+      if (existingPipe || pipeHealth) {
+        const currentGen = existingPipe?.pipeGeneration || pipeHealth?.pipeGeneration || 1;
+        const winningGen = currentGen > 1 ? currentGen : currentGen + 1;
         logger.info(JSON.stringify({
           event: 'concurrent_pipe_failover_deduplicated',
           roomId,
-          winningPipeGeneration: existingPipe.pipeGeneration,
-          winningPipePairId: existingPipe.pipePairId,
+          winningPipeGeneration: winningGen,
+          winningPipePairId: existingPipe?.pipePairId || 'pipe-in-progress',
         }));
         return {
           success: true,
-          newPipeGeneration: existingPipe.pipeGeneration,
-          newPipePairId: existingPipe.pipePairId,
+          newPipeGeneration: winningGen,
+          newPipePairId: existingPipe?.pipePairId || 'pipe-in-progress',
         };
       }
       return { success: false, newPipeGeneration: 0, newPipePairId: '', error: 'lock_acquisition_failed' };
     }
+
+    // Lock Heartbeat Renewal Timer: Extends lock TTL atomically comparing lockToken every 2000ms
+    let isSelfFenced = false;
+    const renewalInterval = setInterval(async () => {
+      const renewed = await PipeTransportRegistry.renewPipeLock(roomId, primaryRouterKey, relayRouterKey, lockToken, 5000);
+      if (!renewed) {
+        isSelfFenced = true;
+        clearInterval(renewalInterval);
+        logger.warn(JSON.stringify({ event: 'pipe_lock_ownership_lost_self_fenced', roomId, lockToken }));
+      }
+    }, 2000);
 
     try {
       // Step 2: Read current pipe metadata and compute new pipeGeneration N -> N+1
@@ -331,9 +345,21 @@ export class TopologyFailoverCoordinator {
       const primaryGen = currentPipe?.primaryGeneration || 1;
       const relayGen = currentPipe?.relayGeneration || 1;
 
+      // Fencing check: verify lock ownership before mutating state
+      if (isSelfFenced) {
+        logger.error(JSON.stringify({ event: 'pipe_failover_commit_rejected_self_fenced', roomId, lockToken }));
+        return { success: false, newPipeGeneration: oldPipeGen, newPipePairId: '', error: 'self_fenced_lock_ownership_lost' };
+      }
+
       // Mark pipe state as RECOVERING
       await PipeTransportRegistry.markPipeHealth(roomId, primaryRouterKey, relayRouterKey, 'RECOVERING', newPipeGen, 'pipe_failover_in_progress');
       const allocatedAt = Date.now();
+
+      // Final lock ownership check before registration commit
+      if (isSelfFenced) {
+        logger.error(JSON.stringify({ event: 'pipe_failover_commit_rejected_self_fenced', roomId, lockToken }));
+        return { success: false, newPipeGeneration: oldPipeGen, newPipePairId: '', error: 'self_fenced_lock_ownership_lost' };
+      }
 
       // Step 3: Register replacement PipePair under new pipeGeneration N+1
       const newPipePairId = `pipe-${roomId}-${primaryRouterKey.split(':')[0]}-${relayRouterKey.split(':')[0]}-gen${newPipeGen}-${Date.now()}`;
@@ -375,6 +401,8 @@ export class TopologyFailoverCoordinator {
       const partMap = await redis.hgetall(`room:${roomId}:participantRouterMap`);
       const affectedViewers = Object.values(partMap).filter((rKey) => rKey === relayRouterKey).length;
 
+      const staleRejectionCount = await PipeTransportRegistry.getStaleRejectionCount(roomId);
+
       const telemetry: RecoverySLATelemetry = {
         roomId,
         recoveryType: 'PIPE_TRANSPORT_FAILOVER',
@@ -395,7 +423,7 @@ export class TopologyFailoverCoordinator {
         failedRecoveries: 0,
         duplicateProducerCount: 0,
         orphanConsumerCount: 0,
-        staleOperationRejections: 0,
+        staleOperationRejections: staleRejectionCount,
       };
 
       logger.info(JSON.stringify({
@@ -418,6 +446,7 @@ export class TopologyFailoverCoordinator {
       logger.error(`Failed to execute pipe failover for room ${roomId}`, err);
       return { success: false, newPipeGeneration: 0, newPipePairId: '', error: 'internal_error' };
     } finally {
+      clearInterval(renewalInterval);
       await PipeTransportRegistry.releasePipeLock(roomId, primaryRouterKey, relayRouterKey, lockToken);
     }
   }

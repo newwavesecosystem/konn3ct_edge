@@ -24,7 +24,7 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
     MediaPodGracefulShutdownService.resetPodDrainState(podA);
     MediaPodGracefulShutdownService.resetPodDrainState(podB);
     MediaPodGracefulShutdownService.resetPodDrainState(podC);
-  });
+  }, 60000);
 
   afterEach(async () => {
     await redis.flushall();

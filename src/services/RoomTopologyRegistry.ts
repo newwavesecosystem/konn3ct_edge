@@ -1033,8 +1033,7 @@ export class RoomTopologyRegistry {
 
       if (existingLeaseRaw && existingLeaseRaw.leaseToken) {
         const expiresAt = parseInt(existingLeaseRaw.leaseExpiresAt || '0', 10);
-        const isExistingPrimaryLive = await this.isMediaPodLive(existingLeaseRaw.primaryPodId);
-        if (now < expiresAt && existingLeaseRaw.primaryPodId !== primaryPodId && isExistingPrimaryLive) {
+        if (now < expiresAt && existingLeaseRaw.primaryPodId !== primaryPodId) {
           logger.warn(JSON.stringify({
             event: 'primary_election_rejected_active_lease',
             roomId,

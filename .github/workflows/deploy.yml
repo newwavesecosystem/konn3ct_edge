@@ -172,7 +172,8 @@ jobs:
             --build-status "${{ job.status }}" \
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
-            --commit-sha "${{ github.sha }}"
+            --commit-sha "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}"
             
       - name: Automated Defect Creation
         if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
@@ -188,4 +189,5 @@ jobs:
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
             --commit-sha "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}" \
             --author "${{ github.actor }}"
