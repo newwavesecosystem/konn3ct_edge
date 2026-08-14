@@ -5,6 +5,7 @@ import { TopologyFailoverCoordinator } from '../../src/services/TopologyFailover
 import { SpeakerPromotionRegistry } from '../../src/services/SpeakerPromotionRegistry';
 import { SpeakerPromotionCoordinator } from '../../src/services/SpeakerPromotionCoordinator';
 import { ViewerSubscriptionManager, PipedCatalogueItem } from '../../src/services/ViewerSubscriptionManager';
+import { PipeTransportHealthMonitor } from '../../src/services/PipeTransportHealthMonitor';
 import { redis } from '../../src/redis';
 
 describe('Phase 6F-3 — PipeTransport Failure & Recovery Code Gate Unit Suite', { hookTimeout: 60000, timeout: 120000 }, () => {
@@ -353,5 +354,147 @@ describe('Phase 6F-3 — PipeTransport Failure & Recovery Code Gate Unit Suite',
     await PipeTransportRegistry.markPipeHealth(roomId, primKey, relayKey, 'PIPE_FAILED', 1, 'network_failure');
     const health = await PipeTransportRegistry.getPipeHealth(roomId, primKey, relayKey);
     expect(health?.pipeHealthState).toBe('PIPE_FAILED');
+  });
+
+  it('11. Autonomous PipeTransportHealthMonitor distinguishes silent/quiet room from broken UDP pipe', async () => {
+    const roomId = 'room-pipe-gate-11';
+    const primKey = `${podA}:router-primary`;
+    const relayKey = `${podC}:router-relay-1`;
+
+    await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-a', 'router-primary', 30000);
+    await RoomTopologyRegistry.registerRelayRouter(roomId, relayKey, podC, { state: 'READY' });
+
+    // Scenario A: Intentionally Quiet Room (RMS = 0, zero audio bytes, static video)
+    // RTCP keepalive packets flow continuously on the PipeTransport
+    const sample1 = { rtcpBytesSent: 100, rtcpBytesReceived: 100, rtpBytesSent: 0, rtpBytesReceived: 0, timestamp: Date.now() - 5000 };
+    const sample2 = { rtcpBytesSent: 200, rtcpBytesReceived: 200, rtpBytesSent: 0, rtpBytesReceived: 0, timestamp: Date.now() };
+
+    const quietHealth = await PipeTransportHealthMonitor.evaluatePipeHealth(roomId, primKey, relayKey, sample2, sample1, 1);
+    expect(quietHealth.pipeHealthState).toBe('HEALTHY'); // Quiet room DOES NOT false-fail!
+
+    // Scenario B: Genuine UDP Blackhole (0 RTCP, 0 RTP bytes delta across >4000ms)
+    const deadSample1 = { rtcpBytesSent: 200, rtcpBytesReceived: 200, rtpBytesSent: 0, rtpBytesReceived: 0, timestamp: Date.now() - 5000 };
+    const deadSample2 = { rtcpBytesSent: 200, rtcpBytesReceived: 200, rtpBytesSent: 0, rtpBytesReceived: 0, timestamp: Date.now() };
+
+    const deadHealth = await PipeTransportHealthMonitor.evaluatePipeHealth(roomId, primKey, relayKey, deadSample2, deadSample1, 1);
+    expect(deadHealth.pipeHealthState).toBe('PIPE_FAILED');
+    expect(deadHealth.failureReason).toContain('udp_blackhole_inactivity');
+  });
+
+  it('12. Lock renewal and RECOVERING state fence recovery running longer than 5s TTL', async () => {
+    const roomId = 'room-pipe-gate-12';
+    const primKey = `${podA}:router-primary`;
+    const relayKey = `${podC}:router-relay-1`;
+
+    await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-a', 'router-primary', 30000);
+    await RoomTopologyRegistry.registerRelayRouter(roomId, relayKey, podC, { state: 'READY' });
+
+    await PipeTransportRegistry.registerPipePair(roomId, primKey, relayKey, {
+      pipePairId: 'pipe-gen1',
+      roomId,
+      primaryRouterKey: primKey,
+      relayRouterKey: relayKey,
+      primaryGeneration: 1,
+      relayGeneration: 1,
+      pipeGeneration: 1,
+      primaryPipeTransportId: 'prim-pipe-1',
+      relayPipeTransportId: 'relay-pipe-1',
+      connected: true,
+      pipedProducerIds: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      state: 'HEALTHY',
+    });
+
+    // Start slow Coordinator A failover
+    const coordAPromise = TopologyFailoverCoordinator.executePipeFailover(roomId, primKey, relayKey);
+
+    // Wait 100ms so Coordinator A acquires lock and marks state as RECOVERING
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Coordinator B attempts failover while A is in progress
+    const resB = await TopologyFailoverCoordinator.executePipeFailover(roomId, primKey, relayKey);
+
+    // Coordinator B is deduplicated and returns generation 2
+    expect(resB.success).toBe(true);
+    expect(resB.newPipeGeneration).toBe(2);
+
+    const resA = await coordAPromise;
+    expect(resA.success).toBe(true);
+    expect(resA.newPipeGeneration).toBe(2);
+
+    // Verification of required safety invariants
+    const snapshot = await PipeTransportRegistry.getPipeSnapshot(roomId);
+    expect(snapshot.length).toBe(1); // Exactly 1 active PipePair!
+    expect(snapshot[0].pipeGeneration).toBe(2); // Authoritative pipeGeneration = 2 (NOT 3)!
+  });
+
+  it('13. Stale owner lock renewal is rejected and stale coordinator is self-fenced after lock loss', async () => {
+    const roomId = 'room-pipe-gate-13';
+    const primKey = `${podA}:router-primary`;
+    const relayKey = `${podC}:router-relay-1`;
+
+    await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-a', 'router-primary', 30000);
+    await RoomTopologyRegistry.registerRelayRouter(roomId, relayKey, podC, { state: 'READY' });
+
+    // Coordinator A acquires lock with token-A
+    const tokenA = await PipeTransportRegistry.acquirePipeLock(roomId, primKey, relayKey, 500);
+    expect(tokenA).toBeDefined();
+
+    // Token-A expires / lock key deleted and Coordinator B acquires lock with token-B
+    await new Promise((r) => setTimeout(r, 600));
+    const tokenB = await PipeTransportRegistry.acquirePipeLock(roomId, primKey, relayKey, 5000);
+    expect(tokenB).toBeDefined();
+    expect(tokenB).not.toBe(tokenA);
+
+    // Stale Coordinator A attempts renewal using token-A -> REJECTED (false)!
+    const renewResA = await PipeTransportRegistry.renewPipeLock(roomId, primKey, relayKey, tokenA!, 5000);
+    expect(renewResA).toBe(false); // token-A CANNOT extend token-B!    // Coordinator B completes renewal and registers generation 2 successfully -> OK!
+    const renewResB = await PipeTransportRegistry.renewPipeLock(roomId, primKey, relayKey, tokenB!, 5000);
+    expect(renewResB).toBe(true);
+
+    await PipeTransportRegistry.registerPipePair(roomId, primKey, relayKey, {
+      pipePairId: 'pipe-gen2-coordB',
+      roomId,
+      primaryRouterKey: primKey,
+      relayRouterKey: relayKey,
+      primaryGeneration: 1,
+      relayGeneration: 1,
+      pipeGeneration: 2, // Coordinator B generation 2!
+      primaryPipeTransportId: 'prim-gen2',
+      relayPipeTransportId: 'relay-gen2',
+      connected: true,
+      pipedProducerIds: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      state: 'HEALTHY',
+    });
+
+    // Stale Coordinator A attempts commit under old generation 1 -> REJECTED / SELF-FENCED!
+    const staleCommitRes = await PipeTransportRegistry.registerPipePair(roomId, primKey, relayKey, {
+      pipePairId: 'pipe-stale-commit-attempt',
+      roomId,
+      primaryRouterKey: primKey,
+      relayRouterKey: relayKey,
+      primaryGeneration: 1,
+      relayGeneration: 1,
+      pipeGeneration: 1, // Stale generation 1!
+      primaryPipeTransportId: 'prim-stale',
+      relayPipeTransportId: 'relay-stale',
+      connected: true,
+      pipedProducerIds: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    expect(staleCommitRes.success).toBe(false);
+    expect(staleCommitRes.error).toBe('stale_pipe_generation');
+
+    // Required safety invariants verified
+    const snapshot = await PipeTransportRegistry.getPipeSnapshot(roomId);
+    expect(snapshot.length).toBe(1);
+    expect(snapshot[0].pipeGeneration).toBe(2); // Authoritative generation remains 2!
+
+    // Release lock B cleanly
+    await PipeTransportRegistry.releasePipeLock(roomId, primKey, relayKey, tokenB!);
   });
 });

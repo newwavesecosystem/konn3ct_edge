@@ -66,6 +66,29 @@ export class PipeTransportRegistry {
   }
 
   /**
+   * Renew owner-safe distributed lock atomically comparing lockToken via Lua script.
+   */
+  public static async renewPipeLock(
+    roomId: string,
+    primaryRouterKey: RouterKey,
+    relayRouterKey: RouterKey,
+    lockToken: string,
+    ttlMs = 5000
+  ): Promise<boolean> {
+    if (!roomId || !lockToken) return false;
+    const lockKey = this.keyPipeLock(roomId, primaryRouterKey, relayRouterKey);
+    const script = `
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("pexpire", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    `;
+    const res = await redis.eval(script, 1, lockKey, lockToken, ttlMs.toString());
+    return res === 1;
+  }
+
+  /**
    * Fetches existing PipeTransport pair metadata between Primary and Relay Routers.
    */
   public static async getPipePair(
@@ -131,6 +154,7 @@ export class PipeTransportRegistry {
 
         // Fencing check: reject stale pipe generation
         if (requestedGen < existingGen) {
+          await this.incrementStaleRejectionCount(roomId);
           logger.warn(JSON.stringify({
             event: 'stale_pipe_generation_rejected',
             roomId,
@@ -491,5 +515,16 @@ export class PipeTransportRegistry {
       logger.error(`Failed to fetch PipeTransport snapshot for room ${roomId}`, err);
       return [];
     }
+  }
+
+  public static async incrementStaleRejectionCount(roomId: string): Promise<number> {
+    if (!roomId) return 0;
+    return await redis.incr(`room:${roomId}:staleRejectionsCount`);
+  }
+
+  public static async getStaleRejectionCount(roomId: string): Promise<number> {
+    if (!roomId) return 0;
+    const val = await redis.get(`room:${roomId}:staleRejectionsCount`);
+    return val ? parseInt(val, 10) : 0;
   }
 }
