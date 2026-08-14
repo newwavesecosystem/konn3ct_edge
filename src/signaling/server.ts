@@ -647,7 +647,7 @@ export function initializeSignaling(server: Server) {
         }
 
         // Clean up stale WebRTC state from the old connection before terminating
-        cleanupParticipantMedia(existingClient, room.id);
+        await cleanupParticipantMedia(existingClient, room.id);
 
         try {
           existingClient.ws.terminate();
@@ -723,7 +723,7 @@ export function initializeSignaling(server: Server) {
 
       // Clean up stale WebRTC state from the previous connection
       if (existingClient) {
-        cleanupParticipantMedia(existingClient, roomId);
+        await cleanupParticipantMedia(existingClient, roomId);
       }
 
       ws.send(JSON.stringify({ 
@@ -1017,11 +1017,11 @@ export function initializeSignaling(server: Server) {
    * Closes transports, removes producers and consumer references.
    * Safe to call multiple times.
    */
-  function cleanupParticipantMedia(client: Client, roomId: string) {
+  async function cleanupParticipantMedia(client: Client, roomId: string) {
     // Close all transports owned by this client
     for (const tId of client.transports) {
       try {
-        closeTransport(tId);
+        mediaController.closeTransport(tId);
       } catch (e) {
         logger.warn(`[cleanupParticipantMedia] Failed to close transport ${tId}`, e);
       }
@@ -1029,10 +1029,7 @@ export function initializeSignaling(server: Server) {
     client.transports = [];
 
     // Remove all producers belonging to this client from the room's producer list
-    const producers = roomProducers.get(roomId);
-    if (producers) {
-      roomProducers.set(roomId, producers.filter(p => p.participantId !== client.participantId));
-    }
+    await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
 
     // Remove all consumer references owned by this client
     for (const [consumerId, owner] of consumerOwners.entries()) {

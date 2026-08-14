@@ -102,16 +102,6 @@ export class RoomTopologyRegistry {
       await new Promise((r) => setTimeout(r, retryDelayMs));
     }
 
-    try {
-      await redis.del(this.keyLock(roomId));
-      const res = await redis.set(this.keyLock(roomId), lockToken, 'PX', this.LOCK_TTL_MS, 'NX');
-      if (res === 'OK') {
-        return { lockToken, acquired: true };
-      }
-    } catch (e) {
-      // Ignore
-    }
-
     return { lockToken: '', acquired: false };
   }
 

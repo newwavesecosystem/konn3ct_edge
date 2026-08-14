@@ -279,8 +279,9 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
       );
       await SpeakerPromotionCoordinator.acceptInvitationToSpeak(roomId, 'spk-1', invite.data!.promotionId, invite.data!.promotionVersion);
 
-      // Simulate Primary Pod A Crash
+      // Simulate Primary Pod A Crash and lease expiry
       await redis.del(`media:node:${podA}:heartbeat`);
+      await redis.hset(`room:${roomId}:primaryLease`, 'leaseExpiresAt', (Date.now() - 1000).toString());
 
       // Execute Primary failover to Pod C
       const failoverRes = await TopologyFailoverCoordinator.executePrimaryFailover(roomId, podC, 'inst-2', 'router-primary');
@@ -334,6 +335,7 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
 
       // Simulate Primary failover -> generation bumped to 2
       await redis.del(`media:node:${podA}:heartbeat`);
+      await redis.hset(`room:${roomId}:primaryLease`, 'leaseExpiresAt', (Date.now() - 1000).toString());
       await TopologyFailoverCoordinator.executePrimaryFailover(roomId, podC, 'inst-2', 'router-primary');
 
       // Host attempts publish with stale generation 1 -> REJECTED
