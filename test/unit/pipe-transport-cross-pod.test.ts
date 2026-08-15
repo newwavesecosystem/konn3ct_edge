@@ -382,9 +382,8 @@ describe('Phase 6C-2: Cross-Pod Redis RPC PipeTransport MVP', () => {
 
   // Test 10: RPC timeout triggers rollback
   it('triggers rollback when RPC to target pod times out', async () => {
-    await redis.set('media:node:dead-pod:heartbeat', 'active');
+    await redis.set('media:node:dead-pod:heartbeat', JSON.stringify({ status: 'healthy' }));
     const res = await createCrossPodPipePair(roomId, podA, primaryRouterId, 'dead-pod', relayRouterId);
-    await redis.del('media:node:dead-pod:heartbeat');
     expect(res.success).toBe(false);
     expect(res.error).toContain('RPC Timeout');
   });

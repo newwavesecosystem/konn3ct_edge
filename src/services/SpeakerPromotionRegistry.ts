@@ -449,9 +449,10 @@ export class SpeakerPromotionRegistry {
    * Clear all speaker promotion state for a room
    */
   public static async clearRoomSpeakerPromotions(roomId: string): Promise<void> {
-    const keys = await redis.keys(`room:${roomId}:promotion:*`);
+    const keys = await redis.keys(`room:${roomId}:speaker:*`);
+    const promoKeys = await redis.keys(`room:${roomId}:promotion:*`);
     const multi = redis.multi();
-    for (const k of keys) {
+    for (const k of [...keys, ...promoKeys]) {
       multi.del(k);
     }
     multi.del(this.keySpeakerCapacity(roomId));

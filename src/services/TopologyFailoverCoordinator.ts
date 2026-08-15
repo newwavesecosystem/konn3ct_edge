@@ -57,112 +57,120 @@ export class TopologyFailoverCoordinator {
     newPrimaryInstanceId: string,
     routerId: string
   ): Promise<{ success: boolean; telemetry?: RecoverySLATelemetry; error?: string }> {
-    const observedAt = Date.now();
-    const detectedAt = observedAt + 50; // Detection latency
-    const startedAt = Date.now();
+    try {
+      const observedAt = Date.now();
+      const detectedAt = observedAt + 50; // Detection latency
+      const startedAt = Date.now();
 
-    logger.warn(JSON.stringify({
-      event: 'primary_failover_initiated',
-      roomId,
-      newPrimaryPodId,
-      newPrimaryInstanceId,
-    }));
-
-    // Step 1: Elect new Primary Pod under lease token & increment primaryGeneration
-    const electionRes = await RoomTopologyRegistry.electPrimaryRouter(
-      roomId,
-      newPrimaryPodId,
-      newPrimaryInstanceId,
-      routerId,
-      TOPOLOGY_FAILOVER_CONFIG.PRIMARY_LEASE_TTL_MS
-    );
-
-    if (!electionRes.success || !electionRes.data) {
-      logger.error(`Primary election failed for room ${roomId}: ${electionRes.error}`);
-      return { success: false, error: electionRes.error || 'Election failed' };
-    }
-
-    const lease = electionRes.data;
-    const allocatedAt = Date.now();
-    const newPrimaryRouterKey = lease.primaryRouterKey;
-
-    // Step 2: Re-pipe Primary Producers to all active Relays under new pipeGeneration
-    const relays = await RoomTopologyRegistry.getRelayRouters(roomId);
-    let pipedCount = 0;
-
-    for (const rKey of relays) {
-      const currentSnapshot = await PipeTransportRegistry.getPipeSnapshot(roomId);
-      const pipePairId = `pipe-${roomId}-${newPrimaryPodId}-${rKey.split(':')[0]}-${Date.now()}`;
-      const newPipeGen = (currentSnapshot[0]?.pipeGeneration || 0) + 1;
-
-      await PipeTransportRegistry.registerPipePair(roomId, newPrimaryRouterKey, rKey, {
-        pipePairId,
+      logger.warn(JSON.stringify({
+        event: 'primary_failover_initiated',
         roomId,
-        primaryRouterKey: newPrimaryRouterKey,
-        relayRouterKey: rKey,
-        primaryGeneration: lease.primaryGeneration,
-        pipeGeneration: newPipeGen,
-        primaryPipeTransportId: `pipe-prim-${Date.now()}`,
-        relayPipeTransportId: `pipe-relay-${Date.now()}`,
-        connected: true,
-        pipedProducerIds: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      pipedCount++;
-    }
+        newPrimaryPodId,
+        newPrimaryInstanceId,
+      }));
 
-    const pipeRestoredAt = Date.now();
+      // Step 1: Elect new Primary Pod under lease token & increment primaryGeneration
+      const electionRes = await RoomTopologyRegistry.electPrimaryRouter(
+        roomId,
+        newPrimaryPodId,
+        newPrimaryInstanceId,
+        routerId,
+        TOPOLOGY_FAILOVER_CONFIG.PRIMARY_LEASE_TTL_MS
+      );
 
-    // Step 3: Increment publishSessionGeneration for all promoted speakers so stale primary producers are fenced
-    const promoKeys = await redis.keys(`room:${roomId}:promotion:*`);
-    let reconnectedSpeakers = 0;
+      if (!electionRes.success || !electionRes.data) {
+        logger.error(`Primary election failed for room ${roomId}: ${electionRes.error}`);
+        return { success: false, error: electionRes.error || 'Election failed' };
+      }
 
-    for (const key of promoKeys) {
-      const pid = key.split(':').pop();
-      if (pid) {
-        const pData = await SpeakerPromotionRegistry.getPromotionData(roomId, pid);
-        if (pData && pData.state === 'PROMOTED_SPEAKER') {
-          await SpeakerPromotionRegistry.incrementPublishSessionGeneration(roomId, pid);
-          reconnectedSpeakers++;
+      const lease = electionRes.data;
+      const allocatedAt = Date.now();
+      const newPrimaryRouterKey = lease.primaryRouterKey;
+
+      // Step 2: Re-pipe Primary Producers to all active Relays under new pipeGeneration
+      const relays = await RoomTopologyRegistry.getRelayRouters(roomId);
+      let pipedCount = 0;
+
+      for (const rKey of relays) {
+        if (lease.primaryGeneration > 1) {
+          await PipeTransportRegistry.retireOldGenerationPipe(roomId, newPrimaryRouterKey, rKey, lease.primaryGeneration - 1);
+        }
+        const currentSnapshot = await PipeTransportRegistry.getPipeSnapshot(roomId);
+        const pipePairId = `pipe-${roomId}-${newPrimaryPodId}-${rKey.split(':')[0]}-${Date.now()}`;
+        const newPipeGen = (currentSnapshot[0]?.pipeGeneration || 0) + 1;
+
+        await PipeTransportRegistry.registerPipePair(roomId, newPrimaryRouterKey, rKey, {
+          pipePairId,
+          roomId,
+          primaryRouterKey: newPrimaryRouterKey,
+          relayRouterKey: rKey,
+          primaryGeneration: lease.primaryGeneration,
+          pipeGeneration: newPipeGen,
+          primaryPipeTransportId: `pipe-prim-${Date.now()}`,
+          relayPipeTransportId: `pipe-relay-${Date.now()}`,
+          connected: true,
+          pipedProducerIds: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        pipedCount++;
+      }
+
+      const pipeRestoredAt = Date.now();
+
+      // Step 3: Increment publishSessionGeneration for all promoted speakers so stale primary producers are fenced
+      const promoKeys = await redis.keys(`room:${roomId}:promotion:*`);
+      let reconnectedSpeakers = 0;
+
+      for (const key of promoKeys) {
+        const pid = key.split(':').pop();
+        if (pid) {
+          const pData = await SpeakerPromotionRegistry.getPromotionData(roomId, pid);
+          if (pData && pData.state === 'PROMOTED_SPEAKER') {
+            await SpeakerPromotionRegistry.incrementPublishSessionGeneration(roomId, pid);
+            reconnectedSpeakers++;
+          }
         }
       }
+
+      const mediaRecoveredAt = Date.now();
+      const completedAt = Date.now();
+
+      const telemetry: RecoverySLATelemetry = {
+        roomId,
+        recoveryType: 'PRIMARY_POD_FAILOVER',
+        failureObservedAt: observedAt,
+        failureDetectedAt: detectedAt,
+        recoveryStartedAt: startedAt,
+        replacementAllocatedAt: allocatedAt,
+        pipeRestoredAt: pipeRestoredAt,
+        firstMediaRecoveredAt: mediaRecoveredAt,
+        recoveryCompletedAt: completedAt,
+        failureDetectionMs: detectedAt - observedAt,
+        replacementAllocationMs: allocatedAt - startedAt,
+        pipeRecoveryMs: pipeRestoredAt - allocatedAt,
+        mediaRecoveryMs: mediaRecoveredAt - pipeRestoredAt,
+        totalRecoveryMs: completedAt - observedAt,
+        affectedParticipantCount: reconnectedSpeakers,
+        successfulRecoveries: reconnectedSpeakers,
+        failedRecoveries: 0,
+        duplicateProducerCount: 0,
+        orphanConsumerCount: 0,
+        staleOperationRejections: 0,
+      };
+
+      logger.info(JSON.stringify({
+        event: 'primary_failover_completed',
+        roomId,
+        primaryGeneration: lease.primaryGeneration,
+        telemetry,
+      }));
+
+      return { success: true, telemetry };
+    } catch (err) {
+      logger.error(`Failed to execute primary failover for room ${roomId}`, err);
+      return { success: false, error: 'topology_control_unavailable' };
     }
-
-    const mediaRecoveredAt = Date.now();
-    const completedAt = Date.now();
-
-    const telemetry: RecoverySLATelemetry = {
-      roomId,
-      recoveryType: 'PRIMARY_POD_FAILOVER',
-      failureObservedAt: observedAt,
-      failureDetectedAt: detectedAt,
-      recoveryStartedAt: startedAt,
-      replacementAllocatedAt: allocatedAt,
-      pipeRestoredAt: pipeRestoredAt,
-      firstMediaRecoveredAt: mediaRecoveredAt,
-      recoveryCompletedAt: completedAt,
-      failureDetectionMs: detectedAt - observedAt,
-      replacementAllocationMs: allocatedAt - startedAt,
-      pipeRecoveryMs: pipeRestoredAt - allocatedAt,
-      mediaRecoveryMs: mediaRecoveredAt - pipeRestoredAt,
-      totalRecoveryMs: completedAt - observedAt,
-      affectedParticipantCount: reconnectedSpeakers,
-      successfulRecoveries: reconnectedSpeakers,
-      failedRecoveries: 0,
-      duplicateProducerCount: 0,
-      orphanConsumerCount: 0,
-      staleOperationRejections: 0,
-    };
-
-    logger.info(JSON.stringify({
-      event: 'primary_failover_completed',
-      roomId,
-      primaryGeneration: lease.primaryGeneration,
-      telemetry,
-    }));
-
-    return { success: true, telemetry };
   }
 
   /**
@@ -173,107 +181,112 @@ export class TopologyFailoverCoordinator {
     oldRelayRouterKey: RouterKey,
     replacementRelayRouterKey: RouterKey,
     isGracefulDrain = false
-  ): Promise<{ success: boolean; migratedViewers: number; telemetry?: RecoverySLATelemetry }> {
-    const observedAt = Date.now();
-    const detectedAt = isGracefulDrain ? observedAt : observedAt + 100;
-    const startedAt = detectedAt;
+  ): Promise<{ success: boolean; migratedViewers: number; telemetry?: RecoverySLATelemetry; error?: string }> {
+    try {
+      const observedAt = Date.now();
+      const detectedAt = isGracefulDrain ? observedAt : observedAt + 100;
+      const startedAt = detectedAt;
 
-    logger.warn(JSON.stringify({
-      event: 'relay_migration_initiated',
-      roomId,
-      oldRelayRouterKey,
-      replacementRelayRouterKey,
-      isGracefulDrain,
-    }));
-
-    // Step 1: Mark old Relay as CLOSED (if graceful drain) or FAILED (if unexpected failure)
-    if (isGracefulDrain) {
-      await RoomTopologyRegistry.closeRelayRouter(roomId, oldRelayRouterKey);
-    } else {
-      await RoomTopologyRegistry.markRelayFailed(roomId, oldRelayRouterKey);
-    }
-    const allocatedAt = Date.now();
-
-    // Step 2: Establish PipeTransport from Primary to replacement Relay
-    const primaryRouterKey = await RoomTopologyRegistry.getPrimaryRouterKey(roomId);
-    if (primaryRouterKey) {
-      const pipePairId = `pipe-${roomId}-${primaryRouterKey.split(':')[0]}-${replacementRelayRouterKey.split(':')[0]}-${Date.now()}`;
-      await PipeTransportRegistry.registerPipePair(roomId, primaryRouterKey, replacementRelayRouterKey, {
-        pipePairId,
+      logger.warn(JSON.stringify({
+        event: 'relay_migration_initiated',
         roomId,
-        primaryRouterKey,
-        relayRouterKey: replacementRelayRouterKey,
-        primaryPipeTransportId: `pipe-prim-${Date.now()}`,
-        relayPipeTransportId: `pipe-relay-${Date.now()}`,
-        connected: true,
-        pipedProducerIds: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-    }
+        oldRelayRouterKey,
+        replacementRelayRouterKey,
+        isGracefulDrain,
+      }));
 
-    const pipeRestoredAt = Date.now();
+      // Step 1: Mark old Relay as CLOSED (if graceful drain) or FAILED (if unexpected failure)
+      if (isGracefulDrain) {
+        await RoomTopologyRegistry.closeRelayRouter(roomId, oldRelayRouterKey);
+      } else {
+        await RoomTopologyRegistry.markRelayFailed(roomId, oldRelayRouterKey);
+      }
+      const allocatedAt = Date.now();
 
-    // Step 3: Find all viewers assigned to old Relay and migrate under participantRouteGeneration
-    const partMap = await redis.hgetall(`room:${roomId}:participantRouterMap`);
-    let migratedViewers = 0;
-
-    for (const [vid, rKey] of Object.entries(partMap)) {
-      if (rKey === oldRelayRouterKey) {
-        const migration = await RoomTopologyRegistry.registerViewerRouteMigration(
+      // Step 2: Establish PipeTransport from Primary to replacement Relay
+      const primaryRouterKey = await RoomTopologyRegistry.getPrimaryRouterKey(roomId);
+      if (primaryRouterKey) {
+        const pipePairId = `pipe-${roomId}-${primaryRouterKey.split(':')[0]}-${replacementRelayRouterKey.split(':')[0]}-${Date.now()}`;
+        await PipeTransportRegistry.registerPipePair(roomId, primaryRouterKey, replacementRelayRouterKey, {
+          pipePairId,
           roomId,
-          vid,
-          oldRelayRouterKey,
-          replacementRelayRouterKey
-        );
+          primaryRouterKey,
+          relayRouterKey: replacementRelayRouterKey,
+          primaryPipeTransportId: `pipe-prim-${Date.now()}`,
+          relayPipeTransportId: `pipe-relay-${Date.now()}`,
+          connected: true,
+          pipedProducerIds: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
 
-        const commitRes = await RoomTopologyRegistry.commitViewerRouteMigration(
-          roomId,
-          vid,
-          replacementRelayRouterKey,
-          migration.participantRouteGeneration
-        );
+      const pipeRestoredAt = Date.now();
 
-        if (commitRes.success) {
-          migratedViewers++;
+      // Step 3: Find all viewers assigned to old Relay and migrate under participantRouteGeneration
+      const partMap = await redis.hgetall(`room:${roomId}:participantRouterMap`);
+      let migratedViewers = 0;
+
+      for (const [vid, rKey] of Object.entries(partMap)) {
+        if (rKey === oldRelayRouterKey) {
+          const migration = await RoomTopologyRegistry.registerViewerRouteMigration(
+            roomId,
+            vid,
+            oldRelayRouterKey,
+            replacementRelayRouterKey
+          );
+
+          const commitRes = await RoomTopologyRegistry.commitViewerRouteMigration(
+            roomId,
+            vid,
+            replacementRelayRouterKey,
+            migration.participantRouteGeneration
+          );
+
+          if (commitRes.success) {
+            migratedViewers++;
+          }
         }
       }
+
+      const mediaRecoveredAt = Date.now();
+      const completedAt = Date.now();
+
+      const telemetry: RecoverySLATelemetry = {
+        roomId,
+        recoveryType: 'RELAY_POD_FAILOVER',
+        failureObservedAt: observedAt,
+        failureDetectedAt: detectedAt,
+        recoveryStartedAt: startedAt,
+        replacementAllocatedAt: allocatedAt,
+        pipeRestoredAt: pipeRestoredAt,
+        firstMediaRecoveredAt: mediaRecoveredAt,
+        recoveryCompletedAt: completedAt,
+        failureDetectionMs: detectedAt - observedAt,
+        replacementAllocationMs: allocatedAt - startedAt,
+        pipeRecoveryMs: pipeRestoredAt - allocatedAt,
+        mediaRecoveryMs: mediaRecoveredAt - pipeRestoredAt,
+        totalRecoveryMs: completedAt - observedAt,
+        affectedParticipantCount: migratedViewers,
+        successfulRecoveries: migratedViewers,
+        failedRecoveries: 0,
+        duplicateProducerCount: 0,
+        orphanConsumerCount: 0,
+        staleOperationRejections: 0,
+      };
+
+      logger.info(JSON.stringify({
+        event: 'relay_migration_completed',
+        roomId,
+        migratedViewers,
+        telemetry,
+      }));
+
+      return { success: true, migratedViewers, telemetry };
+    } catch (err) {
+      logger.error(`Failed to execute relay migration for room ${roomId}`, err);
+      return { success: false, migratedViewers: 0, error: 'topology_control_unavailable' };
     }
-
-    const mediaRecoveredAt = Date.now();
-    const completedAt = Date.now();
-
-    const telemetry: RecoverySLATelemetry = {
-      roomId,
-      recoveryType: 'RELAY_POD_FAILOVER',
-      failureObservedAt: observedAt,
-      failureDetectedAt: detectedAt,
-      recoveryStartedAt: startedAt,
-      replacementAllocatedAt: allocatedAt,
-      pipeRestoredAt: pipeRestoredAt,
-      firstMediaRecoveredAt: mediaRecoveredAt,
-      recoveryCompletedAt: completedAt,
-      failureDetectionMs: detectedAt - observedAt,
-      replacementAllocationMs: allocatedAt - startedAt,
-      pipeRecoveryMs: pipeRestoredAt - allocatedAt,
-      mediaRecoveryMs: mediaRecoveredAt - pipeRestoredAt,
-      totalRecoveryMs: completedAt - observedAt,
-      affectedParticipantCount: migratedViewers,
-      successfulRecoveries: migratedViewers,
-      failedRecoveries: 0,
-      duplicateProducerCount: 0,
-      orphanConsumerCount: 0,
-      staleOperationRejections: 0,
-    };
-
-    logger.info(JSON.stringify({
-      event: 'relay_migration_completed',
-      roomId,
-      migratedViewers,
-      telemetry,
-    }));
-
-    return { success: true, migratedViewers, telemetry };
   }
 
   /**

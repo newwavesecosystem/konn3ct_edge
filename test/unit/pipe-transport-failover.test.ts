@@ -73,6 +73,10 @@ describe('Phase 6F-3 — PipeTransport Failure & Recovery Code Gate Unit Suite',
     await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-a', 'router-primary', 30000);
     await RoomTopologyRegistry.registerRelayRouter(roomId, relayKey, podC, { state: 'READY' });
 
+    await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-1', 'router-primary', 30000);
+    await redis.set(`media:node:${podA}:heartbeat`, JSON.stringify({ status: 'healthy' }));
+    await redis.set(`media:node:${podC}:heartbeat`, JSON.stringify({ status: 'healthy' }));
+
     await PipeTransportRegistry.registerPipePair(roomId, primKey, relayKey, {
       pipePairId: 'pipe-gen1',
       roomId,

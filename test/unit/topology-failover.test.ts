@@ -163,9 +163,10 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
       const relay1Key = `${podB}:router-relay-1`;
       await RoomTopologyRegistry.registerRelayRouter(roomId, relay1Key, podB, { state: 'READY' });
 
-      // Reserve viewer 1
+      // Reserve and commit viewer 1
       const res1 = await RoomTopologyRegistry.reserveRelayCapacity(roomId, 'viewer-1', 2);
       expect(res1.success).toBe(true);
+      await RoomTopologyRegistry.commitRelayAssignment(roomId, 'viewer-1', relay1Key, 2);
 
       // Mark relay as DRAINING
       await RoomTopologyRegistry.drainRelayRouter(roomId, relay1Key);
@@ -185,6 +186,7 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
       const relay1Key = `${podB}:router-relay-1`;
       await RoomTopologyRegistry.registerRelayRouter(roomId, relay1Key, podB, { state: 'READY' });
       await RoomTopologyRegistry.reserveRelayCapacity(roomId, 'viewer-sig-1', 2);
+      await RoomTopologyRegistry.commitRelayAssignment(roomId, 'viewer-sig-1', relay1Key, 2);
 
       // Initiate graceful drain for podB migrating to podC
       const drainRes1 = await MediaPodGracefulShutdownService.initiateGracefulPodDrain(podB, podC);
@@ -206,6 +208,7 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
       const newRelay = `${podC}:router-relay-2`;
       await RoomTopologyRegistry.registerRelayRouter(roomId, oldRelay, podB, { state: 'READY' });
       await RoomTopologyRegistry.reserveRelayCapacity(roomId, 'viewer-hard-1', 2);
+      await RoomTopologyRegistry.commitRelayAssignment(roomId, 'viewer-hard-1', oldRelay, 2);
       await RoomTopologyRegistry.registerRelayRouter(roomId, newRelay, podC, { state: 'READY' });
 
       // Execute viewer migration to newRelay
@@ -253,6 +256,7 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
       const newRelay = `${podC}:router-relay-2`;
       await RoomTopologyRegistry.registerRelayRouter(roomId, oldRelay, podB, { state: 'READY' });
       await RoomTopologyRegistry.reserveRelayCapacity(roomId, 'viewer-200', 2);
+      await RoomTopologyRegistry.commitRelayAssignment(roomId, 'viewer-200', oldRelay, 2);
       await RoomTopologyRegistry.registerRelayRouter(roomId, newRelay, podC, { state: 'READY' });
 
       const failoverRes = await TopologyFailoverCoordinator.executeRelayMigration(roomId, oldRelay, newRelay);
@@ -305,15 +309,15 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
   describe('Publisher Fencing & Host Protection', () => {
     it('15. Rejects produce RPCs when Primary lease is expired or failed', async () => {
       const roomId = 'room-unit-15';
-      // Setup primary with expired lease
-      await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-1', 'router-primary', 50); // 50ms TTL
+      // Setup primary with lease that we will expire after setup
+      await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-1', 'router-primary', 5000);
       const invite = await SpeakerPromotionCoordinator.inviteViewerToSpeak(
         roomId, 'spk-2', 'host-user', { canPublishAudio: true, canPublishVideo: true, canShareScreen: false }, podA
       );
       await SpeakerPromotionCoordinator.acceptInvitationToSpeak(roomId, 'spk-2', invite.data!.promotionId, invite.data!.promotionVersion);
 
-      // Wait for lease to expire
-      await new Promise((r) => setTimeout(r, 80));
+      // Force lease to expire in Redis
+      await redis.hset(RoomTopologyRegistry.keyPrimaryLease(roomId), 'leaseExpiresAt', (Date.now() - 1000).toString());
 
       const authRes = await SpeakerPromotionCoordinator.validateServerSidePublishAuthorization(
         roomId, 'spk-2', 'audio', 'SPEAKER_PUBLISH', 1, 1
@@ -415,6 +419,7 @@ describe('Phase 6F — Failure, Draining & Recovery Unit Suite', { hookTimeout: 
     it('22. CLOSED Relay does not trigger failure-recovery handling', async () => {
       const roomId = 'room-unit-lifecycle-6';
       await RoomTopologyRegistry.electPrimaryRouter(roomId, podA, 'inst-1', 'router-primary', 5000);
+      await redis.set(`media:node:${podA}:heartbeat`, JSON.stringify({ status: 'healthy' }));
       const closedRelay = `${podB}:router-relay-closed`;
       await RoomTopologyRegistry.registerRelayRouter(roomId, closedRelay, podB, { state: 'CLOSED' });
 

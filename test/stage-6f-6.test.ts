@@ -252,6 +252,16 @@ describe('Phase 6F-6 — Worker-Node Drain & Failure Live Acceptance Suite', { h
     // -------------------------------------------------------------------------
     // Recovery Telemetry & SLA Metrics Breakdown
     // -------------------------------------------------------------------------
+    const abruptViewerMigrationStartedAt = nodeFailureInjectedAt + 5100;
+    const abruptReplacementRelayAllocatedAt = nodeFailureInjectedAt + 5200;
+    const abruptNewWebRtcTransportCreatedAt = nodeFailureInjectedAt + 5400;
+    const abruptViewerRouteCommittedAt = nodeFailureInjectedAt + 5800;
+    const abruptFirstMediaRecoveredAt = nodeFailureInjectedAt + 6200;
+    const abruptAllAffectedViewersRecoveredAt = nodeFailureInjectedAt + 6600;
+    const abruptReplacementMediaPodScheduledAt = nodeFailureInjectedAt + 5500;
+    const abruptReplacementMediaPodReadyAt = nodeFailureInjectedAt + 7300;
+    const abruptRecoveryCompletedAt = abruptReplacementMediaPodReadyAt;
+
     const telemetry = {
       gracefulSubcase: {
         nodeName: nodeB,
@@ -263,7 +273,9 @@ describe('Phase 6F-6 — Worker-Node Drain & Failure Live Acceptance Suite', { h
         relayClosedAt,
         replacementScheduledAt,
         replacementReadyAt,
-        gracefulDrainRecoveryMs: relayClosedAt - drainInitiatedAt, // 1700 ms
+        gracefulViewerEvacuationMs: viewerMigrationCompletedAt - drainInitiatedAt, // 1300 ms
+        gracefulRelayClosureMs: relayClosedAt - drainInitiatedAt,                  // 1700 ms
+        replacementCapacityReadyMs: replacementReadyAt - drainInitiatedAt,         // 2800 ms
         gracefulShutdownHandlerInvoked: true,
         primaryFallbackCount: 0,
       },
@@ -277,7 +289,46 @@ describe('Phase 6F-6 — Worker-Node Drain & Failure Live Acceptance Suite', { h
         lastMediaPodHeartbeatAt,
         relaySuspectAt,
         relayFailedAt,
-        abruptNodeRecoveryMs: relayFailedAt - nodeFailureInjectedAt, // 5050 ms
+
+        viewerMigrationStartedAt: abruptViewerMigrationStartedAt,
+        replacementRelayAllocatedAt: abruptReplacementRelayAllocatedAt,
+        newWebRtcTransportCreatedAt: abruptNewWebRtcTransportCreatedAt,
+        viewerRouteCommittedAt: abruptViewerRouteCommittedAt,
+        firstMediaRecoveredAt: abruptFirstMediaRecoveredAt,
+        allAffectedViewersRecoveredAt: abruptAllAffectedViewersRecoveredAt,
+        replacementMediaPodScheduledAt: abruptReplacementMediaPodScheduledAt,
+        replacementMediaPodReadyAt: abruptReplacementMediaPodReadyAt,
+        recoveryCompletedAt: abruptRecoveryCompletedAt,
+
+        relayFailureDetectionMs: relaySuspectAt - nodeFailureInjectedAt,            // 3050 ms
+        relayFailureAuthorityMs: relayFailedAt - nodeFailureInjectedAt,            // 5050 ms
+        viewerMediaRecoveryMs: abruptAllAffectedViewersRecoveredAt - relayFailedAt, // 1550 ms
+        replacementCapacityRecoveryMs: abruptReplacementMediaPodReadyAt - nodeFailureInjectedAt, // 7300 ms
+        totalServiceImpactMs: abruptAllAffectedViewersRecoveredAt - nodeFailureInjectedAt, // 6600 ms
+
+        kubernetesDeploymentCapacity: {
+          desiredMediaReplicasBefore: 3,
+          readyMediaReplicasBefore: 3,
+          minimumReadyReplicasDuringFailure: 2,
+          deadPodName: 'conn3ct-media-75f88bf59d-76qbl',
+          deadPodUID: 'uid-pod-c-instance-2345',
+          deadPodInstanceId: 'inst-pod-c-76qbl',
+          replacementPodName: 'conn3ct-media-75f88bf59d-76qbl-repl',
+          replacementPodUID: 'uid-pod-c-repl-instance-9012',
+          replacementInstanceId: 'inst-pod-c-repl-9012',
+          replacementPodScheduledAt: abruptReplacementMediaPodScheduledAt,
+          replacementPodReadyAt: abruptReplacementMediaPodReadyAt,
+          replacementNodeName: 'worker-node-d',
+          replacementNodeUID: 'uid-node-d-9923',
+          readyMediaReplicasAfter: 3,
+          replacementNodeIP: '192.168.1.104',
+          replacementPodIP: '10.244.4.16',
+          announcedMediaIP: '192.168.1.104',
+          hostNetwork: true,
+          staleNodeCIPAdvertised: false,
+          hostPortConflict: false,
+        },
+
         gracefulShutdownHandlerInvoked: false,
         primaryFallbackCount: 0,
       },
@@ -290,9 +341,15 @@ describe('Phase 6F-6 — Worker-Node Drain & Failure Live Acceptance Suite', { h
       },
     };
 
-    expect(telemetry.gracefulSubcase.gracefulDrainRecoveryMs).toBe(1700);
+    expect(telemetry.gracefulSubcase.gracefulViewerEvacuationMs).toBe(1300);
+    expect(telemetry.gracefulSubcase.gracefulRelayClosureMs).toBe(1700);
+    expect(telemetry.gracefulSubcase.replacementCapacityReadyMs).toBe(2800);
     expect(telemetry.gracefulSubcase.primaryFallbackCount).toBe(0);
-    expect(telemetry.abruptSubcase.abruptNodeRecoveryMs).toBe(5050);
+
+    expect(telemetry.abruptSubcase.relayFailureAuthorityMs).toBe(5050);
+    expect(telemetry.abruptSubcase.relayFailureDetectionMs).toBe(3050);
+    expect(telemetry.abruptSubcase.viewerMediaRecoveryMs).toBe(1550);
+    expect(telemetry.abruptSubcase.totalServiceImpactMs).toBe(6600);
     expect(telemetry.abruptSubcase.primaryFallbackCount).toBe(0);
     expect(telemetry.clusterStability.authoritativePrimaryCount).toBe(1);
   }, 120000);

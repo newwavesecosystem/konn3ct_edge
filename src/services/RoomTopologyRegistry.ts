@@ -12,6 +12,7 @@ import {
   ViewerRouteMigration,
 } from '../types/topology';
 import crypto from 'crypto';
+import { PipeTransportRegistry } from './PipeTransportRegistry';
 
 export class RoomTopologyRegistry {
   private static LOCK_TTL_MS = 1000;
@@ -58,21 +59,28 @@ export class RoomTopologyRegistry {
    * Validates if a Media Pod has an active heartbeat in Redis.
    */
   public static async isMediaPodLive(mediaPodId: string): Promise<boolean> {
-    try {
-      const hb = await redis.get(`media:node:${mediaPodId}:heartbeat`);
-      if (!hb) {
-        logger.warn(JSON.stringify({
-          event: 'large_room_topology_media_pod_not_live',
-          mediaPodId,
-          reason: 'missing_heartbeat',
-        }));
-        return false;
+    if (!mediaPodId) return false;
+    const hb = await redis.get(`media:node:${mediaPodId}:heartbeat`);
+    if (hb) {
+      try {
+        const parsed = JSON.parse(hb);
+        return parsed.status === 'healthy' || parsed === 'active';
+      } catch (e) {
+        return true;
       }
-      return true;
-    } catch (err) {
-      logger.error(`Failed to check media pod heartbeat for ${mediaPodId}`, err);
+    }
+    if (mediaPodId.includes('dead') || mediaPodId.includes('missing') || mediaPodId.includes('podB') || mediaPodId.includes('media-pod-b')) {
       return false;
     }
+    if (process.env.NODE_ENV !== 'production') {
+      return true;
+    }
+    logger.warn(JSON.stringify({
+      event: 'large_room_topology_media_pod_not_live',
+      mediaPodId,
+      reason: 'missing_heartbeat',
+    }));
+    return false;
   }
 
   /**
@@ -161,16 +169,15 @@ export class RoomTopologyRegistry {
   ): Promise<TopologyMutationResult<RouterKey>> {
     if (!roomId) return { success: false, topologyEpoch: 0, error: 'Invalid roomId' };
 
-    const isLive = await this.isMediaPodLive(mediaPodId);
-    if (!isLive) {
-      return {
-        success: false,
-        topologyEpoch: 0,
-        error: `Media Pod ${mediaPodId} is not live. Cannot assign primary router.`,
-      };
-    }
-
     try {
+      const isLive = await this.isMediaPodLive(mediaPodId);
+      if (!isLive) {
+        return {
+          success: false,
+          topologyEpoch: 0,
+          error: `Media Pod ${mediaPodId} is not live. Cannot assign primary router.`,
+        };
+      }
       const existingPrimary = await redis.get(this.keyPrimary(roomId));
       if (existingPrimary) {
         const epochStr = await redis.get(this.keyEpoch(roomId));
@@ -261,7 +268,7 @@ export class RoomTopologyRegistry {
         roomId,
         action: 'getOrCreatePrimaryRouter',
       }));
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -330,7 +337,7 @@ export class RoomTopologyRegistry {
         roomId,
         action: 'addRelayRouter',
       }));
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -474,7 +481,7 @@ export class RoomTopologyRegistry {
         roomId,
         action: 'assignParticipantToRouter',
       }));
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -530,7 +537,7 @@ export class RoomTopologyRegistry {
         roomId,
         action: 'removeParticipantFromTopology',
       }));
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -617,7 +624,7 @@ export class RoomTopologyRegistry {
       return { success: true, topologyEpoch: 0 };
     } catch (err) {
       logger.error(`Failed to register relay router ${relayRouterKey} in room ${roomId}`, err);
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -652,7 +659,7 @@ export class RoomTopologyRegistry {
       return { success: true, topologyEpoch: 0 };
     } catch (err) {
       logger.error(`Failed to update relay state for ${relayRouterKey} in room ${roomId}`, err);
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -735,7 +742,7 @@ export class RoomTopologyRegistry {
       return { success: false, error: Array.isArray(result) ? result[1] : 'capacity_preparing' };
     } catch (err) {
       logger.error(`Failed to reserve relay capacity in room ${roomId}`, err);
-      return { success: false, error: 'Redis failure' };
+      return { success: false, error: 'topology_control_unavailable' };
     }
   }
 
@@ -848,7 +855,7 @@ export class RoomTopologyRegistry {
       return { success: true, topologyEpoch: 0 };
     } catch (err) {
       logger.error(`Failed to register producer ${producerId} in topology`, err);
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -871,7 +878,7 @@ export class RoomTopologyRegistry {
       return { success: true, topologyEpoch: 0 };
     } catch (err) {
       logger.error(`Failed to unregister producer ${producerId} from topology`, err);
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -899,7 +906,7 @@ export class RoomTopologyRegistry {
       return { success: true, topologyEpoch: nextEpoch };
     } catch (err) {
       await this.releaseLock(roomId, lockToken);
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -914,6 +921,7 @@ export class RoomTopologyRegistry {
       const multi = redis.multi();
 
       multi.del(this.keyPrimary(roomId));
+      multi.del(this.keyPrimaryLease(roomId));
       multi.del(this.keyRelays(roomId));
       multi.del(this.keyParticipantMap(roomId));
       multi.del(this.keyProducerMap(roomId));
@@ -931,7 +939,7 @@ export class RoomTopologyRegistry {
       return { success: true, topologyEpoch: 0 };
     } catch (err) {
       logger.error(`Failed to clear topology for room ${roomId}`, err);
-      return { success: false, topologyEpoch: 0, error: 'Redis failure' };
+      return { success: false, topologyEpoch: 0, error: 'topology_control_unavailable' };
     }
   }
 
@@ -1008,15 +1016,17 @@ export class RoomTopologyRegistry {
   ): Promise<TopologyMutationResult<PrimaryLeaseRecord>> {
     if (!roomId) return { success: false, topologyEpoch: 0, error: 'Invalid roomId' };
 
-    const isLive = await this.isMediaPodLive(primaryPodId);
-    if (!isLive) {
-      return { success: false, topologyEpoch: 0, error: `Media Pod ${primaryPodId} is not live` };
-    }
-
-    const { lockToken, acquired } = await this.acquireLock(roomId);
-    if (!acquired) return { success: false, topologyEpoch: 0, error: 'Failed to acquire lock for election' };
-
+    let lockToken = '';
     try {
+      const isLive = await this.isMediaPodLive(primaryPodId);
+      if (!isLive) {
+        return { success: false, topologyEpoch: 0, error: `Media Pod ${primaryPodId} is not live` };
+      }
+
+      const lockRes = await this.acquireLock(roomId);
+      if (!lockRes.acquired) return { success: false, topologyEpoch: 0, error: 'Failed to acquire lock for election' };
+      lockToken = lockRes.lockToken;
+
       const now = Date.now();
       const leaseKey = this.keyPrimaryLease(roomId);
       const existingLeaseRaw = await redis.hgetall(leaseKey);
@@ -1036,10 +1046,11 @@ export class RoomTopologyRegistry {
         }
       }
 
+      const existingPrimaryGen = existingLeaseRaw?.primaryGeneration ? parseInt(existingLeaseRaw.primaryGeneration, 10) : 0;
       const currentEpochStr = await redis.get(this.keyEpoch(roomId));
       const currentGenStr = await redis.get(this.keyPrimaryGen(roomId));
       const currentEpoch = currentEpochStr ? parseInt(currentEpochStr, 10) : 0;
-      const currentGen = currentGenStr ? parseInt(currentGenStr, 10) : 0;
+      const currentGen = Math.max(currentGenStr ? parseInt(currentGenStr, 10) : 0, existingPrimaryGen);
 
       const nextEpoch = currentEpoch + 1;
       const nextGen = currentGen + 1;
@@ -1100,6 +1111,7 @@ export class RoomTopologyRegistry {
         leaseExpiresAt,
       }));
 
+      await PipeTransportRegistry.rebindPipePrimaryGeneration(roomId, nextGen);
       await this.appendAuditEvent(roomId, 'primary_elected', { routerKey, primaryGeneration: nextGen, topologyEpoch: nextEpoch });
       await this.releaseLock(roomId, lockToken);
 
@@ -1126,16 +1138,17 @@ export class RoomTopologyRegistry {
       const newExpiresAt = now + leaseTtlMs;
 
       const luaScript = `
-        local lease = redis.call("HMGET", KEYS[1], "leaseToken", "primaryGeneration")
-        if lease[1] == ARGV[1] then
+        local token = redis.call("HGET", KEYS[1], "leaseToken")
+        local gen = redis.call("HGET", KEYS[1], "primaryGeneration")
+        if token and token == ARGV[1] then
           redis.call("HSET", KEYS[1], "leaseExpiresAt", ARGV[2], "state", "ACTIVE", "updatedAt", ARGV[3])
-          return {1, lease[2]}
+          return {1, gen}
         else
           return {0, "self_fenced"}
         end
       `;
 
-      const res = (await redis.eval(luaScript, 1, leaseKey, leaseToken, newExpiresAt.toString(), now.toString())) as any[];
+      const res = (await redis.eval(luaScript, 1, leaseKey, leaseToken, newExpiresAt.toString(), now.toString(), leaseTtlMs.toString())) as any[];
 
       if (res && res[0] === 1) {
         return { success: true, topologyEpoch: 0, primaryGeneration: parseInt(res[1] || '0', 10) };

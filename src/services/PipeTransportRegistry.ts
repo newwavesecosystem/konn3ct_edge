@@ -527,4 +527,35 @@ export class PipeTransportRegistry {
     const val = await redis.get(`room:${roomId}:staleRejectionsCount`);
     return val ? parseInt(val, 10) : 0;
   }
+
+  /**
+   * Rebind existing healthy PipePairs to a new Primary Generation after Primary re-election / lease reconciliation.
+   */
+  public static async rebindPipePrimaryGeneration(
+    roomId: string,
+    newPrimaryGeneration: number
+  ): Promise<{ success: boolean; reboundCount: number }> {
+    if (!roomId) return { success: false, reboundCount: 0 };
+    try {
+      const pipeKeys = await redis.smembers(this.keyPipeSet(roomId));
+      let reboundCount = 0;
+      for (const pairKey of pipeKeys) {
+        const pipeData = await redis.hgetall(pairKey);
+        if (pipeData && pipeData.pipePairId) {
+          await redis.hset(pairKey, 'primaryGeneration', newPrimaryGeneration.toString());
+          reboundCount++;
+        }
+      }
+      logger.info(JSON.stringify({
+        event: 'pipe_primary_generation_rebound',
+        roomId,
+        newPrimaryGeneration,
+        reboundCount,
+      }));
+      return { success: true, reboundCount };
+    } catch (err) {
+      logger.error(`Failed to rebind pipe primary generation for room ${roomId}`, err);
+      return { success: false, reboundCount: 0 };
+    }
+  }
 }

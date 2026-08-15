@@ -23,26 +23,34 @@ export class SpeakerPromotionCoordinator {
       return { success: false, error: 'Unauthorized: Only Host or Co-host can invite to speak' };
     }
 
-    // 2. Discover target participant's receive router on Relay from Redis map
-    const receiveRouterKey = (await redis.hget(`room:${roomId}:participantRouterMap`, targetParticipantId)) || `${podA}:router-primary`;
-    const receiveMediaPodId = receiveRouterKey.split(':')[0];
+    try {
+      // 2. Discover target participant's receive router on Relay from Redis map
+      const receiveRouterKey = (await redis.hget(`room:${roomId}:participantRouterMap`, targetParticipantId)) || `${podA}:router-primary`;
+      const receiveMediaPodId = receiveRouterKey.split(':')[0];
 
-    const primaryRes = await RoomTopologyRegistry.getOrCreatePrimaryRouter(roomId, podA, 'router-primary');
-    const primaryRouterKey = primaryRes.data!;
+      const primaryRes = await RoomTopologyRegistry.getOrCreatePrimaryRouter(roomId, podA, 'router-primary');
+      if (!primaryRes.success || !primaryRes.data) {
+        return { success: false, error: primaryRes.error || 'topology_control_unavailable' };
+      }
+      const primaryRouterKey = primaryRes.data;
 
-    // 3. Create Promotion Invitation in Redis with 30s TTL
-    const res = await SpeakerPromotionRegistry.createPromotionInvite(
-      roomId,
-      targetParticipantId,
-      requestedBy,
-      permissions,
-      receiveRouterKey,
-      receiveMediaPodId,
-      primaryRouterKey,
-      podA
-    );
+      // 3. Create Promotion Invitation in Redis with 30s TTL
+      const res = await SpeakerPromotionRegistry.createPromotionInvite(
+        roomId,
+        targetParticipantId,
+        requestedBy,
+        permissions,
+        receiveRouterKey,
+        receiveMediaPodId,
+        primaryRouterKey,
+        podA
+      );
 
-    return res;
+      return res;
+    } catch (err) {
+      logger.error(`Failed to invite viewer to speak in room ${roomId}`, err);
+      return { success: false, error: 'topology_control_unavailable' };
+    }
   }
 
   /**
