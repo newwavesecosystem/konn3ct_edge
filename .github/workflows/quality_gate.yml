@@ -53,7 +53,7 @@ jobs:
           OPENAI_API_KEY: "dummy_key"
 
       - name: Dependency Vulnerability Audit (SCA)
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=critical
 
       - name: Secret Scanning (Gitleaks)
         uses: gitleaks/gitleaks-action@v2
