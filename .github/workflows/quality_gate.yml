@@ -72,7 +72,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
             --commit-sha "${{ github.sha }}" \
-            --commit-message "${{ github.event.head_commit.message }}"
+            --commit-message "${{ github.event.head_commit.message }}" \
+            --success-stage "Testing"
             
       - name: Automated Defect Creation
         if: failure()

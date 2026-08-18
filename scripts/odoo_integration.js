@@ -24,6 +24,7 @@ const runId = argv['run-id'] || '';
 const commitSha = argv['commit-sha'] || '';
 const commitMessage = argv['commit-message'] || '';
 const author = argv['author'] || 'Unknown';
+const successStage = argv['success-stage'] || '';
 
 // The pattern matching the Blueprint Traceability IDs (e.g., KE-V06-MEDIA-REQ-001)
 const ID_REGEX = /KE-[A-Z0-9]+-[A-Z]+-[A-Z]+-\d+/i;
@@ -95,7 +96,11 @@ async function postEvidence() {
     const taskIds = await jsonRpcCall('object', 'execute_kw', [
       ODOO_DB, uid, ODOO_API_KEY,
       'project.task', 'search',
-      [[['x_studio_traceability_id', '=', id]]]
+      [[
+        '|',
+        ['x_studio_traceability_id', '=', id],
+        ['name', 'ilike', id]
+      ]]
     ]);
     
     if (!taskIds || taskIds.length === 0) {
@@ -126,6 +131,29 @@ async function postEvidence() {
     ]);
     
     console.log(`✅ Evidence posted to Odoo Task ID ${id}`);
+    
+    // Automatically move Kanban stage if build was successful
+    if (successStage && buildStatus === 'success') {
+      const stages = await jsonRpcCall('object', 'execute_kw', [
+        ODOO_DB, uid, ODOO_API_KEY,
+        'project.task.type', 'search_read',
+        [[['name', 'ilike', successStage]]],
+        { fields: ['id', 'name'], limit: 1 }
+      ]);
+      
+      if (stages && stages.length > 0) {
+        const stageId = stages[0].id;
+        await jsonRpcCall('object', 'execute_kw', [
+          ODOO_DB, uid, ODOO_API_KEY,
+          'project.task', 'write',
+          [[taskId], { stage_id: stageId }]
+        ]);
+        console.log(`🔄 Task automatically moved to stage: ${stages[0].name}`);
+      } else {
+        console.log(`⚠️ Kanban stage matching '${successStage}' not found in Odoo. Skipping stage transition.`);
+      }
+    }
+
   } catch (error) {
     console.error("Failed to post evidence to Odoo:", error);
   }
