@@ -149,7 +149,8 @@ async function createDefect() {
       'project.task', 'create',
       [{
         name: `[CI Failure] ${repo} - ${branchName}`,
-        description: description
+        description: description,
+        project_id: 46
       }]
     ]);
     

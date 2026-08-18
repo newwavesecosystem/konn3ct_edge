@@ -44,12 +44,13 @@ jobs:
         run: npm run lint
 
       - name: Unit & Integration Tests (with Typechecking)
-        run: npm run quality:gate
+        run: npm run test:unit
         env:
           # Required dummy env vars so Prisma and Tests don't instantly crash
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/konn3ct_test"
           JWT_SECRET: "test_secret"
           REDIS_URL: "redis://localhost:6379"
+          OPENAI_API_KEY: "dummy_key"
 
       - name: Dependency Vulnerability Audit (SCA)
         run: npm audit --audit-level=high

@@ -7,7 +7,7 @@ export const odooRouter = Router();
 const { ODOO_URL, ODOO_DB, ODOO_USER, ODOO_API_KEY, OPENAI_API_KEY } = process.env;
 
 const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
+  apiKey: OPENAI_API_KEY || 'dummy-key-for-tests',
 });
 
 async function jsonRpcCall(service: string, method: string, args: any[]) {
