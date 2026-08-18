@@ -172,7 +172,8 @@ jobs:
         run: |
           node scripts/odoo_integration.js \
             --action post_evidence \
-            --branch-name "${{ github.ref_name }}" \
+            --branch-name "${{ github.head_ref || github.ref_name }}" \
+            --pr-title "${{ github.event.pull_request.title }}" \
             --build-status "${{ job.status }}" \
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
@@ -189,7 +190,8 @@ jobs:
         run: |
           node scripts/odoo_integration.js \
             --action create_defect \
-            --branch-name "${{ github.ref_name }}" \
+            --branch-name "${{ github.head_ref || github.ref_name }}" \
+            --pr-title "${{ github.event.pull_request.title }}" \
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
             --commit-sha "${{ github.sha }}" \
