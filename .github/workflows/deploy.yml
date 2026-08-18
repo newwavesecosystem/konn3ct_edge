@@ -117,6 +117,10 @@ jobs:
             --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
             --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
             --from-literal=DEEPGRAM_API_KEY="${{ secrets.DEEPGRAM_API_KEY }}" \
+            --from-literal=ODOO_URL="${{ vars.ODOO_URL }}" \
+            --from-literal=ODOO_DB="${{ vars.ODOO_DB }}" \
+            --from-literal=ODOO_USER="${{ vars.ODOO_USER }}" \
+            --from-literal=ODOO_API_KEY="${{ secrets.ODOO_API_KEY }}" \
             --from-literal=EXTERNAL_API_KEY="${{ secrets.EXTERNAL_API_KEY }}" \
             --from-literal=BOT_SECRET="${{ secrets.BOT_SECRET }}" \
             --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}" \
