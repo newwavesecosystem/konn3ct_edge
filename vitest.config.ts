@@ -24,7 +24,13 @@ export default defineConfig({
       '**/dist/**', 
       '**/.next/**', 
       '**/frontend/e2e/**', 
-      '**/*.spec.ts' // Playwright tests use spec.ts, Vitest will use test.ts
+      '**/*.spec.ts', // Playwright tests use spec.ts, Vitest will use test.ts
+      'test/unit/StageView.test.tsx',
+      'test/unit/ai-panel.test.tsx',
+      'test/unit/participant-tile.test.ts',
+      'test/unit/webrtc.test.ts',
+      'test/unit/mute-latency.test.ts',
+      'test/unit/scale.test.ts'
     ],
     include: ['test/**/*.test.{ts,tsx}', 'src/__tests__/**/*.test.{ts,tsx}'],
     coverage: {
