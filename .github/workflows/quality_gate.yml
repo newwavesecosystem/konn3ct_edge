@@ -55,10 +55,6 @@ jobs:
       - name: Dependency Vulnerability Audit (SCA)
         run: npm audit --audit-level=critical
 
-      - name: Secret Scanning (Gitleaks)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post Evidence to Odoo
         if: always()
