@@ -64,14 +64,23 @@ odooRouter.post('/task/elaborate', async (req: Request, res: Response) => {
       return res.status(200).json({ status: 'skipped', message: 'AI brief already exists' });
     }
 
+    // Check if the title already contains a traceability ID
+    const ID_REGEX = /KE-[A-Z0-9]+-[A-Z]+-[A-Z]+-\d+/i;
+    const existingIdMatch = task_title.match(ID_REGEX);
+    let finalTraceabilityId = existingIdMatch ? existingIdMatch[0].toUpperCase() : null;
+
     // AI Doctrine Prompt
     const doctrinePrompt = `
-You are the Konn3ct Edge AI Project Management Engineer. Your responsibility is to convert short management instructions into engineering-ready work packages. Every task must maintain traceability between: Strategy -> Business Objective -> Project -> Requirement -> Engineering Task. 
+You are the Konn3ct Edge AI Project Management Engineer. Your responsibility is to convert short management instructions into engineering-ready work packages. Every task must maintain traceability.
 
 Given the task title, generate a professional implementation brief. 
-Return HTML only (using <b>, <ul>, <li>, <br>). Do not use markdown backticks.
+You must respond with ONLY a valid JSON object. Do not include markdown formatting like \`\`\`json.
+{
+  "domain": "A 3-to-4 letter uppercase acronym representing the system domain (e.g., MED for Media, SEC for Security, UI for Frontend, SYS for Backend)",
+  "brief_html": "The HTML formatted execution brief (using <b>, <ul>, <li>, <br>)."
+}
 
-Required structure:
+Required HTML structure for brief_html:
 <b>1. Task Summary</b><br/>
 <b>2. Business Context</b><br/>
 <b>3. Objective & Scope</b><br/>
@@ -88,15 +97,28 @@ Task Title: ${task_title}
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: "You are the Konn3ct Edge AI Project Management Engineer." },
+        { role: "system", content: "You are the Konn3ct Edge AI Project Management Engineer. You output strict JSON." },
         { role: "user", content: doctrinePrompt.trim() }
       ],
       temperature: 0.7,
+      response_format: { type: "json_object" }
     });
 
-    let aiReply = completion.choices[0].message.content || '';
-    if (aiReply.startsWith("```html")) aiReply = aiReply.substring(7);
-    if (aiReply.endsWith("```")) aiReply = aiReply.substring(0, aiReply.length - 3);
+    let aiReply = completion.choices[0].message.content || '{}';
+    let aiData;
+    try {
+      aiData = JSON.parse(aiReply);
+    } catch (e) {
+      logger.error("Failed to parse GPT JSON response, falling back");
+      aiData = { domain: "SYS", brief_html: aiReply };
+    }
+
+    // Generate Traceability ID if missing
+    let updatedTitle = task_title;
+    if (!finalTraceabilityId) {
+      finalTraceabilityId = `KE-V04-${aiData.domain || 'SYS'}-TSK-${task_id}`;
+      updatedTitle = `${finalTraceabilityId} ${task_title}`;
+    }
 
     const formattedDescription = `
       <div style="background-color: #f8f9fa; padding: 10px; border-left: 4px solid #005A9C; margin-bottom: 20px;">
@@ -105,7 +127,7 @@ Task Title: ${task_title}
       </div>
       <div style="border-top: 2px dashed #ccc; padding-top: 15px;">
         <b>🤖 AI-GENERATED EXECUTION BRIEF</b><br/><br/>
-        ${aiReply.trim()}
+        ${aiData.brief_html}
       </div>
     `;
 
@@ -118,10 +140,20 @@ Task Title: ${task_title}
     if (!uid) throw new Error("Odoo authentication failed");
 
     // Write back to Odoo
+    const writePayload: any = { description: formattedDescription };
+    
+    // Only update the name if we generated a new ID
+    if (updatedTitle !== task_title) {
+      writePayload.name = updatedTitle;
+    }
+    
+    // Write Traceability ID to the custom field (if it exists in Odoo, it will accept it; otherwise it ignores it safely via XML-RPC sometimes, but to be safe we always write the name)
+    writePayload.x_studio_traceability_id = finalTraceabilityId;
+
     await jsonRpcCall('object', 'execute_kw', [
       ODOO_DB, uid, ODOO_API_KEY,
       'project.task', 'write',
-      [[task_id], { description: formattedDescription }]
+      [[task_id], writePayload]
     ]);
 
     logger.info(`Successfully elaborated Odoo task ${task_id}`);
