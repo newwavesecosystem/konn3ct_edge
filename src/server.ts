@@ -33,6 +33,7 @@ import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
 import { streamingRouter } from './routes/streaming';
 import { internalRecordingsRouter } from './routes/internalRecordings';
+import { odooRouter } from './routes/odoo';
 
 if (process.env.NODE_ENV === 'production') {
   const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
@@ -112,6 +113,7 @@ app.use('/api/ai', aiRouter);
 app.use('/api/external/v1', externalRouter);
 app.use('/api/streaming', streamingRouter);
 app.use('/api/internal/recordings', internalRecordingsRouter);
+app.use('/api/odoo', odooRouter);
 
 // Prometheus metrics endpoint for Phase 0 Baseline
 app.get('/metrics', async (req, res) => {
