@@ -10,7 +10,21 @@ jobs:
   quality-gate:
     name: Enforce Quality & Security
     runs-on: ubuntu-latest
-    
+
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: konn3ct_test
+        ports:
+          - 5432:5432
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,3 +57,37 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post Evidence to Odoo
+        if: always()
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action post_evidence \
+            --branch-name "${{ github.ref_name }}" \
+            --build-status "${{ job.status }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}"
+            
+      - name: Automated Defect Creation
+        if: failure()
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action create_defect \
+            --branch-name "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}" \
+            --author "${{ github.actor }}"
