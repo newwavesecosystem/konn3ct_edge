@@ -49,6 +49,7 @@ jobs:
           # Required dummy env vars so Prisma and Tests don't instantly crash
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/konn3ct_test"
           JWT_SECRET: "test_secret"
+          REDIS_URL: "redis://localhost:6379"
 
       - name: Dependency Vulnerability Audit (SCA)
         run: npm audit --audit-level=high
