@@ -48,8 +48,8 @@ odooRouter.post('/task/elaborate', async (req: Request, res: Response) => {
     }
 
     // Safely extract Odoo's native fields or custom mapped fields
-    const task_id = req.body.id || req.body.task_id;
-    const task_title = req.body.name || req.body.task_title;
+    const task_id = req.body.id || req.body.task_id || req.body._id;
+    const task_title = req.body.name || req.body.display_name || req.body.task_title;
     const existing_description = req.body.description || req.body.existing_description;
 
     if (!task_id || !task_title) {
