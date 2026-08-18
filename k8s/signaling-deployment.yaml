@@ -73,6 +73,26 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: EXTERNAL_API_KEY
+            - name: ODOO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: ODOO_URL
+            - name: ODOO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: ODOO_DB
+            - name: ODOO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: ODOO_USER
+            - name: ODOO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: ODOO_API_KEY
             - name: DEEPGRAM_API_KEY
               valueFrom:
                 secretKeyRef:

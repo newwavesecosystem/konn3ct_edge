@@ -178,7 +178,8 @@ jobs:
             --repo "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
             --commit-sha "${{ github.sha }}" \
-            --commit-message "${{ github.event.head_commit.message }}"
+            --commit-message "${{ github.event.head_commit.message }}" \
+            --success-stage "Completed"
             
       - name: Automated Defect Creation
         if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
