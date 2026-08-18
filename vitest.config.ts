@@ -30,7 +30,9 @@ export default defineConfig({
       'test/unit/participant-tile.test.ts',
       'test/unit/webrtc.test.ts',
       'test/unit/mute-latency.test.ts',
-      'test/unit/scale.test.ts'
+      'test/unit/scale.test.ts',
+      'test/unit/action-lifecycle.test.ts',
+      'test/unit/video-processor.test.ts'
     ],
     include: ['test/**/*.test.{ts,tsx}', 'src/__tests__/**/*.test.{ts,tsx}'],
     coverage: {
