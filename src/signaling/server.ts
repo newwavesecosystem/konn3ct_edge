@@ -2038,15 +2038,19 @@ export function initializeSignaling(server: Server) {
                     if (check && check.status === 'starting') {
                       await db.recording.update({
                         where: { id: recording.id },
-                        data: { status: 'failed' }
+                        data: { 
+                          status: 'failed',
+                          failureReason: 'WATCHDOG_START_TIMEOUT',
+                          endedAt: new Date()
+                        }
                       });
                       logger.warn(`Recording watchdog timed out for job ${recording.id}`);
-                      broadcastToRoom(roomId, { type: 'recording_stopped' });
+                      broadcastToRoom(roomId, { type: 'recording_stopped', reason: 'WATCHDOG_START_TIMEOUT' });
                     }
                   } catch (err) {
                     logger.error(`Watchdog check failed for recording ${recording.id}`, err);
                   }
-                }, 75000); // 75 seconds (readiness timeout in worker is 60s)
+                }, 120000); // 120 seconds (allows time for bot to spin up and load media)
               } else {
                 await db.recording.update({
                   where: { id: recording.id },

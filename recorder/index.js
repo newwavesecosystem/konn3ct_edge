@@ -294,11 +294,10 @@ async function processRecordingJob(job) {
     await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
 
     // Navigate to the meeting URL
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 }).catch(e => console.log('Goto error:', e));
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(e => console.log('Goto error:', e));
 
     // Wait for route to load
     await page.bringToFront();
-    await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
     console.log(JSON.stringify({ event: "recorder_route_loaded", recordingId }));
     console.log(JSON.stringify({ event: "recorder_joined_room", recordingId }));
 
@@ -347,9 +346,57 @@ async function processRecordingJob(job) {
     // Notify Backend that recording has started
     await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/started`, recordingId, job.jobId, botToken, "callback_started");
 
-    // Subscribe to stop event
+    // Subscribe to stop event and browser crashes
     await new Promise((resolve, reject) => {
       let isStopping = false;
+      let killTimeout = null;
+
+      const onBrowserCrash = () => {
+        if (!isStopping) {
+          reject(new Error("BROWSER_CRASH: Headless browser disconnected unexpectedly"));
+        }
+      };
+      
+      const onPageError = (err) => {
+        if (!isStopping) {
+          reject(new Error(`BROWSER_EXIT: Page crashed with error - ${err.message}`));
+        }
+      };
+
+      browser.on('disconnected', onBrowserCrash);
+      page.on('error', onPageError);
+
+      ffmpegProc.on('exit', async (code) => {
+        if (killTimeout) clearTimeout(killTimeout);
+        console.log(JSON.stringify({ event: "recorder_ffmpeg_capture_stopped", recordingId }));
+        console.log(JSON.stringify({ event: "recorder_ffmpeg_exit_code", recordingId, code }));
+
+        try {
+          if (!isStopping && code !== 0) {
+            throw new Error(`FFMPEG_EXIT: Process exited unexpectedly with code ${code}`);
+          }
+          
+          const fileStats = fs.statSync(outputPathRaw);
+          if (fileStats.size < 10000) throw new Error("File too small");
+
+          // Spawn background transcoder ONLY for validation & upload
+          const transcoderPath = path.join(__dirname, 'transcoder.js');
+          const stdoutPath = path.join(recordingsDir, `${recordingId}_transcode_stdout.log`);
+          const stderrPath = path.join(recordingsDir, `${recordingId}_transcode_stderr.log`);
+          const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, outputPathRaw, stdoutPath, stderrPath], {
+            detached: true,
+            stdio: ['ignore', 1, 2]
+          });
+          
+          await redis.set(`recorder:transcode:lease:${recordingId}`, Date.now(), 'EX', 1 * 60 * 60);
+          await redis.set(`recorder:transcode:lease:${recordingId}:pid`, child.pid, 'EX', 1 * 60 * 60);
+          child.unref();
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+
       const stopHandler = async (channel, message) => {
         if (channel === `recorder:stop:${roomId}` && !isStopping) {
           isStopping = true;
@@ -363,37 +410,10 @@ async function processRecordingJob(job) {
           }
           
           // Timeout for SIGINT
-          const killTimeout = setTimeout(() => {
+          killTimeout = setTimeout(() => {
             console.log(JSON.stringify({ event: "recorder_ffmpeg_sigkill_sent", recordingId }));
             ffmpegProc.kill('SIGKILL');
           }, 15000);
-
-          ffmpegProc.on('exit', async (code) => {
-            clearTimeout(killTimeout);
-            console.log(JSON.stringify({ event: "recorder_ffmpeg_capture_stopped", recordingId }));
-            console.log(JSON.stringify({ event: "recorder_ffmpeg_exit_code", recordingId, code }));
-
-            try {
-              const fileStats = fs.statSync(outputPathRaw);
-              if (fileStats.size < 10000) throw new Error("File too small");
-
-              // Spawn background transcoder ONLY for validation & upload
-              const transcoderPath = path.join(__dirname, 'transcoder.js');
-              const stdoutPath = path.join(recordingsDir, `${recordingId}_transcode_stdout.log`);
-              const stderrPath = path.join(recordingsDir, `${recordingId}_transcode_stderr.log`);
-              const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, outputPathRaw, stdoutPath, stderrPath], {
-                detached: true,
-                stdio: ['ignore', 1, 2]
-              });
-              
-              await redis.set(`recorder:transcode:lease:${recordingId}`, Date.now(), 'EX', 1 * 60 * 60);
-              await redis.set(`recorder:transcode:lease:${recordingId}:pid`, child.pid, 'EX', 1 * 60 * 60);
-              child.unref();
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          });
         }
       };
 
