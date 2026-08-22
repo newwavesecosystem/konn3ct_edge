@@ -861,6 +861,34 @@ export function initializeSignaling(server: Server) {
       });
       client.transports = [];
 
+      // IMMEDIATELY clean up and broadcast closure for all producers belonging to this client.
+      // This ensures other participants do not see a frozen black screen or camera frame.
+      getRoomProducers(roomId).then(async (allProducers) => {
+        const clientProducers = allProducers.filter(p => p.participantId === participantId);
+        for (const p of clientProducers) {
+          if (p.kind === 'video' && p.appData?.source === 'screen') {
+            const ssEventId = crypto.randomUUID();
+            broadcastToRoom(roomId, {
+              type: 'screen_share_stopped',
+              actionType: 'screen_share_stopped',
+              roomId,
+              userId,
+              senderParticipantId: userId,
+              producerId: p.producerId,
+              broadcastAt: new Date().toISOString()
+            }, participantId);
+          } else {
+            broadcastToRoom(roomId, {
+              type: 'producer_closed',
+              producerId: p.producerId
+            }, participantId);
+          }
+        }
+        await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
+      }).catch(err => {
+        logger.error(`[CLEANUP] Failed to immediately clean up producers for user ${userId}:`, err);
+      });
+
       // Clean up consumer owners to prevent invalid ownership spam
       for (const [consumerId, owner] of consumerOwners.entries()) {
         if (owner === client) {

@@ -3,8 +3,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
 
-const geistSansVariable = "font-sans";
-const geistMonoVariable = "font-mono";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+
+const geistSansVariable = GeistSans.variable;
+const geistMonoVariable = GeistMono.variable;
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME || "konn3ct";
 

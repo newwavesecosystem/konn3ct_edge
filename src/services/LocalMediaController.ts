@@ -58,7 +58,17 @@ export class LocalMediaController extends EventEmitter {
     roomId: string
   ) {
     const router = await sfu.getOrCreateRouter(roomId);
-    return sfu.createConsumer(transportId, producerId, rtpCapabilities, router);
+    return sfu.createConsumer(
+      transportId,
+      producerId,
+      rtpCapabilities,
+      router,
+      (consumerId) => {
+        const producer = sfu.getProducer(producerId);
+        const appData = producer ? producer.appData : {};
+        this.emit('producerClose', { consumerId, producerId, appData });
+      }
+    );
   }
 
   async canConsume(roomId: string, producerId: string, rtpCapabilities: any): Promise<boolean> {

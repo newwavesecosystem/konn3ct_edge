@@ -12,3 +12,4 @@ konn3ct-mobile/test-results/
 frontend/playwright-report/
 frontend/test-results/
 docs/odoo_imports/
+scripts/generate_odoo_csvs.js
