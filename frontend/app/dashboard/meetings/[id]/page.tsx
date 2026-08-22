@@ -8,10 +8,12 @@ import { apiClient, MeetingSummary, Transcription, Room } from "@/lib/api-client
 import { ArrowLeft, Brain, FileText, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function MeetingIntelligencePage() {
-  const params = useParams();
+import { use } from "react";
+
+export default function MeetingIntelligencePage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
   const router = useRouter();
-  const roomId = params.id as string;
+  const roomId = params.id;
 
   const [room, setRoom] = useState<Room | null>(null);
   const [summary, setSummary] = useState<MeetingSummary | null>(null);

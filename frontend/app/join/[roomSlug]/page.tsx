@@ -119,7 +119,7 @@ export default function JoinPage({
         
         setDevices({ audioInputs, audioOutputs, videoInputs });
         
-        const saved = sessionStorage.getItem("conn3ct_devices");
+        const saved = localStorage.getItem("conn3ct_devices");
         if (saved) {
           setSelectedDevices(JSON.parse(saved));
         } else {
@@ -333,7 +333,7 @@ export default function JoinPage({
 
       if (data.sessionToken) {
         // Save the secure session token to navigate with
-        sessionStorage.setItem("conn3ct_session_token", data.sessionToken);
+        localStorage.setItem("conn3ct_session_token", data.sessionToken);
       }
 
       // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
@@ -549,7 +549,7 @@ export default function JoinPage({
                     onChange={(val) => {
                       const newDevs = { ...selectedDevices, videoInput: val };
                       setSelectedDevices(newDevs);
-                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                      localStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
                     }}
                   />
                   <DeviceSelect 
@@ -559,7 +559,7 @@ export default function JoinPage({
                     onChange={(val) => {
                       const newDevs = { ...selectedDevices, audioInput: val };
                       setSelectedDevices(newDevs);
-                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                      localStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
                     }}
                   />
                   <DeviceSelect 
@@ -569,7 +569,7 @@ export default function JoinPage({
                     onChange={(val) => {
                       const newDevs = { ...selectedDevices, audioOutput: val };
                       setSelectedDevices(newDevs);
-                      sessionStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
+                      localStorage.setItem("conn3ct_devices", JSON.stringify(newDevs));
                     }}
                   />
 

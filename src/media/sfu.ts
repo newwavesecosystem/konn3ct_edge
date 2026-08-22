@@ -420,7 +420,13 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
 /**
  * Create a Consumer (client receiving media)
  */
-export async function createConsumer(transportId: string, producerId: string, rtpCapabilities: any, router: Router) {
+export async function createConsumer(
+  transportId: string,
+  producerId: string,
+  rtpCapabilities: any,
+  router: Router,
+  onProducerClose?: (consumerId: string) => void
+) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
@@ -444,6 +450,9 @@ export async function createConsumer(transportId: string, producerId: string, rt
   consumer.on('producerclose', () => {
     consumer.close();
     consumers.delete(consumer.id);
+    if (onProducerClose) {
+      onProducerClose(consumer.id);
+    }
   });
 
   return {

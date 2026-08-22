@@ -1959,7 +1959,7 @@ export function MeetingProvider({
 
       // Initialize selectedDevices from sessionStorage or defaults
       setSelectedDevices(prev => {
-        const saved = typeof window !== 'undefined' ? sessionStorage.getItem("conn3ct_devices") : null;
+        const saved = typeof window !== 'undefined' ? localStorage.getItem("conn3ct_devices") : null;
         if (saved && !prev.audioInput && !prev.videoInput) {
           try {
             return JSON.parse(saved);
@@ -2005,7 +2005,11 @@ export function MeetingProvider({
       console.log('camera_switch_started');
     }
 
-    setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
+    setSelectedDevices(prev => {
+      const next = { ...prev, [kind]: deviceId };
+      localStorage.setItem("conn3ct_devices", JSON.stringify(next));
+      return next;
+    });
 
     if (kind === 'audioOutput') {
       return;

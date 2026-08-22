@@ -586,7 +586,7 @@ export class WebRTCClient {
         case 'producer_closed':
           // The remote producer was closed — clean up our local consumer
           this.consumers.forEach((consumer, consumerId) => {
-            if (consumerId === msg.consumerId) {
+            if (consumerId === msg.consumerId || consumer.producerId === msg.producerId) {
               consumer.close();
               this.consumers.delete(consumerId);
             }
