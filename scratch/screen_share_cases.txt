@@ -1,0 +1,110 @@
+      case 'set_screen_share_policy': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           client.ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized' }));
+           return;
+        }
+        const { mode, stopExistingShares } = data;
+        const newVersion = await setScreenSharePolicyMode(roomId, mode);
+
+        logger.info(`[AUDIT] SCREEN_SHARE_POLICY_CHANGED | Room: ${roomId} | Actor: ${userId} (${client.role}) | Mode: ${mode} | Version: ${newVersion}`);
+        
+        broadcastToRoom(roomId, {
+          type: 'screen_share_policy_changed',
+          mode,
+          version: newVersion
+        });
+
+        if (stopExistingShares) {
+           // Iterate all producers and stop screen shares of non-hosts
+           const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+           for (const [pid, pStr] of Object.entries(producersObj)) {
+               const p = JSON.parse(pStr);
+               if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
+                   await mediaController.closeProducer(pid);
+                   await redis.hdel(`room:${roomId}:producers`, pid);
+                   broadcastToRoom(roomId, {
+                     type: 'screen_share_stopped',
+                     actionType: 'screen_share_stopped',
+                     producerId: pid,
+                     participantId: p.participantId,
+                     userId: p.userId
+                   });
+                   logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
+               }
+           }
+        }
+        break;
+      }
+
+      case 'set_participant_screen_share_permission': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           return;
+        }
+        const { targetUserId, permission } = data; // permission: 'DEFAULT' | 'ALLOW' | 'BLOCK'
+        const identityKey = getParticipantIdentityKey(targetUserId);
+        const newVersion = await setParticipantScreenSharePermissionCommand(roomId, identityKey, permission);
+
+        logger.info(`[AUDIT] PARTICIPANT_SCREEN_SHARE_PERMISSION_CHANGED | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Permission: ${permission} | Version: ${newVersion}`);
+
+        broadcastToRoom(roomId, {
+          type: 'participant_screen_share_permission_changed',
+          targetUserId,
+          permission,
+          version: newVersion
+        });
+        break;
+      }
+
+      case 'stop_participant_screen_share': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           return;
+        }
+        const { targetUserId } = data;
+        let stoppedCount = 0;
+        const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+        for (const [pid, pStr] of Object.entries(producersObj)) {
+            const p = JSON.parse(pStr);
+            if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
+                await mediaController.closeProducer(pid);
+                await redis.hdel(`room:${roomId}:producers`, pid);
+                stoppedCount++;
+                broadcastToRoom(roomId, {
+                  type: 'screen_share_stopped',
+                  actionType: 'screen_share_stopped',
+                  producerId: pid,
+                  participantId: p.participantId,
+                  userId: p.userId
+                });
+                logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Producer: ${pid}`);
+            }
+        }
+        client.ws.send(JSON.stringify({ type: 'stop_participant_screen_share_result', targetUserId, stoppedCount }));
+        break;
+      }
+
+      case 'stop_all_participant_screen_shares': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           return;
+        }
+        let stoppedCount = 0;
+        const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+        for (const [pid, pStr] of Object.entries(producersObj)) {
+            const p = JSON.parse(pStr);
+            if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
+                await mediaController.closeProducer(pid);
+                await redis.hdel(`room:${roomId}:producers`, pid);
+                stoppedCount++;
+                broadcastToRoom(roomId, {
+                  type: 'screen_share_stopped',
+                  actionType: 'screen_share_stopped',
+                  producerId: pid,
+                  participantId: p.participantId,
+                  userId: p.userId
+                });
+                logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
+            }
+        }
+        logger.info(`[AUDIT] ALL_NON_HOST_SCREEN_SHARES_STOPPED | Room: ${roomId} | Actor: ${userId} | Stopped: ${stoppedCount}`);
+        client.ws.send(JSON.stringify({ type: 'stop_all_participant_screen_shares_result', stoppedCount }));
+        break;
+      }

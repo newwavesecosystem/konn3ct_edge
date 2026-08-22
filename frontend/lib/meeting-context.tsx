@@ -54,6 +54,12 @@ interface MeetingContextValue {
   isMuted: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  screenSharePolicyMode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED';
+  participantScreenSharePermissions: Record<string, 'DEFAULT' | 'ALLOW' | 'BLOCK'>;
+  effectiveScreenSharePermission: {
+    allowed: boolean;
+    reason: 'ALLOWED' | 'PARTICIPANT_BLOCKED' | 'HOST_DISABLED_SCREEN_SHARING' | 'NOT_SELECTED_FOR_SCREEN_SHARING' | 'ROLE_NOT_AUTHORIZED';
+  };
   isRecording: boolean;
   recordingStatus: 'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed';
   isHandRaised: boolean;
@@ -83,6 +89,10 @@ interface MeetingContextValue {
   toggleMute: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
+  setScreenSharePolicy: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) => void;
+  setParticipantScreenSharePermission: (targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => void;
+  stopParticipantScreenShare: (targetUserId: string) => void;
+  stopAllParticipantScreenShares: () => void;
   toggleRecording: () => void;
   toggleHandRaise: () => void;
   toggleCaptions: () => void;
@@ -483,6 +493,32 @@ export function MeetingProvider({
   const [isMuted, setIsMuted] = useState(initialMuted);
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenSharePolicyMode, setScreenSharePolicyMode] = useState<'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED'>('EVERYONE');
+  const [participantScreenSharePermissions, setParticipantScreenSharePermissions] = useState<Record<string, 'DEFAULT' | 'ALLOW' | 'BLOCK'>>({});
+  
+  const effectiveScreenSharePermission = useMemo<MeetingContextValue['effectiveScreenSharePermission']>(() => {
+    const isHost = ['host', 'admin'].includes(currentUser.role);
+    const isCoHost = currentUser.role === 'co-host';
+    const explicit = participantScreenSharePermissions[clientParticipantId || initialCurrentUser.id] || 'DEFAULT';
+
+    if (isHost) return { allowed: true, reason: 'ALLOWED' };
+    if (explicit === 'BLOCK') return { allowed: false, reason: 'PARTICIPANT_BLOCKED' };
+    if (isCoHost) return { allowed: true, reason: 'ALLOWED' }; // Configurable co-host policy mapped here as true by default
+
+    switch (screenSharePolicyMode) {
+      case 'EVERYONE':
+        return { allowed: true, reason: 'ALLOWED' };
+      case 'HOSTS_ONLY':
+        return { allowed: false, reason: 'HOST_DISABLED_SCREEN_SHARING' };
+      case 'SELECTED':
+        return explicit === 'ALLOW' 
+          ? { allowed: true, reason: 'ALLOWED' } 
+          : { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING' };
+      default:
+        return { allowed: true, reason: 'ALLOWED' };
+    }
+  }, [screenSharePolicyMode, participantScreenSharePermissions, currentUser.role, clientParticipantId, initialCurrentUser.id]);
+
   const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed'>('idle');
   const [isRecording, setIsRecording] = useState(false);
 
@@ -1511,6 +1547,32 @@ export function MeetingProvider({
           }
         };
 
+        client.onInitialPermissions = (perms) => {
+          setScreenSharePolicyMode(perms.screenSharePolicyMode);
+          if (currentUser.id) {
+             setParticipantScreenSharePermissions(prev => ({
+               ...prev,
+               [clientParticipantId || initialCurrentUser.id]: perms.localScreenSharePermission
+             }));
+          }
+        };
+
+        client.onScreenSharePolicyChanged = (mode, version) => {
+          setScreenSharePolicyMode(mode);
+        };
+
+        client.onParticipantScreenSharePermissionChanged = (userId, permission, version) => {
+          setParticipantScreenSharePermissions(prev => ({ ...prev, [userId]: permission }));
+        };
+
+        client.onScreenShareStoppedByHost = (userId, producerId) => {
+          if (userId === (clientParticipantId || initialCurrentUser.id) || userId === client?.userId) {
+            toast.error("Your screen sharing was stopped by the host.");
+            setIsScreenSharing(false);
+            client?.disableScreenShare({ serverAlreadyClosed: true });
+          }
+        };
+
         client.onRoomSettingsUpdated = (newSettings, updatedBy) => {
           setRoomSettings(prev => {
             if (currentUser.role !== 'host' && currentUser.role !== 'co-host') {
@@ -2408,6 +2470,22 @@ export function MeetingProvider({
     webrtcClient.current?.sendKickUser(userId);
   }, []);
 
+  const setScreenSharePolicy = useCallback((mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) => {
+    webrtcClient.current?.setScreenSharePolicy(mode, stopExistingShares);
+  }, []);
+
+  const setParticipantScreenSharePermission = useCallback((targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => {
+    webrtcClient.current?.setParticipantScreenSharePermission(targetUserId, permission);
+  }, []);
+
+  const stopParticipantScreenShare = useCallback((targetUserId: string) => {
+    webrtcClient.current?.stopParticipantScreenShare(targetUserId);
+  }, []);
+
+  const stopAllParticipantScreenShares = useCallback(() => {
+    webrtcClient.current?.stopAllParticipantScreenShares();
+  }, []);
+
   const changeUserRole = useCallback((userId: string, newRole: string) => {
     webrtcClient.current?.sendChangeRole(userId, newRole);
   }, []);
@@ -2491,6 +2569,9 @@ export function MeetingProvider({
         aiMessages,
         setAiMessages,
         isScreenSharing,
+        screenSharePolicyMode,
+        participantScreenSharePermissions,
+        effectiveScreenSharePermission,
         isRecording,
         recordingStatus,
         isHandRaised,
@@ -2537,6 +2618,10 @@ export function MeetingProvider({
         admitAllUsers: () => webrtcClient.current?.admitAllUsers(),
         denyAllUsers: () => webrtcClient.current?.denyAllUsers(),
         kickUser,
+        setScreenSharePolicy,
+        setParticipantScreenSharePermission,
+        stopParticipantScreenShare,
+        stopAllParticipantScreenShares,
         changeUserRole,
         forceMuteUser,
         forceVideoOffUser,

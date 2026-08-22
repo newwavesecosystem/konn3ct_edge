@@ -22,6 +22,14 @@ import {
   canPromoteParticipantToSpeaker,
   getLargeRoomCapacityState,
 } from '../helpers/largeRoomHelpers';
+import { 
+  canParticipantShareScreenAdvanced,
+  setScreenSharePolicyMode,
+  setParticipantScreenSharePermissionCommand,
+  getParticipantIdentityKey,
+  getRoomPermissions,
+  getParticipantScreenSharePermission
+} from '../helpers/roomPermissions';
 
 // --- Event Loop & GC Telemetry ---
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
@@ -209,6 +217,10 @@ async function cleanupRoomData(roomId: string) {
 
     // 3. Clear Redis cache so new sessions don't load old history
     await invalidateRoomHistoryCache(roomId);
+    
+    // Clear screen share permission keys
+    await redis.del(`room:${roomId}:permissions`);
+    await redis.del(`room:${roomId}:participantPermissions`);
 
     // 4. Clear memory state for eCinema
     roomECinema.delete(roomId);
@@ -721,6 +733,20 @@ export function initializeSignaling(server: Server) {
       disconnectTimeouts.delete(`${participantId}:${roomId}`);
       logger.info(`Participant ${participantId} (User ${userId}) reconnected to room ${roomId} during grace period`);
 
+      const identityKey = getParticipantIdentityKey(userId);
+      const [roomPerms, userPerm] = await Promise.all([
+        getRoomPermissions(roomId),
+        getParticipantScreenSharePermission(roomId, identityKey)
+      ]);
+
+      const permissionsPayload = {
+        screenSharePolicyMode: roomPerms.screenSharePolicyMode,
+        participantScreenSharingEnabled: roomPerms.participantScreenSharingEnabled,
+        coHostScreenSharingEnabled: roomPerms.coHostScreenSharingEnabled,
+        screenSharePolicyVersion: roomPerms.screenSharePolicyVersion,
+        localScreenSharePermission: userPerm
+      };
+
       // Clean up stale WebRTC state from the previous connection
       if (existingClient) {
         await cleanupParticipantMedia(existingClient, roomId);
@@ -734,7 +760,8 @@ export function initializeSignaling(server: Server) {
         name: client.name,
         role: client.role,
         roomName,
-        maxParticipants: client.maxParticipants
+        maxParticipants: client.maxParticipants,
+        permissions: permissionsPayload
       }));
       broadcastRoomState(roomId);
     } else {
@@ -749,6 +776,20 @@ export function initializeSignaling(server: Server) {
         }
       }
 
+      const identityKey = getParticipantIdentityKey(userId);
+      const [roomPerms, userPerm] = await Promise.all([
+        getRoomPermissions(roomId),
+        getParticipantScreenSharePermission(roomId, identityKey)
+      ]);
+
+      const permissionsPayload = {
+        screenSharePolicyMode: roomPerms.screenSharePolicyMode,
+        participantScreenSharingEnabled: roomPerms.participantScreenSharingEnabled,
+        coHostScreenSharingEnabled: roomPerms.coHostScreenSharingEnabled,
+        screenSharePolicyVersion: roomPerms.screenSharePolicyVersion,
+        localScreenSharePermission: userPerm
+      };
+
       ws.send(JSON.stringify({ 
         type: 'session_status', 
         recovered: false, 
@@ -757,7 +798,8 @@ export function initializeSignaling(server: Server) {
         name: client.name,
         role: client.role,
         roomName,
-        maxParticipants: client.maxParticipants
+        maxParticipants: client.maxParticipants,
+        permissions: permissionsPayload
       }));
 
       if (client.status === 'active') {
@@ -1338,6 +1380,137 @@ export function initializeSignaling(server: Server) {
           logger.warn(`network_detection_settings_update_rejected_permission: User ${client.userId} (${client.role}) attempted to update room settings in ${roomId}`);
         }
         break;
+
+      case 'set_screen_share_policy': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           client.ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized' }));
+           return;
+        }
+        const { mode, stopExistingShares } = data;
+        const newVersion = await setScreenSharePolicyMode(roomId, mode);
+
+        logger.info(`[AUDIT] SCREEN_SHARE_POLICY_CHANGED | Room: ${roomId} | Actor: ${userId} (${client.role}) | Mode: ${mode} | Version: ${newVersion}`);
+        
+        broadcastToRoom(roomId, {
+          type: 'screen_share_policy_changed',
+          mode,
+          version: newVersion
+        });
+
+        if (stopExistingShares) {
+           // Iterate all producers and stop screen shares of non-hosts
+           const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+           for (const [pid, pStr] of Object.entries(producersObj)) {
+               const p = JSON.parse(pStr);
+               if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
+                   try { await mediaController.closeProducer(pid); } catch(e){}
+                   await redis.hdel(`room:${roomId}:producers`, pid);
+                   broadcastToRoom(roomId, {
+                     type: 'screen_share_stopped',
+                     actionType: 'screen_share_stopped',
+                     producerId: pid,
+                     participantId: p.participantId,
+                     userId: p.userId
+                   });
+                   logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
+               }
+           }
+        }
+        break;
+      }
+
+      case 'set_participant_screen_share_permission': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           return;
+        }
+        const { targetUserId, permission } = data; // permission: 'DEFAULT' | 'ALLOW' | 'BLOCK'
+        const identityKey = getParticipantIdentityKey(targetUserId);
+        const newVersion = await setParticipantScreenSharePermissionCommand(roomId, identityKey, permission);
+
+        logger.info(`[AUDIT] PARTICIPANT_SCREEN_SHARE_PERMISSION_CHANGED | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Permission: ${permission} | Version: ${newVersion}`);
+
+        broadcastToRoom(roomId, {
+          type: 'participant_screen_share_permission_changed',
+          targetUserId,
+          permission,
+          version: newVersion
+        });
+        
+        if (permission === 'BLOCK') {
+          // Immediately stop current shares
+          const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+          for (const [pid, pStr] of Object.entries(producersObj)) {
+              const p = JSON.parse(pStr);
+              if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
+                  try { await mediaController.closeProducer(pid); } catch(e){}
+                  await redis.hdel(`room:${roomId}:producers`, pid);
+                  broadcastToRoom(roomId, {
+                    type: 'screen_share_stopped',
+                    actionType: 'screen_share_stopped',
+                    producerId: pid,
+                    participantId: p.participantId,
+                    userId: p.userId
+                  });
+                  logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Producer: ${pid}`);
+              }
+          }
+        }
+        break;
+      }
+
+      case 'stop_participant_screen_share': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           return;
+        }
+        const { targetUserId } = data;
+        let stoppedCount = 0;
+        const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+        for (const [pid, pStr] of Object.entries(producersObj)) {
+            const p = JSON.parse(pStr);
+            if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
+                try { await mediaController.closeProducer(pid); } catch(e){}
+                await redis.hdel(`room:${roomId}:producers`, pid);
+                stoppedCount++;
+                broadcastToRoom(roomId, {
+                  type: 'screen_share_stopped',
+                  actionType: 'screen_share_stopped',
+                  producerId: pid,
+                  participantId: p.participantId,
+                  userId: p.userId
+                });
+                logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Producer: ${pid}`);
+            }
+        }
+        client.ws.send(JSON.stringify({ type: 'stop_participant_screen_share_result', targetUserId, stoppedCount }));
+        break;
+      }
+
+      case 'stop_all_participant_screen_shares': {
+        if (!['host', 'co-host', 'admin'].includes(client.role)) {
+           return;
+        }
+        let stoppedCount = 0;
+        const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+        for (const [pid, pStr] of Object.entries(producersObj)) {
+            const p = JSON.parse(pStr);
+            if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
+                try { await mediaController.closeProducer(pid); } catch(e){}
+                await redis.hdel(`room:${roomId}:producers`, pid);
+                stoppedCount++;
+                broadcastToRoom(roomId, {
+                  type: 'screen_share_stopped',
+                  actionType: 'screen_share_stopped',
+                  producerId: pid,
+                  participantId: p.participantId,
+                  userId: p.userId
+                });
+                logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
+            }
+        }
+        logger.info(`[AUDIT] ALL_NON_HOST_SCREEN_SHARES_STOPPED | Room: ${roomId} | Actor: ${userId} | Stopped: ${stoppedCount}`);
+        client.ws.send(JSON.stringify({ type: 'stop_all_participant_screen_shares_result', stoppedCount }));
+        break;
+      }
 
       case 'update_large_room_settings': {
         if (['host', 'co-host', 'admin'].includes(client.role)) {
@@ -2339,6 +2512,18 @@ export function initializeSignaling(server: Server) {
         }
 
         if (data.kind === 'video' && source === 'screen') {
+          const authCheck = await canParticipantShareScreenAdvanced(roomId, participantCtx);
+          if (!authCheck.allowed) {
+            client.ws.send(JSON.stringify({
+              type: 'produce_failed',
+              errorCode: authCheck.reason === 'SCREEN_SHARE_LIMIT_REACHED' ? authCheck.reason : 'SCREEN_SHARE_NOT_ALLOWED',
+              clientEventId: data.clientEventId,
+              serverEventId: crypto.randomUUID(),
+              message: authCheck.reason || 'Screen sharing not allowed',
+            }));
+            return;
+          }
+
           const screenCheck = canParticipantShareScreen(participantCtx, settings, roomProducersList);
           if (!screenCheck.allowed) {
             client.ws.send(JSON.stringify({
@@ -2350,10 +2535,31 @@ export function initializeSignaling(server: Server) {
             }));
             return;
           }
+          // Tag request with version to double check later
+          (data as any).authVersion = authCheck.version;
         }
 
         const producerRes = await mediaController.createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
         const producerId = typeof producerRes === 'string' ? producerRes : (producerRes?.id || (producerRes as any)?.producerId);
+
+        if (data.kind === 'video' && source === 'screen') {
+           const finalAuthCheck = await canParticipantShareScreenAdvanced(roomId, participantCtx);
+           const reqVersion = (data as any).authVersion;
+           
+           if (!finalAuthCheck.allowed || (reqVersion !== undefined && finalAuthCheck.version !== reqVersion)) {
+               logger.warn(`Screen share rejected due to policy race condition for ${userId}`);
+               try { await mediaController.closeProducer(producerId); } catch(e){}
+               
+               client.ws.send(JSON.stringify({
+                 type: 'produce_failed',
+                 errorCode: 'SCREEN_SHARE_NOT_ALLOWED',
+                 clientEventId: data.clientEventId,
+                 serverEventId: crypto.randomUUID(),
+                 message: finalAuthCheck.reason || 'STALE_PERMISSION_VERSION',
+               }));
+               return;
+           }
+        }
         
         logger.info(JSON.stringify({
           event: "producer_created",

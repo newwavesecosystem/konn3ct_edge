@@ -163,6 +163,10 @@ export class WebRTCClient {
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
+  public onScreenSharePolicyChanged?: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', version: number) => void;
+  public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number) => void;
+  public onScreenShareStoppedByHost?: (userId: string, producerId: string) => void;
+  public onInitialPermissions?: (permissions: any) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
@@ -401,6 +405,9 @@ export class WebRTCClient {
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
+          if (msg.permissions) {
+             this.onInitialPermissions?.(msg.permissions);
+          }
           if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
           
           if (msg.status === 'denied') {
@@ -626,6 +633,16 @@ export class WebRTCClient {
           break;
         case 'room_settings_updated':
           this.onRoomSettingsUpdated?.(msg.settings, msg.updatedBy);
+          break;
+        case 'screen_share_policy_changed':
+          this.onScreenSharePolicyChanged?.(msg.mode, msg.version);
+          break;
+        case 'participant_screen_share_permission_changed':
+          this.onParticipantScreenSharePermissionChanged?.(msg.targetUserId, msg.permission, msg.version);
+          break;
+        case 'screen_share_stopped':
+          // Existing handling might be generic, but we explicitly handle host stops
+          this.onScreenShareStoppedByHost?.(msg.userId, msg.producerId);
           break;
         case 'ecinema_update':
           this.onECinemaUpdate?.(msg.link);
@@ -2311,16 +2328,16 @@ export class WebRTCClient {
     return screenTrack;
   }
 
-  public async disableScreenShare(): Promise<void> {
-    this.stopScreenShareProducer();
+  public async disableScreenShare(options?: { serverAlreadyClosed?: boolean }): Promise<void> {
+    this.stopScreenShareProducer(options);
   }
 
-  private stopScreenShareProducer() {
+  private stopScreenShareProducer(options?: { serverAlreadyClosed?: boolean }) {
     if (this.screenShareProducer) {
       const producerId = this.screenShareProducer.id;
       // Tell the server FIRST so it can broadcast screen_share_stopped to all peers
       // and trigger producerclose on all remote consumers
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (!options?.serverAlreadyClosed && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
           type: 'stop_producer',
           producerId,
@@ -2331,6 +2348,10 @@ export class WebRTCClient {
       this.screenShareProducer.track?.stop();
       this.screenShareProducer.close();
       this.screenShareProducer = null;
+      
+      if (!options?.serverAlreadyClosed) {
+        this.onScreenShareStopped?.(this.userId || '', producerId);
+      }
       this.localScreenTrack = null;
     }
     
@@ -2609,6 +2630,30 @@ export class WebRTCClient {
   public sendKickUser(userId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'kick_user', userId }));
+    }
+  }
+
+  public setScreenSharePolicy(mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'set_screen_share_policy', mode, stopExistingShares }));
+    }
+  }
+
+  public setParticipantScreenSharePermission(targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'set_participant_screen_share_permission', targetUserId, permission }));
+    }
+  }
+
+  public stopParticipantScreenShare(targetUserId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'stop_participant_screen_share', targetUserId }));
+    }
+  }
+
+  public stopAllParticipantScreenShares() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'stop_all_participant_screen_shares' }));
     }
   }
 

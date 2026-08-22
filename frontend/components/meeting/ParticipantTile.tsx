@@ -60,7 +60,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled } = useMeeting();
+  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare } = useMeeting();
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -442,9 +442,19 @@ export function ParticipantTile({
       {/* ── Top-Left Overlays ── */}
       <div className="absolute top-3 left-3 z-20 flex flex-col items-start gap-2 pointer-events-none">
         {participant.isScreenSharing && (
-          <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
-            <MonitorUp className="w-3 h-3" />
-            Sharing
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
+              <MonitorUp className="w-3 h-3" />
+              Sharing
+            </div>
+            {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); stopParticipantScreenShare(participant.userId); }}
+                className="bg-red-500 hover:bg-red-600 transition-colors backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1 text-xs text-white font-medium shadow-sm"
+              >
+                Stop Share
+              </button>
+            )}
           </div>
         )}
         
