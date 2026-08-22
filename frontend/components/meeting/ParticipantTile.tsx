@@ -16,7 +16,8 @@ import {
   SignalMedium,
   SignalLow,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Maximize
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -123,6 +124,21 @@ export function ParticipantTile({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  const toggleFullscreen = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    
+    const elem = videoRef.current as any;
+    if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
+    } else {
+      if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      else if (elem.webkitEnterFullscreen) elem.webkitEnterFullscreen();
+    }
+  }, []);
 
   // Camera video ref
   const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
@@ -423,15 +439,25 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Overlays (Name, Mic, Controls) ── */}
-      {participant.isScreenSharing && (
-        <div className="absolute top-3 left-3 z-10">
+      {/* ── Top-Left Overlays ── */}
+      <div className="absolute top-3 left-3 z-20 flex flex-col items-start gap-2 pointer-events-none">
+        {participant.isScreenSharing && (
           <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
             <MonitorUp className="w-3 h-3" />
             Sharing
           </div>
-        </div>
-      )}
+        )}
+        
+        {isCameraEffectivelyOn && (
+          <button
+            onClick={toggleFullscreen}
+            title="Full Screen"
+            className="pointer-events-auto bg-black/40 hover:bg-black/60 transition-colors backdrop-blur-md rounded-full p-1.5 text-white/90 shadow-md"
+          >
+            <Maximize className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* ── Audio Connection Status (Top-right) ── */}
       {(!participant.isHandRaised) && (() => {
