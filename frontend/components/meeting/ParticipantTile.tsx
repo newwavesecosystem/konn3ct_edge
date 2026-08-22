@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable react-hooks/immutability */
-import React from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -17,7 +17,9 @@ import {
   SignalLow,
   Loader2,
   AlertTriangle,
-  Maximize
+  Maximize,
+  MoreVertical,
+  BellRing
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -60,7 +62,8 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare } = useMeeting();
+  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare, pingParticipant } = useMeeting();
+  const [showMenu, setShowMenu] = useState(false);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -458,6 +461,32 @@ export function ParticipantTile({
           </div>
         )}
         
+        {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+          <div className="pointer-events-auto relative">
+            <button
+              className="p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-white backdrop-blur-sm transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+              title="More options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
+                <div className="absolute left-0 top-full mt-1 w-40 bg-[var(--mt-bg-elevated)] border border-[var(--mt-border)] rounded-md shadow-lg z-50 py-1 flex flex-col text-sm">
+                  <button
+                    className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center gap-2"
+                    onClick={(e) => { e.stopPropagation(); pingParticipant(participant.userId); setShowMenu(false); }}
+                  >
+                    <BellRing className="w-4 h-4 text-[var(--mt-text-muted)]" />
+                    Ping participant
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {isCameraEffectivelyOn && (
           <button
             onClick={toggleFullscreen}

@@ -168,6 +168,8 @@ export class WebRTCClient {
   public onScreenShareStoppedByHost?: (userId: string, producerId: string) => void;
   public onInitialPermissions?: (permissions: any) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
+  public onParticipantPingReceived?: (ping: any) => void;
+  public onPingStatus?: (status: any) => void;
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
   // Recording
@@ -643,6 +645,12 @@ export class WebRTCClient {
         case 'screen_share_stopped':
           // Existing handling might be generic, but we explicitly handle host stops
           this.onScreenShareStoppedByHost?.(msg.userId, msg.producerId);
+          break;
+        case 'PARTICIPANT_PING':
+          this.onParticipantPingReceived?.(msg);
+          break;
+        case 'PING_STATUS':
+          this.onPingStatus?.(msg);
           break;
         case 'ecinema_update':
           this.onECinemaUpdate?.(msg.link);
@@ -2630,6 +2638,18 @@ export class WebRTCClient {
   public sendKickUser(userId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'kick_user', userId }));
+    }
+  }
+
+  public pingParticipant(targetUserId: string, clientPingId?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ping_participant', targetUserId, clientPingId }));
+    }
+  }
+
+  public pingDeliveryAck(pingId: string, stats: { visualShown: boolean, audioAttempted: boolean, audioPlayed: boolean, audioBlocked: boolean, hapticAttempted: boolean }) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ping_delivery_ack', pingId, ...stats }));
     }
   }
 

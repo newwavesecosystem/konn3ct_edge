@@ -200,6 +200,7 @@ interface MeetingContextValue {
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
   isRecorderMode: boolean;
   playNotificationSound: (frequency: number, duration?: number, vol?: number) => void;
+  pingParticipant: (targetUserId: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -756,6 +757,8 @@ export function MeetingProvider({
   const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
   const localIsSpeakingRef = useRef<boolean>(false);
   const hasLeftMeetingRef = useRef<boolean>(false);
+  const pingDedupeRef = useRef<Set<string>>(new Set());
+  const lastPingSoundTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (
@@ -1570,6 +1573,69 @@ export function MeetingProvider({
             toast.error("Your screen sharing was stopped by the host.");
             setIsScreenSharing(false);
             client?.disableScreenShare({ serverAlreadyClosed: true });
+          }
+        };
+
+        client.onParticipantPingReceived = (ping) => {
+          if (pingDedupeRef.current.has(ping.pingId)) return;
+          pingDedupeRef.current.add(ping.pingId);
+          setTimeout(() => pingDedupeRef.current.delete(ping.pingId), 15000);
+
+          const now = Date.now();
+          const shouldPlaySound = (now - lastPingSoundTimeRef.current) > 2000;
+          if (shouldPlaySound) lastPingSoundTimeRef.current = now;
+
+          const stats = {
+            visualShown: true,
+            audioAttempted: shouldPlaySound,
+            audioPlayed: false,
+            audioBlocked: false,
+            hapticAttempted: false
+          };
+
+          const senderName = ping.senderDisplayName || 'The host';
+          toast(
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold">🔔 Attention requested</span>
+              <span className="text-sm opacity-90">{senderName} is trying to get your attention.</span>
+            </div>, 
+            { duration: 5000 }
+          );
+
+          if (shouldPlaySound) {
+            try {
+              const ctx = getSharedAudioContext();
+              if (ctx && ctx.state !== 'suspended') {
+                playNotificationSound(880, 0.2, 0.15); // Attention beep
+                setTimeout(() => playNotificationSound(1100, 0.2, 0.15), 250);
+                stats.audioPlayed = true;
+              } else {
+                stats.audioBlocked = true;
+              }
+            } catch (e) {
+              stats.audioBlocked = true;
+            }
+          }
+
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            stats.hapticAttempted = true;
+            try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+          }
+
+          client?.pingDeliveryAck(ping.pingId, stats);
+        };
+
+        client.onPingStatus = (status) => {
+          if (status.status === 'SENT') {
+            toast.success("Ping sent");
+          } else if (status.status === 'DELIVERED') {
+            toast.success("Ping delivered");
+          } else if (status.status === 'NOT_REACHABLE') {
+            toast.error("Unable to reach participant");
+          } else if (status.status === 'RATE_LIMITED') {
+            toast.error("You are sending pings too quickly");
+          } else if (status.status === 'DENIED') {
+            toast.error("Permission denied");
           }
         };
 
@@ -2529,6 +2595,10 @@ export function MeetingProvider({
     webrtcClient.current?.sendECinemaUpdate(link);
   }, []);
 
+  const pingParticipant = useCallback((targetUserId: string) => {
+    webrtcClient.current?.pingParticipant(targetUserId);
+  }, []);
+
   const sendECinemaAction = useCallback((action: 'play' | 'pause', time?: number) => {
     // We don't optimistically update here because the YouTube player handles its own state for the host
     webrtcClient.current?.sendECinemaAction(action, time);
@@ -2740,6 +2810,7 @@ export function MeetingProvider({
         webrtcClientRef: webrtcClient,
         isRecorderMode,
         playNotificationSound,
+        pingParticipant,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />

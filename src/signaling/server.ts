@@ -86,11 +86,55 @@ if (!process.env.TURN_SECRET && process.env.NODE_ENV === 'production') {
 
 redis.on("error", (e: any) => logger.error('Redis connection error', e));
 
+const PING_RATE_LIMIT_SCRIPT = `
+local senderKey = KEYS[1]
+local targetKey = KEYS[2]
+local nowMs = tonumber(ARGV[1])
+
+local targetLastPing = redis.call('GET', targetKey)
+if targetLastPing then
+    local remaining = 10000 - (nowMs - tonumber(targetLastPing))
+    if remaining > 0 then
+        return { 0, 'TARGET_COOLDOWN', remaining, -1 }
+    end
+end
+
+local count = redis.call('INCR', senderKey)
+if count == 1 then
+    redis.call('EXPIRE', senderKey, 60)
+end
+
+if count > 10 then
+    return { 0, 'SENDER_MINUTE_LIMIT', -1, count }
+end
+
+redis.call('SET', targetKey, nowMs, 'PX', 10000)
+return { 1, 'ALLOWED', -1, count }
+`;
+
+const COMPARE_AND_DELETE_SCRIPT = `
+local sessionKey = KEYS[1]
+local connectionId = ARGV[1]
+local sessionGen = ARGV[2]
+
+local current = redis.call('GET', sessionKey)
+if not current then return 0 end
+
+local data = cjson.decode(current)
+if data.connectionId == connectionId and tostring(data.sessionGeneration) == tostring(sessionGen) then
+    redis.call('DEL', sessionKey)
+    return 1
+end
+return 0
+`;
+
 const redisSubscriber = duplicateRedis(redis);
 redisSubscriber.on("error", (e: any) => logger.error('Redis subscriber connection error', e));
 
 redisSubscriber.subscribe('recorder:completed').catch((e: any) => logger.error('Failed to subscribe to recorder:completed', e));
 redisSubscriber.subscribe('streamer:status').catch((e: any) => logger.error('Failed to subscribe to streamer:status', e));
+redisSubscriber.subscribe(`signaling:targeted:${process.env.POD_ID || 'pod-1'}`).catch((e: any) => logger.error('Failed to subscribe to targeted signaling', e));
+
 redisSubscriber.on('message', async (channel: string, message: string) => {
   if (channel === 'recorder:completed') {
     try {
@@ -152,6 +196,53 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
     } catch (e) {
       logger.error('Failed to process streamer:status message', e);
     }
+  } else if (channel.startsWith('signaling:targeted:')) {
+    try {
+      const data = JSON.parse(message);
+      if (data.type === 'PARTICIPANT_PING') {
+        const { roomId, targetIdentityKey, targetSessionGeneration, pingId, senderRole, senderDisplayName, sentAt, expiresAt } = data;
+        const roomClients = rooms.get(roomId);
+        if (roomClients) {
+          // Find the client with this identityKey
+          let targetClient: Client | undefined;
+          for (const c of roomClients.values()) {
+            if (getParticipantIdentityKey(c.userId) === targetIdentityKey) {
+              targetClient = c;
+              break;
+            }
+          }
+          if (targetClient && targetClient.sessionGeneration === targetSessionGeneration && targetClient.ws.readyState === WebSocket.OPEN) {
+            targetClient.ws.send(JSON.stringify({
+              type: 'PARTICIPANT_PING',
+              pingId,
+              roomId,
+              senderRole,
+              senderDisplayName,
+              sentAt
+            }));
+          } else {
+            logger.warn(`Stale or offline target session for ping ${pingId}`);
+          }
+        }
+      } else if (data.type === 'PING_STATUS') {
+        const { roomId, senderIdentityKey, pingId, status } = data;
+        const roomClients = rooms.get(roomId);
+        if (roomClients) {
+          for (const c of roomClients.values()) {
+            if (getParticipantIdentityKey(c.userId) === senderIdentityKey && c.ws.readyState === WebSocket.OPEN) {
+              c.ws.send(JSON.stringify({
+                type: 'PING_STATUS',
+                pingId,
+                status
+              }));
+              break;
+            }
+          }
+        }
+      }
+    } catch(e) {
+      logger.error('Failed to process targeted message', e);
+    }
   }
 });
 
@@ -173,6 +264,8 @@ interface Client {
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
   isMuted: boolean;
+  sessionGeneration?: string;
+  connectionId?: string;
   maxActiveCameras?: number;
   preempted?: boolean;
   maxParticipants?: number;
@@ -702,7 +795,14 @@ export function initializeSignaling(server: Server) {
     // Determine initial status
     const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
-    const client: Client = { ws, userId, participantId, email, name, roomId, roomSlug, role, status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, isCameraOn: false, isMuted: true, isBot };
+    const client: Client = { 
+      ws, userId, participantId, email, name, roomId, roomSlug, role, 
+      status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, 
+      maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, 
+      isCameraOn: false, isMuted: true, isBot,
+      connectionId: crypto.randomUUID(),
+      sessionGeneration: Date.now().toString()
+    };
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
@@ -727,6 +827,19 @@ export function initializeSignaling(server: Server) {
     }
 
     rooms.get(roomId)!.set(participantId, client);
+
+    const identityKeyForSession = getParticipantIdentityKey(userId);
+    redis.set(
+      `room:${roomId}:participantSessions:${identityKeyForSession}`, 
+      JSON.stringify({
+        signalingPodId: process.env.POD_ID || 'pod-1',
+        connectionId: client.connectionId,
+        sessionGeneration: client.sessionGeneration,
+        connectedAt: Date.now()
+      })
+    ).catch(e => logger.warn('Failed to set participant session', e));
+    redis.expire(`room:${roomId}:participantSessions:${identityKeyForSession}`, 86400).catch(() => {});
+
 
     if (disconnectTimeouts.has(`${participantId}:${roomId}`)) {
       clearTimeout(disconnectTimeouts.get(`${participantId}:${roomId}`)!);
@@ -948,6 +1061,16 @@ export function initializeSignaling(server: Server) {
         const roomClients = rooms.get(roomId);
         if (roomClients) {
           roomClients.delete(participantId);
+          
+          const identityKeyForSession = getParticipantIdentityKey(userId);
+          redis.eval(
+            COMPARE_AND_DELETE_SCRIPT,
+            1,
+            `room:${roomId}:participantSessions:${identityKeyForSession}`,
+            client.connectionId || '',
+            client.sessionGeneration || ''
+          ).catch(e => logger.warn('Failed to cleanup participant session', e));
+
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             cleanupRoomData(roomId);
@@ -1206,6 +1329,132 @@ export function initializeSignaling(server: Server) {
           }
         }
         break;
+
+      case 'ping_participant': {
+        if (client.role !== 'host' && client.role !== 'co-host') {
+          client.ws.send(JSON.stringify({ type: 'PING_STATUS', pingId: data.pingId || 'unknown', status: 'DENIED' }));
+          break;
+        }
+
+        // Validate target is in the room currently (or via Redis)
+        const targetUserId = data.targetUserId;
+        if (!targetUserId) break;
+
+        const senderIdentityKey = getParticipantIdentityKey(client.userId);
+        const targetIdentityKey = getParticipantIdentityKey(targetUserId);
+
+        // Rate Limiting
+        const nowMs = Date.now();
+        const rateResult = await redis.eval(
+          PING_RATE_LIMIT_SCRIPT,
+          2,
+          `rate:ping:${roomId}:${senderIdentityKey}:total`,
+          `rate:ping:${roomId}:${senderIdentityKey}:${targetIdentityKey}`,
+          nowMs.toString()
+        ) as [number, string, number, number];
+
+        if (rateResult[0] === 0) {
+          client.ws.send(JSON.stringify({ type: 'PING_STATUS', pingId: data.pingId || 'unknown', status: 'RATE_LIMITED' }));
+          break;
+        }
+
+        const targetSessionStr = await redis.get(`room:${roomId}:participantSessions:${targetIdentityKey}`);
+        if (!targetSessionStr) {
+          client.ws.send(JSON.stringify({ type: 'PING_STATUS', pingId: data.pingId || 'unknown', status: 'NOT_REACHABLE' }));
+          break;
+        }
+
+        const targetSession = JSON.parse(targetSessionStr);
+        const pingId = crypto.randomUUID();
+        const expiresAt = nowMs + 10000;
+
+        await redis.set(`ping:${pingId}`, JSON.stringify({
+          roomId,
+          senderIdentityKey,
+          targetIdentityKey,
+          targetSessionGeneration: targetSession.sessionGeneration,
+          sentAt: nowMs,
+          expiresAt,
+          status: 'SENT'
+        }), 'PX', 10000);
+
+        try {
+          await db.auditLog.create({
+            data: {
+              action: 'PARTICIPANT_PING_SENT',
+              userId: client.userId,
+              roomId: client.roomId,
+              details: JSON.stringify({ pingId, targetIdentityKey, targetPodId: targetSession.signalingPodId })
+            }
+          });
+        } catch(e) {}
+
+        client.ws.send(JSON.stringify({ type: 'PING_STATUS', pingId: data.clientPingId || pingId, status: 'SENT', serverPingId: pingId }));
+
+        redis.publish(`signaling:targeted:${targetSession.signalingPodId}`, JSON.stringify({
+          type: 'PARTICIPANT_PING',
+          pingId,
+          roomId,
+          targetIdentityKey,
+          targetSessionGeneration: targetSession.sessionGeneration,
+          senderRole: client.role,
+          senderDisplayName: client.name,
+          sentAt: nowMs,
+          expiresAt
+        }));
+
+        break;
+      }
+
+      case 'ping_delivery_ack': {
+        const pingId = data.pingId;
+        const pingRecordStr = await redis.get(`ping:${pingId}`);
+        if (!pingRecordStr) break;
+
+        const pingRecord = JSON.parse(pingRecordStr);
+        const senderIdentityKey = getParticipantIdentityKey(client.userId);
+        
+        if (pingRecord.targetIdentityKey !== senderIdentityKey) break;
+        if (pingRecord.roomId !== roomId) break;
+        if (pingRecord.status !== 'SENT') break; // idempotent
+        
+        const nowMs = Date.now();
+        if (nowMs > pingRecord.expiresAt) break;
+
+        pingRecord.status = 'DELIVERED';
+        await redis.set(`ping:${pingId}`, JSON.stringify(pingRecord), 'PX', Math.max(1, pingRecord.expiresAt - nowMs));
+
+        try {
+          await db.auditLog.create({
+            data: {
+              action: 'PARTICIPANT_PING_DELIVERED',
+              userId: client.userId,
+              roomId: client.roomId,
+              details: JSON.stringify({ 
+                pingId, 
+                visualShown: data.visualShown, 
+                audioAttempted: data.audioAttempted, 
+                audioPlayed: data.audioPlayed, 
+                audioBlocked: data.audioBlocked,
+                deliveryLatencyMs: nowMs - pingRecord.sentAt
+              })
+            }
+          });
+        } catch(e) {}
+
+        const senderSessionStr = await redis.get(`room:${roomId}:participantSessions:${pingRecord.senderIdentityKey}`);
+        if (senderSessionStr) {
+          const senderSession = JSON.parse(senderSessionStr);
+          redis.publish(`signaling:targeted:${senderSession.signalingPodId}`, JSON.stringify({
+            type: 'PING_STATUS',
+            pingId,
+            roomId,
+            senderIdentityKey: pingRecord.senderIdentityKey,
+            status: 'DELIVERED'
+          }));
+        }
+        break;
+      }
 
       case 'change_role':
         if (client.role === 'host') {

@@ -220,7 +220,7 @@ function ParticipantRow({
 
   const { 
     currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole, roomSettings, askToUnmute,
-    participantScreenSharePermissions, setParticipantScreenSharePermission, stopParticipantScreenShare 
+    participantScreenSharePermissions, setParticipantScreenSharePermission, stopParticipantScreenShare, pingParticipant
   } = useMeeting();
   const isSpeaking = participant.isSpeaking;
   const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
@@ -369,6 +369,12 @@ function ParticipantRow({
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
                 <div className="absolute right-0 top-full mt-1 w-48 bg-[var(--mt-bg-elevated)] border border-[var(--mt-border)] rounded-md shadow-lg z-50 py-1 flex flex-col text-sm">
+                  <button
+                    className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)]"
+                    onClick={() => { pingParticipant(participant.userId); setShowMenu(false); }}
+                  >
+                    Ping participant
+                  </button>
                   <div className="px-3 py-1.5 text-xs font-semibold text-[var(--mt-text-muted)]">Screen sharing</div>
                   <button
                     className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center justify-between"
