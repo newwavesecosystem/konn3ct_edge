@@ -94,6 +94,13 @@ model Room {
   networkWindowSize Int @default(5)
   networkMonitorIntervalMs Int @default(2000)
   persistChat Boolean @default(true)
+  largeRoomMode      String  @default("standard")  // "standard" | "large_webinar" | "large_interactive"
+  largeRoomEnabled   Boolean @default(false)
+  maxActiveVideoPublishers Int @default(5)
+  maxActiveAudioPublishers Int @default(20)
+  maxScreenShares Int    @default(1)
+  maxViewersPerRelayRouter Int @default(500)
+  relayProvisionThresholdPercent Int @default(80)
 
   createdAt DateTime @default(now())
 
@@ -355,4 +362,13 @@ model MeetingFeedback {
 
   room Room @relation(fields: [roomId], references: [id])
   @@index([roomId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String?
+  roomId    String?
+  details   String?
+  createdAt DateTime @default(now())
 }

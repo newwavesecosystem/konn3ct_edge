@@ -51,6 +51,24 @@ const PipService = {
   onModeChanged(listener: (isInPip: boolean) => void): EmitterSubscription | null {
     return emitter?.addListener('KonnPipModeChanged', listener) ?? null;
   },
+
+  /**
+   * Update the microphone state in PiP control actions dynamically.
+   */
+  updateMuteState(isMuted: boolean): void {
+    if (KonnPip && KonnPip.updateMuteState) {
+      KonnPip.updateMuteState(isMuted);
+    }
+  },
+
+  /**
+   * Subscribe to PiP actions (e.g. mute toggle, leave meeting).
+   * @param listener Called with { action: 'toggle_mute' | 'leave' }
+   * @returns An EmitterSubscription you must call .remove() on to unsubscribe.
+   */
+  onPipAction(listener: (data: { action: string }) => void): EmitterSubscription | null {
+    return emitter?.addListener('KonnPipAction', listener) ?? null;
+  },
 };
 
 export default PipService;

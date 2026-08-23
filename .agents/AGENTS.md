@@ -14,4 +14,7 @@
 - **Files:** `ReactionsLayer.tsx` and `meeting-context.tsx` (reaction variables/functions)
 - **Constraint:** NEVER modify the Emoji Reactions UI, animations, or underlying logic.
 - **Reasoning:** The user has heavily customized the dynamic glassmorphic UI and organic float animations.
-- **Override:** Do not touch this logic unless the user explicitly tells you to AND you have asked for and received their approval TWICE.
+### Git Commit Policy (CRITICAL)
+- **Constraint:** NEVER execute `git commit` or `git push`. The user performs all commits and pushes manually.
+- **Override:** Do not run git commit or git push unless the user explicitly commands you to do so in the chat.
+

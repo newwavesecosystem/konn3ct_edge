@@ -1,4 +1,4 @@
-import { redis } from './server';
+import { redis } from '../redis';
 import { db } from '../db';
 import { logger } from '../logger';
 import crypto from 'crypto';

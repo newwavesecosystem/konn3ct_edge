@@ -22,7 +22,7 @@ spec:
   - host: __NEXT_PUBLIC_BACKEND_DOMAIN__ # Replaced dynamically by GitHub Actions
     http:
       paths:
-      - path: /signal
+      - path: /
         pathType: Prefix
         backend:
           service:

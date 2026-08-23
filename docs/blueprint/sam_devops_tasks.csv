@@ -1,0 +1,56 @@
+id,name,Description,start Date,Deadline,Priority,Tags
+DEV-001,DEV-001 - Digital Ocean DOKS Cluster Provisioning,"Provision Digital Ocean Kubernetes (DOKS) clusters for Staging and Production environments. Expectation: Fully functional K8s cluster ready for deployments.
+
+Acceptance Criteria:
+- Terraform scripts created to provision DOKS clusters
+- Node pools configured with auto-scaling enabled (min 3 nodes, max 10 nodes)
+- Digital Ocean Load Balancers attached to the cluster ingress controller",08/10/2026,08/13/2026,High,"DevOps, Kubernetes, Infrastructure"
+DEV-002,DEV-002 - Managed Database & Redis Setup,"Provision Digital Ocean Managed PostgreSQL 16+ and Managed Redis clusters. Expectation: Secure, highly available data layer.
+
+Acceptance Criteria:
+- PostgreSQL primary instance deployed with a standby read-replica
+- Redis cluster deployed for session state and WebRTC signaling
+- Automated daily backups configured with 30-day retention
+- VPC peering configured so DBs are only accessible from the DOKS cluster",08/13/2026,08/16/2026,High,"DevOps, Database, Infrastructure"
+DEV-003,DEV-003 - Cloudflare WAF & DNS Configuration,"Configure Cloudflare for DNS management, CDN caching, and Web Application Firewall (Volume 10). Expectation: Secure edge network.
+
+Acceptance Criteria:
+- DNS records point to Digital Ocean Load Balancers (Proxy enabled)
+- Cloudflare WAF rules enabled for SQLi, XSS, and known exploit payloads
+- Cloudflare CDN configured to cache static frontend assets aggressively
+- Under Attack mode tested and verified",08/16/2026,08/19/2026,High,"SecOps, Cloudflare, Network"
+DEV-004,DEV-004 - CI/CD Pipeline (GitHub Actions),"Set up GitHub Actions pipelines for automated testing, Docker image building, and deployment to DOKS. Expectation: Zero-downtime automated deployments.
+
+Acceptance Criteria:
+- Pipeline runs unit/integration tests on every Pull Request
+- On merge to main, pipeline builds Docker images and pushes to DO Container Registry
+- Automated Helm or Kustomize deployment to Staging environment
+- Manual approval gate for Production deployments",08/19/2026,08/23/2026,High,"DevOps, CI/CD"
+DEV-005,DEV-005 - Kubernetes Secrets & RBAC Management,"Implement secure secret management and Role-Based Access Control in K8s. Expectation: No hardcoded secrets; strict least-privilege access.
+
+Acceptance Criteria:
+- External Secrets Operator or HashiCorp Vault deployed
+- Environment variables (DB credentials, API keys) injected securely into pods
+- K8s RBAC configured (e.g., developers have read-only access to prod cluster)
+- Network Policies restrict ingress/egress between namespaces",08/23/2026,08/26/2026,High,"SecOps, Kubernetes, Security"
+DEV-006,DEV-006 - Automated Load & Stress Testing Bots,"Build headless bot scripts (k6 or Playwright) to simulate hundreds of concurrent users joining a meeting room (Volume 7). Expectation: Validation of auto-scaling triggers.
+
+Acceptance Criteria:
+- Bot script can spawn 500+ headless browser instances joining a specific room
+- Simulates WebRTC media transmission (dummy audio/video tracks)
+- Validates that DOKS cluster successfully spins up new nodes when CPU/Memory thresholds are met
+- Generates load test performance report",08/26/2026,08/30/2026,High,"DevOps, Testing, Bots"
+DEV-007,DEV-007 - Automated Penetration & Vulnerability Scanners,"Integrate automated security scanning tools (e.g., OWASP ZAP, Trivy) into the CI pipeline (Volume 10). Expectation: Continuous security auditing.
+
+Acceptance Criteria:
+- Trivy scans Docker images for CVEs before deployment
+- Automated DAST (Dynamic Application Security Testing) runs against Staging on a weekly schedule
+- Security alerts fail the build if CRITICAL vulnerabilities are found
+- Reports are sent to the engineering Slack/Discord channel",08/30/2026,09/03/2026,High,"SecOps, Security, Bots"
+DEV-008,DEV-008 - Observability, Logging & Alerting Stack,"Deploy a centralized logging and monitoring stack (e.g., Prometheus, Grafana, ELK/Loki). Expectation: Deep visibility into system health.
+
+Acceptance Criteria:
+- Prometheus scraping metrics from K8s nodes, Postgres, Redis, and WebRTC servers
+- Grafana dashboards visualizing CPU, Memory, API latency, and active WebRTC connections
+- Centralized log aggregation (Loki or ELK) for searching application logs
+- PagerDuty/Slack alerts configured for high CPU, high error rates, or DB failovers",09/03/2026,09/07/2026,High,"DevOps, Monitoring"

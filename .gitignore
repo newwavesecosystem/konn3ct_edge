@@ -1,5 +1,8 @@
 node_modules
 .env
+.env.*
+!.env.example
+!.env.test.example
 dist
 .tsbuildinfo
 konnect_dashboard/
@@ -8,3 +11,5 @@ konn3ct-mobile/playwright-report/
 konn3ct-mobile/test-results/
 frontend/playwright-report/
 frontend/test-results/
+docs/odoo_imports/
+scripts/generate_odoo_csvs.js

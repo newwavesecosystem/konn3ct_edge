@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-backend
 spec:
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate
   selector:
@@ -27,6 +27,7 @@ spec:
                 operator: In
                 values:
                 - conn3ct-recorder
+                - conn3ct-backend
             topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
@@ -106,6 +107,11 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: DO_SPACES_BUCKET
+            - name: TELEMETRY_S3_BUCKET_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: conn3ct-secrets
+                  key: TELEMETRY_S3_BUCKET_NAME
             - name: NEXT_PUBLIC_FRONTEND_URL
               valueFrom:
                 secretKeyRef:

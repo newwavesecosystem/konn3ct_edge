@@ -275,6 +275,7 @@ export default function ProfileScreen() {
         )}
 
         {/* --- Security Card --- */}
+        {!APP_CONFIG.GOV_LOGIN && (
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={[styles.cardIconBox, { backgroundColor: `${COLORS.brandBlue}15` }]}>
@@ -303,6 +304,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        )}
 
         {/* --- Active Sessions Card --- */}
         <View style={styles.card}>

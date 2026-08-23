@@ -480,7 +480,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 <Calendar color={COLORS.amber} size={20} />
               </View>
               <Text style={styles.dashboardStatValue}>{dashboardStats?.upcoming_meetings || 0}</Text>
-              <Text style={styles.dashboardStatLabel}>Upcoming</Text>
+              <Text style={styles.dashboardStatLabel}>Upcoming/Today</Text>
             </View>
 
             {/* Streaming */}
@@ -812,13 +812,17 @@ export default function DashboardScreen({ navigation }: Props) {
                 }
               }
 
+              const roomSlug = (meeting.roomlink && typeof meeting.roomlink === 'string') 
+                ? meeting.roomlink.split('/').pop() 
+                : (meeting.room?.url || meeting.room?.slug || meeting.url || meeting.slug || String(meeting.room_id || meeting.roomId || meeting.id));
+
               return (
                 <TouchableOpacity
                   key={meeting.id || i}
                   style={styles.meetingCard}
                   onPress={() =>
                     navigation.navigate('Lobby', {
-                      roomId: String(meeting.room_id || meeting.roomId || meeting.id),
+                      roomId: String(roomSlug),
                     })
                   }
                   activeOpacity={0.7}
@@ -894,7 +898,9 @@ export default function DashboardScreen({ navigation }: Props) {
               }
               const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
               const accent = ACCENT_COLORS[i % 3];
-              const roomSlug = meeting.roomlink ? meeting.roomlink.split('/').pop() : (meeting.room?.slug || meeting.roomId || meeting.room_id);
+              const roomSlug = (meeting.roomlink && typeof meeting.roomlink === 'string') 
+                ? meeting.roomlink.split('/').pop() 
+                : (meeting.room?.url || meeting.room?.slug || meeting.url || meeting.slug || String(meeting.room_id || meeting.roomId || meeting.id));
 
               return (
                 <TouchableOpacity

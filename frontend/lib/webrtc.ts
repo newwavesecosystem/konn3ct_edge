@@ -163,7 +163,13 @@ export class WebRTCClient {
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string) => void;
+  public onScreenSharePolicyChanged?: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', version: number) => void;
+  public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number) => void;
+  public onScreenShareStoppedByHost?: (userId: string, producerId: string) => void;
+  public onInitialPermissions?: (permissions: any) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
+  public onParticipantPingReceived?: (ping: any) => void;
+  public onPingStatus?: (status: any) => void;
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
   // Recording
@@ -401,6 +407,9 @@ export class WebRTCClient {
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
+          if (msg.permissions) {
+             this.onInitialPermissions?.(msg.permissions);
+          }
           if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
           
           if (msg.status === 'denied') {
@@ -586,7 +595,7 @@ export class WebRTCClient {
         case 'producer_closed':
           // The remote producer was closed — clean up our local consumer
           this.consumers.forEach((consumer, consumerId) => {
-            if (consumerId === msg.consumerId) {
+            if (consumerId === msg.consumerId || consumer.producerId === msg.producerId) {
               consumer.close();
               this.consumers.delete(consumerId);
             }
@@ -626,6 +635,22 @@ export class WebRTCClient {
           break;
         case 'room_settings_updated':
           this.onRoomSettingsUpdated?.(msg.settings, msg.updatedBy);
+          break;
+        case 'screen_share_policy_changed':
+          this.onScreenSharePolicyChanged?.(msg.mode, msg.version);
+          break;
+        case 'participant_screen_share_permission_changed':
+          this.onParticipantScreenSharePermissionChanged?.(msg.targetUserId, msg.permission, msg.version);
+          break;
+        case 'screen_share_stopped':
+          // Existing handling might be generic, but we explicitly handle host stops
+          this.onScreenShareStoppedByHost?.(msg.userId, msg.producerId);
+          break;
+        case 'PARTICIPANT_PING':
+          this.onParticipantPingReceived?.(msg);
+          break;
+        case 'PING_STATUS':
+          this.onPingStatus?.(msg);
           break;
         case 'ecinema_update':
           this.onECinemaUpdate?.(msg.link);
@@ -1084,7 +1109,9 @@ export class WebRTCClient {
     let lastBytesSent = 0;
     let lastBytesRecv = 0;
     let lastPacketsSent = 0;
+    let lastPacketsRecv = 0;
     let lastPacketsLost = 0;
+    let lastOutboundPacketsLost = 0;
     let lastFramesDropped = 0;
     let lastFramesEncoded = 0;
     let lastTime = performance.now();
@@ -1107,7 +1134,9 @@ export class WebRTCClient {
         let bytesSent = 0;
         let bytesRecv = 0;
         let packetsSent = 0;
+        let packetsRecv = 0;
         let packetsLost = 0;
+        let outboundPacketsLost = 0;
         let framesDropped = 0;
         let framesEncoded = 0;
         let availableOutgoingBitrate: number | null = null;
@@ -1123,6 +1152,7 @@ export class WebRTCClient {
             if (stat.type === 'remote-inbound-rtp') {
               rtt = Math.max(rtt, stat.roundTripTime ? stat.roundTripTime * 1000 : 0);
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
+              outboundPacketsLost += stat.packetsLost || 0;
             }
             if (stat.type === 'outbound-rtp') {
               bytesSent += stat.bytesSent || 0;
@@ -1142,6 +1172,7 @@ export class WebRTCClient {
           recvStats.forEach((stat: any) => {
             if (stat.type === 'inbound-rtp') {
               bytesRecv += stat.bytesReceived || 0;
+              packetsRecv += stat.packetsReceived || 0;
               packetsLost += stat.packetsLost || 0;
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
             }
@@ -1152,21 +1183,33 @@ export class WebRTCClient {
         const dBytesSent = Math.max(0, bytesSent - lastBytesSent);
         const dBytesRecv = Math.max(0, bytesRecv - lastBytesRecv);
         const dPacketsSent = Math.max(0, packetsSent - lastPacketsSent);
+        const dPacketsRecv = Math.max(0, packetsRecv - lastPacketsRecv);
         const dPacketsLost = Math.max(0, packetsLost - lastPacketsLost);
+        const dOutboundPacketsLost = Math.max(0, outboundPacketsLost - lastOutboundPacketsLost);
         const dFramesDropped = Math.max(0, framesDropped - lastFramesDropped);
         const dFramesEncoded = Math.max(0, framesEncoded - lastFramesEncoded);
 
         lastBytesSent = bytesSent;
         lastBytesRecv = bytesRecv;
         lastPacketsSent = packetsSent;
+        lastPacketsRecv = packetsRecv;
         lastPacketsLost = packetsLost;
+        lastOutboundPacketsLost = outboundPacketsLost;
         lastFramesDropped = framesDropped;
         lastFramesEncoded = framesEncoded;
         lastTime = now;
 
         const sendBitrate = (dBytesSent * 8) / dt;
         const recvBitrate = (dBytesRecv * 8) / dt;
-        const packetLoss = dPacketsSent > 0 ? (dPacketsLost / (dPacketsSent + dPacketsLost)) * 100 : 0;
+        
+        // Calculate inbound loss accurately
+        const inboundLoss = (dPacketsRecv + dPacketsLost) > 0 ? (dPacketsLost / (dPacketsRecv + dPacketsLost)) * 100 : 0;
+        
+        // Calculate outbound loss accurately (using remote-inbound-rtp data)
+        const outboundLoss = (dPacketsSent + dOutboundPacketsLost) > 0 ? (dOutboundPacketsLost / (dPacketsSent + dOutboundPacketsLost)) * 100 : 0;
+        
+        // Use the worst of the two directions as our overall packet loss metric
+        const packetLoss = Math.max(inboundLoss, outboundLoss);
         const fps = dFramesEncoded / dt;
 
         history.push({ rtt, packetLoss, jitter, sendBitrate, recvBitrate, framesDropped: dFramesDropped, framesEncoded: dFramesEncoded });
@@ -2311,16 +2354,16 @@ export class WebRTCClient {
     return screenTrack;
   }
 
-  public async disableScreenShare(): Promise<void> {
-    this.stopScreenShareProducer();
+  public async disableScreenShare(options?: { serverAlreadyClosed?: boolean }): Promise<void> {
+    this.stopScreenShareProducer(options);
   }
 
-  private stopScreenShareProducer() {
+  private stopScreenShareProducer(options?: { serverAlreadyClosed?: boolean }) {
     if (this.screenShareProducer) {
       const producerId = this.screenShareProducer.id;
       // Tell the server FIRST so it can broadcast screen_share_stopped to all peers
       // and trigger producerclose on all remote consumers
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (!options?.serverAlreadyClosed && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
           type: 'stop_producer',
           producerId,
@@ -2331,6 +2374,10 @@ export class WebRTCClient {
       this.screenShareProducer.track?.stop();
       this.screenShareProducer.close();
       this.screenShareProducer = null;
+      
+      if (!options?.serverAlreadyClosed) {
+        this.onScreenShareStopped?.(this.userId || '', producerId);
+      }
       this.localScreenTrack = null;
     }
     
@@ -2609,6 +2656,42 @@ export class WebRTCClient {
   public sendKickUser(userId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'kick_user', userId }));
+    }
+  }
+
+  public pingParticipant(targetUserId: string, clientPingId?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ping_participant', targetUserId, clientPingId }));
+    }
+  }
+
+  public pingDeliveryAck(pingId: string, stats: { visualShown: boolean, audioAttempted: boolean, audioPlayed: boolean, audioBlocked: boolean, hapticAttempted: boolean }) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ping_delivery_ack', pingId, ...stats }));
+    }
+  }
+
+  public setScreenSharePolicy(mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'set_screen_share_policy', mode, stopExistingShares }));
+    }
+  }
+
+  public setParticipantScreenSharePermission(targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'set_participant_screen_share_permission', targetUserId, permission }));
+    }
+  }
+
+  public stopParticipantScreenShare(targetUserId: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'stop_participant_screen_share', targetUserId }));
+    }
+  }
+
+  public stopAllParticipantScreenShares() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'stop_all_participant_screen_shares' }));
     }
   }
 

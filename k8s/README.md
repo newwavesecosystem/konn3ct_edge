@@ -56,6 +56,7 @@ kubectl create secret generic conn3ct-secrets \
   --from-literal=DO_SPACES_KEY="..." \
   --from-literal=DO_SPACES_SECRET="..." \
   --from-literal=DO_SPACES_BUCKET="..." \
+  --from-literal=TELEMETRY_S3_BUCKET_NAME="..." \
   --from-literal=NEXT_PUBLIC_FRONTEND_URL="..." \
   --from-literal=NEXT_PUBLIC_FRONTEND_DOMAIN="..." \
   --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="..." \

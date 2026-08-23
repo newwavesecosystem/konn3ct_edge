@@ -54,6 +54,12 @@ interface MeetingContextValue {
   isMuted: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  screenSharePolicyMode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED';
+  participantScreenSharePermissions: Record<string, 'DEFAULT' | 'ALLOW' | 'BLOCK'>;
+  effectiveScreenSharePermission: {
+    allowed: boolean;
+    reason: 'ALLOWED' | 'PARTICIPANT_BLOCKED' | 'HOST_DISABLED_SCREEN_SHARING' | 'NOT_SELECTED_FOR_SCREEN_SHARING' | 'ROLE_NOT_AUTHORIZED';
+  };
   isRecording: boolean;
   recordingStatus: 'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed';
   isHandRaised: boolean;
@@ -83,6 +89,10 @@ interface MeetingContextValue {
   toggleMute: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
+  setScreenSharePolicy: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) => void;
+  setParticipantScreenSharePermission: (targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => void;
+  stopParticipantScreenShare: (targetUserId: string) => void;
+  stopAllParticipantScreenShares: () => void;
   toggleRecording: () => void;
   toggleHandRaise: () => void;
   toggleCaptions: () => void;
@@ -190,6 +200,7 @@ interface MeetingContextValue {
   webrtcClientRef?: React.MutableRefObject<WebRTCClient | null>;
   isRecorderMode: boolean;
   playNotificationSound: (frequency: number, duration?: number, vol?: number) => void;
+  pingParticipant: (targetUserId: string) => void;
 }
 
 const MeetingContext = createContext<MeetingContextValue | null>(null);
@@ -483,6 +494,32 @@ export function MeetingProvider({
   const [isMuted, setIsMuted] = useState(initialMuted);
   const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenSharePolicyMode, setScreenSharePolicyMode] = useState<'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED'>('EVERYONE');
+  const [participantScreenSharePermissions, setParticipantScreenSharePermissions] = useState<Record<string, 'DEFAULT' | 'ALLOW' | 'BLOCK'>>({});
+  
+  const effectiveScreenSharePermission = useMemo<MeetingContextValue['effectiveScreenSharePermission']>(() => {
+    const isHost = ['host', 'admin'].includes(currentUser.role);
+    const isCoHost = currentUser.role === 'co-host';
+    const explicit = participantScreenSharePermissions[clientParticipantId || initialCurrentUser.id] || 'DEFAULT';
+
+    if (isHost) return { allowed: true, reason: 'ALLOWED' };
+    if (explicit === 'BLOCK') return { allowed: false, reason: 'PARTICIPANT_BLOCKED' };
+    if (isCoHost) return { allowed: true, reason: 'ALLOWED' }; // Configurable co-host policy mapped here as true by default
+
+    switch (screenSharePolicyMode) {
+      case 'EVERYONE':
+        return { allowed: true, reason: 'ALLOWED' };
+      case 'HOSTS_ONLY':
+        return { allowed: false, reason: 'HOST_DISABLED_SCREEN_SHARING' };
+      case 'SELECTED':
+        return explicit === 'ALLOW' 
+          ? { allowed: true, reason: 'ALLOWED' } 
+          : { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING' };
+      default:
+        return { allowed: true, reason: 'ALLOWED' };
+    }
+  }, [screenSharePolicyMode, participantScreenSharePermissions, currentUser.role, clientParticipantId, initialCurrentUser.id]);
+
   const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed'>('idle');
   const [isRecording, setIsRecording] = useState(false);
 
@@ -720,6 +757,8 @@ export function MeetingProvider({
   const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
   const localIsSpeakingRef = useRef<boolean>(false);
   const hasLeftMeetingRef = useRef<boolean>(false);
+  const pingDedupeRef = useRef<Set<string>>(new Set());
+  const lastPingSoundTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (
@@ -1511,6 +1550,95 @@ export function MeetingProvider({
           }
         };
 
+        client.onInitialPermissions = (perms) => {
+          setScreenSharePolicyMode(perms.screenSharePolicyMode);
+          if (currentUser.id) {
+             setParticipantScreenSharePermissions(prev => ({
+               ...prev,
+               [clientParticipantId || initialCurrentUser.id]: perms.localScreenSharePermission
+             }));
+          }
+        };
+
+        client.onScreenSharePolicyChanged = (mode, version) => {
+          setScreenSharePolicyMode(mode);
+        };
+
+        client.onParticipantScreenSharePermissionChanged = (userId, permission, version) => {
+          setParticipantScreenSharePermissions(prev => ({ ...prev, [userId]: permission }));
+        };
+
+        client.onScreenShareStoppedByHost = (userId, producerId) => {
+          if (userId === (clientParticipantId || initialCurrentUser.id) || userId === client?.userId) {
+            toast.error("Your screen sharing was stopped by the host.");
+            setIsScreenSharing(false);
+            client?.disableScreenShare({ serverAlreadyClosed: true });
+          }
+        };
+
+        client.onParticipantPingReceived = (ping) => {
+          if (pingDedupeRef.current.has(ping.pingId)) return;
+          pingDedupeRef.current.add(ping.pingId);
+          setTimeout(() => pingDedupeRef.current.delete(ping.pingId), 15000);
+
+          const now = Date.now();
+          const shouldPlaySound = (now - lastPingSoundTimeRef.current) > 2000;
+          if (shouldPlaySound) lastPingSoundTimeRef.current = now;
+
+          const stats = {
+            visualShown: true,
+            audioAttempted: shouldPlaySound,
+            audioPlayed: false,
+            audioBlocked: false,
+            hapticAttempted: false
+          };
+
+          const senderName = ping.senderDisplayName || 'The host';
+          toast(
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold">🔔 Attention requested</span>
+              <span className="text-sm opacity-90">{senderName} is trying to get your attention.</span>
+            </div>, 
+            { duration: 5000 }
+          );
+
+          if (shouldPlaySound) {
+            try {
+              const ctx = getSharedAudioContext();
+              if (ctx && ctx.state !== 'suspended') {
+                playNotificationSound(880, 0.2, 0.15); // Attention beep
+                setTimeout(() => playNotificationSound(1100, 0.2, 0.15), 250);
+                stats.audioPlayed = true;
+              } else {
+                stats.audioBlocked = true;
+              }
+            } catch (e) {
+              stats.audioBlocked = true;
+            }
+          }
+
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            stats.hapticAttempted = true;
+            try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+          }
+
+          client?.pingDeliveryAck(ping.pingId, stats);
+        };
+
+        client.onPingStatus = (status) => {
+          if (status.status === 'SENT') {
+            toast.success("Ping sent");
+          } else if (status.status === 'DELIVERED') {
+            toast.success("Ping delivered");
+          } else if (status.status === 'NOT_REACHABLE') {
+            toast.error("Unable to reach participant");
+          } else if (status.status === 'RATE_LIMITED') {
+            toast.error("You are sending pings too quickly");
+          } else if (status.status === 'DENIED') {
+            toast.error("Permission denied");
+          }
+        };
+
         client.onRoomSettingsUpdated = (newSettings, updatedBy) => {
           setRoomSettings(prev => {
             if (currentUser.role !== 'host' && currentUser.role !== 'co-host') {
@@ -1959,7 +2087,7 @@ export function MeetingProvider({
 
       // Initialize selectedDevices from sessionStorage or defaults
       setSelectedDevices(prev => {
-        const saved = typeof window !== 'undefined' ? sessionStorage.getItem("conn3ct_devices") : null;
+        const saved = typeof window !== 'undefined' ? localStorage.getItem("conn3ct_devices") : null;
         if (saved && !prev.audioInput && !prev.videoInput) {
           try {
             return JSON.parse(saved);
@@ -2005,7 +2133,11 @@ export function MeetingProvider({
       console.log('camera_switch_started');
     }
 
-    setSelectedDevices(prev => ({ ...prev, [kind]: deviceId }));
+    setSelectedDevices(prev => {
+      const next = { ...prev, [kind]: deviceId };
+      localStorage.setItem("conn3ct_devices", JSON.stringify(next));
+      return next;
+    });
 
     if (kind === 'audioOutput') {
       return;
@@ -2404,6 +2536,22 @@ export function MeetingProvider({
     webrtcClient.current?.sendKickUser(userId);
   }, []);
 
+  const setScreenSharePolicy = useCallback((mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) => {
+    webrtcClient.current?.setScreenSharePolicy(mode, stopExistingShares);
+  }, []);
+
+  const setParticipantScreenSharePermission = useCallback((targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => {
+    webrtcClient.current?.setParticipantScreenSharePermission(targetUserId, permission);
+  }, []);
+
+  const stopParticipantScreenShare = useCallback((targetUserId: string) => {
+    webrtcClient.current?.stopParticipantScreenShare(targetUserId);
+  }, []);
+
+  const stopAllParticipantScreenShares = useCallback(() => {
+    webrtcClient.current?.stopAllParticipantScreenShares();
+  }, []);
+
   const changeUserRole = useCallback((userId: string, newRole: string) => {
     webrtcClient.current?.sendChangeRole(userId, newRole);
   }, []);
@@ -2447,6 +2595,10 @@ export function MeetingProvider({
     webrtcClient.current?.sendECinemaUpdate(link);
   }, []);
 
+  const pingParticipant = useCallback((targetUserId: string) => {
+    webrtcClient.current?.pingParticipant(targetUserId);
+  }, []);
+
   const sendECinemaAction = useCallback((action: 'play' | 'pause', time?: number) => {
     // We don't optimistically update here because the YouTube player handles its own state for the host
     webrtcClient.current?.sendECinemaAction(action, time);
@@ -2487,6 +2639,9 @@ export function MeetingProvider({
         aiMessages,
         setAiMessages,
         isScreenSharing,
+        screenSharePolicyMode,
+        participantScreenSharePermissions,
+        effectiveScreenSharePermission,
         isRecording,
         recordingStatus,
         isHandRaised,
@@ -2533,6 +2688,10 @@ export function MeetingProvider({
         admitAllUsers: () => webrtcClient.current?.admitAllUsers(),
         denyAllUsers: () => webrtcClient.current?.denyAllUsers(),
         kickUser,
+        setScreenSharePolicy,
+        setParticipantScreenSharePermission,
+        stopParticipantScreenShare,
+        stopAllParticipantScreenShares,
         changeUserRole,
         forceMuteUser,
         forceVideoOffUser,
@@ -2651,6 +2810,7 @@ export function MeetingProvider({
         webrtcClientRef: webrtcClient,
         isRecorderMode,
         playNotificationSound,
+        pingParticipant,
       }}
     >
       <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />

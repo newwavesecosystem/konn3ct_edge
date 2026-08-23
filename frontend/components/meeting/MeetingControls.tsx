@@ -42,12 +42,14 @@ import {
   HelpCircle,
   Shield,
 } from "lucide-react";
+import { ScreenSharePermissionsDialog } from "./ScreenSharePermissionsDialog";
 
 export function MeetingControls() {
   const {
     isMuted,
     isCameraOn,
     isScreenSharing,
+    effectiveScreenSharePermission,
     isRecording,
     recordingStatus,
     isHandRaised,
@@ -89,6 +91,7 @@ export function MeetingControls() {
   const { theme, toggleTheme } = useMeetingTheme();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showECinemaDialog, setShowECinemaDialog] = useState(false);
+  const [showScreenSharePerms, setShowScreenSharePerms] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -128,6 +131,7 @@ export function MeetingControls() {
 
   return (
     <>
+      <ScreenSharePermissionsDialog open={showScreenSharePerms} onOpenChange={setShowScreenSharePerms} />
       <div
         className="shrink-0 flex items-center justify-center sm:justify-between px-2 sm:px-4 py-1.5 sm:py-2 gap-1.5 sm:gap-3"
         style={{
@@ -224,10 +228,23 @@ export function MeetingControls() {
               icon={isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <MonitorUp className="w-5 h-5" />}
               active={isScreenSharing}
               onClick={() => {
-                toggleScreenShare();
+                if (effectiveScreenSharePermission.allowed || isScreenSharing) {
+                  toggleScreenShare();
+                }
               }}
-              tooltip="Share screen"
-              className="hidden sm:flex"
+              disabled={!effectiveScreenSharePermission.allowed && !isScreenSharing}
+              tooltip={
+                isScreenSharing 
+                  ? "Stop sharing" 
+                  : !effectiveScreenSharePermission.allowed 
+                    ? effectiveScreenSharePermission.reason === 'HOST_DISABLED_SCREEN_SHARING' 
+                      ? "Screen sharing has been disabled by the host." 
+                      : effectiveScreenSharePermission.reason === 'PARTICIPANT_BLOCKED' 
+                        ? "The host has disabled screen sharing for you."
+                        : "Only selected participants can share their screen."
+                    : "Share screen"
+              }
+              className={`hidden sm:flex ${!effectiveScreenSharePermission.allowed && !isScreenSharing ? 'opacity-50 cursor-not-allowed' : ''}`}
             />
           )}
           {/* React */}
@@ -278,11 +295,18 @@ export function MeetingControls() {
                     onClick={() => { toggleHandRaise(); setShowMoreMenu(false); }}
                   />
                   {!currentUser.isMobile && (
+                  <div className={!effectiveScreenSharePermission.allowed && !isScreenSharing ? 'opacity-50 cursor-not-allowed' : ''}>
                     <MoreMenuItem
                       icon={isScreenSharing ? <MonitorOff className="w-4 h-4" /> : <MonitorUp className="w-4 h-4" />}
                       label={isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                      onClick={() => { toggleScreenShare(); setShowMoreMenu(false); }}
+                      onClick={() => { 
+                        if (effectiveScreenSharePermission.allowed || isScreenSharing) {
+                          toggleScreenShare(); 
+                          setShowMoreMenu(false); 
+                        }
+                      }}
                     />
+                  </div>
                   )}
                   {roomFeatureFlags.captionsEnabled && (
                     <MoreMenuItem
@@ -313,6 +337,13 @@ export function MeetingControls() {
                   label="Polls"
                   onClick={() => { setActivePanel("polls"); setShowMoreMenu(false); }}
                 />
+                {isHost && (
+                  <MoreMenuItem
+                    icon={<Shield className="w-4 h-4" />}
+                    label="Screen sharing permissions"
+                    onClick={() => { setShowScreenSharePerms(true); setShowMoreMenu(false); }}
+                  />
+                )}
                 {/* 
                 <MoreMenuItem
                   icon={<FileText className="w-4 h-4" />}

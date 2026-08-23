@@ -110,14 +110,33 @@ export class VideoProcessor {
     this.videoElement.srcObject = rawStream;
     this.videoElement.play();
 
+    // Fix aspect ratio distortion: set canvas size from stream settings BEFORE captureStream
+    const track = rawStream.getVideoTracks()[0];
+    if (track) {
+      const settings = track.getSettings();
+      if (settings.width && settings.height) {
+        let targetWidth = settings.width;
+        let targetHeight = settings.height;
+        if (targetWidth > 1280 || targetHeight > 720) {
+          const scale = Math.min(1280 / targetWidth, 720 / targetHeight);
+          targetWidth = Math.round(targetWidth * scale);
+          targetHeight = Math.round(targetHeight * scale);
+        }
+        this.canvas.width = targetWidth;
+        this.canvas.height = targetHeight;
+      }
+    }
+
     // Use Canvas.captureStream to get the processed video track
     const processedVideoTrack = this.canvas.captureStream(30).getVideoTracks()[0];
     this.processedStream = new MediaStream([processedVideoTrack]);
     
     // Pass through audio tracks
-    rawStream.getAudioTracks().forEach(track => {
-      this.processedStream?.addTrack(track);
-    });
+    if (rawStream && typeof rawStream.getAudioTracks === 'function') {
+      rawStream.getAudioTracks().forEach(track => {
+        this.processedStream?.addTrack(track);
+      });
+    }
 
     this.isProcessing = true;
     this.processFrame();

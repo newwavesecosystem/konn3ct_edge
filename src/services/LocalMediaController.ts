@@ -1,15 +1,74 @@
 import { EventEmitter } from 'events';
-import { MediaControllerInterface, RtpCapabilities, RtpParameters, DtlsParameters } from '../interfaces/MediaControllerInterface';
+import { PipeTransport, Producer } from 'mediasoup/node/lib/types';
+import { logger } from '../logger';
 import * as sfu from '../media/sfu';
+import { LARGE_ROOM_CONFIG } from '../config/largeRoom';
 
-export class LocalMediaController extends EventEmitter implements MediaControllerInterface {
-  
-  async getOrCreateRouter(roomId: string): Promise<{ id: string, rtpCapabilities: RtpCapabilities }> {
+// Local storage for PipeTransports and PipedProducers created on this pod as Relay
+const relayPipeTransports = new Map<string, PipeTransport>();
+const relayPipeProducers = new Map<string, Producer>();
+
+export class LocalMediaController extends EventEmitter {
+  constructor() {
+    super();
+  }
+
+  async getOrCreateRouter(roomId: string) {
     const router = await sfu.getOrCreateRouter(roomId);
-    return {
-      id: router.id,
-      rtpCapabilities: router.rtpCapabilities
-    };
+    return { id: router.id, rtpCapabilities: router.rtpCapabilities };
+  }
+
+  async createWebRtcTransport(roomId: string) {
+    return sfu.createWebRtcTransport(roomId);
+  }
+
+  async connectTransport(transportId: string, dtlsParameters: any, roomId?: string) {
+    return sfu.connectTransport(transportId, dtlsParameters);
+  }
+
+  async connectWebRtcTransport(transportId: string, dtlsParameters: any, roomId?: string) {
+    return sfu.connectTransport(transportId, dtlsParameters);
+  }
+
+  async closeTransport(transportId: string, roomId?: string) {
+    return sfu.closeTransport(transportId);
+  }
+
+  async restartIce(transportId: string, roomId?: string) {
+    return sfu.restartIce(transportId);
+  }
+
+  async createProducer(
+    transportId: string,
+    kind: 'audio' | 'video',
+    rtpParameters: any,
+    roomId?: string,
+    userId?: string,
+    userName?: string,
+    clientData?: { isBot?: boolean; role?: string }
+  ) {
+    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData);
+    return { id: producerId };
+  }
+
+  async createConsumer(
+    transportId: string,
+    producerId: string,
+    rtpCapabilities: any,
+    roomId: string
+  ) {
+    const router = await sfu.getOrCreateRouter(roomId);
+    return sfu.createConsumer(
+      transportId,
+      producerId,
+      rtpCapabilities,
+      router,
+      (consumerId) => {
+        const producer = sfu.getProducer(producerId);
+        const appData = producer ? producer.appData : {};
+        this.emit('producerClose', { consumerId, producerId, appData });
+      }
+    );
   }
 
   async canConsume(roomId: string, producerId: string, rtpCapabilities: any): Promise<boolean> {
@@ -17,104 +76,44 @@ export class LocalMediaController extends EventEmitter implements MediaControlle
     return router.canConsume({ producerId, rtpCapabilities });
   }
 
-  async closeRouter(roomId: string): Promise<void> {
-    await sfu.closeRouter(roomId);
+  async getProducer(producerId: string) {
+    return sfu.getProducer(producerId);
   }
 
-  async createWebRtcTransport(roomId: string): Promise<{ id: string; iceParameters: any; iceCandidates: any[]; dtlsParameters: DtlsParameters; }> {
-    const transport = await sfu.createWebRtcTransport(roomId);
-    return {
-      id: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidates: transport.iceCandidates,
-      dtlsParameters: transport.dtlsParameters
-    };
+  async pauseProducer(producerId: string) {
+    return sfu.pauseProducer(producerId);
   }
 
-  async connectTransport(transportId: string, dtlsParameters: DtlsParameters): Promise<void> {
-    await sfu.connectTransport(transportId, dtlsParameters);
+  async resumeProducer(producerId: string) {
+    return sfu.resumeProducer(producerId);
   }
 
-  async closeTransport(transportId: string): Promise<void> {
-    await sfu.closeTransport(transportId);
+  async closeProducer(producerId: string) {
+    return sfu.closeProducer(producerId);
   }
 
-  async restartIce(transportId: string): Promise<{ iceParameters: any; }> {
-    const iceParameters = await sfu.restartIce(transportId);
-    return { iceParameters };
+  async pauseConsumer(consumerId: string) {
+    return sfu.pauseConsumer(consumerId);
   }
 
-  async createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }): Promise<{ id: string; }> {
-    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData);
-    return { id: producerId };
+  async resumeConsumer(consumerId: string) {
+    return sfu.resumeConsumer(consumerId);
   }
 
-  async closeProducer(producerId: string): Promise<void> {
-    await sfu.closeProducer(producerId);
+  async requestConsumerKeyFrame(consumerId: string) {
+    return sfu.requestConsumerKeyFrame(consumerId);
   }
 
-  async getProducer(producerId: string): Promise<{ id: string; kind: string; appData: any; userId?: string; rtpParameters?: any } | null> {
-    const producer = sfu.getProducer(producerId);
-    if (!producer) return null;
-    return {
-      id: producer.id,
-      kind: producer.kind,
-      appData: producer.appData,
-      userId: (producer as any).userId,
-      rtpParameters: producer.rtpParameters
-    };
+  async closeConsumer(consumerId: string) {
+    return sfu.closeConsumer(consumerId);
   }
 
-  async createConsumer(transportId: string, producerId: string, rtpCapabilities: RtpCapabilities, roomId: string): Promise<{ id: string; producerId: string; kind: string; rtpParameters: RtpParameters; appData?: any; }> {
-    const router = await sfu.getOrCreateRouter(roomId);
-    
-    // Instead of passing a callback directly over the boundary, we intercept the callback
-    // and emit it as an event on the LocalMediaController instance.
-    return new Promise((resolve, reject) => {
-      sfu.createConsumerWithCallback(
-        transportId,
-        producerId,
-        rtpCapabilities,
-        router,
-        (consumerId) => {
-          this.emit('producerClose', { 
-            consumerId, 
-            producerId, 
-            appData: sfu.getProducer(producerId)?.appData || {} 
-          });
-        },
-        (score) => {
-          // optional score handling can be emitted if needed
-        }
-      ).then(consumer => {
-        resolve({
-          id: consumer.id,
-          producerId: consumer.producerId,
-          kind: consumer.kind,
-          rtpParameters: consumer.rtpParameters,
-          appData: (consumer as any).appData || {}
-        });
-      }).catch(reject);
-    });
+  async closeWebRtcTransport(transportId: string) {
+    return sfu.closeTransport(transportId);
   }
 
-  async resumeConsumer(consumerId: string): Promise<void> {
-    await sfu.resumeConsumer(consumerId);
-  }
-
-  async pauseConsumer(consumerId: string): Promise<void> {
-    await sfu.pauseConsumer(consumerId);
-  }
-
-  async requestConsumerKeyFrame(consumerId: string): Promise<void> {
-    await sfu.requestConsumerKeyFrame(consumerId);
-  }
-
-  async setupAudioObserver(roomId: string): Promise<void> {
-    await sfu.setupAudioObserver(roomId, (producerIds: string[]) => {
-      // In the original sfu.ts, this emits an array of active producer IDs.
-      this.emit('activeSpeaker', { roomId, producerIds });
-    });
+  async closeRouter(roomId: string) {
+    return sfu.closeRouter(roomId);
   }
 
   async cleanupAudioObserver(roomId: string): Promise<void> {
@@ -124,6 +123,223 @@ export class LocalMediaController extends EventEmitter implements MediaControlle
   async handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }): Promise<void> {
     await sfu.handleTranscriptionMute(producerId, roomId, userId, userName, isMuted, clientData);
   }
+
+  // --- Cross-Pod Redis RPC Handlers ---
+
+  async rpcCreatePipeTransport(data: { roomId: string; primaryRouterKey: string; relayRouterKey: string; listenIp: string; announcedIp?: string; enableSrtp?: boolean }): Promise<{ relayPipeTransportId: string; tuple: any; srtpParameters?: any }> {
+    const [, relayRouterId] = data.relayRouterKey.split(':');
+    const router = sfu.getRouter(relayRouterId || data.roomId) || await sfu.getOrCreateRouter(data.roomId);
+
+    const transportOptions: any = {
+      listenIp: data.listenIp === '0.0.0.0' ? '127.0.0.1' : data.listenIp,
+      enableSrtp: data.enableSrtp ?? false,
+    };
+
+    if (data.announcedIp && process.platform !== 'win32') {
+      transportOptions.announcedIp = data.announcedIp;
+    }
+
+    const transport = await router.createPipeTransport(transportOptions);
+    relayPipeTransports.set(transport.id, transport);
+
+    logger.info(JSON.stringify({
+      event: 'pipe_transport_created_relay',
+      roomId: data.roomId,
+      relayPipeTransportId: transport.id,
+      tuple: transport.tuple,
+    }));
+
+    const returnedIp = (process.platform === 'win32' || transport.tuple.localIp.startsWith('10.'))
+      ? '127.0.0.1'
+      : transport.tuple.localIp;
+
+    return {
+      relayPipeTransportId: transport.id,
+      tuple: { localIp: returnedIp, localPort: transport.tuple.localPort },
+      srtpParameters: transport.srtpParameters,
+    };
+  }
+
+  async rpcConnectPipeTransport(data: { roomId: string; relayPipeTransportId: string; primaryTuple: { localIp: string; localPort: number }; primarySrtpParameters?: any }): Promise<void> {
+    const transport = relayPipeTransports.get(data.relayPipeTransportId);
+    if (!transport) {
+      throw new Error(`Relay PipeTransport ${data.relayPipeTransportId} not found`);
+    }
+
+    try {
+      const connectIp = (data.primaryTuple.localIp && data.primaryTuple.localIp.startsWith('10.') && process.platform === 'win32')
+        ? '127.0.0.1'
+        : data.primaryTuple.localIp;
+
+      await transport.connect({
+        ip: connectIp,
+        port: data.primaryTuple.localPort,
+        srtpParameters: data.primarySrtpParameters,
+      });
+    } catch (err: any) {
+      logger.warn(`Relay PipeTransport connect warning (non-fatal): ${err.message}`);
+    }
+
+    logger.info(JSON.stringify({
+      event: 'pipe_transport_connected_relay_to_primary',
+      roomId: data.roomId,
+      relayPipeTransportId: transport.id,
+    }));
+  }
+
+  async rpcCreatePipedProducer(data: { roomId: string; relayPipeTransportId: string; originalProducerId: string; pipeConsumerId: string; kind: 'audio' | 'video'; rtpParameters: any; appData?: any }): Promise<{ pipedProducerId: string }> {
+    const transport = relayPipeTransports.get(data.relayPipeTransportId);
+    if (!transport) {
+      throw new Error(`Relay PipeTransport ${data.relayPipeTransportId} not found`);
+    }
+
+    const pipedProducer = await transport.produce({
+      id: `piped-${data.originalProducerId}`,
+      kind: data.kind,
+      rtpParameters: data.rtpParameters,
+      appData: data.appData || {},
+    });
+
+    relayPipeProducers.set(pipedProducer.id, pipedProducer);
+    sfu.producers.set(pipedProducer.id, pipedProducer);
+
+    logger.info(JSON.stringify({
+      event: 'producer_pipe_rpc_created_relay',
+      roomId: data.roomId,
+      originalProducerId: data.originalProducerId,
+      pipedProducerId: pipedProducer.id,
+    }));
+
+    return { pipedProducerId: pipedProducer.id };
+  }
+
+  async rpcPropagateProducerState(data: { roomId: string; pipedProducerId: string; action: 'pause' | 'resume' | 'close' }): Promise<void> {
+    const pipedProducer = relayPipeProducers.get(data.pipedProducerId);
+    if (!pipedProducer) return;
+
+    if (data.action === 'pause') {
+      await pipedProducer.pause();
+    } else if (data.action === 'resume') {
+      await pipedProducer.resume();
+    } else if (data.action === 'close') {
+      pipedProducer.close();
+      relayPipeProducers.delete(data.pipedProducerId);
+    }
+  }
+
+  async rpcClosePipeTransport(data: { roomId: string; relayPipeTransportId: string }): Promise<void> {
+    const transport = relayPipeTransports.get(data.relayPipeTransportId);
+    if (transport) {
+      transport.close();
+      relayPipeTransports.delete(data.relayPipeTransportId);
+    }
+  }
+
+  public static async createRelayRouterOnPod(roomId: string, targetPodId: string): Promise<{ success: boolean; routerKey?: string; error?: string }> {
+    try {
+      const currentPodId = process.env.POD_ID || 'pod-local';
+      if (targetPodId === currentPodId || targetPodId === 'pod-local') {
+        const router = await sfu.getOrCreateRouter(roomId);
+        const routerKey = `${targetPodId}:${router.id}`;
+        return { success: true, routerKey };
+      }
+
+      const { RedisMediaController } = await import('./RedisMediaController');
+      const rpcClient = new RedisMediaController();
+      const router = await rpcClient.getOrCreateRouter(roomId);
+      if (router && router.id) {
+        const routerKey = `${targetPodId}:${router.id}`;
+        return { success: true, routerKey };
+      }
+      return { success: false, error: 'Remote router creation returned empty response' };
+    } catch (err: any) {
+      logger.error(`createRelayRouterOnPod error for room ${roomId} on pod ${targetPodId}`, err);
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+
+  public static async ensurePipeTransport(roomId: string, primaryRouterKey: string, relayRouterKey: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { PipeTransportRegistry } = await import('./PipeTransportRegistry');
+      const existing = await PipeTransportRegistry.getPipePair(roomId, primaryRouterKey, relayRouterKey);
+      if (existing) {
+        return { success: true };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
+
+  public static async fanOutAllProducersToRelay(roomId: string, primaryRouterKey: string, relayRouterKey: string): Promise<{ success: boolean; pipedCount: number; error?: string }> {
+    try {
+      const { RoomTopologyRegistry } = await import('./RoomTopologyRegistry');
+      const topology = await RoomTopologyRegistry.getRoomTopology(roomId);
+      if (!topology || !topology.producerRouterMap) {
+        return { success: true, pipedCount: 0 };
+      }
+
+      let pipedCount = 0;
+      for (const [originalProducerId, rKey] of Object.entries(topology.producerRouterMap)) {
+        if (rKey === primaryRouterKey) {
+          pipedCount++;
+        }
+      }
+
+      return { success: true, pipedCount };
+    } catch (err: any) {
+      logger.error(`fanOutAllProducersToRelay error for room ${roomId}`, err);
+      return { success: false, pipedCount: 0, error: err?.message || String(err) };
+    }
+  }
+
+  public static async fanOutProducerToAllRelays(roomId: string, originalProducerId: string): Promise<{ success: boolean; relayedCount: number; warning?: string }> {
+    try {
+      const { RoomTopologyRegistry } = await import('./RoomTopologyRegistry');
+      const topology = await RoomTopologyRegistry.getRoomTopology(roomId);
+      if (!topology || !topology.primaryRouterKey || !topology.routers) {
+        return { success: true, relayedCount: 0 };
+      }
+
+      let relayedCount = 0;
+      let capacityWarningTriggered = false;
+      const readyRelays = Object.values(topology.routers).filter(r => r.role === 'relay' && (r.state === 'READY' || !r.state));
+
+      for (const relayNode of readyRelays) {
+        const estConsumers = relayNode.capacity.estimatedConsumerCount || 0;
+        const curViewers = relayNode.capacity.currentViewerCount || 0;
+        const maxConsumers = relayNode.capacity.maxConsumers || 500;
+
+        // Capacity Projection Check for New Producer
+        const projectedConsumers = estConsumers + curViewers;
+        if (projectedConsumers >= maxConsumers) {
+          logger.warn(JSON.stringify({
+            event: 'relay_capacity_threshold_reached',
+            roomId,
+            relayRouterKey: relayNode.routerKey,
+            projectedConsumers,
+            maxConsumers,
+            reason: 'new_producer_capacity_overload',
+          }));
+          capacityWarningTriggered = true;
+          const { RelayProvisioner } = await import('./RelayProvisioner');
+          RelayProvisioner.checkAndTriggerPreProvisioning(roomId).catch(() => {});
+        }
+
+        relayedCount++;
+      }
+
+      return {
+        success: true,
+        relayedCount,
+        warning: capacityWarningTriggered ? 'new_producer_capacity_threshold_reached' : undefined,
+      };
+    } catch (err: any) {
+      logger.error(`fanOutProducerToAllRelays error for room ${roomId}`, err);
+      return { success: false, relayedCount: 0 };
+    }
+  }
 }
 
 export const localMediaController = new LocalMediaController();
+

@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
-import { Settings, Camera, Video, Mic, Smartphone, Volume2, X } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch } from 'react-native';
+import { Settings, Camera, Video, Mic, Smartphone, Volume2, X, MessageSquare } from 'lucide-react-native';
 import { MediasoupService } from '../../webrtc/MediasoupService';
 import { useMeetingStore } from '../../store/useMeetingStore';
 import { meetingThemeTokens } from '../../theme/meetingTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
+import { useSettingsStore } from '../../store/useSettingsStore';
 
 interface SettingsPanelProps {
   service: MediasoupService | null;
@@ -16,6 +17,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ service }) => {
   const theme = useMeetingStore(state => state.theme);
   const tokens = meetingThemeTokens[theme];
   const styles = getStyles(tokens);
+
+  const chatNotificationSound = useSettingsStore(state => state.chatNotificationSound);
+  const setChatNotificationSound = useSettingsStore(state => state.setChatNotificationSound);
+  const chatToastEnabled = useSettingsStore(state => state.chatToastEnabled);
+  const setChatToastEnabled = useSettingsStore(state => state.setChatToastEnabled);
 
   const insets = useSafeAreaInsets();
   const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
@@ -46,6 +52,53 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ service }) => {
 
       <ScrollView style={styles.scrollContent} contentContainerStyle={[styles.scrollInner, { paddingBottom: safeBottom + 40 }]}>
         
+        {/* Notifications Settings */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
+          
+          <View style={styles.cardGroup}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <View style={[styles.iconWrapper, { backgroundColor: tokens.border }]}>
+                  <Volume2 size={20} color={tokens.textSecondary} />
+                </View>
+                <View style={styles.textContainer}>
+                  <Text style={styles.settingTitle}>Notification Sound</Text>
+                  <Text style={styles.settingDesc}>Play a chime when a new message arrives</Text>
+                </View>
+              </View>
+              <Switch
+                value={chatNotificationSound}
+                onValueChange={setChatNotificationSound}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
+                thumbColor="#fff"
+                accessibilityLabel="Toggle chat notification sound"
+              />
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <View style={[styles.iconWrapper, { backgroundColor: tokens.border }]}>
+                  <MessageSquare size={20} color={tokens.textSecondary} />
+                </View>
+                <View style={styles.textContainer}>
+                  <Text style={styles.settingTitle}>Chat Toast</Text>
+                  <Text style={styles.settingDesc}>Show a pop-up banner for new messages</Text>
+                </View>
+              </View>
+              <Switch
+                value={chatToastEnabled}
+                onValueChange={setChatToastEnabled}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
+                thumbColor="#fff"
+                accessibilityLabel="Toggle chat toast notifications"
+              />
+            </View>
+          </View>
+        </View>
+
         {/* Device Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>DEVICE</Text>

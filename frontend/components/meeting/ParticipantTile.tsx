@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable react-hooks/immutability */
-import React from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -16,7 +16,10 @@ import {
   SignalMedium,
   SignalLow,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Maximize,
+  MoreVertical,
+  BellRing
 } from "lucide-react";
 import type { Participant } from "@/lib/types/meeting";
 import { useMeeting } from "@/lib/meeting-context";
@@ -59,7 +62,8 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled } = useMeeting();
+  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare, pingParticipant } = useMeeting();
+  const [showMenu, setShowMenu] = useState(false);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -123,6 +127,21 @@ export function ParticipantTile({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  const toggleFullscreen = React.useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    
+    const elem = videoRef.current as any;
+    if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
+    } else {
+      if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      else if (elem.webkitEnterFullscreen) elem.webkitEnterFullscreen();
+    }
+  }, []);
 
   // Camera video ref
   const lastVideoElRef = React.useRef<HTMLVideoElement | null>(null);
@@ -423,15 +442,61 @@ export function ParticipantTile({
         </div>
       )}
 
-      {/* ── Overlays (Name, Mic, Controls) ── */}
-      {participant.isScreenSharing && (
-        <div className="absolute top-3 left-3 z-10">
-          <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
-            <MonitorUp className="w-3 h-3" />
-            Sharing
+      {/* ── Top-Left Overlays ── */}
+      <div className="absolute top-3 left-3 z-20 flex flex-col items-start gap-2 pointer-events-none">
+        {participant.isScreenSharing && (
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <div className="bg-blue-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1 text-xs text-white font-medium">
+              <MonitorUp className="w-3 h-3" />
+              Sharing
+            </div>
+            {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); stopParticipantScreenShare(participant.userId); }}
+                className="bg-red-500 hover:bg-red-600 transition-colors backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1 text-xs text-white font-medium shadow-sm"
+              >
+                Stop Share
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        )}
+        
+        {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+          <div className="pointer-events-auto relative">
+            <button
+              className="p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-white backdrop-blur-sm transition-colors"
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+              title="More options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setShowMenu(false); }} />
+                <div className="absolute left-0 top-full mt-1 w-40 bg-[var(--mt-bg-elevated)] border border-[var(--mt-border)] rounded-md shadow-lg z-50 py-1 flex flex-col text-sm">
+                  <button
+                    className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center gap-2"
+                    onClick={(e) => { e.stopPropagation(); pingParticipant(participant.userId); setShowMenu(false); }}
+                  >
+                    <BellRing className="w-4 h-4 text-[var(--mt-text-muted)]" />
+                    Ping participant
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {isCameraEffectivelyOn && (
+          <button
+            onClick={toggleFullscreen}
+            title="Full Screen"
+            className="pointer-events-auto bg-black/40 hover:bg-black/60 transition-colors backdrop-blur-md rounded-full p-1.5 text-white/90 shadow-md"
+          >
+            <Maximize className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* ── Audio Connection Status (Top-right) ── */}
       {(!participant.isHandRaised) && (() => {

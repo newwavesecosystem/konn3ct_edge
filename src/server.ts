@@ -16,7 +16,7 @@ client.collectDefaultMetrics();
 startDeepTelemetry();
 
 
-import { initializeWorkers } from './media/sfu';
+
 import { config } from './media/config';
 import { logger } from './logger';
 import { generalLimiter } from './middleware/rateLimiter';
@@ -33,6 +33,8 @@ import { aiRouter } from './routes/ai';
 import { externalRouter } from './routes/external';
 import { streamingRouter } from './routes/streaming';
 import { internalRecordingsRouter } from './routes/internalRecordings';
+import { odooRouter } from './routes/odoo';
+import { marketingRouter } from './routes/marketing';
 
 if (process.env.NODE_ENV === 'production') {
   const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
@@ -112,6 +114,8 @@ app.use('/api/ai', aiRouter);
 app.use('/api/external/v1', externalRouter);
 app.use('/api/streaming', streamingRouter);
 app.use('/api/internal/recordings', internalRecordingsRouter);
+app.use('/api/odoo', odooRouter);
+app.use('/api/odoo/marketing', marketingRouter);
 
 // Prometheus metrics endpoint for Phase 0 Baseline
 app.get('/metrics', async (req, res) => {
@@ -124,7 +128,55 @@ app.get('/metrics', async (req, res) => {
 });
 
 
-// Basic 404 handler
+// Protected Admin Topology Endpoint for Phase 6B Observability
+app.get('/api/admin/room-topology/:roomId', async (req, res) => {
+  const adminSecret = process.env.ADMIN_API_KEY || 'konn3ct-internal-admin-secret';
+  const requestAdminKey = req.headers['x-admin-key'];
+  const userRole = (req as any).user?.role;
+
+  const isAuthorized = requestAdminKey === adminSecret || userRole === 'admin';
+
+  if (!isAuthorized) {
+    logger.warn(`Unauthorized admin topology snapshot request for room ${req.params.roomId} from IP ${req.ip}`);
+    return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
+  }
+
+  try {
+    const { RoomTopologyRegistry } = await import('./services/RoomTopologyRegistry');
+    const { PipeTransportRegistry } = await import('./services/PipeTransportRegistry');
+    const snapshot = await RoomTopologyRegistry.getRoomTopology(req.params.roomId);
+    const pipeTransports = await PipeTransportRegistry.getPipeSnapshot(req.params.roomId);
+
+    if (!snapshot) {
+      return res.status(404).json({ error: 'Topology not found for room' });
+    }
+
+    logger.info(JSON.stringify({
+      event: 'pipe_transport_admin_snapshot_requested',
+      roomId: req.params.roomId,
+      requestedBy: (req as any).user?.id || 'admin_api_key',
+    }));
+
+    // Redact raw internal pod IDs / IP addresses for security
+    const redactedRouters: Record<string, any> = {};
+    for (const [key, node] of Object.entries(snapshot.routers)) {
+      redactedRouters[key] = {
+        ...node,
+        mediaPodId: node.mediaPodId.replace(/\d+\.\d+\.\d+\.\d+/, '[REDACTED_POD_IP]'),
+      };
+    }
+
+    return res.json({
+      ...snapshot,
+      routers: redactedRouters,
+      pipeTransports,
+    });
+  } catch (err) {
+    logger.error(`Error fetching room topology for ${req.params.roomId}`, err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
@@ -139,26 +191,54 @@ async function boot() {
   try {
     // In production (Kubernetes), dynamically fetch the true public IP for WebRTC routing
     if (process.env.NODE_ENV === 'production') {
+      const http = require('http');
       const https = require('https');
-      const publicIp = await new Promise<string>((resolve) => {
-        https.get('https://api.ipify.org', (res: any) => {
+      
+      const fetchDO = () => new Promise<string>((resolve, reject) => {
+        const req = http.get('http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address', { timeout: 2000 }, (res: any) => {
+          if (res.statusCode !== 200) return reject(new Error('DO Metadata not found'));
           let data = '';
           res.on('data', (chunk: string) => data += chunk);
           res.on('end', () => resolve(data.trim()));
-        }).on('error', (err: any) => {
-          logger.error('Failed to fetch public IP for WebRTC', err);
-          resolve(process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1');
         });
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('timeout')));
       });
-      logger.info(`Dynamically detected Public IP for WebRTC: ${publicIp}`);
+
+      const fetchIpify = () => new Promise<string>((resolve, reject) => {
+        const req = https.get('https://api.ipify.org', { timeout: 3000 }, (res: any) => {
+          let data = '';
+          res.on('data', (chunk: string) => data += chunk);
+          res.on('end', () => resolve(data.trim()));
+        });
+        req.on('error', reject);
+        req.on('timeout', () => req.destroy(new Error('timeout')));
+      });
+
+      let publicIp = process.env.WEBRTC_ANNOUNCED_IP || '127.0.0.1';
+      const isPrivateOrLoopback = (ip: string) => 
+        !ip || ip === '127.0.0.1' || ip === '0.0.0.0' || ip.startsWith('10.') || ip.startsWith('192.168.') || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(ip);
+
+      if (isPrivateOrLoopback(publicIp)) {
+        try {
+          publicIp = await fetchIpify();
+          logger.info(`Detected Public IP via ipify: ${publicIp}`);
+        } catch (err) {
+          logger.warn('ipify failed, falling back to DO Metadata...');
+          try {
+            publicIp = await fetchDO();
+            logger.info(`Detected Public IP via DO Metadata: ${publicIp}`);
+          } catch (err2) {
+            logger.error('Failed to fetch public IP for WebRTC', err2);
+          }
+        }
+      }
       config.mediasoup.webRtcTransport.listenIps[0].announcedIp = publicIp;
     }
 
-    await initializeWorkers();
-    logger.info('Mediasoup workers initialized successfully.');
-  } catch (err) {
-    logger.error('Failed to initialize mediasoup workers.', err);
-    if (process.env.NODE_ENV === 'production') throw err;
+    // Mediasoup workers are no longer initialized here in Phase 4.
+    // They run in the dedicated media-server.ts entrypoint.
+    logger.info('Signaling server booting without local Mediasoup workers.');
   } finally {
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);
