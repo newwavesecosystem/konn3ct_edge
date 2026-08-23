@@ -333,7 +333,7 @@ export default function JoinPage({
 
       if (data.sessionToken) {
         // Save the secure session token to navigate with
-        localStorage.setItem("conn3ct_session_token", data.sessionToken);
+        sessionStorage.setItem("conn3ct_session_token", data.sessionToken);
       }
 
       // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
