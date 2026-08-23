@@ -1109,7 +1109,9 @@ export class WebRTCClient {
     let lastBytesSent = 0;
     let lastBytesRecv = 0;
     let lastPacketsSent = 0;
+    let lastPacketsRecv = 0;
     let lastPacketsLost = 0;
+    let lastOutboundPacketsLost = 0;
     let lastFramesDropped = 0;
     let lastFramesEncoded = 0;
     let lastTime = performance.now();
@@ -1132,7 +1134,9 @@ export class WebRTCClient {
         let bytesSent = 0;
         let bytesRecv = 0;
         let packetsSent = 0;
+        let packetsRecv = 0;
         let packetsLost = 0;
+        let outboundPacketsLost = 0;
         let framesDropped = 0;
         let framesEncoded = 0;
         let availableOutgoingBitrate: number | null = null;
@@ -1148,6 +1152,7 @@ export class WebRTCClient {
             if (stat.type === 'remote-inbound-rtp') {
               rtt = Math.max(rtt, stat.roundTripTime ? stat.roundTripTime * 1000 : 0);
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
+              outboundPacketsLost += stat.packetsLost || 0;
             }
             if (stat.type === 'outbound-rtp') {
               bytesSent += stat.bytesSent || 0;
@@ -1167,6 +1172,7 @@ export class WebRTCClient {
           recvStats.forEach((stat: any) => {
             if (stat.type === 'inbound-rtp') {
               bytesRecv += stat.bytesReceived || 0;
+              packetsRecv += stat.packetsReceived || 0;
               packetsLost += stat.packetsLost || 0;
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
             }
@@ -1177,21 +1183,33 @@ export class WebRTCClient {
         const dBytesSent = Math.max(0, bytesSent - lastBytesSent);
         const dBytesRecv = Math.max(0, bytesRecv - lastBytesRecv);
         const dPacketsSent = Math.max(0, packetsSent - lastPacketsSent);
+        const dPacketsRecv = Math.max(0, packetsRecv - lastPacketsRecv);
         const dPacketsLost = Math.max(0, packetsLost - lastPacketsLost);
+        const dOutboundPacketsLost = Math.max(0, outboundPacketsLost - lastOutboundPacketsLost);
         const dFramesDropped = Math.max(0, framesDropped - lastFramesDropped);
         const dFramesEncoded = Math.max(0, framesEncoded - lastFramesEncoded);
 
         lastBytesSent = bytesSent;
         lastBytesRecv = bytesRecv;
         lastPacketsSent = packetsSent;
+        lastPacketsRecv = packetsRecv;
         lastPacketsLost = packetsLost;
+        lastOutboundPacketsLost = outboundPacketsLost;
         lastFramesDropped = framesDropped;
         lastFramesEncoded = framesEncoded;
         lastTime = now;
 
         const sendBitrate = (dBytesSent * 8) / dt;
         const recvBitrate = (dBytesRecv * 8) / dt;
-        const packetLoss = dPacketsSent > 0 ? (dPacketsLost / (dPacketsSent + dPacketsLost)) * 100 : 0;
+        
+        // Calculate inbound loss accurately
+        const inboundLoss = (dPacketsRecv + dPacketsLost) > 0 ? (dPacketsLost / (dPacketsRecv + dPacketsLost)) * 100 : 0;
+        
+        // Calculate outbound loss accurately (using remote-inbound-rtp data)
+        const outboundLoss = (dPacketsSent + dOutboundPacketsLost) > 0 ? (dOutboundPacketsLost / (dPacketsSent + dOutboundPacketsLost)) * 100 : 0;
+        
+        // Use the worst of the two directions as our overall packet loss metric
+        const packetLoss = Math.max(inboundLoss, outboundLoss);
         const fps = dFramesEncoded / dt;
 
         history.push({ rtt, packetLoss, jitter, sendBitrate, recvBitrate, framesDropped: dFramesDropped, framesEncoded: dFramesEncoded });
