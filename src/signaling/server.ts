@@ -1009,7 +1009,7 @@ export function initializeSignaling(server: Server) {
       // This prevents orphaned ports from causing "UDP connection failed" errors.
       client.transports.forEach(tId => {
         try {
-          mediaController.closeTransport(tId);
+          mediaController.closeTransport(tId, roomId);
         } catch (e) {
           logger.warn(`Failed to close transport ${tId}`, e);
         }
@@ -1214,7 +1214,7 @@ export function initializeSignaling(server: Server) {
     // Close all transports owned by this client
     for (const tId of client.transports) {
       try {
-        mediaController.closeTransport(tId);
+        mediaController.closeTransport(tId, roomId);
       } catch (e) {
         logger.warn(`[cleanupParticipantMedia] Failed to close transport ${tId}`, e);
       }
@@ -1652,7 +1652,7 @@ export function initializeSignaling(server: Server) {
            for (const [pid, pStr] of Object.entries(producersObj)) {
                const p = JSON.parse(pStr);
                if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
-                   try { await mediaController.closeProducer(pid); } catch(e){}
+                   try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                    await redis.hdel(`room:${roomId}:producers`, pid);
                    broadcastToRoom(roomId, {
                      type: 'screen_share_stopped',
@@ -1691,7 +1691,7 @@ export function initializeSignaling(server: Server) {
           for (const [pid, pStr] of Object.entries(producersObj)) {
               const p = JSON.parse(pStr);
               if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
-                  try { await mediaController.closeProducer(pid); } catch(e){}
+                  try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                   await redis.hdel(`room:${roomId}:producers`, pid);
                   broadcastToRoom(roomId, {
                     type: 'screen_share_stopped',
@@ -1717,7 +1717,7 @@ export function initializeSignaling(server: Server) {
         for (const [pid, pStr] of Object.entries(producersObj)) {
             const p = JSON.parse(pStr);
             if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
-                try { await mediaController.closeProducer(pid); } catch(e){}
+                try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                 await redis.hdel(`room:${roomId}:producers`, pid);
                 stoppedCount++;
                 broadcastToRoom(roomId, {
@@ -1743,7 +1743,7 @@ export function initializeSignaling(server: Server) {
         for (const [pid, pStr] of Object.entries(producersObj)) {
             const p = JSON.parse(pStr);
             if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
-                try { await mediaController.closeProducer(pid); } catch(e){}
+                try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                 await redis.hdel(`room:${roomId}:producers`, pid);
                 stoppedCount++;
                 broadcastToRoom(roomId, {
@@ -2797,7 +2797,7 @@ export function initializeSignaling(server: Server) {
            
            if (!finalAuthCheck.allowed || (reqVersion !== undefined && finalAuthCheck.version !== reqVersion)) {
                logger.warn(`Screen share rejected due to policy race condition for ${userId}`);
-               try { await mediaController.closeProducer(producerId); } catch(e){}
+               try { await mediaController.closeProducer(producerId, roomId); } catch(e){}
                
                client.ws.send(JSON.stringify({
                  type: 'produce_failed',
@@ -2902,7 +2902,7 @@ export function initializeSignaling(server: Server) {
           else if (targetProducer.participantId === client.participantId) failReason = "SELF_CONSUME_NOT_ALLOWED";
           else if (!canConsume) {
             failReason = "RTP_CAPABILITIES_MISMATCH";
-            sfuProducer = await mediaController.getProducer(data.producerId);
+            sfuProducer = await mediaController.getProducer(data.producerId, roomId);
             const consumerCodecs = data.rtpCapabilities?.codecs || [];
             const hasAudioOpus = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase() === 'audio/opus');
             const hasVideoCodec = consumerCodecs.some((c: any) => c.mimeType?.toLowerCase().startsWith('video/'));
@@ -3010,7 +3010,7 @@ export function initializeSignaling(server: Server) {
       case 'reset_webrtc_state': {
         logger.info(`User ${userId} requested WebRTC state reset (IP change detected)`);
         for (const tid of client.transports) {
-          mediaController.closeTransport(tid);
+          mediaController.closeTransport(tid, roomId);
         }
         client.transports = [];
         
@@ -3029,7 +3029,7 @@ export function initializeSignaling(server: Server) {
         const { transportId } = data;
         try {
           logger.info(`User ${userId} requesting ICE Restart for transport ${transportId}`);
-          const iceParameters = await mediaController.restartIce(transportId);
+          const iceParameters = await mediaController.restartIce(transportId, roomId);
           client.ws.send(JSON.stringify({
             type: 'ice_restarted',
             transportId,
@@ -3063,7 +3063,7 @@ export function initializeSignaling(server: Server) {
         await redis.hdel(`room:${roomId}:producers`, pidToStop);
         if (true) {
           // Close the Mediasoup producer — this triggers producerclose on all consumers
-          mediaController.closeProducer(pidToStop);
+          mediaController.closeProducer(pidToStop, roomId);
 
           if (clientEventId) emitActionAck(client, clientEventId, 'stop_producer', crypto.randomUUID(), 'accepted');
 
@@ -3094,7 +3094,7 @@ export function initializeSignaling(server: Server) {
           logger.warn(`User ${userId} tried to resume a consumer they don't own`);
           return;
         }
-        await mediaController.resumeConsumer(data.consumerId);
+        await mediaController.resumeConsumer(data.consumerId, roomId);
         client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
         break;
       }
@@ -3106,7 +3106,7 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({ type: 'error', errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
           return;
         }
-        await mediaController.pauseConsumer(data.consumerId);
+        await mediaController.pauseConsumer(data.consumerId, roomId);
         client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
         break;
       }
@@ -3114,7 +3114,7 @@ export function initializeSignaling(server: Server) {
       case 'request_screen_keyframe': {
         if (data.consumerId) {
           logger.info(`Requesting keyframe for screen share consumer ${data.consumerId} by user ${userId}`);
-          await mediaController.requestConsumerKeyFrame(data.consumerId);
+          await mediaController.requestConsumerKeyFrame(data.consumerId, roomId);
         }
         break;
       }
