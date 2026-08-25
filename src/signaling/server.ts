@@ -248,7 +248,9 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
     try {
       const data = JSON.parse(message);
       // We use internalBroadcastToRoom so we don't re-publish to redis.
-      if (data.isHostOnly) {
+      if (data.command) {
+        processAdminCommand(data);
+      } else if (data.isHostOnly) {
         internalBroadcastToHosts(data.roomId, data.message);
       } else {
         internalBroadcastToRoom(data.roomId, data.message, data.excludeParticipantId);
@@ -298,6 +300,91 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
+
+async function processAdminCommand(data: any) {
+  const { roomId, action, userId, slug } = data;
+  const roomClients = rooms.get(roomId);
+  if (!roomClients) return;
+
+  switch (action) {
+    case 'admit_user': {
+      for (const targetClient of roomClients.values()) {
+        if (targetClient.userId === userId && targetClient.status === 'waiting') {
+          targetClient.status = 'active';
+          targetClient.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: targetClient.userId, name: targetClient.name, role: targetClient.role }));
+          
+          let updatedAdmissions = roomAdmissions.get(roomId);
+          if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
+          updatedAdmissions.add(targetClient.userId);
+
+          broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
+          broadcastRoomState(roomId);
+          sendRoomHistoryAndState(targetClient);
+          if (slug) syncRoomStateToRedis(roomId, slug);
+        }
+      }
+      break;
+    }
+    case 'deny_user': {
+      for (const targetClient of roomClients.values()) {
+        if (targetClient.userId === userId && targetClient.status === 'waiting') {
+          targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
+          targetClient.ws.close();
+          roomClients.delete(targetClient.participantId);
+          broadcastToHosts(roomId, { type: 'waiting_room_denied', userId: targetClient.userId });
+        }
+      }
+      break;
+    }
+    case 'kick_user': {
+      for (const targetClient of roomClients.values()) {
+        if (targetClient.userId === userId && targetClient.role !== 'host') {
+          roomClients.delete(targetClient.participantId);
+          await removeRoomProducersByPredicate(roomId, (p: any) => p.userId === userId);
+          broadcastToRoom(roomId, { type: 'user_left', userId, participantId: targetClient.participantId });
+          targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
+          targetClient.ws.close();
+        }
+      }
+      break;
+    }
+    case 'admit_all': {
+      for (const [id, c] of roomClients.entries()) {
+        if (c.status === 'waiting') {
+          c.status = 'active';
+          c.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: c.userId, name: c.name, role: c.role }));
+          broadcastToRoom(roomId, {
+            type: 'user_joined',
+            userId: c.userId,
+            participantId: c.participantId,
+            name: c.name,
+            role: c.role,
+            isMobile: c.isMobile,
+            isMuted: c.isMuted
+          });
+          sendRoomHistoryAndState(c);
+        }
+      }
+      if (slug) syncRoomStateToRedis(roomId, slug);
+      break;
+    }
+    case 'deny_all': {
+      let deniedAny = false;
+      for (const [id, c] of Array.from(roomClients.entries())) {
+        if (c.status === 'waiting') {
+          c.ws.send(JSON.stringify({ type: 'error', message: 'You have been denied entry to this room.' }));
+          c.ws.close();
+          roomClients.delete(id);
+          deniedAny = true;
+        }
+      }
+      if (deniedAny) {
+        broadcastToHosts(roomId, { type: 'waiting_room_denied_all' });
+      }
+      break;
+    }
+  }
+}
 
 async function cleanupRoomData(roomId: string) {
   try {
@@ -471,9 +558,9 @@ export function internalBroadcastToHosts(roomId: string, message: any) {
     const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
     for (let i = currentIndex; i < end; i++) {
       const [id, client] = clientsArr[i];
-      if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
+      if ((client.role === 'host' || client.role === 'co-host') && client.ws.readyState === WebSocket.OPEN) {
         client.ws.send(payload);
-        logger.info(`Sent waiting_room_request to host ${client.userId}`);
+        logger.info(`Sent waiting_room_request to host/co-host ${client.userId}`);
         sentToHost = true;
       }
     }
@@ -482,7 +569,7 @@ export function internalBroadcastToHosts(roomId: string, message: any) {
     if (currentIndex < clientsArr.length) {
       setImmediate(processChunk);
     } else if (!sentToHost) {
-      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
+      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts or co-hosts were found!`);
     }
   }
   
@@ -1391,56 +1478,36 @@ export function initializeSignaling(server: Server) {
 
     switch (data.type) {
       case 'admit_user':
-        if (client.role === 'host') {
-          for (const targetClient of rooms.get(roomId)?.values() || []) {
-            if (targetClient.userId === data.userId && targetClient.status === 'waiting') {
-              targetClient.status = 'active';
-              targetClient.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: targetClient.userId, name: targetClient.name, role: targetClient.role }));
-              
-              // Re-fetch admissions set since the client object may be recreated
-              let updatedAdmissions = roomAdmissions.get(roomId);
-              if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
-              updatedAdmissions.add(targetClient.userId);
-
-              broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
-              broadcastRoomState(roomId);
-              sendRoomHistoryAndState(targetClient);
-              syncRoomStateToRedis(roomId, client.roomSlug);
-            }
-          }
+        if (client.role === 'host' || client.role === 'co-host') {
+          redis.publish('signaling:room:broadcast', JSON.stringify({
+            roomId,
+            command: true,
+            action: 'admit_user',
+            userId: data.userId,
+            slug: client.roomSlug
+          }));
         }
         break;
 
       case 'deny_user':
-        if (client.role === 'host') {
-          for (const targetClient of rooms.get(roomId)?.values() || []) {
-            if (targetClient.userId === data.userId && targetClient.status === 'waiting') {
-              targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
-              targetClient.ws.close();
-              rooms.get(roomId)?.delete(targetClient.participantId);
-              // Notify all other hosts that this user was denied
-              broadcastToHosts(roomId, {
-                type: 'waiting_room_denied',
-                userId: data.userId,
-              });
-            }
-          }
+        if (client.role === 'host' || client.role === 'co-host') {
+          redis.publish('signaling:room:broadcast', JSON.stringify({
+            roomId,
+            command: true,
+            action: 'deny_user',
+            userId: data.userId
+          }));
         }
         break;
 
       case 'kick_user':
-        if (client.role === 'host') {
-          for (const targetClient of rooms.get(roomId)?.values() || []) {
-            // Don't allow kicking other hosts (or maybe we should? for now let's say only attendees)
-            if (targetClient.userId === data.userId && targetClient.role !== 'host') {
-              // Remove first so the close handler skips grace period
-              rooms.get(roomId)?.delete(targetClient.participantId);
-              await removeRoomProducersByPredicate(roomId, (p: any) => p.userId === data.userId);
-              broadcastToRoom(roomId, { type: 'user_left', userId: data.userId, participantId: targetClient.participantId });
-              targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
-              targetClient.ws.close();
-            }
-          }
+        if (client.role === 'host' || client.role === 'co-host') {
+          redis.publish('signaling:room:broadcast', JSON.stringify({
+            roomId,
+            command: true,
+            action: 'kick_user',
+            userId: data.userId
+          }));
         }
         break;
 
@@ -2627,45 +2694,22 @@ export function initializeSignaling(server: Server) {
 
       case 'admit_all':
         if (client.role === 'host' || client.role === 'co-host') {
-          const roomClients = rooms.get(roomId);
-          if (roomClients) {
-            for (const [id, c] of roomClients.entries()) {
-              if (c.status === 'waiting') {
-                c.status = 'active';
-                c.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: c.userId, name: c.name, role: c.role }));
-                broadcastToRoom(roomId, {
-                  type: 'user_joined',
-                  userId: c.userId,
-                  participantId: c.participantId,
-                  name: c.name,
-                  role: c.role,
-                  isMobile: c.isMobile,
-                  isMuted: c.isMuted
-                });
-                sendRoomHistoryAndState(c);
-              }
-            }
-            syncRoomStateToRedis(roomId, client.roomSlug);
-          }
+          redis.publish('signaling:room:broadcast', JSON.stringify({
+            roomId,
+            command: true,
+            action: 'admit_all',
+            slug: client.roomSlug
+          }));
         }
         break;
 
       case 'deny_all':
         if (client.role === 'host' || client.role === 'co-host') {
-          const roomClients = rooms.get(roomId);
-          if (roomClients) {
-            let deniedAny = false;
-            for (const [id, c] of Array.from(roomClients.entries())) {
-              if (c.status === 'waiting') {
-                c.ws.send(JSON.stringify({ type: 'error', message: 'You have been denied entry to this room.' }));
-                roomClients.delete(id);
-                deniedAny = true;
-              }
-            }
-            if (deniedAny) {
-              broadcastToHosts(roomId, { type: 'waiting_room_denied_all' });
-            }
-          }
+          redis.publish('signaling:room:broadcast', JSON.stringify({
+            roomId,
+            command: true,
+            action: 'deny_all'
+          }));
         }
         break;
 
