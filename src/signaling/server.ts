@@ -317,10 +317,10 @@ async function processAdminCommand(data: any) {
           if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
           updatedAdmissions.add(targetClient.userId);
 
+          if (slug) await executeSyncRoomStateToRedis(roomId, slug);
           broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
           broadcastRoomState(roomId);
           sendRoomHistoryAndState(targetClient);
-          if (slug) syncRoomStateToRedis(roomId, slug);
         }
       }
       break;
@@ -1116,7 +1116,7 @@ export function initializeSignaling(server: Server) {
         });
         broadcastRoomState(roomId);
         
-        syncRoomStateToRedis(roomId, roomSlug);
+        await executeSyncRoomStateToRedis(roomId, roomSlug);
 
         // Send existing waiting users to the host that just joined
         if (client.role === 'host') {
@@ -1151,12 +1151,19 @@ export function initializeSignaling(server: Server) {
     }
 
     ws.on('message', async (message: Buffer | string) => {
+      let data: any;
+      try {
+        data = JSON.parse(message.toString());
+        console.log('SERVER WS RECEIVED RAW MESSAGE:', data.type);
+      } catch (e) {
+        logger.warn('Failed to parse websocket message', { error: e });
+        return;
+      }
       try {
         if (Buffer.byteLength(typeof message === 'string' ? message : message) > 65536) {
           logger.warn(`User ${userId} sent oversized WS message (>64KB), ignoring.`);
           return;
         }
-        const data = JSON.parse(message.toString());
         try {
           await handleMessage(client, data);
         } catch (handleError) {
@@ -2532,9 +2539,11 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'mute_state': {
+        console.log('SERVER RECEIVED mute_state:', data);
         const serverEventId = crypto.randomUUID();
         if (clientEventId) emitActionAck(client, clientEventId, 'mute_state', serverEventId, 'accepted');
         client.isMuted = data.isMuted;
+        syncRoomStateToRedis(roomId, client.roomSlug);
         
         // Pause or resume transcription based on mute state
         const producersList = await getRoomProducers(roomId);
@@ -2562,6 +2571,7 @@ export function initializeSignaling(server: Server) {
       case 'camera_state': {
         // Update client's tracked state for late joiners
         client.isCameraOn = data.isCameraOn;
+        syncRoomStateToRedis(roomId, client.roomSlug);
         client.audioOnlyMode = data.audioOnlyMode;
         if (data.videoSuspendedReason) client.videoSuspendedReason = data.videoSuspendedReason;
         else delete client.videoSuspendedReason;
