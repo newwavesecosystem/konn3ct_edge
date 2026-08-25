@@ -658,7 +658,9 @@ async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
             email: client.email,
             role: client.role,
             isMobile: client.isMobile,
-            participantId: client.participantId
+            participantId: client.participantId,
+            isMuted: client.isMuted,
+            isCameraOn: client.isCameraOn
           };
           await redis.hset(`room:${roomId}:participants`, client.participantId, JSON.stringify(pData));
         }

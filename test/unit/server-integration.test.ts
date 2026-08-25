@@ -5,6 +5,7 @@ import express from 'express';
 
 vi.mock('ioredis', () => {
   const globalHandlers: Record<string, Array<(...args: any[]) => void>> = {};
+  const mockHashes: Record<string, Record<string, string>> = {};
   class MockRedis {
     on = vi.fn().mockImplementation((event: string, fn: (...args: any[]) => void) => {
       if (!globalHandlers[event]) globalHandlers[event] = [];
@@ -22,10 +23,24 @@ vi.mock('ioredis', () => {
     subscribe = vi.fn().mockResolvedValue(1);
     psubscribe = vi.fn().mockResolvedValue(1);
     del = vi.fn().mockResolvedValue(1);
-    hget = vi.fn().mockResolvedValue(null);
-    hset = vi.fn().mockResolvedValue(1);
-    hdel = vi.fn().mockResolvedValue(1);
-    hgetall = vi.fn().mockResolvedValue({});
+    hget = vi.fn().mockImplementation(async (key: string, field: string) => {
+      return mockHashes[key] ? mockHashes[key][field] || null : null;
+    });
+    hset = vi.fn().mockImplementation(async (key: string, field: string, value: string) => {
+      if (!mockHashes[key]) mockHashes[key] = {};
+      mockHashes[key][field] = value;
+      return 1;
+    });
+    hdel = vi.fn().mockImplementation(async (key: string, field: string) => {
+      if (mockHashes[key] && mockHashes[key][field]) {
+        delete mockHashes[key][field];
+        return 1;
+      }
+      return 0;
+    });
+    hgetall = vi.fn().mockImplementation(async (key: string) => {
+      return mockHashes[key] || {};
+    });
     eval = vi.fn().mockResolvedValue(null);
     multi = vi.fn().mockReturnValue({
       hset: vi.fn().mockReturnThis(),
