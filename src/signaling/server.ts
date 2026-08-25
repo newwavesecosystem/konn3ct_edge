@@ -1240,7 +1240,7 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      const gracePeriodMs = 30000;
+      const gracePeriodMs = 5000;
       const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
 
