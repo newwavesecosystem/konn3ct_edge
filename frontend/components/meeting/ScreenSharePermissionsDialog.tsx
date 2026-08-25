@@ -147,7 +147,7 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
                   <label key={p.id} className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={participantScreenSharePermissions[p.id] === 'ALLOW'}
+                      checked={participantScreenSharePermissions[p.userId] === 'ALLOW'}
                       onChange={(e) => {
                         setParticipantScreenSharePermission(p.userId, e.target.checked ? 'ALLOW' : 'DEFAULT');
                       }}

@@ -380,13 +380,13 @@ function ParticipantRow({
                     className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center justify-between"
                     onClick={() => { setParticipantScreenSharePermission(participant.userId, 'ALLOW'); setShowMenu(false); }}
                   >
-                    Allow {participantScreenSharePermissions[participant.id] === 'ALLOW' && <Check className="w-4 h-4 text-brand-green" />}
+                    Allow {participantScreenSharePermissions[participant.userId] === 'ALLOW' && <Check className="w-4 h-4 text-brand-green" />}
                   </button>
                   <button
                     className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] text-red-400 hover:text-red-500 flex items-center justify-between"
                     onClick={() => { setParticipantScreenSharePermission(participant.userId, 'BLOCK'); setShowMenu(false); }}
                   >
-                    Block {participantScreenSharePermissions[participant.id] === 'BLOCK' && <Check className="w-4 h-4 text-red-500" />}
+                    Block {participantScreenSharePermissions[participant.userId] === 'BLOCK' && <Check className="w-4 h-4 text-red-500" />}
                   </button>
                   {participant.isScreenSharing && (
                     <>

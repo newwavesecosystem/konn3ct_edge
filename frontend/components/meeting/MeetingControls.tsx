@@ -42,7 +42,7 @@ import {
   HelpCircle,
   Shield,
 } from "lucide-react";
-import { ScreenSharePermissionsDialog } from "./ScreenSharePermissionsDialog";
+
 
 export function MeetingControls() {
   const {
@@ -91,7 +91,6 @@ export function MeetingControls() {
   const { theme, toggleTheme } = useMeetingTheme();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showECinemaDialog, setShowECinemaDialog] = useState(false);
-  const [showScreenSharePerms, setShowScreenSharePerms] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,7 +130,6 @@ export function MeetingControls() {
 
   return (
     <>
-      <ScreenSharePermissionsDialog open={showScreenSharePerms} onOpenChange={setShowScreenSharePerms} />
       <div
         className="shrink-0 flex items-center justify-center sm:justify-between px-2 sm:px-4 py-1.5 sm:py-2 gap-1.5 sm:gap-3"
         style={{
@@ -337,13 +335,7 @@ export function MeetingControls() {
                   label="Polls"
                   onClick={() => { setActivePanel("polls"); setShowMoreMenu(false); }}
                 />
-                {isHost && (
-                  <MoreMenuItem
-                    icon={<Shield className="w-4 h-4" />}
-                    label="Screen sharing permissions"
-                    onClick={() => { setShowScreenSharePerms(true); setShowMoreMenu(false); }}
-                  />
-                )}
+
                 {/* 
                 <MoreMenuItem
                   icon={<FileText className="w-4 h-4" />}

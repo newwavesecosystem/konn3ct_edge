@@ -450,7 +450,7 @@ export function ParticipantTile({
               <MonitorUp className="w-3 h-3" />
               Sharing
             </div>
-            {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+            {['host', 'admin', 'co-host'].includes(currentUser.role) && participant.id !== currentUser.id && (
               <button 
                 onClick={(e) => { e.stopPropagation(); stopParticipantScreenShare(participant.userId); }}
                 className="bg-red-500 hover:bg-red-600 transition-colors backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1 text-xs text-white font-medium shadow-sm"
@@ -461,7 +461,7 @@ export function ParticipantTile({
           </div>
         )}
         
-        {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+        {['host', 'admin', 'co-host'].includes(currentUser.role) && participant.id !== currentUser.id && (
           <div className="pointer-events-auto relative">
             <button
               className="p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-white backdrop-blur-sm transition-colors"
