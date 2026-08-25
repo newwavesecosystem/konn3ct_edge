@@ -15,7 +15,7 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
 
   private async initSubscriber() {
     const sub = duplicateRedis(redis);
-    await sub.subscribe('media:events:producerClose', 'media:events:activeSpeaker');
+    await sub.subscribe('media:events:producerClose', 'media:events:activeSpeaker', 'media:events:caption');
     await sub.psubscribe('media:rpc:response:*');
 
     sub.on('pmessage', (pattern: string, channel: string, message: string) => {
@@ -42,6 +42,8 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
           this.emit('producerClose', data);
         } else if (channel === 'media:events:activeSpeaker') {
           this.emit('activeSpeaker', data);
+        } else if (channel === 'media:events:caption') {
+          this.emit('caption', data);
         }
       } catch (e) {
         logger.error('Failed to parse media event', e);

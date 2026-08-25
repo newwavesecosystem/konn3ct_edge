@@ -134,6 +134,7 @@ redisSubscriber.on("error", (e: any) => logger.error('Redis subscriber connectio
 redisSubscriber.subscribe('recorder:completed').catch((e: any) => logger.error('Failed to subscribe to recorder:completed', e));
 redisSubscriber.subscribe('streamer:status').catch((e: any) => logger.error('Failed to subscribe to streamer:status', e));
 redisSubscriber.subscribe(`signaling:targeted:${process.env.POD_ID || 'pod-1'}`).catch((e: any) => logger.error('Failed to subscribe to targeted signaling', e));
+redisSubscriber.subscribe('signaling:room:broadcast').catch((e: any) => logger.error('Failed to subscribe to signaling:room:broadcast', e));
 
 redisSubscriber.on('message', async (channel: string, message: string) => {
   if (channel === 'recorder:completed') {
@@ -243,6 +244,18 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
     } catch(e) {
       logger.error('Failed to process targeted message', e);
     }
+  } else if (channel === 'signaling:room:broadcast') {
+    try {
+      const data = JSON.parse(message);
+      // We use internalBroadcastToRoom so we don't re-publish to redis.
+      if (data.isHostOnly) {
+        internalBroadcastToHosts(data.roomId, data.message);
+      } else {
+        internalBroadcastToRoom(data.roomId, data.message, data.excludeParticipantId);
+      }
+    } catch(e) {
+      logger.error('Failed to process room broadcast message', e);
+    }
   }
 });
 
@@ -342,26 +355,18 @@ async function asyncWithRetry<T>(
     }
   }
 }
-export function getActiveRoomParticipants(roomId: string) {
+export async function getActiveRoomParticipants(roomId: string) {
   const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, isMuted: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
-  const roomClients = rooms.get(roomId);
-  if (roomClients) {
-    for (const client of roomClients.values()) {
-      if (client.status === 'active') {
-        activeParticipants.push({
-          userId: client.userId,
-          participantId: client.participantId,
-          name: client.name,
-          role: client.role,
-          isMobile: client.isMobile,
-          isCameraOn: client.isCameraOn,
-          isMuted: client.isMuted,
-          audioOnlyMode: client.audioOnlyMode,
-          videoSuspendedReason: client.videoSuspendedReason
-        });
-      }
+  
+  try {
+    const globalParticipantsHash = await redis.hgetall(`room:${roomId}:participants`);
+    for (const pStr of Object.values(globalParticipantsHash)) {
+      activeParticipants.push(JSON.parse(pStr));
     }
+  } catch (e) {
+    logger.error('Failed to get active room participants from Redis', e);
   }
+  
   return activeParticipants;
 }
 
@@ -392,12 +397,104 @@ export function getDefaultRoomSettings(): RoomSettings {
 }
 export const roomSettingsMap = new Map<string, RoomSettings>();
 
+const roomStateDebounceTimers = new Map<string, NodeJS.Timeout>();
+
+export function broadcastRoomState(roomId: string) {
+  if (roomStateDebounceTimers.has(roomId)) return;
+
+  const timer = setTimeout(async () => {
+    roomStateDebounceTimers.delete(roomId);
+    const activeParticipants = await getActiveRoomParticipants(roomId);
+    logger.info(`[PRESENCE] Broadcasting authoritative room state for ${roomId}. Participants: ${activeParticipants.length}`);
+    broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
+  }, 1000);
+
+  roomStateDebounceTimers.set(roomId, timer);
+}
+
+export function broadcastToRoom(roomId: string, message: any, excludeParticipantId?: string) {
+  redis.publish('signaling:room:broadcast', JSON.stringify({
+    roomId,
+    message,
+    excludeParticipantId,
+    isHostOnly: false
+  }));
+}
+
+export function internalBroadcastToRoom(roomId: string, message: any, excludeParticipantId?: string) {
+  const roomClients = rooms.get(roomId);
+  if (!roomClients) return;
+
+  const payload = JSON.stringify(message);
+  const clientsArr = Array.from(roomClients.entries());
+  const CHUNK_SIZE = 500;
+  
+  let currentIndex = 0;
+  
+  function processChunk() {
+    const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
+    for (let i = currentIndex; i < end; i++) {
+      const [id, client] = clientsArr[i];
+      if (id !== excludeParticipantId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(payload);
+      }
+    }
+    
+    currentIndex = end;
+    if (currentIndex < clientsArr.length) {
+      setImmediate(processChunk);
+    }
+  }
+  
+  processChunk();
+}
+
+export function broadcastToHosts(roomId: string, message: any) {
+  redis.publish('signaling:room:broadcast', JSON.stringify({
+    roomId,
+    message,
+    isHostOnly: true
+  }));
+}
+
+export function internalBroadcastToHosts(roomId: string, message: any) {
+  const roomClients = rooms.get(roomId);
+  if (!roomClients) return;
+
+  const payload = JSON.stringify(message);
+  const clientsArr = Array.from(roomClients.entries());
+  const CHUNK_SIZE = 500;
+  let sentToHost = false;
+  let currentIndex = 0;
+
+  function processChunk() {
+    const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
+    for (let i = currentIndex; i < end; i++) {
+      const [id, client] = clientsArr[i];
+      if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(payload);
+        logger.info(`Sent waiting_room_request to host ${client.userId}`);
+        sentToHost = true;
+      }
+    }
+    
+    currentIndex = end;
+    if (currentIndex < clientsArr.length) {
+      setImmediate(processChunk);
+    } else if (!sentToHost) {
+      logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
+    }
+  }
+  
+  processChunk();
+}
+
 export async function sendRoomHistoryAndState(client: Client) {
   const { ws, roomId, roomCreatedDate, participantId, userId } = client;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   try {
-    const activeParticipants = getActiveRoomParticipants(roomId);
+    const activeParticipants = await getActiveRoomParticipants(roomId);
     ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
     const history = await getOrLoadRoomHistory(roomId, roomCreatedDate, participantId, userId);
@@ -463,26 +560,31 @@ export function syncRoomStateToRedis(roomId: string, roomSlug: string) {
 async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
   try {
     const clients = rooms.get(roomId);
-    if (!clients || clients.size === 0) {
-      await redis.del(`room:${roomSlug}:participants`);
-      return;
-    }
     
-    const participants = [];
-    for (const client of clients.values()) {
-      if (client.status === 'active') {
-        participants.push({
-          userId: client.userId,
-          name: client.name,
-          email: client.email,
-          role: client.role,
-          isMobile: client.isMobile
-        });
+    // First, sync local clients to the global hash
+    if (clients && clients.size > 0) {
+      for (const client of clients.values()) {
+        if (client.status === 'active') {
+          const pData = {
+            userId: client.userId,
+            name: client.name,
+            email: client.email,
+            role: client.role,
+            isMobile: client.isMobile,
+            participantId: client.participantId
+          };
+          await redis.hset(`room:${roomId}:participants`, client.participantId, JSON.stringify(pData));
+        }
       }
+      await redis.expire(`room:${roomId}:participants`, 86400); // 24 hours expiry
     }
+
+    // Now re-build the legacy slug-based list for backward compatibility just in case
+    const globalParticipantsHash = await redis.hgetall(`room:${roomId}:participants`);
+    const allParticipants = Object.values(globalParticipantsHash).map(v => JSON.parse(v));
     
-    if (participants.length > 0) {
-      await redis.set(`room:${roomSlug}:participants`, JSON.stringify(participants), "EX", 86400); // 24 hours expiry
+    if (allParticipants.length > 0) {
+      await redis.set(`room:${roomSlug}:participants`, JSON.stringify(allParticipants), "EX", 86400);
     } else {
       await redis.del(`room:${roomSlug}:participants`);
     }
@@ -571,14 +673,14 @@ export function initializeSignaling(server: Server) {
         activeParticipantIds.add(prod.participantId);
       }
     }
-    broadcastToRoom(roomId, {
+    internalBroadcastToRoom(roomId, {
       type: 'active_speaker',
       userIds: Array.from(activeUsers),
       participantIds: Array.from(activeParticipantIds)
     });
   });
 
-  transcriberEvents.on('caption', (data) => {
+  mediaController.on('caption', (data) => {
     const { roomId, userId, name, text, isFinal, lang } = data;
     logger.info(`[SIGNALING] Broadcasting caption to room ${roomId} for user ${userId}: "${text}"`);
     
@@ -593,7 +695,7 @@ export function initializeSignaling(server: Server) {
       });
     }
 
-    broadcastToRoom(roomId, {
+    internalBroadcastToRoom(roomId, {
       type: 'caption',
       userId,
       name,
@@ -623,7 +725,7 @@ export function initializeSignaling(server: Server) {
       if (cpuUsage > maxDegradationLoad) {
         for (const roomId of rooms.keys()) {
           logger.warn("CPU LOAD IS HIGH!!!", cpuUsage)
-          broadcastToRoom(roomId, { type: 'server_load_high' });
+          internalBroadcastToRoom(roomId, { type: 'server_load_high' });
         }
       }
     } catch (e) {
@@ -1071,27 +1173,39 @@ export function initializeSignaling(server: Server) {
             client.sessionGeneration || ''
           ).catch(e => logger.warn('Failed to cleanup participant session', e));
 
+          // 1. Remove their producers globally
+          await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
+          
+          // 2. Remove them from global participants
+          await redis.hdel(`room:${roomId}:participants`, participantId);
+
+          // 3. Clean up local maps if local room is empty
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             cleanupRoomData(roomId);
-            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             roomAdmissions.delete(roomId);
+          }
+
+          // 4. Sync state to redis first so the user is removed
+          await syncRoomStateToRedis(roomId, roomSlug);
+
+          // 5. Check if GLOBAL room is empty
+          const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
+          const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
+
+          if (isGloballyEmpty) {
+            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             mediaController.cleanupAudioObserver(roomId); // Clean up talking indicator
             mediaController.closeRouter(roomId); // Prevent Mediasoup Router memory leaks
             redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
-            syncRoomStateToRedis(roomId, roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
-            // Remove their producers from the array
-            await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
-
             broadcastToRoom(roomId, {
               type: 'user_left',
               userId,
               participantId
             });
             broadcastRoomState(roomId);
-            syncRoomStateToRedis(roomId, roomSlug);
           }
         }
         disconnectTimeouts.delete(`${participantId}:${roomId}`);
@@ -1931,19 +2045,34 @@ export function initializeSignaling(server: Server) {
         const rc = rooms.get(roomId);
         if (rc) {
           rc.delete(client.participantId);
+          // 1. Remove their producers globally
+          await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
+
+          // 2. Remove them from global participants
+          await redis.hdel(`room:${roomId}:participants`, client.participantId);
+
+          // 3. Clean up local maps if local room is empty
           if (rc.size === 0) {
             rooms.delete(roomId);
             cleanupRoomData(roomId);
-            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             roomAdmissions.delete(roomId);
+          }
+
+          // 4. Sync state to redis first so the user is removed
+          await syncRoomStateToRedis(roomId, client.roomSlug);
+
+          // 5. Check if GLOBAL room is empty
+          const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
+          const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
+
+          if (isGloballyEmpty) {
+            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             mediaController.cleanupAudioObserver(roomId);
+            mediaController.closeRouter(roomId);
             redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
-            syncRoomStateToRedis(roomId, client.roomSlug);
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
-            await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
             broadcastToRoom(roomId, { type: 'user_left', userId, participantId: client.participantId });
-            syncRoomStateToRedis(roomId, client.roomSlug);
           }
         }
         // If there's an existing disconnect timeout, clear it so it doesn't fire later
@@ -3148,78 +3277,4 @@ export function initializeSignaling(server: Server) {
     }
   }
 
-  const roomStateDebounceTimers = new Map<string, NodeJS.Timeout>();
-
-  function broadcastRoomState(roomId: string) {
-    if (roomStateDebounceTimers.has(roomId)) return;
-
-    const timer = setTimeout(() => {
-      roomStateDebounceTimers.delete(roomId);
-      const activeParticipants = getActiveRoomParticipants(roomId);
-      logger.info(`[PRESENCE] Broadcasting authoritative room state for ${roomId}. Participants: ${activeParticipants.length}`);
-      broadcastToRoom(roomId, { type: 'participants_list', participants: activeParticipants });
-    }, 1000);
-
-    roomStateDebounceTimers.set(roomId, timer);
-  }
-
-  function broadcastToRoom(roomId: string, message: any, excludeParticipantId?: string) {
-    const roomClients = rooms.get(roomId);
-    if (!roomClients) return;
-
-    const payload = JSON.stringify(message);
-    const clientsArr = Array.from(roomClients.entries());
-    const CHUNK_SIZE = 500;
-    
-    let currentIndex = 0;
-    
-    function processChunk() {
-      const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
-      for (let i = currentIndex; i < end; i++) {
-        const [id, client] = clientsArr[i];
-        if (id !== excludeParticipantId && client.status === 'active' && client.ws.readyState === WebSocket.OPEN) {
-          client.ws.send(payload);
-        }
-      }
-      
-      currentIndex = end;
-      if (currentIndex < clientsArr.length) {
-        setImmediate(processChunk);
-      }
-    }
-    
-    processChunk();
-  }
-
-  function broadcastToHosts(roomId: string, message: any) {
-    const roomClients = rooms.get(roomId);
-    if (!roomClients) return;
-
-    const payload = JSON.stringify(message);
-    const clientsArr = Array.from(roomClients.entries());
-    const CHUNK_SIZE = 500;
-    let sentToHost = false;
-    let currentIndex = 0;
-
-    function processChunk() {
-      const end = Math.min(currentIndex + CHUNK_SIZE, clientsArr.length);
-      for (let i = currentIndex; i < end; i++) {
-        const [id, client] = clientsArr[i];
-        if (client.role === 'host' && client.ws.readyState === WebSocket.OPEN) {
-          client.ws.send(payload);
-          logger.info(`Sent waiting_room_request to host ${client.userId}`);
-          sentToHost = true;
-        }
-      }
-      
-      currentIndex = end;
-      if (currentIndex < clientsArr.length) {
-        setImmediate(processChunk);
-      } else if (!sentToHost) {
-        logger.warn(`Tried to broadcast to hosts in room ${roomId}, but no active hosts were found!`);
-      }
-    }
-    
-    processChunk();
-  }
 }
