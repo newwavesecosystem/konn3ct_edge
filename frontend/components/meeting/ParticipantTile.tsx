@@ -121,12 +121,14 @@ export function ParticipantTile({
     }
   }, [isVisible, isSelf, participant.videoTrack, pauseRemoteVideo, resumeRemoteVideo]);
 
-  const initials = participant.name
-    .split(" ")
+  const initials = (participant.name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || (participant.name ? participant.name.slice(0, 2).toUpperCase() : "?");
 
   const toggleFullscreen = React.useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -547,7 +549,7 @@ export function ParticipantTile({
             <span className="shrink-0">{roleIcon[participant.role]}</span>
           )}
           <span className="text-white text-xs font-medium truncate">
-            {participant.name}
+            {participant.name || 'Guest'}
           </span>
           {isSelf && (
             <span className="text-white/60 text-[10px] shrink-0">(You)</span>

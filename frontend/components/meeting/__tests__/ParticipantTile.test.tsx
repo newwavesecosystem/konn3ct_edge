@@ -25,7 +25,7 @@ describe('ParticipantTile Network Detection', () => {
     id: 'user-1',
     userId: 'user-1-db',
     name: 'Alice',
-    role: 'attendee',
+    role: 'attendee' as const,
     isMuted: true,
     isCameraOn: true,
     isScreenSharing: false,
@@ -35,6 +35,7 @@ describe('ParticipantTile Network Detection', () => {
     cameraStream: null,
     screenStream: null,
     audioOnlyMode: false,
+    joinedAt: new Date().toISOString(),
   };
 
   const setupMockContext = (networkDetectionEnabled: boolean, currentUserId: string = 'local-user') => {

@@ -640,7 +640,7 @@ export function MeetingProvider({
           setIsMuted(true);
           setParticipants((prev) =>
             prev.map((p) =>
-              p.userId === initialCurrentUser.userId ? { ...p, isMuted: true } : p
+              p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isMuted: true } : p
             )
           );
         }
@@ -874,7 +874,7 @@ export function MeetingProvider({
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
-            setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: false } : p));
+            setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isCameraOn: false } : p));
           }
         };
 
@@ -883,7 +883,7 @@ export function MeetingProvider({
           if (client) {
             client.pauseCamera();
             setIsCameraOn(false);
-            setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: false } : p));
+            setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isCameraOn: false } : p));
           }
         };
 
@@ -1273,7 +1273,7 @@ export function MeetingProvider({
 
         client.onAudioStatusChanged = (status) => {
           setParticipants((prev) => prev.map(p =>
-            p.userId === initialCurrentUser.userId ? { ...p, audioConnectionStatus: status as any } : p
+            p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, audioConnectionStatus: status as any } : p
           ));
         };
 
@@ -1379,7 +1379,7 @@ export function MeetingProvider({
 
         client.onActiveSpeaker = (userIds, participantIds) => {
           setParticipants((prev) => prev.map(p => {
-            if (p.userId === initialCurrentUser.userId) {
+            if (p.id === (clientParticipantId || initialCurrentUser.id)) {
               return { ...p, isSpeaking: localIsSpeakingRef.current || userIds.includes(p.userId) || (participantIds && participantIds.includes(p.id)) || userIds.includes(webrtcClient.current?.userId || '') };
             }
             return { ...p, isSpeaking: (participantIds && participantIds.includes(p.id)) || userIds.includes(p.userId) };
@@ -1499,9 +1499,15 @@ export function MeetingProvider({
               client?.disconnect();
             }
             if (state === 'connected') {
-              // Update local user's name and role based on server truth
+              // Update local user's name and role based on server truth, preserving existing name if server userName is not ready
               setParticipants(prev => prev.map(p => 
-                p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, name: webrtcClient.current?.userName || 'Guest', role: (webrtcClient.current?.userRole || 'attendee') as any } : p
+                p.id === (clientParticipantId || initialCurrentUser.id) 
+                  ? { 
+                      ...p, 
+                      name: webrtcClient.current?.userName?.trim() ? webrtcClient.current.userName.trim() : (p.name?.trim() ? p.name : (initialCurrentUser.name || 'Guest')), 
+                      role: (webrtcClient.current?.userRole || p.role || 'attendee') as any 
+                    } 
+                  : p
               ));
               if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
                 setMeetingInfo(prev => ({ 
@@ -1573,6 +1579,9 @@ export function MeetingProvider({
             toast.error("Your screen sharing was stopped by the host.");
             setIsScreenSharing(false);
             client?.disableScreenShare({ serverAlreadyClosed: true });
+            setParticipants(prev => prev.map(p =>
+              p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: false, screenTrack: null } : p
+            ));
           }
         };
 
@@ -1717,7 +1726,7 @@ export function MeetingProvider({
             let staleRemoved = false;
             
             // Add local user
-            const localUser = prev.find(p => p.userId === initialCurrentUser.userId);
+            const localUser = prev.find(p => p.id === (clientParticipantId || initialCurrentUser.id));
             if (localUser) nextParticipants.push(localUser);
 
             const seenParticipantIds = new Set<string>();
@@ -1730,14 +1739,18 @@ export function MeetingProvider({
               }
               seenParticipantIds.add(p.participantId);
 
-              const existing = prev.find(existing => existing.id === p.participantId);
+              // Match existing by participantId OR userId to preserve state across ID transitions
+              const existing = prev.find(existing => existing.id === p.participantId || existing.userId === p.userId || existing.id === p.userId);
+              const validName = p.name?.trim() ? p.name.trim() : (existing?.name?.trim() ? existing.name : `Participant ${p.participantId.substring(5, 9)}`);
+
               if (existing) {
                 nextParticipants.push({ 
                   ...existing, 
+                  id: p.participantId,
                   userId: p.userId,
-                  name: p.name, 
-                  role: p.role as any, 
-                  isMobile: p.isMobile, 
+                  name: validName, 
+                  role: (p.role as any) || existing.role, 
+                  isMobile: p.isMobile ?? existing.isMobile, 
                   isCameraOn: p.isCameraOn ?? existing.isCameraOn, 
                   audioOnlyMode: p.audioOnlyMode ?? existing.audioOnlyMode, 
                   videoSuspendedReason: p.videoSuspendedReason ?? existing.videoSuspendedReason,
@@ -1747,8 +1760,8 @@ export function MeetingProvider({
                 nextParticipants.push({
                   id: p.participantId,
                   userId: p.userId,
-                  name: p.name,
-                  role: p.role as any,
+                  name: validName,
+                  role: (p.role as any) || 'attendee',
                   isMuted: (p as any).isMuted ?? true,
                   isCameraOn: p.isCameraOn || false,
                   audioOnlyMode: p.audioOnlyMode,
@@ -1780,18 +1793,30 @@ export function MeetingProvider({
         client.onUserJoined = (user) => {
           if (hasLeftMeetingRef.current) return;
           if (user.userId === webrtcClient.current?.userId) return;
-          const targetId = resolveUserId(user.userId);
           const uniqueId = user.participantId || user.userId;
           setWaitingUsers(prev => prev.filter(u => u.userId !== user.userId));
           setParticipants((prev) => {
-            if (prev.some(p => p.id === uniqueId)) {
-              return prev.map(p => p.id === uniqueId ? { ...p, name: user.name, role: user.role as any, isMobile: user.isMobile, isCameraOn: user.isCameraOn ?? p.isCameraOn, audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason } : p);
+            const existingIndex = prev.findIndex(p => p.id === uniqueId || p.userId === user.userId || p.id === user.userId);
+            const validName = user.name?.trim() ? user.name.trim() : (existingIndex >= 0 ? prev[existingIndex].name : `Participant ${uniqueId.substring(5, 9)}`);
+
+            if (existingIndex >= 0) {
+              return prev.map((p, idx) => idx === existingIndex ? { 
+                ...p, 
+                id: uniqueId,
+                userId: user.userId,
+                name: validName, 
+                role: (user.role as any) || p.role, 
+                isMobile: user.isMobile ?? p.isMobile, 
+                isCameraOn: user.isCameraOn ?? p.isCameraOn, 
+                audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, 
+                videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason 
+              } : p);
             }
             return [...prev, {
               id: uniqueId,
               userId: user.userId,
-              name: user.name,
-              role: user.role as any,
+              name: validName,
+              role: (user.role as any) || 'attendee',
               isMuted: (user as any).isMuted ?? true,
               isCameraOn: user.isCameraOn || false,
               audioOnlyMode: user.audioOnlyMode,
@@ -1871,27 +1896,30 @@ export function MeetingProvider({
           const source = (consumer.appData as any)?.source || (consumer.kind === 'audio' ? 'audio' : 'camera');
           
           setParticipants((prev) => {
-            const exists = prev.find((p) => p.id === participantId);
+            const exists = prev.find((p) => p.id === participantId || p.userId === participantId);
             if (exists) {
               return prev.map((p) => {
-                if (p.id === participantId) {
+                if (p.id === exists.id) {
+                  const updatedName = (userName?.trim() && (!p.name || p.name.startsWith('Participant '))) ? userName.trim() : p.name;
                   if (consumer.kind === 'audio') {
                     if (source === 'screen-audio') {
                       return { 
                         ...p, 
+                        name: updatedName,
                         screenAudioTrack: consumer.track as MediaStreamTrack,
                         screenAudioProducerId: consumer.producerId,
                         screenAudioConsumerId: consumer.id,
                         screenAudioTrackId: consumer.track.id
                       };
                     } else {
-                      return { ...p, audioTrack: consumer.track as MediaStreamTrack };
+                      return { ...p, name: updatedName, audioTrack: consumer.track as MediaStreamTrack };
                     }
                   }
                   if (consumer.kind === 'video') {
                     if (source === 'screen') {
                       return { 
                         ...p, 
+                        name: updatedName,
                         screenTrack: consumer.track as MediaStreamTrack, 
                         screenProducerId: consumer.producerId,
                         screenConsumerId: consumer.id,
@@ -1911,6 +1939,7 @@ export function MeetingProvider({
                       const newCameraOn = canonicalCameraOff ? false : true;
                       return { 
                         ...p, 
+                        name: updatedName,
                         videoTrack: consumer.track as MediaStreamTrack, 
                         cameraProducerId: consumer.producerId,
                         cameraConsumerId: consumer.id,
@@ -1931,10 +1960,11 @@ export function MeetingProvider({
               });
             } else {
               client?.emitTelemetry('participant_missing_but_media_active');
+              const resolvedName = userName?.trim() ? userName.trim() : `Participant ${participantId.substring(5, 9)}`;
               const newParticipant: Participant = {
                 id: participantId,
                 userId: participantId, // Fallback, though ideally we'd have the real userId
-                name: userName || `Participant ${participantId.substring(5, 9)}`,
+                name: resolvedName,
                 role: "attendee",
                 isMuted: consumer.kind !== "audio",
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
@@ -2022,7 +2052,7 @@ export function MeetingProvider({
 
           setParticipants((prev) =>
             prev.map((p) => {
-              if (p.userId === initialCurrentUser.userId) {
+              if (p.id === (clientParticipantId || initialCurrentUser.id)) {
                 return { ...p, audioTrack: audioTrack || undefined, isMuted };
               }
               return p;
@@ -2044,7 +2074,7 @@ export function MeetingProvider({
               
               setParticipants((prev) =>
                 prev.map((p) => {
-                  if (p.userId === initialCurrentUser.userId) {
+                  if (p.id === (clientParticipantId || initialCurrentUser.id)) {
                     return { ...p, videoTrack: videoTrack || undefined, isCameraOn };
                   }
                   return p;
@@ -2153,7 +2183,7 @@ export function MeetingProvider({
         } else {
           localCameraTrackRef.current = newTrack;
           setParticipants(prev => prev.map(p => 
-            p.userId === initialCurrentUser.userId ? { ...p, videoTrack: newTrack } : p
+            p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, videoTrack: newTrack } : p
           ));
         }
       }
@@ -2279,7 +2309,7 @@ export function MeetingProvider({
     else webrtcClient.current?.resumeMic();
     webrtcClient.current?.sendMuteState(newState);
     setIsMuted(newState);
-    setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isMuted: newState } : p));
+    setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isMuted: newState } : p));
   }, [isMuted, initialCurrentUser.id]);
 
   const cameraOperationInProgress = useRef(false);
@@ -2299,7 +2329,7 @@ export function MeetingProvider({
         localCameraTrackRef.current = null;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
+        setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
         console.log('camera_switch_completed');
       } finally {
         cameraOperationInProgress.current = false;
@@ -2321,7 +2351,7 @@ export function MeetingProvider({
         localCameraTrackRef.current = finalTrack;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+        setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
       }).catch(err => {
         console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
@@ -2344,20 +2374,20 @@ export function MeetingProvider({
         await webrtcClient.current?.disableScreenShare();
         setIsScreenSharing(false);
         setParticipants(prev => prev.map(p =>
-          p.userId === initialCurrentUser.userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
+          p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: false, screenTrack: null } : p
         ));
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
           setIsScreenSharing(true);
           setParticipants(prev => prev.map(p =>
-            p.userId === initialCurrentUser.userId ? { ...p, isScreenSharing: true, screenTrack } : p
+            p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: true, screenTrack } : p
           ));
           screenTrack.onended = async () => {
             await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
             setParticipants(prev => prev.map(p =>
-              p.userId === initialCurrentUser.userId ? { ...p, isScreenSharing: false, screenTrack: null } : p
+              p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: false, screenTrack: null } : p
             ));
           };
         }
@@ -2381,7 +2411,7 @@ export function MeetingProvider({
     const newState = !isHandRaised;
     setIsHandRaised(newState);
     webrtcClient.current?.sendHandRaise(newState);
-    setParticipants(prev => prev.map(p => p.userId === initialCurrentUser.userId ? { ...p, isHandRaised: newState } : p));
+    setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isHandRaised: newState } : p));
   }, [isHandRaised, initialCurrentUser.id]);
 
   const sendMessage = useCallback(
@@ -2541,6 +2571,7 @@ export function MeetingProvider({
   }, []);
 
   const setParticipantScreenSharePermission = useCallback((targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => {
+    setParticipantScreenSharePermissions(prev => ({ ...prev, [targetUserId]: permission }));
     webrtcClient.current?.setParticipantScreenSharePermission(targetUserId, permission);
   }, []);
 
