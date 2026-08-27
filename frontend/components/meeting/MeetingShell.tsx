@@ -253,16 +253,17 @@ export function MeetingShell() {
           <div className={cn(
             "hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
             webrtcStatus === 'connected' ? "bg-brand-green/10 text-brand-green border-brand-green/20" :
-              webrtcStatus === 'connecting' ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20" :
+              (webrtcStatus === 'connecting' || webrtcStatus === 'reconnecting') ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20" :
                 "bg-red-400/10 text-red-400 border-red-400/20"
           )}>
             <div className={cn(
               "w-1.5 h-1.5 rounded-full",
               webrtcStatus === 'connected' ? "bg-brand-green" :
-                webrtcStatus === 'connecting' ? "bg-yellow-400 animate-pulse" :
+                (webrtcStatus === 'connecting' || webrtcStatus === 'reconnecting') ? "bg-yellow-400 animate-pulse" :
                   "bg-red-400"
             )} />
             {webrtcStatus === 'connected' ? 'Connected' :
+              webrtcStatus === 'reconnecting' ? 'Reconnecting...' :
               webrtcStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
           </div>
 
@@ -278,6 +279,14 @@ export function MeetingShell() {
           </span>
         </div>
       </div>
+      )}
+
+      {/* Reconnecting Signaling Banner */}
+      {webrtcStatus === 'reconnecting' && (
+        <div className="bg-amber-500/20 border-b border-amber-500/30 text-amber-300 px-4 py-1.5 text-xs flex items-center justify-center gap-2 font-medium z-30">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+          <span>Reconnecting signaling... Audio & meeting session remain active.</span>
+        </div>
       )}
 
       {/* Main content */}

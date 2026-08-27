@@ -87,6 +87,17 @@ export class WebRTCClient {
   public roomName: string | undefined;
   public maxParticipants: number | undefined;
   public sessionStatus?: string;
+  public meetingInstanceId: string | null = null;
+  public resumeToken: string | null = null;
+  public sessionGeneration: number = 0;
+  public admissionGeneration: number = 0;
+  public sessionStateVersion: number = 0;
+  public lastPingAt: number = 0;
+  public lastPongAt: number = 0;
+  public pingRtt: number = 0;
+  public socketConnectTime: number = 0;
+  public lastCloseCode: number = 0;
+  public lastCloseReason: string = '';
   public joinSessionId: string = Math.random().toString(36).substring(2, 15);
   public joinStartTime: number = Date.now();
 
@@ -337,11 +348,23 @@ export class WebRTCClient {
     this.ws.onopen = async () => {
       try {
         this.reconnectAttempts = 0; // Reset on success
+        this.socketConnectTime = Date.now();
+
+        // If we have an existing session and resumeToken, send resume_session immediately
+        if (this.meetingInstanceId && this.resumeToken) {
+          this.ws?.send(JSON.stringify({
+            type: 'resume_session',
+            meetingInstanceId: this.meetingInstanceId,
+            resumeToken: this.resumeToken,
+            lastSessionGeneration: this.sessionGeneration
+          }));
+        }
 
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'ping' }));
+            this.lastPingAt = Date.now();
+            this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
           }
         }, 25000);
 
@@ -394,6 +417,12 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'pong':
+          this.lastPongAt = Date.now();
+          if (msg.timestamp) {
+            this.pingRtt = this.lastPongAt - msg.timestamp;
+          }
+          break;
         case 'consume_failed':
           if (this.pendingRequests.has('consumed')) {
             const queue = this.pendingRequests.get('consumed')!;
@@ -421,11 +450,23 @@ export class WebRTCClient {
           this.onActionAck?.(msg);
           break;
         case 'session_status':
+          if (typeof msg.sessionStateVersion === 'number') {
+            if (msg.sessionStateVersion <= this.sessionStateVersion) {
+              console.warn(`[WebRTC] Ignoring stale session_status version ${msg.sessionStateVersion} (current: ${this.sessionStateVersion})`);
+              return;
+            }
+            this.sessionStateVersion = msg.sessionStateVersion;
+          }
+
           this.sessionStatus = msg.status;
           if (msg.userId) this.userId = msg.userId;
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
+          if (msg.meetingInstanceId) this.meetingInstanceId = msg.meetingInstanceId;
+          if (msg.resumeToken) this.resumeToken = msg.resumeToken;
+          if (typeof msg.sessionGeneration === 'number') this.sessionGeneration = msg.sessionGeneration;
+          if (typeof msg.admissionGeneration === 'number') this.admissionGeneration = msg.admissionGeneration;
           if (msg.permissions) {
              this.onInitialPermissions?.(msg.permissions);
           }
@@ -453,49 +494,50 @@ export class WebRTCClient {
             this.onConnectionStateChange?.('waiting');
             return; // Don't republish yet
           }
-          if (this.device?.loaded) {
-            console.log(`WebSocket reconnected (recovered=${msg.recovered}). Executing Client-Side Auto-Republish because server transports were destroyed...`);
-            if (msg.recovered && this.ws && this.ws.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-            }
-            this.republishMedia().catch(console.error);
-            this.onConnectionStateChange?.('connected');
-          } else if (!this.device?.loaded && msg.status === 'active') {
-            // First time active or recovered after a full page refresh
-            if (msg.recovered) {
-              console.log("Session recovered after a page refresh. Resetting server WebRTC state...");
-              if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-              }
-            }
-            this.initializeMediasoup().then(async () => {
-              try {
-                const res = await this.request('getProducers', 'producersList');
-                if (res.producers) {
-                  for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
-                  }
-                }
+          if (msg.status === 'active') {
+            if (this.device?.loaded) {
+              // Selective reconciliation: Check if existing transports are still healthy
+              const sendHealthy = this.sendTransport && (this.sendTransport.connectionState === 'connected' || this.sendTransport.connectionState === 'connecting' || this.sendTransport.connectionState === 'new');
+              const recvHealthy = this.recvTransport && (this.recvTransport.connectionState === 'connected' || this.recvTransport.connectionState === 'connecting' || this.recvTransport.connectionState === 'new');
 
-                this.onConnectionStateChange?.('connected');
-              } catch (e) {
-                console.error("Failed to load existing producers:", e);
+              if (sendHealthy && recvHealthy) {
+                console.log("[WebRTC] Session resumed with healthy existing transports. Reconciling remote producers without duplicate republish...");
+                this.request('getProducers', 'producersList').then((res) => {
+                  if (res?.producers) {
+                    for (const p of res.producers) {
+                      if (!this.consumers.has(p.producerId)) {
+                        this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData).catch(console.error);
+                      }
+                    }
+                  }
+                }).catch(console.error);
+              } else {
+                console.log("[WebRTC] Transports interrupted during reconnect. Performing selective media recovery...");
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                  this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+                }
+                this.republishMedia().catch(console.error);
               }
-            }).catch(err => {
-              console.error("Failed to initialize mediasoup", err); 
-              this.onConnectionStateChange?.('failed');
-            });
-          } else if (msg.recovered && msg.status === 'active') {
-            // Session recovered without page refresh (e.g. WiFi -> 4G switch)
-            console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes...");
-            this.needsRepublish = false;
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+              this.onConnectionStateChange?.('connected');
+            } else {
+              // First time active or fresh device load
+              this.initializeMediasoup().then(async () => {
+                try {
+                  const res = await this.request('getProducers', 'producersList');
+                  if (res.producers) {
+                    for (const p of res.producers) {
+                      await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
+                    }
+                  }
+                  this.onConnectionStateChange?.('connected');
+                } catch (e) {
+                  console.error("Failed to load existing producers:", e);
+                }
+              }).catch(err => {
+                console.error("Failed to initialize mediasoup", err); 
+                this.onConnectionStateChange?.('failed');
+              });
             }
-            this.republishMedia().catch(console.error);
-            this.onConnectionStateChange?.('connected');
-          } else if (msg.status === 'active') {
-            this.onConnectionStateChange?.('connected');
           }
           break;
         case 'newProducer':
@@ -703,11 +745,15 @@ export class WebRTCClient {
       console.error('WebSocket Error:', err);
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event: CloseEvent) => {
       if (this.pingInterval) clearInterval(this.pingInterval);
+      if (this.statsInterval) clearInterval(this.statsInterval);
+      this.lastCloseCode = event.code;
+      this.lastCloseReason = event.reason;
+      console.log(`[WebRTC] Signaling socket closed (code=${event.code}, reason="${event.reason}", intentional=${this.isIntentionalDisconnect})`);
+
       if (!this.isIntentionalDisconnect) {
-        this.onConnectionStateChange?.('disconnected');
-        this.needsRepublish = true;
+        this.onConnectionStateChange?.('reconnecting');
         this.attemptReconnect();
       }
     };

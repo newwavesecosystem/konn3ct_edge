@@ -30,6 +30,20 @@ import {
   getRoomPermissions,
   getParticipantScreenSharePermission
 } from '../helpers/roomPermissions';
+import {
+  AdmissionRecord,
+  SessionLease,
+  generateResumeToken,
+  hashResumeToken,
+  rotateResumeToken,
+  verifyResumeToken,
+  getActiveMeetingInstanceId,
+  closeActiveMeetingInstance,
+  setMeetingAdmission,
+  getMeetingAdmission,
+  acquireSessionLease,
+  releaseSessionLease,
+} from '../helpers/sessionResumption';
 
 // --- Event Loop & GC Telemetry ---
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
@@ -279,7 +293,11 @@ interface Client {
   videoSuspendedReason?: 'network';
   isCameraOn?: boolean;
   isMuted: boolean;
-  sessionGeneration?: string;
+  meetingInstanceId?: string;
+  resumeToken?: string;
+  sessionGeneration?: number;
+  admissionGeneration?: number;
+  sessionStateVersion?: number;
   connectionId?: string;
   maxActiveCameras?: number;
   preempted?: boolean;
@@ -289,6 +307,8 @@ interface Client {
   cleanupStarted?: boolean;
   participantId: string;
   micExemption?: boolean;
+  lastPingAt?: number;
+  lastPongAt?: number;
 }
 
 export const rooms = new Map<string, Map<string, Client>>();
@@ -301,6 +321,34 @@ export const roomTranscripts = new Map<string, Array<{ name: string, text: strin
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
 
+/**
+ * Clean up all media state for a participant (transports, producers, consumers).
+ * Safe to call multiple times.
+ */
+async function cleanupParticipantMedia(client: Client, roomId: string) {
+  // Close all transports owned by this client
+  for (const tId of client.transports) {
+    try {
+      mediaController.closeTransport(tId, roomId);
+    } catch (e) {
+      logger.warn(`[cleanupParticipantMedia] Failed to close transport ${tId}`, e);
+    }
+  }
+  client.transports = [];
+
+  // Remove all producers belonging to this client from the room's producer list
+  await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
+
+  // Remove all consumer references owned by this client
+  for (const [consumerId, owner] of consumerOwners.entries()) {
+    if (owner === client) {
+      consumerOwners.delete(consumerId);
+    }
+  }
+
+  logger.info(`[cleanupParticipantMedia] Cleaned up media state for user ${client.userId} (participant ${client.participantId}) in room ${roomId}`);
+}
+
 async function processAdminCommand(data: any) {
   const { roomId, action, userId, slug } = data;
   const roomClients = rooms.get(roomId);
@@ -308,15 +356,57 @@ async function processAdminCommand(data: any) {
 
   switch (action) {
     case 'admit_user': {
+      const identityKey = getParticipantIdentityKey(userId);
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
+      let nextAdmissionGen = 1;
+      let nextStateVer = 1;
+      const plainResumeToken = generateResumeToken();
+
+      if (meetingInstanceId) {
+        const existingAdm = await getMeetingAdmission(meetingInstanceId, identityKey);
+        nextAdmissionGen = (existingAdm?.admissionGeneration || 0) + 1;
+        nextStateVer = Math.max(existingAdm?.sessionStateVersion || 0, 0) + 1;
+
+        const admissionRec: AdmissionRecord = {
+          status: 'ACTIVE',
+          admittedAt: Date.now(),
+          admittedBy: data.sourceUserId || 'host',
+          admissionGeneration: nextAdmissionGen,
+          sessionStateVersion: nextStateVer,
+          tokenHash: hashResumeToken(plainResumeToken),
+          role: existingAdm?.role || 'attendee',
+          name: existingAdm?.name || 'Guest',
+          userId
+        };
+        await setMeetingAdmission(meetingInstanceId, identityKey, admissionRec);
+      }
+
       for (const targetClient of roomClients.values()) {
         if (targetClient.userId === userId && targetClient.status === 'waiting') {
           targetClient.status = 'active';
-          targetClient.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: targetClient.userId, name: targetClient.name, role: targetClient.role }));
-          
-          let updatedAdmissions = roomAdmissions.get(roomId);
-          if (!updatedAdmissions) { updatedAdmissions = new Set(); roomAdmissions.set(roomId, updatedAdmissions); }
-          updatedAdmissions.add(targetClient.userId);
+          targetClient.admissionGeneration = nextAdmissionGen;
+          targetClient.sessionStateVersion = nextStateVer;
+          targetClient.resumeToken = plainResumeToken;
+          targetClient.meetingInstanceId = meetingInstanceId || undefined;
 
+          if (meetingInstanceId) {
+            await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, targetClient.connectionId || '', nextAdmissionGen);
+          }
+
+          targetClient.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            status: 'active', 
+            recovered: false, 
+            userId: targetClient.userId, 
+            name: targetClient.name, 
+            role: targetClient.role,
+            meetingInstanceId: meetingInstanceId || '',
+            resumeToken: plainResumeToken,
+            sessionGeneration: targetClient.sessionGeneration || 1,
+            admissionGeneration: nextAdmissionGen,
+            sessionStateVersion: nextStateVer
+          }));
+          
           if (slug) await executeSyncRoomStateToRedis(roomId, slug);
           broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
           broadcastRoomState(roomId);
@@ -326,29 +416,125 @@ async function processAdminCommand(data: any) {
       break;
     }
     case 'deny_user': {
+      const identityKey = getParticipantIdentityKey(userId);
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
+      if (meetingInstanceId) {
+        const existingAdm = await getMeetingAdmission(meetingInstanceId, identityKey);
+        const nextAdmissionGen = (existingAdm?.admissionGeneration || 0) + 1;
+        const nextStateVer = (existingAdm?.sessionStateVersion || 0) + 1;
+        await setMeetingAdmission(meetingInstanceId, identityKey, {
+          status: 'REMOVED',
+          admittedAt: Date.now(),
+          admittedBy: data.sourceUserId || 'host',
+          admissionGeneration: nextAdmissionGen,
+          sessionStateVersion: nextStateVer,
+          role: existingAdm?.role || 'attendee',
+          name: existingAdm?.name || 'Guest',
+          userId
+        });
+      }
+
       for (const targetClient of roomClients.values()) {
         if (targetClient.userId === userId && targetClient.status === 'waiting') {
-          targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'denied' }));
+          targetClient.status = 'waiting';
+          targetClient.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            recovered: false, 
+            status: 'denied',
+            meetingInstanceId: meetingInstanceId || '',
+            sessionStateVersion: 999999
+          }));
           targetClient.ws.close();
           roomClients.delete(targetClient.participantId);
+          await cleanupParticipantMedia(targetClient, roomId);
           broadcastToHosts(roomId, { type: 'waiting_room_denied', userId: targetClient.userId });
         }
       }
       break;
     }
     case 'kick_user': {
+      const identityKey = getParticipantIdentityKey(userId);
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
+      if (meetingInstanceId) {
+        const existingAdm = await getMeetingAdmission(meetingInstanceId, identityKey);
+        const nextAdmissionGen = (existingAdm?.admissionGeneration || 0) + 1;
+        const nextStateVer = (existingAdm?.sessionStateVersion || 0) + 1;
+        await setMeetingAdmission(meetingInstanceId, identityKey, {
+          status: 'REMOVED',
+          admittedAt: Date.now(),
+          admittedBy: data.sourceUserId || 'host',
+          admissionGeneration: nextAdmissionGen,
+          sessionStateVersion: nextStateVer,
+          role: existingAdm?.role || 'attendee',
+          name: existingAdm?.name || 'Guest',
+          userId
+        });
+      }
+
       for (const targetClient of roomClients.values()) {
         if (targetClient.userId === userId && targetClient.role !== 'host') {
           roomClients.delete(targetClient.participantId);
-          await removeRoomProducersByPredicate(roomId, (p: any) => p.userId === userId);
+          await cleanupParticipantMedia(targetClient, roomId);
           broadcastToRoom(roomId, { type: 'user_left', userId, participantId: targetClient.participantId });
-          targetClient.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'kicked' }));
+          targetClient.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            recovered: false, 
+            status: 'kicked',
+            meetingInstanceId: meetingInstanceId || '',
+            sessionStateVersion: 999999
+          }));
           targetClient.ws.close();
         }
       }
       break;
     }
+    case 'move_to_waiting': {
+      const identityKey = getParticipantIdentityKey(userId);
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
+      let nextAdmissionGen = 1;
+      let nextStateVer = 1;
+      if (meetingInstanceId) {
+        const existingAdm = await getMeetingAdmission(meetingInstanceId, identityKey);
+        nextAdmissionGen = (existingAdm?.admissionGeneration || 0) + 1;
+        nextStateVer = (existingAdm?.sessionStateVersion || 0) + 1;
+        await setMeetingAdmission(meetingInstanceId, identityKey, {
+          status: 'WAITING',
+          admittedAt: Date.now(),
+          admittedBy: data.sourceUserId || 'host',
+          admissionGeneration: nextAdmissionGen,
+          sessionStateVersion: nextStateVer,
+          role: existingAdm?.role || 'attendee',
+          name: existingAdm?.name || 'Guest',
+          userId
+        });
+      }
+
+      for (const targetClient of roomClients.values()) {
+        if (targetClient.userId === userId && targetClient.role !== 'host') {
+          targetClient.status = 'waiting';
+          targetClient.admissionGeneration = nextAdmissionGen;
+          targetClient.sessionStateVersion = nextStateVer;
+          targetClient.resumeToken = undefined;
+          await cleanupParticipantMedia(targetClient, roomId);
+          targetClient.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            recovered: false, 
+            status: 'waiting',
+            meetingInstanceId: meetingInstanceId || '',
+            admissionGeneration: nextAdmissionGen,
+            sessionStateVersion: nextStateVer
+          }));
+          broadcastToRoom(roomId, { type: 'user_left', userId, participantId: targetClient.participantId }, targetClient.participantId);
+          broadcastRoomState(roomId);
+        }
+      }
+      break;
+    }
     case 'end_meeting': {
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
+      if (meetingInstanceId) {
+        await closeActiveMeetingInstance(roomId, meetingInstanceId);
+      }
       rooms.delete(roomId);
       cleanupRoomData(roomId);
       redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
@@ -363,7 +549,7 @@ async function processAdminCommand(data: any) {
 
       for (const [id, c] of roomClients.entries()) {
         if (c.userId !== data.userId) { // Using data.userId instead of userId, but data has userId
-          c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended' }));
+          c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended', sessionStateVersion: 999999 }));
         }
         
         if (disconnectTimeouts.has(`${c.userId}:${roomId}`)) {
@@ -418,15 +604,19 @@ async function processAdminCommand(data: any) {
       } else if (data.target === 'all') {
         broadcastForceMute(c => c.userId !== data.sourceUserId);
       } else if (data.target === 'all_except_hosts') {
-        broadcastForceMute(c => c.role !== 'host' && c.role !== 'co-host');
+        broadcastForceMute(c => c.userId !== data.sourceUserId && c.role !== 'host');
       } else if (data.target === 'all_except_presenters') {
-        const producers = await getRoomProducers(roomId);
-        const presenters = new Set(
-          producers.filter(p => p.appData?.source === 'screen').map(p => p.userId)
-        );
-        broadcastForceMute(c => c.userId !== data.sourceUserId && !presenters.has(c.userId));
-      } else {
-        broadcastForceMute(c => c.role !== 'host');
+        broadcastForceMute(c => c.userId !== data.sourceUserId && c.role !== 'host' && c.role !== 'presenter');
+      }
+      break;
+    }
+    case 'ask_to_unmute': {
+      for (const [id, c] of roomClients.entries()) {
+        if (c.status === 'active' && c.userId === data.userId) {
+          c.micExemption = true;
+          c.ws.send(JSON.stringify({ type: 'ask_to_unmute', hostName: data.hostName || 'The host' }));
+          break;
+        }
       }
       break;
     }
@@ -445,23 +635,8 @@ async function processAdminCommand(data: any) {
         broadcastForceVideoOff(c => c.userId !== data.sourceUserId);
       } else if (data.target === 'all_except_hosts') {
         broadcastForceVideoOff(c => c.role !== 'host' && c.role !== 'co-host');
-      } else if (data.target === 'all_except_presenters') {
-        const producers = await getRoomProducers(roomId);
-        const presenters = new Set(
-          producers.filter(p => p.appData?.source === 'screen').map(p => p.userId)
-        );
-        broadcastForceVideoOff(c => c.userId !== data.sourceUserId && !presenters.has(c.userId));
       } else {
         broadcastForceVideoOff(c => c.role !== 'host');
-      }
-      break;
-    }
-    case 'ask_to_unmute': {
-      for (const [id, c] of roomClients.entries()) {
-        if (c.status === 'active' && c.userId === data.userId) {
-          c.micExemption = true;
-          c.ws.send(JSON.stringify({ type: 'ask_to_unmute', hostName: data.hostName }));
-        }
       }
       break;
     }
@@ -493,10 +668,52 @@ async function processAdminCommand(data: any) {
       break;
     }
     case 'admit_all': {
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
       for (const [id, c] of roomClients.entries()) {
         if (c.status === 'waiting') {
+          const identityKey = getParticipantIdentityKey(c.userId);
+          const plainResumeToken = generateResumeToken();
+          let nextAdmissionGen = 1;
+          let nextStateVer = 1;
+          if (meetingInstanceId) {
+            const existingAdm = await getMeetingAdmission(meetingInstanceId, identityKey);
+            nextAdmissionGen = (existingAdm?.admissionGeneration || 0) + 1;
+            nextStateVer = Math.max(existingAdm?.sessionStateVersion || 0, 0) + 1;
+
+            const admissionRec: AdmissionRecord = {
+              status: 'ACTIVE',
+              admittedAt: Date.now(),
+              admittedBy: data.sourceUserId || 'host',
+              admissionGeneration: nextAdmissionGen,
+              sessionStateVersion: nextStateVer,
+              tokenHash: hashResumeToken(plainResumeToken),
+              role: c.role || 'attendee',
+              name: c.name || 'Guest',
+              userId: c.userId
+            };
+            await setMeetingAdmission(meetingInstanceId, identityKey, admissionRec);
+            await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, c.connectionId || '', nextAdmissionGen);
+          }
+
           c.status = 'active';
-          c.ws.send(JSON.stringify({ type: 'session_status', status: 'active', recovered: false, userId: c.userId, name: c.name, role: c.role }));
+          c.admissionGeneration = nextAdmissionGen;
+          c.sessionStateVersion = nextStateVer;
+          c.resumeToken = plainResumeToken;
+          c.meetingInstanceId = meetingInstanceId || undefined;
+
+          c.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            status: 'active', 
+            recovered: false, 
+            userId: c.userId, 
+            name: c.name, 
+            role: c.role,
+            meetingInstanceId: meetingInstanceId || '',
+            resumeToken: plainResumeToken,
+            sessionGeneration: c.sessionGeneration || 1,
+            admissionGeneration: nextAdmissionGen,
+            sessionStateVersion: nextStateVer
+          }));
           broadcastToRoom(roomId, {
             type: 'user_joined',
             userId: c.userId,
@@ -1126,49 +1343,118 @@ export function initializeSignaling(server: Server) {
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
     const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
-    const hasBeenAdmitted = roomAdmissions.get(roomId)?.has(userId) === true;
+    const identityKey = getParticipantIdentityKey(userId);
+    const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
+
+    let admission = meetingInstanceId ? await getMeetingAdmission(meetingInstanceId, identityKey) : null;
     
-    // Determine initial status
-    const initialStatus = (isWaitingRoomEnabled && !bypassWaitingRoom && !hasBeenAdmitted && role !== 'host' && role !== 'bot') ? 'waiting' : 'active';
+    // Determine initial status based on durable meeting instance admission
+    let initialStatus: 'waiting' | 'active' | 'denied' = 'waiting';
+    let isRecovered = false;
+
+    if (admission?.status === 'ACTIVE') {
+      initialStatus = 'active';
+      isRecovered = true;
+    } else if (admission?.status === 'REMOVED') {
+      initialStatus = 'denied';
+    } else if (role === 'host' || role === 'bot' || bypassWaitingRoom || !isWaitingRoomEnabled) {
+      initialStatus = 'active';
+    } else {
+      initialStatus = 'waiting';
+    }
+
     const isBot = role === 'bot' || role === 'recorder' || name?.toLowerCase().includes('bot');
+    const clientConnectionId = crypto.randomUUID();
+    let clientSessionGen = 1;
+    let clientAdmissionGen = admission?.admissionGeneration || 1;
+    let clientStateVer = admission?.sessionStateVersion || 1;
+    let plainResumeToken: string | undefined;
+
+    if (initialStatus === 'active' && meetingInstanceId) {
+      plainResumeToken = generateResumeToken();
+      if (!admission || admission.status !== 'ACTIVE') {
+        admission = {
+          status: 'ACTIVE',
+          admittedAt: Date.now(),
+          admittedBy: role === 'host' ? 'host' : 'room_policy',
+          admissionGeneration: 1,
+          sessionStateVersion: 1,
+          tokenHash: hashResumeToken(plainResumeToken),
+          role,
+          name,
+          userId
+        };
+        await setMeetingAdmission(meetingInstanceId, identityKey, admission);
+      } else {
+        admission.tokenHash = hashResumeToken(plainResumeToken);
+        await setMeetingAdmission(meetingInstanceId, identityKey, admission);
+      }
+
+      const leaseRes = await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, clientConnectionId, admission.admissionGeneration);
+      if (leaseRes.success && leaseRes.session) {
+        clientSessionGen = leaseRes.session.sessionGeneration;
+        clientAdmissionGen = leaseRes.session.admissionGeneration;
+        clientStateVer = leaseRes.session.sessionStateVersion;
+      }
+    } else if (initialStatus === 'waiting' && meetingInstanceId) {
+      if (!admission) {
+        admission = {
+          status: 'WAITING',
+          admittedAt: Date.now(),
+          admittedBy: 'pending_host',
+          admissionGeneration: 1,
+          sessionStateVersion: 1,
+          role,
+          name,
+          userId
+        };
+        await setMeetingAdmission(meetingInstanceId, identityKey, admission);
+      }
+    }
+
     const client: Client = { 
       ws, userId, participantId, email, name, roomId, roomSlug, role, 
-      status: initialStatus, transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, 
+      status: initialStatus === 'denied' ? 'waiting' : initialStatus, 
+      transports: [], isMobile, maxActiveCameras: clientData.maxActiveCameras, 
       maxParticipants: clientData.maxParticipants, roomCreatedDate: clientData.roomCreatedDate, 
       isCameraOn: false, isMuted: true, isBot,
-      connectionId: crypto.randomUUID(),
-      sessionGeneration: Date.now().toString()
+      connectionId: clientConnectionId,
+      meetingInstanceId: meetingInstanceId || undefined,
+      resumeToken: plainResumeToken,
+      sessionGeneration: clientSessionGen,
+      admissionGeneration: clientAdmissionGen,
+      sessionStateVersion: clientStateVer
     };
+
+    if (initialStatus === 'denied') {
+      ws.send(JSON.stringify({ 
+        type: 'session_status', 
+        recovered: false, 
+        status: 'kicked', 
+        meetingInstanceId: meetingInstanceId || '',
+        sessionStateVersion: 999999 
+      }));
+      ws.close();
+      return;
+    }
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
-      // Register this room to this specific Pod in Redis for NGINX scaling awareness
       redis.set(`room:${roomSlug}:pod`, POD_ID).catch(e => logger.warn('Redis set error', e));
-      redis.expire(`room:${roomSlug}:pod`, 86400).catch(e => logger.warn('Redis expire error', e)); // 24h safety net
+      redis.expire(`room:${roomSlug}:pod`, 86400).catch(e => logger.warn('Redis expire error', e));
 
       // Setup audio observer for talking indicators
       mediaController.setupAudioObserver(roomId).catch(e => logger.error('Failed to setup audio observer', e));
     }
 
-    // Check if there's an existing client in the room that was already admitted
     const existingClient = rooms.get(roomId)!.get(participantId);
-    if (existingClient && existingClient.status === 'active') {
-      client.status = 'active';
-    }
-
-    if (client.status === 'active') {
-      let admissions = roomAdmissions.get(roomId);
-      if (!admissions) { admissions = new Set(); roomAdmissions.set(roomId, admissions); }
-      admissions.add(userId);
-    }
-
     rooms.get(roomId)!.set(participantId, client);
 
     const identityKeyForSession = getParticipantIdentityKey(userId);
     redis.set(
       `room:${roomId}:participantSessions:${identityKeyForSession}`, 
       JSON.stringify({
-        signalingPodId: process.env.POD_ID || 'pod-1',
+        signalingPodId: POD_ID,
         connectionId: client.connectionId,
         sessionGeneration: client.sessionGeneration,
         connectedAt: Date.now()
@@ -1176,13 +1462,11 @@ export function initializeSignaling(server: Server) {
     ).catch(e => logger.warn('Failed to set participant session', e));
     redis.expire(`room:${roomId}:participantSessions:${identityKeyForSession}`, 86400).catch(() => {});
 
-
     if (disconnectTimeouts.has(`${participantId}:${roomId}`)) {
       clearTimeout(disconnectTimeouts.get(`${participantId}:${roomId}`)!);
       disconnectTimeouts.delete(`${participantId}:${roomId}`);
       logger.info(`Participant ${participantId} (User ${userId}) reconnected to room ${roomId} during grace period`);
 
-      const identityKey = getParticipantIdentityKey(userId);
       const [roomPerms, userPerm] = await Promise.all([
         getRoomPermissions(roomId),
         getParticipantScreenSharePermission(roomId, identityKey)
@@ -1196,7 +1480,6 @@ export function initializeSignaling(server: Server) {
         localScreenSharePermission: userPerm
       };
 
-      // Clean up stale WebRTC state from the previous connection
       if (existingClient) {
         await cleanupParticipantMedia(existingClient, roomId);
       }
@@ -1209,6 +1492,11 @@ export function initializeSignaling(server: Server) {
         name: client.name,
         role: client.role,
         roomName,
+        meetingInstanceId: meetingInstanceId || '',
+        resumeToken: plainResumeToken,
+        sessionGeneration: client.sessionGeneration,
+        admissionGeneration: client.admissionGeneration,
+        sessionStateVersion: client.sessionStateVersion,
         maxParticipants: client.maxParticipants,
         permissions: permissionsPayload
       }));
@@ -1217,7 +1505,6 @@ export function initializeSignaling(server: Server) {
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
 
-      // Pre-warm the router NOW so it is ready when the client asks for routerCapabilities.
       if (client.status === 'active') {
         try {
           await mediaController.getOrCreateRouter(roomId);
@@ -1226,7 +1513,6 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      const identityKey = getParticipantIdentityKey(userId);
       const [roomPerms, userPerm] = await Promise.all([
         getRoomPermissions(roomId),
         getParticipantScreenSharePermission(roomId, identityKey)
@@ -1242,12 +1528,17 @@ export function initializeSignaling(server: Server) {
 
       ws.send(JSON.stringify({ 
         type: 'session_status', 
-        recovered: false, 
+        recovered: isRecovered, 
         status: client.status,
         userId: client.userId,
         name: client.name,
         role: client.role,
         roomName,
+        meetingInstanceId: meetingInstanceId || '',
+        resumeToken: plainResumeToken,
+        sessionGeneration: client.sessionGeneration,
+        admissionGeneration: client.admissionGeneration,
+        sessionStateVersion: client.sessionStateVersion,
         maxParticipants: client.maxParticipants,
         permissions: permissionsPayload
       }));
@@ -1345,47 +1636,9 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      logger.info(`User ${userId} disconnected from room ${roomId}. Starting 30s grace period...`);
-
-      // IMMEDAITELY clean up Mediasoup transports for this connection.
-      // If the client reconnects, they will create new WebRTC transports anyway.
-      // This prevents orphaned ports from causing "UDP connection failed" errors.
-      client.transports.forEach(tId => {
-        try {
-          mediaController.closeTransport(tId, roomId);
-        } catch (e) {
-          logger.warn(`Failed to close transport ${tId}`, e);
-        }
-      });
-      client.transports = [];
-
-      // IMMEDIATELY clean up and broadcast closure for all producers belonging to this client.
-      // This ensures other participants do not see a frozen black screen or camera frame.
-      getRoomProducers(roomId).then(async (allProducers) => {
-        const clientProducers = allProducers.filter(p => p.participantId === participantId);
-        for (const p of clientProducers) {
-          if (p.kind === 'video' && p.appData?.source === 'screen') {
-            const ssEventId = crypto.randomUUID();
-            broadcastToRoom(roomId, {
-              type: 'screen_share_stopped',
-              actionType: 'screen_share_stopped',
-              roomId,
-              userId,
-              senderParticipantId: userId,
-              producerId: p.producerId,
-              broadcastAt: new Date().toISOString()
-            }, participantId);
-          } else {
-            broadcastToRoom(roomId, {
-              type: 'producer_closed',
-              producerId: p.producerId
-            }, participantId);
-          }
-        }
-        await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
-      }).catch(err => {
-        logger.error(`[CLEANUP] Failed to immediately clean up producers for user ${userId}:`, err);
-      });
+      const SIGNALING_PRESENCE_GRACE_MS = 35000;
+      const graceExpiresAt = new Date(Date.now() + SIGNALING_PRESENCE_GRACE_MS).toISOString();
+      logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${SIGNALING_PRESENCE_GRACE_MS}, graceExpiresAt: ${graceExpiresAt}`);
 
       // Clean up consumer owners to prevent invalid ownership spam
       for (const [consumerId, owner] of consumerOwners.entries()) {
@@ -1394,25 +1647,38 @@ export function initializeSignaling(server: Server) {
         }
       }
 
-      const gracePeriodMs = 5000;
-      const graceExpiresAt = new Date(Date.now() + gracePeriodMs).toISOString();
-      logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${gracePeriodMs}, graceExpiresAt: ${graceExpiresAt}`);
-
       const timeout = setTimeout(async () => {
         logger.info(`Participant ${participantId} (User ${userId}) grace period expired. Cleaning up session.`);
         logger.info(`[CLEANUP] client_cleanup_completed for user ${userId} in room ${roomId}`);
+
+        if (client.meetingInstanceId && client.sessionGeneration) {
+          const identityKey = getParticipantIdentityKey(userId);
+          const released = await releaseSessionLease(
+            client.meetingInstanceId,
+            identityKey,
+            client.connectionId || '',
+            client.sessionGeneration
+          );
+          if (!released) {
+            logger.info(`[CLEANUP] Disconnect cleanup for ${userId} ignored: session generation ${client.sessionGeneration} superseded by newer session.`);
+            disconnectTimeouts.delete(`${participantId}:${roomId}`);
+            return;
+          }
+        }
+
         const roomClients = rooms.get(roomId);
         if (roomClients) {
           roomClients.delete(participantId);
           
-          const identityKeyForSession = getParticipantIdentityKey(userId);
-          redis.eval(
-            COMPARE_AND_DELETE_SCRIPT,
-            1,
-            `room:${roomId}:participantSessions:${identityKeyForSession}`,
-            client.connectionId || '',
-            client.sessionGeneration || ''
-          ).catch(e => logger.warn('Failed to cleanup participant session', e));
+          // Close transports on expiry
+          client.transports.forEach(tId => {
+            try {
+              mediaController.closeTransport(tId, roomId);
+            } catch (e) {
+              logger.warn(`Failed to close transport ${tId}`, e);
+            }
+          });
+          client.transports = [];
 
           // 1. Remove their producers globally
           await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
@@ -1424,7 +1690,6 @@ export function initializeSignaling(server: Server) {
           if (roomClients.size === 0) {
             rooms.delete(roomId);
             cleanupRoomData(roomId);
-            roomAdmissions.delete(roomId);
           }
 
           // 4. Sync state to redis first so the user is removed
@@ -1449,7 +1714,7 @@ export function initializeSignaling(server: Server) {
           }
         }
         disconnectTimeouts.delete(`${participantId}:${roomId}`);
-      }, gracePeriodMs);
+      }, SIGNALING_PRESENCE_GRACE_MS);
 
       disconnectTimeouts.set(`${participantId}:${roomId}`, timeout);
     });
@@ -1559,35 +1824,6 @@ export function initializeSignaling(server: Server) {
     }));
   }
 
-  /**
-   * Idempotent cleanup of all WebRTC media state for a participant.
-   * Closes transports, removes producers and consumer references.
-   * Safe to call multiple times.
-   */
-  async function cleanupParticipantMedia(client: Client, roomId: string) {
-    // Close all transports owned by this client
-    for (const tId of client.transports) {
-      try {
-        mediaController.closeTransport(tId, roomId);
-      } catch (e) {
-        logger.warn(`[cleanupParticipantMedia] Failed to close transport ${tId}`, e);
-      }
-    }
-    client.transports = [];
-
-    // Remove all producers belonging to this client from the room's producer list
-    await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
-
-    // Remove all consumer references owned by this client
-    for (const [consumerId, owner] of consumerOwners.entries()) {
-      if (owner === client) {
-        consumerOwners.delete(consumerId);
-      }
-    }
-
-    logger.info(`[cleanupParticipantMedia] Cleaned up media state for user ${client.userId} (participant ${client.participantId}) in room ${roomId}`);
-  }
-
   async function handleMessage(client: Client, data: any) {
     const { roomId, userId } = client;
 
@@ -1630,6 +1866,92 @@ export function initializeSignaling(server: Server) {
     }
 
     switch (data.type) {
+      case 'resume_session': {
+        const { meetingInstanceId, resumeToken, lastSessionGeneration } = data;
+        const identityKey = getParticipantIdentityKey(client.userId);
+        if (!meetingInstanceId || !resumeToken) {
+          client.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            status: 'denied', 
+            reason: 'INVALID_RESUME_CREDENTIALS', 
+            meetingInstanceId: meetingInstanceId || '',
+            sessionStateVersion: 999999 
+          }));
+          break;
+        }
+
+        const adm = await getMeetingAdmission(meetingInstanceId, identityKey);
+        if (!adm || adm.status !== 'ACTIVE' || !verifyResumeToken(adm, resumeToken)) {
+          logger.warn(`[WebRTC] Resume failed for user ${client.userId}: invalid token or not active (status=${adm?.status})`);
+          client.ws.send(JSON.stringify({ 
+            type: 'session_status', 
+            status: adm?.status === 'WAITING' ? 'waiting' : 'denied', 
+            recovered: false,
+            meetingInstanceId,
+            admissionGeneration: adm?.admissionGeneration || 1,
+            sessionStateVersion: (adm?.sessionStateVersion || 0) + 1
+          }));
+          break;
+        }
+
+        // Rotate resume token with bounded 60s retry overlap window
+        const newResumeToken = rotateResumeToken(adm);
+        await setMeetingAdmission(meetingInstanceId, identityKey, adm);
+
+        const leaseResult = await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, client.connectionId || '', adm.admissionGeneration);
+        if (!leaseResult.success) {
+          logger.warn(`[WebRTC] Failed to acquire session lease for resume: ${leaseResult.reason}`);
+          break;
+        }
+
+        client.status = 'active';
+        client.meetingInstanceId = meetingInstanceId;
+        client.sessionGeneration = leaseResult.session!.sessionGeneration;
+        client.admissionGeneration = leaseResult.session!.admissionGeneration;
+        client.sessionStateVersion = leaseResult.session!.sessionStateVersion;
+        client.resumeToken = newResumeToken;
+
+        const [roomPerms, userPerm] = await Promise.all([
+          getRoomPermissions(roomId),
+          getParticipantScreenSharePermission(roomId, identityKey)
+        ]);
+
+        client.ws.send(JSON.stringify({
+          type: 'session_status',
+          recovered: true,
+          status: 'active',
+          userId: client.userId,
+          name: client.name,
+          role: client.role,
+          roomName: client.roomSlug,
+          meetingInstanceId,
+          resumeToken: newResumeToken,
+          sessionGeneration: client.sessionGeneration,
+          admissionGeneration: client.admissionGeneration,
+          sessionStateVersion: client.sessionStateVersion,
+          permissions: {
+            screenSharePolicyMode: roomPerms.screenSharePolicyMode,
+            participantScreenSharingEnabled: roomPerms.participantScreenSharingEnabled,
+            coHostScreenSharingEnabled: roomPerms.coHostScreenSharingEnabled,
+            screenSharePolicyVersion: roomPerms.screenSharePolicyVersion,
+            localScreenSharePermission: userPerm
+          }
+        }));
+        break;
+      }
+
+      case 'move_to_waiting':
+        if (client.role === 'host' || client.role === 'co-host') {
+          redis.publish('signaling:room:broadcast', JSON.stringify({
+            roomId,
+            command: true,
+            action: 'move_to_waiting',
+            userId: data.userId,
+            slug: client.roomSlug
+          }));
+        }
+        break;
+
       case 'admit_user':
         if (client.role === 'host' || client.role === 'co-host') {
           redis.publish('signaling:room:broadcast', JSON.stringify({
@@ -2884,6 +3206,11 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'createWebRtcTransport': {
+        if (client.status !== 'active') {
+          logger.warn(`[MEDIA_AUTH] User ${userId} attempted createWebRtcTransport while status=${client.status}`);
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: participant is not active.', requestId: data.requestId }));
+          break;
+        }
         const transportParams = await mediaController.createWebRtcTransport(roomId);
         client.transports.push(transportParams.id);
 
@@ -2918,6 +3245,11 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'connectWebRtcTransport': {
+        if (client.status !== 'active') {
+          logger.warn(`[MEDIA_AUTH] User ${userId} attempted connectWebRtcTransport while status=${client.status}`);
+          client.ws.send(JSON.stringify({ type: 'transportConnectError', transportId: data.transportId, error: 'Unauthorized: participant is not active.', requestId: data.requestId }));
+          break;
+        }
         try {
           if (!client.transports.includes(data.transportId)) {
             client.transports.push(data.transportId);
@@ -2932,6 +3264,17 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'produce': {
+        if (client.status !== 'active') {
+          logger.warn(`[MEDIA_AUTH] User ${userId} attempted produce while status=${client.status}`);
+          client.ws.send(JSON.stringify({
+            type: 'produce_failed',
+            errorCode: 'PARTICIPANT_NOT_ACTIVE',
+            clientEventId: data.clientEventId,
+            serverEventId: crypto.randomUUID(),
+            message: 'Unauthorized: participant is not active.'
+          }));
+          return;
+        }
         if (!client.transports || !client.transports.includes(data.transportId)) {
           const errPayload = {
             event: "sfu_produce_failed",
@@ -3119,6 +3462,11 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'consume': {
+        if (client.status !== 'active') {
+          logger.warn(`[MEDIA_AUTH] User ${userId} attempted consume while status=${client.status}`);
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: participant is not active.', requestId: data.requestId }));
+          break;
+        }
         const now = Date.now();
         if (!consumeBursts.has(roomId)) consumeBursts.set(roomId, []);
         consumeBursts.get(roomId)!.push(now);

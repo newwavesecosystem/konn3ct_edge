@@ -1502,7 +1502,9 @@ export function MeetingProvider({
             if (['failed', 'kicked', 'denied'].includes(state)) {
               client?.disconnect();
             }
-            if (state === 'connected') {
+            if (state === 'reconnecting') {
+              console.log("[MeetingContext] Signaling reconnecting... preserving active meeting UI and media.");
+            } else if (state === 'connected') {
               // Update local user's name and role based on server truth, preserving existing name if server userName is not ready
               setParticipants(prev => prev.map(p => 
                 p.id === (clientParticipantId || initialCurrentUser.id) 
@@ -1521,6 +1523,8 @@ export function MeetingProvider({
                 }));
               }
             } else if (state === 'waiting') {
+              setIsMuted(true);
+              setIsCameraOn(false);
               if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
                 setMeetingInfo(prev => ({ 
                   ...prev, 
