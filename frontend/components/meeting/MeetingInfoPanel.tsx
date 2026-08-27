@@ -5,7 +5,17 @@ import { useMeeting } from "@/lib/meeting-context";
 import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift } from "lucide-react";
 
 export function MeetingInfoPanel() {
-  const { meetingInfo, participants, meetingDuration, totalDonations, currentUser, roomFeatureFlags, roomSettings } = useMeeting();
+  const { 
+    meetingInfo, 
+    participants, 
+    meetingDuration, 
+    totalDonations, 
+    currentUser, 
+    roomFeatureFlags, 
+    roomSettings,
+    isRecording,
+    recordingStatus
+  } = useMeeting();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -91,7 +101,7 @@ export function MeetingInfoPanel() {
           <InfoStat
             icon={<Radio className="w-4 h-4" />}
             label="Recording"
-            value={meetingInfo.isRecording ? "Active" : "Off"}
+            value={isRecording || recordingStatus === 'recording' ? "ON" : (recordingStatus === 'starting' ? "Starting..." : (recordingStatus === 'processing' ? "Processing..." : "OFF"))}
           />
         </div>
 

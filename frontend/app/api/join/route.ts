@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
           captionsEnabled?: boolean;
           donationsEnabled?: boolean;
           virtualBackgroundEnabled?: boolean;
+          isWaitingRoomEnabled?: boolean;
           logoutUrl?: string | null;
         };
 
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
           captionsEnabled: room.captionsEnabled ?? true,
           donationsEnabled: room.donationsEnabled ?? true,
           virtualBackgroundEnabled: room.virtualBackgroundEnabled ?? true,
+          isWaitingRoomEnabled: room.isWaitingRoomEnabled ?? true,
           logoutUrl: room.logoutUrl ?? null,
         };
 

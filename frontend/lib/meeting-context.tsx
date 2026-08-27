@@ -483,6 +483,7 @@ export function MeetingProvider({
     ...mockMeetingInfo,
     roomName: formattedTitle,
     roomSlug,
+    isWaitingRoomEnabled: storedJoinInfo?.isWaitingRoomEnabled !== undefined ? storedJoinInfo.isWaitingRoomEnabled : true,
   });
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [activePanel, setActivePanel] = useState<SidePanel>(null);
@@ -1528,21 +1529,23 @@ export function MeetingProvider({
                     } 
                   : p
               ));
-              if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
+              if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants || webrtcClient.current?.isWaitingRoomEnabled !== undefined) {
                 setMeetingInfo(prev => ({ 
                   ...prev, 
                   ...(webrtcClient.current?.roomName && { roomName: webrtcClient.current.roomName }),
                   ...(webrtcClient.current?.maxParticipants && { maxParticipants: webrtcClient.current.maxParticipants }),
+                  ...(webrtcClient.current?.isWaitingRoomEnabled !== undefined && { isWaitingRoomEnabled: webrtcClient.current.isWaitingRoomEnabled }),
                 }));
               }
             } else if (state === 'waiting') {
               setIsMuted(true);
               setIsCameraOn(false);
-              if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants) {
+              if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants || webrtcClient.current?.isWaitingRoomEnabled !== undefined) {
                 setMeetingInfo(prev => ({ 
                   ...prev, 
                   ...(webrtcClient.current?.roomName && { roomName: webrtcClient.current.roomName }),
                   ...(webrtcClient.current?.maxParticipants && { maxParticipants: webrtcClient.current.maxParticipants }),
+                  ...(webrtcClient.current?.isWaitingRoomEnabled !== undefined && { isWaitingRoomEnabled: webrtcClient.current.isWaitingRoomEnabled }),
                 }));
               }
             } else if (state === 'kicked') {
@@ -1744,6 +1747,18 @@ export function MeetingProvider({
           if (link) {
             toast.success("eCinema broadcast has started!");
           }
+        };
+
+        client.onRecordingStarted = () => {
+          setIsRecording(true);
+          setRecordingStatus('recording');
+          toast.info("Recording has started.", { id: 'recording_status' });
+        };
+
+        client.onRecordingStopped = () => {
+          setIsRecording(false);
+          setRecordingStatus('processing');
+          toast.info("Recording has stopped and is being processed.", { id: 'recording_status' });
         };
 
         client.onParticipantsList = (backendParticipants) => {

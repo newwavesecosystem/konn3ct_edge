@@ -101,6 +101,7 @@ export class WebRTCClient {
   public userRole: string | undefined;
   public roomName: string | undefined;
   public maxParticipants: number | undefined;
+  public isWaitingRoomEnabled?: boolean;
   public sessionStatus?: string;
   public meetingInstanceId: string | null = null;
   public resumeToken: string | null = null;
@@ -486,6 +487,7 @@ export class WebRTCClient {
              this.onInitialPermissions?.(msg.permissions);
           }
           if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
+          if (typeof msg.isWaitingRoomEnabled === 'boolean') this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
           
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
