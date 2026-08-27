@@ -266,6 +266,8 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
         processAdminCommand(data);
       } else if (data.isHostOnly) {
         internalBroadcastToHosts(data.roomId, data.message);
+      } else if (data.targetUserId) {
+        internalSendPrivateMessage(data.roomId, data.targetUserId, data.message);
       } else {
         internalBroadcastToRoom(data.roomId, data.message, data.excludeParticipantId);
       }
@@ -938,6 +940,52 @@ export function internalBroadcastToHosts(roomId: string, message: any) {
   processChunk();
 }
 
+export function findClientInRoom(roomId: string, targetIdentifier: string): Client | undefined {
+  const roomClients = rooms.get(roomId);
+  if (!roomClients) return undefined;
+
+  // 1. Direct map key lookup (fast path)
+  const byKey = roomClients.get(targetIdentifier);
+  if (byKey) return byKey;
+
+  // 2. Search by participantId, userId, or identityKey
+  const targetIdentityKey = getParticipantIdentityKey(targetIdentifier);
+  for (const client of roomClients.values()) {
+    if (
+      client.participantId === targetIdentifier ||
+      client.userId === targetIdentifier ||
+      getParticipantIdentityKey(client.userId) === targetIdentityKey
+    ) {
+      return client;
+    }
+  }
+
+  return undefined;
+}
+
+export function internalSendPrivateMessage(roomId: string, targetIdentifier: string, message: any): boolean {
+  const targetClient = findClientInRoom(roomId, targetIdentifier);
+  if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
+    targetClient.ws.send(JSON.stringify(message));
+    logger.info(`[CHAT] Delivered private chat message to target ${targetIdentifier} (userId: ${targetClient.userId}, participantId: ${targetClient.participantId}) in room ${roomId}`);
+    return true;
+  }
+  return false;
+}
+
+export function sendPrivateChatMessage(roomId: string, targetIdentifier: string, message: any) {
+  // 1. Deliver locally if target is connected to this pod
+  internalSendPrivateMessage(roomId, targetIdentifier, message);
+
+  // 2. Publish to Redis so all other pods in cluster also attempt delivery
+  redis.publish('signaling:room:broadcast', JSON.stringify({
+    roomId,
+    targetUserId: targetIdentifier,
+    message
+  })).catch(e => logger.error('Failed to publish private chat message to Redis', e));
+}
+
+
 export async function sendRoomHistoryAndState(client: Client) {
   const { ws, roomId, roomCreatedDate, participantId, userId } = client;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -949,9 +997,13 @@ export async function sendRoomHistoryAndState(client: Client) {
     const history = await getOrLoadRoomHistory(roomId, roomCreatedDate, participantId, userId);
     
     if (ws.readyState === WebSocket.OPEN && history) {
-      // Filter chat history for private messages intended for this user
+      // Filter chat history for private messages intended for or sent by this user
       const filteredChatHistory = history.chatHistory.filter((msg: any) => {
-        return !msg.isPrivate || msg.targetUserId === participantId || msg.userId === userId;
+        return !msg.isPrivate || 
+          msg.targetUserId === participantId || 
+          msg.targetUserId === userId || 
+          msg.userId === userId ||
+          msg.senderParticipantId === participantId;
       });
       
       ws.send(JSON.stringify({ type: 'chat_history', messages: filteredChatHistory }));
@@ -2620,6 +2672,7 @@ export function initializeSignaling(server: Server) {
             timestamp: createdAt.toISOString(),
             broadcastAt: createdAt.toISOString(),
             isPrivate: !!data.targetUserId,
+            targetUserId: data.targetUserId || null,
             fileUrl: data.fileUrl || null,
             id: serverEventId
           };
@@ -2629,13 +2682,7 @@ export function initializeSignaling(server: Server) {
           }
 
           if (data.targetUserId) {
-            const roomClients = rooms.get(roomId);
-            if (roomClients) {
-              const targetClient = roomClients.get(data.targetUserId);
-              if (targetClient && targetClient.ws.readyState === WebSocket.OPEN) {
-                targetClient.ws.send(JSON.stringify(msgPayload));
-              }
-            }
+            sendPrivateChatMessage(roomId, data.targetUserId, msgPayload);
           } else {
             broadcastToRoom(roomId, msgPayload, client.participantId);
           }

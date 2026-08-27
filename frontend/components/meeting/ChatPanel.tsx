@@ -7,6 +7,7 @@ import { Send, Crown, Shield, User, Paperclip, Smile, Lock, MessageSquare, Copy 
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { REACTION_EMOJIS } from "@/lib/mock/meeting";
+import { ChatRecipientSelector } from "./ChatRecipientSelector";
 
 const CHAT_EMOJIS = [...REACTION_EMOJIS, "😭", "😍", "😅", "🙏", "👀", "🚀", "💡", "✨", "🎈", "🎵", "☕"];
 
@@ -234,8 +235,8 @@ export function ChatPanel() {
                     {isMe ? "You" : msg.senderName}
                   </span>
                   {msg.isPrivate && (
-                    <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">
-                      <Lock className="w-2.5 h-2.5" /> Private
+                    <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
+                      <Lock className="w-2.5 h-2.5" /> {isMe && msg.targetUserId ? `Private to ${participants.find(p => p.id === msg.targetUserId || p.userId === msg.targetUserId)?.name || "Direct"}` : "Private"}
                     </span>
                   )}
                   <span className="text-[10px]" style={{ color: "var(--mt-text-ghost)" }}>
@@ -300,17 +301,13 @@ export function ChatPanel() {
       {/* Input */}
       <div className="p-3" style={{ borderTop: "1px solid var(--mt-border)" }}>
         <div className="mb-2 flex items-center justify-between">
-          <select
-            value={targetUserId}
-            onChange={(e) => setTargetUserId(e.target.value)}
-            className="text-[10px] outline-none px-2 py-1 rounded-lg appearance-none"
-            style={{ color: "var(--mt-text-muted)", backgroundColor: "var(--mt-bg-control)", border: "1px solid var(--mt-border)" }}
-          >
-            <option value="everyone" style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: Everyone</option>
-            {participants.filter(p => p.id !== currentUser.id).map(p => (
-              <option key={p.id} value={p.id} style={{ backgroundColor: "var(--mt-dialog-bg)", color: "var(--mt-text-muted)" }}>To: {p.name}</option>
-            ))}
-          </select>
+          <ChatRecipientSelector
+            targetUserId={targetUserId}
+            onSelectTarget={setTargetUserId}
+            participants={participants}
+            currentUserId={currentUser.id}
+            disabled={isChatLocked}
+          />
         </div>
         <div
           className="flex items-center gap-1.5 rounded-xl px-2 py-1"

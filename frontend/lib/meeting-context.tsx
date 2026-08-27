@@ -1051,6 +1051,7 @@ export function MeetingProvider({
             content: m.content,
             timestamp: m.createdAt,
             isPrivate: m.isPrivate,
+            targetUserId: m.targetUserId,
             fileUrl: m.fileUrl
           })));
         };
@@ -1200,6 +1201,7 @@ export function MeetingProvider({
                 content: msg.message,
                 timestamp: msg.timestamp,
                 isPrivate: msg.isPrivate,
+                targetUserId: msg.targetUserId,
                 fileUrl: msg.fileUrl,
               },
             ];
