@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: registry.digitalocean.com/konn3ct-registry/conn3ct-frontend:latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-frontend
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

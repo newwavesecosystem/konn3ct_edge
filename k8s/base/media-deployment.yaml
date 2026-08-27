@@ -5,7 +5,7 @@ metadata:
   labels:
     app: conn3ct-media
 spec:
-  replicas: 3
+  replicas: 1
   strategy:
     type: Recreate
   selector:
@@ -18,26 +18,12 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - conn3ct-recorder
-                  - conn3ct-media
-              topologyKey: kubernetes.io/hostname
       containers:
         - name: backend
-          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend:staging-latest
+          image: registry.digitalocean.com/konn3ct-registry/conn3ct-backend
           command: ["npm", "run", "start:media"]
           imagePullPolicy: Always
           ports:
-            # UDP ports do not strictly need declaring if hostNetwork=true, but good for docs
             - containerPort: 10000
               name: webrtc-udp
               protocol: UDP
@@ -192,8 +178,8 @@ spec:
               value: "--max-old-space-size=5120"
           resources:
             requests:
-              cpu: "1500m"
-              memory: "2Gi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
-              cpu: "3500m"
-              memory: "6Gi"
+              cpu: "2000m"
+              memory: "2.5Gi"
