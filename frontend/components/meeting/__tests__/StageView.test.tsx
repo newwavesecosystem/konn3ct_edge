@@ -19,6 +19,7 @@ vi.mock('lucide-react', () => ({
   Users: () => <div data-testid="users-icon" />,
   ZoomIn: () => <div data-testid="zoom-in-icon" />,
   ZoomOut: () => <div data-testid="zoom-out-icon" />,
+  ArrowLeftRight: () => <div data-testid="swap-icon" />,
 }));
 
 const mockUseVideoHealth = vi.fn().mockReturnValue({ health: 'good', remountKey: 0 });
@@ -182,5 +183,41 @@ describe('StageView - Mobile Rotation & Multi Screen Share', () => {
     fireEvent.click(resetBtn);
     expect(screen.getByText('100%')).toBeInTheDocument();
     expect(zoomOutBtn).toBeDisabled();
+  });
+
+  it('swaps between large screenshare stage and large audience grid when clicking swap button', () => {
+    mocks.meetingState = {
+      participants: [
+        { id: '1', name: 'Alice', isScreenSharing: true, screenTrack: {} as any },
+        { id: '2', name: 'Bob', isScreenSharing: false }
+      ],
+      layoutMode: 'grid',
+      isScreenSharing: false,
+      toggleScreenShare: vi.fn(),
+      currentUser: { id: '3', role: 'attendee' },
+    };
+
+    const { container } = render(<StageView />);
+
+    const swapBtn = screen.getByTitle('Focus audience (show participants large on the left)');
+    expect(swapBtn).toBeInTheDocument();
+
+    // Default: screenshare is primary flex-1; participant strip is in sidebar
+    expect(container.querySelector('.lg\\:w-44')).toBeInTheDocument();
+    expect(container.querySelector('.lg\\:w-72')).not.toBeInTheDocument();
+
+    // Click swap button -> participants become primary large stage
+    fireEvent.click(swapBtn);
+
+    // Now screenshare becomes compact sidebar on the right
+    expect(screen.getByTitle('Focus screenshare (show screenshare large on the left)')).toBeInTheDocument();
+    expect(container.querySelector('.lg\\:w-72')).toBeInTheDocument();
+    expect(container.querySelector('.lg\\:w-44')).not.toBeInTheDocument();
+
+    // Click swap button again -> restores screenshare to primary large stage
+    fireEvent.click(screen.getByTitle('Focus screenshare (show screenshare large on the left)'));
+    expect(screen.getByTitle('Focus audience (show participants large on the left)')).toBeInTheDocument();
+    expect(container.querySelector('.lg\\:w-44')).toBeInTheDocument();
+    expect(container.querySelector('.lg\\:w-72')).not.toBeInTheDocument();
   });
 });

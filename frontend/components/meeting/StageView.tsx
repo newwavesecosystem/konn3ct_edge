@@ -20,7 +20,8 @@ import {
   AlertTriangle,
   RotateCw,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  ArrowLeftRight
 } from "lucide-react";
 import { useVideoHealth } from "@/hooks/useVideoHealth";
 
@@ -783,6 +784,7 @@ function ScreenShareLayout({
   const { webrtcClientRef } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [rotation, setRotation] = React.useState<0 | 90 | 180 | 270>(0);
+  const [primaryView, setPrimaryView] = React.useState<"screen" | "participants">("screen");
   const contentContainerRef = React.useRef<HTMLDivElement | null>(null);
   const [containerSize, setContainerSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
@@ -815,6 +817,7 @@ function ScreenShareLayout({
     setRotation(0);
     setZoomIndex(0);
     setPan({ x: 0, y: 0 });
+    setPrimaryView("screen");
   }, [activeScreenSharerId]);
 
   React.useEffect(() => {
@@ -1004,10 +1007,22 @@ function ScreenShareLayout({
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
+      {/* When participants are primary: Large Participant Grid on the left */}
+      {primaryView === "participants" && !isFullscreen && (
+        <div className="flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden flex flex-col">
+          <GridLayout participants={participants} />
+        </div>
+      )}
+
+      {/* Screenshare stage box */}
       <div
         className={cn(
-          "relative rounded-2xl overflow-hidden transition-all duration-300",
-          isFullscreen ? "fixed inset-2 z-50" : "flex-1 min-h-0 min-w-0",
+          "relative rounded-2xl overflow-hidden transition-all duration-300 flex flex-col",
+          isFullscreen
+            ? "fixed inset-2 z-50"
+            : primaryView === "screen"
+            ? "flex-1 min-h-0 min-w-0"
+            : "w-full lg:w-72 xl:w-84 h-64 lg:h-full shrink-0"
         )}
         style={{
           backgroundColor: "var(--mt-bg-screen)",
@@ -1042,15 +1057,15 @@ function ScreenShareLayout({
               borderBottom: "1px solid var(--mt-border)",
             }}
           >
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2 sm:px-2.5 py-1 rounded-lg">
-                <MonitorUp className="w-3.5 h-3.5" />
-                <span className="text-[11px] sm:text-xs font-semibold">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2 sm:px-2.5 py-1 rounded-lg min-w-0">
+                <MonitorUp className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] sm:text-xs font-semibold truncate">
                   {isMe ? "You are sharing" : `${sharerName} is sharing`}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1 sm:gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {/* Zoom controls: Out, Reset/Indicator, In (Cross-platform) */}
               <div className="flex items-center bg-black/20 hover:bg-black/40 rounded-lg p-0.5 border border-white/5 transition-colors">
                 <button
@@ -1095,6 +1110,23 @@ function ScreenShareLayout({
                 </button>
               </div>
 
+              {/* Swap Sides button: Toggle Screenshare Main Stage vs Participant Grid Main Stage */}
+              <button
+                onClick={() => setPrimaryView((prev) => (prev === "screen" ? "participants" : "screen"))}
+                className={cn(
+                  "p-1.5 rounded-lg transition-colors hover:bg-white/10 flex items-center justify-center",
+                  primaryView === "participants" ? "text-brand-green bg-brand-green/10" : "text-green/60"
+                )}
+                title={
+                  primaryView === "screen"
+                    ? "Focus audience (show participants large on the left)"
+                    : "Focus screenshare (show screenshare large on the left)"
+                }
+                aria-label="Swap screenshare and participant view sizes"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+              </button>
+
               {/* Mobile-only in-box Rotate button */}
               <button
                 onClick={() => setRotation((prev) => ((prev + 90) % 360) as 0 | 90 | 180 | 270)}
@@ -1120,7 +1152,7 @@ function ScreenShareLayout({
               {isMe && (
                 <button
                   onClick={onStopSharing}
-                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95"
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95 shrink-0"
                 >
                   <MonitorOff className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Stop Sharing</span>
@@ -1278,20 +1310,22 @@ function ScreenShareLayout({
         </div>
       </div>
 
-      {/* Participant filmstrip */}
-      <div className={cn(
-        "shrink-0 overflow-auto no-scrollbar",
-        isFullscreen && "hidden",
-        "flex lg:flex-col gap-1.5 sm:gap-2",
-        "w-full lg:w-44 xl:w-52",
-        "py-1 lg:py-0 h-auto lg:h-full"
-      )}>
-        {participants.map((p) => (
-          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
-            <ParticipantTile participant={p} fixedAspect />
-          </div>
-        ))}
-      </div>
+      {/* When screen is primary: render the small Participant filmstrip on the right */}
+      {primaryView === "screen" && (
+        <div className={cn(
+          "shrink-0 overflow-auto no-scrollbar",
+          isFullscreen && "hidden",
+          "flex lg:flex-col gap-1.5 sm:gap-2",
+          "w-full lg:w-44 xl:w-52",
+          "py-1 lg:py-0 h-auto lg:h-full"
+        )}>
+          {participants.map((p) => (
+            <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+              <ParticipantTile participant={p} fixedAspect />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
