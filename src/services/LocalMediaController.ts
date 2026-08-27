@@ -45,9 +45,11 @@ export class LocalMediaController extends EventEmitter {
     roomId?: string,
     userId?: string,
     userName?: string,
-    clientData?: { isBot?: boolean; role?: string }
+    clientData?: { isBot?: boolean; role?: string },
+    appData?: any,
+    paused?: boolean
   ) {
-    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData);
+    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData, appData, paused);
     return { id: producerId };
   }
 

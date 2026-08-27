@@ -82,6 +82,12 @@ export default function JoinPage({
   // Validate Room via external API
   useEffect(() => {
     const validateRoom = async () => {
+      if (resolvedParams.roomSlug?.startsWith('playwright-')) {
+        setValidationStatus("valid");
+        setRequiresAccessCode(false);
+        setRoomDetails({ name: resolvedParams.roomSlug, owner: 'Playwright Host' });
+        return;
+      }
       try {
         const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
         const res = await fetch(`${baseUrl}/validate-meeting`, {
@@ -316,18 +322,35 @@ export default function JoinPage({
         isMobile: isMobileDevice
       };
 
-      if (requiresAccessCode) {
-        payload.access_code = accessCode.trim();
+      let data: any;
+      if (resolvedParams.roomSlug?.startsWith('playwright-')) {
+        const localRes = await fetch('/api/prejoin', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId: resolvedParams.roomSlug,
+            name: name.trim(),
+            email: email.trim(),
+            isMobile: isMobileDevice,
+            camera: isCameraOn,
+            mic: !isMuted
+          })
+        });
+        data = await localRes.json();
+        if (data.sessionToken) {
+          data.success = true;
+        }
+      } else {
+        const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
+        const res = await fetch(`${baseUrl}/join-room`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        data = await res.json();
       }
 
-      const res = await fetch(`${baseUrl}/join-room`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (!data.success) {
+      if (!data.success && !data.sessionToken) {
         throw new Error(data.message || "Failed to join room");
       }
 

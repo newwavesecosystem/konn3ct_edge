@@ -819,6 +819,10 @@ export function MeetingProvider({
         }
 
         client = new WebRTCClient(roomSlug, data.token, clientParticipantId, isRecorderMode);
+        webrtcClient.current = client;
+        if (typeof window !== 'undefined') {
+          (window as any).__KONN3CT_WEBRTC__ = client;
+        }
         client.isHDVideo = isHDVideoEnabled;
         client.isWidescreenEnabled = isWidescreenEnabled;
         client.isLowBandwidth = isLowBandwidthEnabled;
@@ -1537,8 +1541,14 @@ export function MeetingProvider({
         client.onForceMute = (reason) => {
           if (currentUser.role === 'host' || currentUser.role === 'co-host') return;
           setIsMuted(true);
+          webrtcClient.current?.setDesiredMicMuted(true, 'HOST_MUTE');
           webrtcClient.current?.pauseMic();
           webrtcClient.current?.sendMuteState(true);
+          setParticipants((prev) =>
+            prev.map((p) =>
+              p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isMuted: true } : p
+            )
+          );
           if (reason === 'host_action') {
             toast.error("The host has muted your microphone.");
           } else {
@@ -1752,6 +1762,7 @@ export function MeetingProvider({
                   role: (p.role as any) || existing.role, 
                   isMobile: p.isMobile ?? existing.isMobile, 
                   isCameraOn: p.isCameraOn ?? existing.isCameraOn, 
+                  isMuted: (p as any).isMuted !== undefined ? (p as any).isMuted : existing.isMuted,
                   audioOnlyMode: p.audioOnlyMode ?? existing.audioOnlyMode, 
                   videoSuspendedReason: p.videoSuspendedReason ?? existing.videoSuspendedReason,
                   audioConnectionStatus: (p as any).audioConnectionStatus ?? existing.audioConnectionStatus 
@@ -1808,6 +1819,7 @@ export function MeetingProvider({
                 role: (user.role as any) || p.role, 
                 isMobile: user.isMobile ?? p.isMobile, 
                 isCameraOn: user.isCameraOn ?? p.isCameraOn, 
+                isMuted: (user as any).isMuted !== undefined ? (user as any).isMuted : p.isMuted,
                 audioOnlyMode: user.audioOnlyMode ?? p.audioOnlyMode, 
                 videoSuspendedReason: user.videoSuspendedReason ?? p.videoSuspendedReason 
               } : p);
@@ -1961,12 +1973,15 @@ export function MeetingProvider({
             } else {
               client?.emitTelemetry('participant_missing_but_media_active');
               const resolvedName = userName?.trim() ? userName.trim() : `Participant ${participantId.substring(5, 9)}`;
+              const existingRef = prev.find(p => p.id === participantId || p.userId === participantId);
+              const isMutedIntent = existingRef ? existingRef.isMuted : true; // Keep safe mute intent until authoritative presence arrives
+
               const newParticipant: Participant = {
                 id: participantId,
                 userId: participantId, // Fallback, though ideally we'd have the real userId
                 name: resolvedName,
                 role: "attendee",
-                isMuted: consumer.kind !== "audio",
+                isMuted: isMutedIntent,
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
                 isScreenSharing: consumer.kind === "video" && source === 'screen',
                 audioTrack: consumer.kind === "audio" && source !== 'screen-audio' ? (consumer.track as MediaStreamTrack) : undefined,
@@ -2040,6 +2055,7 @@ export function MeetingProvider({
 
           // Audio pipeline (synchronous within the init flow, decoupled from video)
           try {
+            client.setDesiredMicMuted(isMuted, 'INIT_MEDIA');
             audioTrack = await client.enableMic(false, isMuted);
             localAudioTrackRef.current = audioTrack;
             if (isMuted) {
@@ -2305,6 +2321,7 @@ export function MeetingProvider({
   const toggleMute = useCallback(() => {
     if (isRecorderMode) return;
     const newState = !isMuted;
+    webrtcClient.current?.setDesiredMicMuted(newState, newState ? 'USER_MUTE' : 'USER_UNMUTE');
     if (newState) webrtcClient.current?.pauseMic();
     else webrtcClient.current?.resumeMic();
     webrtcClient.current?.sendMuteState(newState);

@@ -3025,7 +3025,20 @@ export function initializeSignaling(server: Server) {
           (data as any).authVersion = authCheck.version;
         }
 
-        const producerRes = await mediaController.createProducer(data.transportId, data.kind, data.rtpParameters, roomId, userId, client.name, { isBot: client.isBot, role: client.role });
+        const isAudioMic = data.kind === 'audio' && source !== 'screen-audio';
+        const startPaused = isAudioMic ? (client.isMuted ?? data.paused ?? true) : !!data.paused;
+
+        const producerRes = await mediaController.createProducer(
+          data.transportId, 
+          data.kind, 
+          data.rtpParameters, 
+          roomId, 
+          userId, 
+          client.name, 
+          { isBot: client.isBot, role: client.role },
+          appData,
+          startPaused
+        );
         const producerId = typeof producerRes === 'string' ? producerRes : (producerRes?.id || (producerRes as any)?.producerId);
 
         if (data.kind === 'video' && source === 'screen') {
@@ -3055,6 +3068,7 @@ export function initializeSignaling(server: Server) {
           kind: data.kind,
           source,
           producerId,
+          paused: startPaused,
           clientEventId: data.clientEventId || undefined
         }));
 
@@ -3066,15 +3080,25 @@ export function initializeSignaling(server: Server) {
           }
         }
 
-        // Track for late joiners — store appData so late joiners know source type
-        const newProd = { producerId, userId, participantId: client.participantId, name: client.name, role: client.role, kind: data.kind, appData };
+        // Track for late joiners — store appData and paused state so late joiners know source type and mute state
+        const newProd = { producerId, userId, participantId: client.participantId, name: client.name, role: client.role, kind: data.kind, appData, paused: startPaused };
         await redis.hset(`room:${roomId}:producers`, producerId, JSON.stringify(newProd));
 
-        client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind, requestId: data.requestId }));
+        client.ws.send(JSON.stringify({ type: 'produced', id: producerId, kind: data.kind, requestId: data.requestId, paused: startPaused }));
         if (clientEventId) emitActionAck(client, clientEventId, 'produce', producerId, 'accepted');
 
-        // Broadcast to others — include appData.source so they render screen share correctly
-        broadcastToRoom(roomId, { type: 'newProducer', producerId, userId, participantId: client.participantId, name: client.name, kind: data.kind, appData }, client.participantId);
+        // Broadcast to others — include appData.source and authoritative isMuted
+        broadcastToRoom(roomId, { 
+          type: 'newProducer', 
+          producerId, 
+          userId, 
+          participantId: client.participantId, 
+          name: client.name, 
+          kind: data.kind, 
+          appData, 
+          paused: startPaused,
+          isMuted: isAudioMic ? (client.isMuted ?? true) : undefined
+        }, client.participantId);
 
         // For screen share, send a dedicated state event so peers update isScreenSharing immediately
         if (source === 'screen') {

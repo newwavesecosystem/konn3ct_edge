@@ -20,6 +20,8 @@ test.describe('Audio Stability', () => {
     // Host (PC) joins first
     await pcPage.goto('/join/playwright-health-room');
     await pcPage.locator('#join-name').pressSequentially('PC Speaker', { delay: 50 });
+    const pcEmail = pcPage.locator('#join-email');
+    if (await pcEmail.isVisible()) await pcEmail.fill('pc-speaker@konn3ct.test');
     await expect(pcPage.locator('#join-meeting-btn')).toBeEnabled({ timeout: 10000 });
     await pcPage.locator('#join-meeting-btn').click();
 
@@ -35,6 +37,8 @@ test.describe('Audio Stability', () => {
     // Attendee (Mobile) joins
     await mobilePage.goto('/join/playwright-health-room');
     await mobilePage.locator('#join-name').pressSequentially('Mobile Attendee', { delay: 50 });
+    const mobEmail = mobilePage.locator('#join-email');
+    if (await mobEmail.isVisible()) await mobEmail.fill('mobile-attendee@konn3ct.test');
     await expect(mobilePage.locator('#join-meeting-btn')).toBeEnabled({ timeout: 10000 });
     await mobilePage.locator('#join-meeting-btn').click();
 

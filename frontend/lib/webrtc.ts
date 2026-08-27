@@ -133,6 +133,25 @@ export class WebRTCClient {
   public onAudioStatusChanged?: (status: string) => void;
   private audioConnectionTimeoutId?: NodeJS.Timeout;
 
+  // Explicit User/Host Mute Intent State Machine (Single Source of Truth)
+  private desiredMicMuted: boolean = true;
+  private micIntentVersion: number = 0;
+
+  public setDesiredMicMuted(muted: boolean, reason: string = 'USER_ACTION') {
+    const prev = this.desiredMicMuted;
+    this.desiredMicMuted = muted;
+    this.micIntentVersion++;
+    console.log(`[WebRTC] [MIC_INTENT_TRANSITION] prev=${prev} -> next=${muted} | Version=${this.micIntentVersion} | Reason=${reason} | UserId=${this.userId || 'self'}`);
+  }
+
+  public getDesiredMicMuted(): boolean {
+    return this.desiredMicMuted;
+  }
+
+  public getMicIntentVersion(): number {
+    return this.micIntentVersion;
+  }
+
   private setAudioConnectionStatus(status: string) {
     if (this.audioConnectionStatus === status) return;
     this.audioConnectionStatus = status;
@@ -967,15 +986,18 @@ export class WebRTCClient {
       });
 
       this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
-        console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
+        const isAudioMic = kind === 'audio' && (appData as any)?.source !== 'screen-audio';
+        const shouldStartPaused = isAudioMic ? this.desiredMicMuted : false;
+        console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'}, paused: ${shouldStartPaused})...`);
         try {
           const { id } = await this.request('produce', 'produced', {
             transportId: this.sendTransport!.id,
             kind,
             rtpParameters,
-            appData // Forward source tag ('camera' | 'screen') to server
+            appData, // Forward source tag ('camera' | 'screen' | 'mic') to server
+            paused: shouldStartPaused
           });
-          console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
+          console.log(`[WebRTC] Producer created on server. Producer ID: ${id} (paused: ${shouldStartPaused})`);
           callback({ id });
         } catch (error: any) {
           console.error(`[WebRTC] Produce error (${kind}):`, error);
@@ -1394,11 +1416,14 @@ export class WebRTCClient {
 
     this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
       try {
+        const isAudioMic = kind === 'audio' && (appData as any)?.source !== 'screen-audio';
+        const shouldStartPaused = isAudioMic ? this.desiredMicMuted : false;
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
           kind,
           rtpParameters,
-          appData
+          appData,
+          paused: shouldStartPaused
         });
         callback({ id });
       } catch (error: any) { errback(error); }
@@ -1489,28 +1514,32 @@ export class WebRTCClient {
         const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
+        if (this.desiredMicMuted) {
+          audioTrack.enabled = false;
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+        }
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: audioTrack, 
           appData: { source: 'mic' },
-          codec: opusCodec
+          codec: opusCodec,
+          disableTrackOnPause: true,
+          zeroRtpOnPause: true
         });
         this.onAudioTrackReplaced?.();
-        if (this.audioConnectionStatus === 'muted') {
+        if (this.desiredMicMuted || this.audioConnectionStatus === 'muted') {
           this.localAudioProducer.pause();
           if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
           if (audioTrack) audioTrack.enabled = false;
         }
       } else {
-        console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
+        console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware with desiredMicMuted=" + this.desiredMicMuted);
         this.emitTelemetry('mic_track_closed_detected');
         this.emitTelemetry('mic_reacquire_started');
         try {
-          // Preserve mute state and pass it into enableMic
-          const wasMuted = this.audioConnectionStatus === 'muted';
-          await this.enableMic(true, wasMuted);
+          // Preserve explicit user mute intent during reconnect
+          await this.enableMic(true, this.desiredMicMuted);
           this.emitTelemetry('mic_reacquire_success');
-          if (wasMuted) this.pauseMic();
-
+          if (this.desiredMicMuted) this.pauseMic();
         } catch (e) {
           console.error("Failed to reacquire mic during reconnect:", e);
           this.emitTelemetry('mic_reacquire_failed');
@@ -1937,8 +1966,13 @@ export class WebRTCClient {
     }
   }
 
-  public async enableMic(isReconnect = false, startMuted = false): Promise<MediaStreamTrack> {
+  public async enableMic(isReconnect = false, startMuted?: boolean): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    if (startMuted !== undefined) {
+      this.setDesiredMicMuted(startMuted, isReconnect ? 'RECONNECT_ENABLE_MIC' : 'INITIAL_ENABLE_MIC');
+    }
+    const snapshotIntentVersion = this.micIntentVersion;
+
     // Clear any pending timeout
     if (this.audioConnectionTimeoutId) {
       clearTimeout(this.audioConnectionTimeoutId);
@@ -1984,10 +2018,15 @@ export class WebRTCClient {
       }
       
       if (!stream) throw new Error("Failed to initialize mic");
-      this.rawAudioTrack = stream.getAudioTracks()[0];
-      if (startMuted) {
-        this.rawAudioTrack.enabled = false;
+
+      // Check intent fencing after async getUserMedia
+      if (this.micIntentVersion !== snapshotIntentVersion) {
+        console.warn(`[WebRTC] [MIC_FENCING] enableMic getUserMedia completed with stale intent version (started at v${snapshotIntentVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
       }
+      let currentDesiredMuted = this.desiredMicMuted;
+
+      this.rawAudioTrack = stream.getAudioTracks()[0];
+      this.rawAudioTrack.enabled = !currentDesiredMuted;
       this.emitTelemetry('audio_track_ready');
       
       let activeTrack = this.rawAudioTrack;
@@ -1997,9 +2036,7 @@ export class WebRTCClient {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
         activeTrack = denoisedStream.getAudioTracks()[0];
-        if (startMuted) {
-          activeTrack.enabled = false;
-        }
+        activeTrack.enabled = !currentDesiredMuted;
       }
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
@@ -2010,25 +2047,38 @@ export class WebRTCClient {
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: activeTrack,
           appData: { source: 'mic' },
-          codec: opusCodec
+          codec: opusCodec,
+          disableTrackOnPause: true,
+          zeroRtpOnPause: true
         });
         this.emitTelemetry('audio_producer_created');
       } else {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       }
 
-      // Enforce producer pause immediately to prevent state overwriting
-      if (startMuted) {
+      // Final post-produce fencing re-evaluation
+      if (this.micIntentVersion !== snapshotIntentVersion) {
+        currentDesiredMuted = this.desiredMicMuted;
+      }
+
+      // Enforce producer pause and track disabled state immediately if desiredMicMuted
+      if (currentDesiredMuted) {
         this.localAudioProducer.pause();
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+        if (activeTrack) activeTrack.enabled = false;
+      } else {
+        if (this.localAudioProducer.paused) this.localAudioProducer.resume();
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+        if (activeTrack) activeTrack.enabled = true;
       }
 
       // Handle unexpected track ends (e.g. mic unplugged)
       activeTrack.onended = async () => {
-        console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
+        const onendedSnapshotVersion = this.micIntentVersion;
+        console.warn(`[WebRTC] [MIC_INTENT: TRACK_ENDED] Microphone track ended unexpectedly. Re-initializing hardware while preserving desiredMicMuted=${this.desiredMicMuted} (v${onendedSnapshotVersion})`);
         try {
-          const wasMuted = this.audioConnectionStatus === 'muted';
-          await this.enableMic(true, wasMuted);
-          if (wasMuted) {
+          await this.enableMic(true, this.desiredMicMuted);
+          if (this.desiredMicMuted) {
             this.pauseMic();
           }
         } catch (err) {
@@ -2041,7 +2091,7 @@ export class WebRTCClient {
         clearTimeout(this.audioConnectionTimeoutId);
         this.audioConnectionTimeoutId = undefined;
       }
-      this.setAudioConnectionStatus(this.localAudioProducer?.paused ? 'muted' : 'connected');
+      this.setAudioConnectionStatus(currentDesiredMuted || this.localAudioProducer?.paused ? 'muted' : 'connected');
       return activeTrack;
     } catch (err: any) {
       this.emitTelemetry('audio_connection_failed');
@@ -2064,6 +2114,7 @@ export class WebRTCClient {
     }
     
     this.isAINoiseSuppressionEnabled = enable;
+    const noiseSnapshotVersion = this.micIntentVersion;
     
     if (this.localAudioProducer) {
       // Clean up old tracks
@@ -2082,13 +2133,20 @@ export class WebRTCClient {
         } 
       });
       
+      if (this.micIntentVersion !== noiseSnapshotVersion) {
+        console.warn(`[WebRTC] [MIC_FENCING] setAINoiseSuppression completed with stale intent version (started at v${noiseSnapshotVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
+      }
+      const currentDesiredMuted = this.desiredMicMuted;
+
       this.rawAudioTrack = stream.getAudioTracks()[0];
+      this.rawAudioTrack.enabled = !currentDesiredMuted;
       let activeTrack = this.rawAudioTrack;
 
       if (enable) {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
         activeTrack = denoisedStream.getAudioTracks()[0];
+        activeTrack.enabled = !currentDesiredMuted;
       }
 
       if (!this.localAudioProducer.closed) {
@@ -2097,11 +2155,22 @@ export class WebRTCClient {
         const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: activeTrack, 
+          appData: { source: 'mic' }, 
+          codec: opusCodec, 
+          disableTrackOnPause: true, 
+          zeroRtpOnPause: true 
+        });
       }
-      if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+      if (currentDesiredMuted || this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
         if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
         activeTrack.enabled = false;
+        this.localAudioProducer.pause();
+      } else {
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+        activeTrack.enabled = true;
+        if (this.localAudioProducer.paused) this.localAudioProducer.resume();
       }
       this.onAudioTrackReplaced?.();
       return activeTrack;
@@ -2116,12 +2185,16 @@ export class WebRTCClient {
       throw new Error("Camera switch already in progress");
     }
 
+    const switchSnapshotVersion = this.micIntentVersion;
     let stream: MediaStream;
     let newTrack: MediaStreamTrack;
 
     if (kind === 'audio') {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
       newTrack = stream.getAudioTracks()[0];
+      if (this.desiredMicMuted) {
+        newTrack.enabled = false;
+      }
     } else {
       this.cameraSwitchInProgress = true;
       try {
@@ -2139,11 +2212,17 @@ export class WebRTCClient {
       const oldTrack = producer.track;
 
       if (kind === 'audio') {
+        if (this.micIntentVersion !== switchSnapshotVersion) {
+          console.warn(`[WebRTC] [MIC_FENCING] switchDevice completed with stale intent version (started at v${switchSnapshotVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
+        }
+        const currentDesiredMuted = this.desiredMicMuted;
         this.rawAudioTrack = newTrack;
+        this.rawAudioTrack.enabled = !currentDesiredMuted;
         if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
           const rawStream = new MediaStream([this.rawAudioTrack]);
           const denoisedStream = await this.purifyInstance.processStream(rawStream);
           newTrack = denoisedStream.getAudioTracks()[0];
+          newTrack.enabled = !currentDesiredMuted;
         }
       }
 
@@ -2173,9 +2252,15 @@ export class WebRTCClient {
         }
       } else {
         await producer.replaceTrack({ track: newTrack });
-        if (producer.paused || this.audioConnectionStatus === 'muted') {
+        const currentDesiredMuted = this.desiredMicMuted;
+        if (currentDesiredMuted || producer.paused || this.audioConnectionStatus === 'muted') {
           if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
           newTrack.enabled = false;
+          producer.pause();
+        } else {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+          newTrack.enabled = true;
+          if (producer.paused) producer.resume();
         }
         if (oldTrack) {
           oldTrack.stop();
@@ -2184,20 +2269,37 @@ export class WebRTCClient {
       }
     } else {
       if (kind === 'audio') {
+        if (this.micIntentVersion !== switchSnapshotVersion) {
+          console.warn(`[WebRTC] [MIC_FENCING] switchDevice create completed with stale intent version (started at v${switchSnapshotVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
+        }
+        const currentDesiredMuted = this.desiredMicMuted;
         this.rawAudioTrack = newTrack;
+        this.rawAudioTrack.enabled = !currentDesiredMuted;
         let activeTrack = newTrack;
         if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
           const rawStream = new MediaStream([this.rawAudioTrack]);
           const denoisedStream = await this.purifyInstance.processStream(rawStream);
           activeTrack = denoisedStream.getAudioTracks()[0];
+          activeTrack.enabled = !currentDesiredMuted;
         }
         const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
-        if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: activeTrack, 
+          appData: { source: 'mic' }, 
+          codec: opusCodec, 
+          disableTrackOnPause: true, 
+          zeroRtpOnPause: true 
+        });
+        if (currentDesiredMuted || this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
           if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
           activeTrack.enabled = false;
+          this.localAudioProducer.pause();
+        } else {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+          activeTrack.enabled = true;
+          if (this.localAudioProducer.paused) this.localAudioProducer.resume();
         }
         this.onAudioTrackReplaced?.();
       } else {
@@ -2240,6 +2342,7 @@ export class WebRTCClient {
   // --- Media Controls ---
   
   public pauseMic() {
+    this.setDesiredMicMuted(true, 'USER_PAUSE_MIC');
     if (this.localAudioProducer && !this.localAudioProducer.paused) {
       this.localAudioProducer.pause();
     }
@@ -2258,10 +2361,11 @@ export class WebRTCClient {
   }
 
   public async resumeMic() {
+    this.setDesiredMicMuted(false, 'USER_RESUME_MIC');
     if (!this.localAudioProducer || this.localAudioProducer.closed || this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
       console.warn("[WebRTC] Microphone track is ended or producer is closed. Re-initializing hardware.");
       try {
-        await this.enableMic(true);
+        await this.enableMic(true, false);
       } catch (e) {
         console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
       }
