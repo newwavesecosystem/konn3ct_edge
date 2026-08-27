@@ -17,6 +17,8 @@ vi.mock('lucide-react', () => ({
   ChevronLeft: () => <div data-testid="chevron-left" />,
   ChevronRight: () => <div data-testid="chevron-right" />,
   Users: () => <div data-testid="users-icon" />,
+  ZoomIn: () => <div data-testid="zoom-in-icon" />,
+  ZoomOut: () => <div data-testid="zoom-out-icon" />,
 }));
 
 const mockUseVideoHealth = vi.fn().mockReturnValue({ health: 'good', remountKey: 0 });
@@ -77,7 +79,7 @@ describe('StageView - Mobile Rotation & Multi Screen Share', () => {
     vi.clearAllMocks();
   });
 
-  it('renders a single screen share with mobile rotate button', () => {
+  it('renders a single screen share with mobile rotate button and zoom controls', () => {
     mocks.meetingState = {
       participants: [
         { id: '1', name: 'Alice', isScreenSharing: true, screenTrack: {} as any },
@@ -92,6 +94,9 @@ describe('StageView - Mobile Rotation & Multi Screen Share', () => {
     render(<StageView />);
     
     expect(screen.getByTitle('Rotate screenshare (0°)')).toBeInTheDocument();
+    expect(screen.getByTitle('Zoom In')).toBeInTheDocument();
+    expect(screen.getByTitle('Zoom Out')).toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
   });
 
   it('cycles rotation through 90, 180, 270, 0 when clicking mobile rotate button', () => {
@@ -132,5 +137,50 @@ describe('StageView - Mobile Rotation & Multi Screen Share', () => {
     fireEvent.click(rotateBtn);
     expect(rotateBtn).toHaveAttribute('title', 'Rotate screenshare (0°)');
     expect(screen.queryByText('0°')).not.toBeInTheDocument();
+  });
+
+  it('handles zoom in, zoom out, and reset to 100% across all devices', () => {
+    mocks.meetingState = {
+      participants: [
+        { id: '1', name: 'Alice', isScreenSharing: true, screenTrack: {} as any },
+      ],
+      layoutMode: 'grid',
+      isScreenSharing: false,
+      toggleScreenShare: vi.fn(),
+      currentUser: { id: '3', role: 'attendee' },
+    };
+
+    render(<StageView />);
+
+    const zoomInBtn = screen.getByTitle('Zoom In');
+    const zoomOutBtn = screen.getByTitle('Zoom Out');
+    const resetBtn = screen.getByTitle(/Click to reset zoom/i);
+
+    // Initial state: 100%
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(zoomOutBtn).toBeDisabled();
+
+    // Zoom in to 125%
+    fireEvent.click(zoomInBtn);
+    expect(screen.getByText('125%')).toBeInTheDocument();
+    expect(zoomOutBtn).not.toBeDisabled();
+
+    // Zoom in to 150%
+    fireEvent.click(zoomInBtn);
+    expect(screen.getByText('150%')).toBeInTheDocument();
+
+    // Zoom out back to 125%
+    fireEvent.click(zoomOutBtn);
+    expect(screen.getByText('125%')).toBeInTheDocument();
+
+    // Zoom in to 200%
+    fireEvent.click(zoomInBtn);
+    fireEvent.click(zoomInBtn);
+    expect(screen.getByText('200%')).toBeInTheDocument();
+
+    // Click Reset button to return to 100%
+    fireEvent.click(resetBtn);
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(zoomOutBtn).toBeDisabled();
   });
 });

@@ -18,7 +18,9 @@ import {
   Users,
   RefreshCw,
   AlertTriangle,
-  RotateCw
+  RotateCw,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import { useVideoHealth } from "@/hooks/useVideoHealth";
 
@@ -784,8 +786,35 @@ function ScreenShareLayout({
   const contentContainerRef = React.useRef<HTMLDivElement | null>(null);
   const [containerSize, setContainerSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
+  // Zoom & Pan state (Cross-platform)
+  const ZOOM_STEPS = [1, 1.25, 1.5, 2, 2.5, 3];
+  const [zoomIndex, setZoomIndex] = React.useState(0);
+  const zoom = ZOOM_STEPS[zoomIndex];
+  const [pan, setPan] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = React.useState(false);
+  const dragStartRef = React.useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+
+  const handleZoomIn = React.useCallback(() => {
+    setZoomIndex((prev) => Math.min(prev + 1, ZOOM_STEPS.length - 1));
+  }, [ZOOM_STEPS.length]);
+
+  const handleZoomOut = React.useCallback(() => {
+    setZoomIndex((prev) => {
+      const next = Math.max(prev - 1, 0);
+      if (next === 0) setPan({ x: 0, y: 0 });
+      return next;
+    });
+  }, []);
+
+  const handleResetZoom = React.useCallback(() => {
+    setZoomIndex(0);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
   React.useEffect(() => {
     setRotation(0);
+    setZoomIndex(0);
+    setPan({ x: 0, y: 0 });
   }, [activeScreenSharerId]);
 
   React.useEffect(() => {
@@ -798,6 +827,40 @@ function ScreenShareLayout({
     const obs = new ResizeObserver(updateSize);
     obs.observe(el);
     return () => obs.disconnect();
+  }, []);
+
+  const handlePointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (zoom <= 1) return;
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }, [zoom, pan]);
+
+  const handlePointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || !dragStartRef.current || zoom <= 1) return;
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+
+    const maxPanX = ((zoom - 1) * (containerSize.width || 400)) / 2;
+    const maxPanY = ((zoom - 1) * (containerSize.height || 300)) / 2;
+
+    const newPanX = Math.max(-maxPanX, Math.min(maxPanX, dragStartRef.current.panX + deltaX));
+    const newPanY = Math.max(-maxPanY, Math.min(maxPanY, dragStartRef.current.panY + deltaY));
+
+    setPan({ x: newPanX, y: newPanY });
+  }, [isDragging, zoom, containerSize]);
+
+  const handlePointerUp = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+    dragStartRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    } catch {}
   }, []);
 
   const sharerName = screenSharer?.name ?? "You";
@@ -932,6 +995,13 @@ function ScreenShareLayout({
       clearTimeout(timeout2);
     };
   }, [isMe, screenSharer?.screenConsumerId, screenSharer?.screenTrack, screenSharer?.screenStats?.firstFrameRendered]);
+  const isRotated90or270 = rotation === 90 || rotation === 270;
+  const transformParts: string[] = [];
+  if (rotation !== 0) transformParts.push(`rotate(${rotation}deg)`);
+  if (pan.x !== 0 || pan.y !== 0) transformParts.push(`translate(${pan.x}px, ${pan.y}px)`);
+  if (zoom !== 1) transformParts.push(`scale(${zoom})`);
+  const transformString = transformParts.length > 0 ? transformParts.join(' ') : undefined;
+
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
       <div
@@ -980,11 +1050,55 @@ function ScreenShareLayout({
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              {/* Zoom controls: Out, Reset/Indicator, In (Cross-platform) */}
+              <div className="flex items-center bg-black/20 hover:bg-black/40 rounded-lg p-0.5 border border-white/5 transition-colors">
+                <button
+                  onClick={handleZoomOut}
+                  disabled={zoomIndex === 0}
+                  className={cn(
+                    "p-1 sm:p-1.5 rounded-md transition-colors",
+                    zoomIndex === 0 ? "opacity-30 cursor-not-allowed text-gray-400" : "hover:bg-white/10 text-white/80 active:scale-95"
+                  )}
+                  title="Zoom Out"
+                  aria-label="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+
+                <button
+                  onClick={handleResetZoom}
+                  disabled={zoomIndex === 0 && pan.x === 0 && pan.y === 0}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono font-medium transition-colors select-none",
+                    zoomIndex !== 0 || pan.x !== 0 || pan.y !== 0
+                      ? "text-brand-green hover:bg-white/10 font-bold"
+                      : "text-white/60"
+                  )}
+                  title="Click to reset zoom & pan (100%)"
+                  aria-label="Reset zoom and pan"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+
+                <button
+                  onClick={handleZoomIn}
+                  disabled={zoomIndex === ZOOM_STEPS.length - 1}
+                  className={cn(
+                    "p-1 sm:p-1.5 rounded-md transition-colors",
+                    zoomIndex === ZOOM_STEPS.length - 1 ? "opacity-30 cursor-not-allowed text-gray-400" : "hover:bg-white/10 text-white/80 active:scale-95"
+                  )}
+                  title="Zoom In"
+                  aria-label="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+              </div>
+
               {/* Mobile-only in-box Rotate button */}
               <button
                 onClick={() => setRotation((prev) => ((prev + 90) % 360) as 0 | 90 | 180 | 270)}
-                className="md:hidden p-1.5 rounded-lg transition-colors flex items-center justify-center gap-0.5"
+                className="md:hidden p-1.5 rounded-lg transition-colors flex items-center justify-center gap-0.5 hover:bg-white/10"
                 style={{ color: rotation !== 0 ? "var(--color-brand-green)" : "var(--mt-text-faint)" }}
                 title={`Rotate screenshare (${rotation}°)`}
                 aria-label="Rotate screenshare"
@@ -997,7 +1111,7 @@ function ScreenShareLayout({
 
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1.5 rounded-lg transition-colors"
+                className="p-1.5 rounded-lg transition-colors hover:bg-white/10"
                 style={{ color: "var(--mt-text-faint)" }}
                 title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
@@ -1019,26 +1133,35 @@ function ScreenShareLayout({
           {/* Screen content */}
           <div
             ref={contentContainerRef}
-            className="flex-1 relative flex items-center justify-center overflow-hidden"
-            style={{ backgroundColor: "var(--mt-bg-screen)" }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="flex-1 relative flex items-center justify-center overflow-hidden touch-none"
+            style={{ 
+              backgroundColor: "var(--mt-bg-screen)",
+              cursor: zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default"
+            }}
           >
             <div
-              className="flex items-center justify-center"
+              className="flex items-center justify-center pointer-events-auto"
               style={
-                (rotation === 90 || rotation === 270) && containerSize.width > 0 && containerSize.height > 0
+                isRotated90or270 && containerSize.width > 0 && containerSize.height > 0
                   ? {
                       width: `${containerSize.height}px`,
                       height: `${containerSize.width}px`,
-                      transform: `rotate(${rotation}deg)`,
+                      transform: transformString,
                       transformOrigin: "center center",
-                      transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease, height 0.3s ease",
+                      transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease, height 0.3s ease",
+                      userSelect: zoom > 1 ? "none" : "auto",
                     }
                   : {
                       width: "100%",
                       height: "100%",
-                      transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                      transform: transformString,
                       transformOrigin: "center center",
-                      transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                      userSelect: zoom > 1 ? "none" : "auto",
                     }
               }
             >
