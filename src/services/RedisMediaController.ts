@@ -207,6 +207,9 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
   async requestConsumerKeyFrame(consumerId: string, roomId?: string): Promise<void> {
     return this.rpcCall('requestConsumerKeyFrame', [consumerId], roomId);
   }
+  async setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number, roomId?: string): Promise<void> {
+    return this.rpcCall('setConsumerPreferredLayersAndPriority', [consumerId, spatialLayer, temporalLayer, priority], roomId);
+  }
 
   // --- Features ---
   async setupAudioObserver(roomId: string): Promise<void> {

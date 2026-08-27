@@ -44,6 +44,7 @@ export interface MediaControllerInterface {
   resumeConsumer(consumerId: string, roomId?: string): Promise<void>;
   pauseConsumer(consumerId: string, roomId?: string): Promise<void>;
   requestConsumerKeyFrame(consumerId: string, roomId?: string): Promise<void>;
+  setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number, roomId?: string): Promise<void>;
 
   // --- Features ---
   setupAudioObserver(roomId: string): Promise<void>;

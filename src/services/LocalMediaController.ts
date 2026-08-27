@@ -106,6 +106,10 @@ export class LocalMediaController extends EventEmitter {
     return sfu.requestConsumerKeyFrame(consumerId);
   }
 
+  async setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number) {
+    return sfu.setConsumerPreferredLayersAndPriority(consumerId, spatialLayer, temporalLayer, priority);
+  }
+
   async closeConsumer(consumerId: string) {
     return sfu.closeConsumer(consumerId);
   }

@@ -322,6 +322,7 @@ const roomECinemaState = new Map<string, { action: 'play' | 'pause', time: numbe
 export const roomTranscripts = new Map<string, Array<{ name: string, text: string, timestamp: number }>>();
 const roomAdmissions = new Map<string, Set<string>>();
 const sfuConsumeMismatchLogged = new Set<string>();
+const clientAdaptationEpochs = new Map<string, number>();
 
 /**
  * Clean up all media state for a participant (transports, producers, consumers).
@@ -3764,6 +3765,57 @@ export function initializeSignaling(server: Server) {
         }
         await mediaController.pauseConsumer(data.consumerId, roomId);
         client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
+        break;
+      }
+
+      case 'set_consumer_adaptation': {
+        const { adaptationEpoch, changes } = data;
+        const lastEpoch = clientAdaptationEpochs.get(client.participantId) || 0;
+        
+        if (typeof adaptationEpoch === 'number' && adaptationEpoch < lastEpoch) {
+          logger.info(`[ADAPTATION] Discarding stale adaptation batch (epoch ${adaptationEpoch} < last ${lastEpoch}) for participant ${client.participantId}`);
+          break;
+        }
+        if (typeof adaptationEpoch === 'number') {
+          clientAdaptationEpochs.set(client.participantId, adaptationEpoch);
+        }
+
+        if (Array.isArray(changes)) {
+          for (const change of changes) {
+            const { consumerId, spatialLayer, temporalLayer, priority, pausedByNetwork } = change;
+            if (!consumerId || consumerOwners.get(consumerId) !== client) {
+              logger.warn(`[ADAPTATION] Participant ${client.participantId} tried to adapt unowned consumer ${consumerId}`);
+              continue;
+            }
+
+            try {
+              if (typeof pausedByNetwork === 'boolean') {
+                if (pausedByNetwork) {
+                  await mediaController.pauseConsumer(consumerId, roomId);
+                } else {
+                  await mediaController.resumeConsumer(consumerId, roomId);
+                }
+              }
+
+              if (typeof spatialLayer === 'number' || typeof priority === 'number') {
+                await mediaController.setConsumerPreferredLayersAndPriority(
+                  consumerId,
+                  spatialLayer,
+                  temporalLayer,
+                  priority,
+                  roomId
+                );
+              }
+            } catch (err) {
+              logger.warn(`[ADAPTATION] Failed to apply adaptation to consumer ${consumerId}:`, err);
+            }
+          }
+        }
+
+        client.ws.send(JSON.stringify({
+          type: 'consumer_adaptation_ack',
+          adaptationEpoch
+        }));
         break;
       }
 

@@ -936,6 +936,17 @@ export function MeetingProvider({
           setParticipants(prev => prev.map(p => p.id === currentUser.id ? { ...p, networkQuality: quality } : p));
         };
 
+        client.onDirectionalNetworkQualityChange = (stats) => {
+          // Provide subtle feedback if downlink or uplink enters CRITICAL
+          const now = Date.now();
+          if (stats.downlink === 'CRITICAL' || stats.uplink === 'CRITICAL') {
+            if (now - lastNetworkToastTime > 30000 && prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+              toast.error("Severe network degradation detected. Preserving audio and meeting controls.", { duration: 5000 });
+              lastNetworkToastTime = now;
+            }
+          }
+        };
+
         client.onDonationStatusReceived = (active) => {
           setIsDonationActive(active);
           if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {

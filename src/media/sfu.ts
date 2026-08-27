@@ -647,6 +647,27 @@ export async function requestConsumerKeyFrame(consumerId: string) {
   await consumer.requestKeyFrame();
 }
 
+export async function setConsumerPreferredLayersAndPriority(
+  consumerId: string,
+  spatialLayer?: number,
+  temporalLayer?: number,
+  priority?: number
+) {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.closed && consumer.kind === 'video') {
+    try {
+      if (typeof spatialLayer === 'number') {
+        await consumer.setPreferredLayers({ spatialLayer, temporalLayer });
+      }
+      if (typeof priority === 'number') {
+        await consumer.setPriority(priority);
+      }
+    } catch (err) {
+      logger.warn(`Failed to set layers/priority on consumer ${consumerId}:`, err);
+    }
+  }
+}
+
 export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {
   if (isMuted) {
     stopTranscription(producerId);

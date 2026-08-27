@@ -3,6 +3,12 @@ import type { Device } from 'mediasoup-client';
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
 import { NetworkDetectionConfig } from './types/meeting';
+import { 
+  NetworkAdaptationController, 
+  DirectionalNetworkStats, 
+  ConsumerMetadata, 
+  QualityTier 
+} from './network-adaptation-controller';
 
 
 export type NetworkQualityLabel = 'good' | 'unstable_network' | 'poor_network' | 'reconnecting' | 'connecting_to_media_server' | 'device_performance_issue' | 'remote_receiver_issue' | 'screen_share_performance_issue';
@@ -32,6 +38,15 @@ export class WebRTCClient {
   private pingInterval: NodeJS.Timeout | null = null;
   private statsInterval: NodeJS.Timeout | null = null;
   
+  // NETWORK-RESILIENCE-003 Adaptive Controller
+  public adaptationController = new NetworkAdaptationController(Date.now());
+  public onDirectionalNetworkQualityChange?: (stats: DirectionalNetworkStats) => void;
+  private consumerMetadata = new Map<string, ConsumerMetadata>();
+  private consumerPauseReasons = new Map<string, Set<'NETWORK' | 'PRODUCER' | 'POLICY' | 'USER' | 'VISIBILITY'>>();
+  private desiredCameraOn: boolean = false;
+  private cameraSuppressedByNetwork: boolean = false;
+  private hostCameraBlocked: boolean = false;
+
   public localVideoProducer: Producer | null = null;
   public localAudioProducer: Producer | null = null;
   public localScreenTrack: MediaStreamTrack | null = null;
@@ -1153,6 +1168,60 @@ export class WebRTCClient {
     }
   }
 
+  public setConsumerPauseReason(
+    consumerId: string, 
+    reason: 'NETWORK' | 'PRODUCER' | 'POLICY' | 'USER' | 'VISIBILITY', 
+    isPaused: boolean
+  ) {
+    let reasons = this.consumerPauseReasons.get(consumerId);
+    if (!reasons) {
+      reasons = new Set();
+      this.consumerPauseReasons.set(consumerId, reasons);
+    }
+
+    if (isPaused) {
+      reasons.add(reason);
+    } else {
+      reasons.delete(reason);
+    }
+
+    const consumer = this.consumers.get(consumerId);
+    if (!consumer || consumer.closed) return;
+
+    const shouldBePaused = reasons.size > 0;
+    if (shouldBePaused && !consumer.paused) {
+      consumer.pause();
+      this.request('pause_consumer', 'consumer_paused', { consumerId }).catch(console.error);
+    } else if (!shouldBePaused && consumer.paused) {
+      this.request('resume', 'resumed', { consumerId }).then(() => {
+        consumer.resume();
+      }).catch(console.error);
+    }
+  }
+
+  public registerConsumerMetadata(meta: ConsumerMetadata) {
+    this.consumerMetadata.set(meta.consumerId, meta);
+  }
+
+  public unregisterConsumerMetadata(consumerId: string) {
+    this.consumerMetadata.delete(consumerId);
+    this.consumerPauseReasons.delete(consumerId);
+    this.adaptationController.removeConsumer(consumerId);
+  }
+
+  public updateConsumerVisibility(consumerId: string, isVisible: boolean) {
+    const meta = this.consumerMetadata.get(consumerId);
+    if (meta) {
+      meta.isVisibleOnScreen = isVisible;
+    }
+  }
+
+  public updateActiveSpeaker(userId: string) {
+    for (const [, meta] of this.consumerMetadata.entries()) {
+      meta.isActiveSpeaker = (meta.userId === userId);
+    }
+  }
+
   private startNetworkMonitor() {
     this.stopNetworkMonitor();
     
@@ -1161,54 +1230,25 @@ export class WebRTCClient {
       return;
     }
     
-    console.log('[WebRTC] network_monitor_started', this.networkConfig);
-
-    const WINDOW_SIZE = this.networkConfig.networkWindowSize;
-    const history: Array<{
-      rtt: number;
-      packetLoss: number;
-      jitter: number;
-      sendBitrate: number;
-      recvBitrate: number;
-      framesDropped: number;
-      framesEncoded: number;
-    }> = [];
-
-    let lastBytesSent = 0;
-    let lastBytesRecv = 0;
-    let lastPacketsSent = 0;
-    let lastPacketsRecv = 0;
-    let lastPacketsLost = 0;
-    let lastOutboundPacketsLost = 0;
-    let lastFramesDropped = 0;
-    let lastFramesEncoded = 0;
-    let lastTime = performance.now();
-    
-    let currentLabel: NetworkQualityLabel = 'good';
-    let labelStreak = 0;
-    let reconnectCount = 0;
+    console.log('[WebRTC] network_monitor_started_adaptive', this.networkConfig);
 
     this.networkInterval = setInterval(async () => {
-      if (performance.now() - this.joinedAtTime < 120000) return;
       if (!this.sendTransport && !this.recvTransport) return;
       
       try {
         const now = performance.now();
-        const dt = (now - lastTime) / 1000;
-        if (dt <= 0) return;
-
         let rtt = 0;
         let jitter = 0;
         let bytesSent = 0;
         let bytesRecv = 0;
         let packetsSent = 0;
         let packetsRecv = 0;
-        let packetsLost = 0;
-        let outboundPacketsLost = 0;
+        let inboundLoss = 0;
+        let outboundLoss = 0;
         let framesDropped = 0;
         let framesEncoded = 0;
         let availableOutgoingBitrate: number | null = null;
-        let iceState = this.sendTransport?.connectionState || 'new';
+        let iceState = this.sendTransport?.connectionState || this.recvTransport?.connectionState || 'new';
 
         if (this.sendTransport) {
           const sendStats = await this.sendTransport.getStats();
@@ -1220,7 +1260,7 @@ export class WebRTCClient {
             if (stat.type === 'remote-inbound-rtp') {
               rtt = Math.max(rtt, stat.roundTripTime ? stat.roundTripTime * 1000 : 0);
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
-              outboundPacketsLost += stat.packetsLost || 0;
+              outboundLoss += stat.packetsLost || 0;
             }
             if (stat.type === 'outbound-rtp') {
               bytesSent += stat.bytesSent || 0;
@@ -1241,159 +1281,107 @@ export class WebRTCClient {
             if (stat.type === 'inbound-rtp') {
               bytesRecv += stat.bytesReceived || 0;
               packetsRecv += stat.packetsReceived || 0;
-              packetsLost += stat.packetsLost || 0;
+              inboundLoss += stat.packetsLost || 0;
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
             }
           });
         }
 
-        // Calculate deltas
-        const dBytesSent = Math.max(0, bytesSent - lastBytesSent);
-        const dBytesRecv = Math.max(0, bytesRecv - lastBytesRecv);
-        const dPacketsSent = Math.max(0, packetsSent - lastPacketsSent);
-        const dPacketsRecv = Math.max(0, packetsRecv - lastPacketsRecv);
-        const dPacketsLost = Math.max(0, packetsLost - lastPacketsLost);
-        const dOutboundPacketsLost = Math.max(0, outboundPacketsLost - lastOutboundPacketsLost);
-        const dFramesDropped = Math.max(0, framesDropped - lastFramesDropped);
-        const dFramesEncoded = Math.max(0, framesEncoded - lastFramesEncoded);
+        // 1. Process directional stats snapshot with EWMA & 3-stage classification
+        const directionalStats = this.adaptationController.processStatsSnapshot({
+          nowMs: now,
+          rttMs: rtt,
+          jitterMs: jitter,
+          totalBytesSent: bytesSent,
+          totalBytesRecv: bytesRecv,
+          totalPacketsSent: packetsSent,
+          totalPacketsRecv: packetsRecv,
+          inboundPacketsLost: inboundLoss,
+          outboundPacketsLost: outboundLoss,
+          framesEncoded,
+          framesDropped,
+          availableOutgoingBitrate,
+          iceState,
+          isRepublishing: this.isRepublishing
+        });
 
-        lastBytesSent = bytesSent;
-        lastBytesRecv = bytesRecv;
-        lastPacketsSent = packetsSent;
-        lastPacketsRecv = packetsRecv;
-        lastPacketsLost = packetsLost;
-        lastOutboundPacketsLost = outboundPacketsLost;
-        lastFramesDropped = framesDropped;
-        lastFramesEncoded = framesEncoded;
-        lastTime = now;
+        // 2. Generate and apply differential adaptation plan
+        const consumersList = Array.from(this.consumerMetadata.values());
+        const plan = this.adaptationController.generateAdaptationPlan(
+          consumersList, 
+          directionalStats.availableDownlinkBps
+        );
 
-        const sendBitrate = (dBytesSent * 8) / dt;
-        const recvBitrate = (dBytesRecv * 8) / dt;
-        
-        // Calculate inbound loss accurately
-        const inboundLoss = (dPacketsRecv + dPacketsLost) > 0 ? (dPacketsLost / (dPacketsRecv + dPacketsLost)) * 100 : 0;
-        
-        // Calculate outbound loss accurately (using remote-inbound-rtp data)
-        const outboundLoss = (dPacketsSent + dOutboundPacketsLost) > 0 ? (dOutboundPacketsLost / (dPacketsSent + dOutboundPacketsLost)) * 100 : 0;
-        
-        // Use the worst of the two directions as our overall packet loss metric
-        const packetLoss = Math.max(inboundLoss, outboundLoss);
-        const fps = dFramesEncoded / dt;
+        // 3. Dispatch batched differential layer/pause updates if changes exist
+        if (plan.changes.length > 0) {
+          // Apply local pause reasons
+          for (const change of plan.changes) {
+            if (typeof change.pausedByNetwork === 'boolean') {
+              this.setConsumerPauseReason(change.consumerId, 'NETWORK', change.pausedByNetwork);
+            }
+          }
 
-        history.push({ rtt, packetLoss, jitter, sendBitrate, recvBitrate, framesDropped: dFramesDropped, framesEncoded: dFramesEncoded });
-        if (history.length > WINDOW_SIZE) history.shift();
-
-        // Averages over window
-        const avgRtt = history.reduce((sum, h) => sum + h.rtt, 0) / history.length;
-        const avgLoss = history.reduce((sum, h) => sum + h.packetLoss, 0) / history.length;
-        const avgJitter = history.reduce((sum, h) => sum + h.jitter, 0) / history.length;
-        const totalFramesDropped = history.reduce((sum, h) => sum + h.framesDropped, 0);
-        const totalFramesEncoded = history.reduce((sum, h) => sum + h.framesEncoded, 0);
-        const frameDropRate = totalFramesEncoded > 0 ? (totalFramesDropped / (totalFramesEncoded + totalFramesDropped)) : 0;
-
-        let candidateLabel: NetworkQualityLabel = 'good';
-        let diag: NetworkDebugSnapshot['diagnosticType'] = 'healthy';
-
-        if (iceState === 'connecting' || iceState === 'checking') {
-          candidateLabel = 'connecting_to_media_server';
-          diag = 'media_server_recovery';
-        } else if (iceState === 'disconnected' || this.isRepublishing) {
-          candidateLabel = 'reconnecting';
-          diag = 'media_server_recovery';
-          reconnectCount++;
-        } else if (frameDropRate > 0.15 && avgLoss < 2 && avgRtt < 150) {
-          candidateLabel = 'device_performance_issue';
-          diag = 'device';
-        } else {
-          const POOR_RTT = this.networkConfig.poorNetworkRttMs;
-          const POOR_LOSS = this.networkConfig.poorNetworkLossPercent;
-          const POOR_JITTER = this.networkConfig.poorNetworkJitterMs;
-
-          // For unstable, we use slightly lower thresholds based on the poor thresholds
-          const UNSTABLE_RTT = Math.max(100, Math.floor(POOR_RTT * 0.7));
-          const UNSTABLE_LOSS = Math.max(1, Math.floor(POOR_LOSS * 0.5));
-          const UNSTABLE_JITTER = Math.max(20, Math.floor(POOR_JITTER * 0.6));
-
-          if (avgRtt > POOR_RTT || avgLoss > POOR_LOSS || avgJitter > POOR_JITTER) {
-            candidateLabel = 'poor_network';
-            diag = 'local_outbound';
-          } else if (avgRtt >= UNSTABLE_RTT || avgLoss >= UNSTABLE_LOSS || avgJitter >= UNSTABLE_JITTER) {
-            candidateLabel = 'unstable_network';
-            diag = 'local_outbound';
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+              type: 'set_consumer_adaptation',
+              adaptationEpoch: plan.adaptationEpoch,
+              changes: plan.changes
+            }));
           }
         }
 
-        // Clean Hysteresis Logic
-        if (candidateLabel === currentLabel) {
-          labelStreak++;
-        } else {
-          if ((this as any).pendingCandidate !== candidateLabel) {
-             (this as any).pendingCandidate = candidateLabel;
-             (this as any).pendingStreak = 1;
-          } else {
-             (this as any).pendingStreak++;
+        // 4. Adapt local webcam uplink
+        if (this.localVideoProducer && !this.localVideoProducer.closed) {
+          if (plan.uplinkPausedByNetwork && !this.cameraSuppressedByNetwork) {
+            this.cameraSuppressedByNetwork = true;
+            this.localVideoProducer.pause();
+            console.log('[ADAPTATION] Camera publication paused by network due to uplink CRITICAL');
+          } else if (!plan.uplinkPausedByNetwork && this.cameraSuppressedByNetwork) {
+            this.cameraSuppressedByNetwork = false;
+            if (this.desiredCameraOn && !this.hostCameraBlocked) {
+              this.localVideoProducer.resume();
+              console.log('[ADAPTATION] Camera publication resumed after uplink recovery');
+            }
+          }
+
+          if (typeof (this.localVideoProducer as any).setMaxSpatialLayer === 'function') {
+            (this.localVideoProducer as any).setMaxSpatialLayer(plan.uplinkMaxSpatialLayer).catch(() => {});
           }
         }
 
-        let nextLabel = currentLabel;
-        const isNetworkLabel = (l: NetworkQualityLabel) => ['good', 'unstable_network', 'poor_network'].includes(l);
-        
-        if (!isNetworkLabel(candidateLabel)) {
-           nextLabel = candidateLabel;
-        } else {
-           if ((this as any).pendingCandidate === candidateLabel && (this as any).pendingStreak >= 3) {
-             nextLabel = candidateLabel;
-           }
-        }
+        // 5. Emit directional telemetry and UI callbacks
+        this.onDirectionalNetworkQualityChange?.(directionalStats);
 
-        if (nextLabel !== currentLabel) {
-          const oldLabel = currentLabel;
-          currentLabel = nextLabel;
-          labelStreak = 1;
-          (this as any).pendingCandidate = null;
-          (this as any).pendingStreak = 0;
-          
-          this.broadcastNetworkLabelChange(currentLabel);
-          
-          this.emitTelemetry('network_quality_label_changed', { old: oldLabel, new: currentLabel, avgRtt, avgLoss });
-          
-          if (currentLabel === 'device_performance_issue') this.emitTelemetry('device_performance_issue_detected');
-          if (currentLabel === 'reconnecting' || currentLabel === 'connecting_to_media_server') this.emitTelemetry('media_connecting_not_network_poor');
-          
-          if (oldLabel === 'poor_network' && currentLabel === 'good' && labelStreak === 1) {
-             this.emitTelemetry('network_quality_false_positive_suspected');
-          }
-        }
+        const mappedLabel: NetworkQualityLabel = 
+          directionalStats.overall === 'CRITICAL' ? 'poor_network' :
+          directionalStats.overall === 'POOR' ? 'poor_network' :
+          directionalStats.overall === 'FAIR' ? 'unstable_network' : 'good';
+
+        this.broadcastNetworkLabelChange(mappedLabel);
 
         if (this.onNetworkDebugSnapshot) {
           this.onNetworkDebugSnapshot({
-            label: currentLabel,
-            rtt: avgRtt,
-            packetLoss: avgLoss,
-            jitter: avgJitter,
-            sendBitrate,
-            recvBitrate,
-            availableOutgoingBitrate,
-            framesEncoded: dFramesEncoded,
-            framesDropped: dFramesDropped,
-            fps,
+            label: mappedLabel,
+            rtt: directionalStats.rttMs,
+            packetLoss: directionalStats.downlinkLossPercent,
+            jitter: directionalStats.jitterMs,
+            sendBitrate: directionalStats.sendBitrateBps,
+            recvBitrate: directionalStats.recvBitrateBps,
+            availableOutgoingBitrate: directionalStats.availableUplinkBps,
+            framesEncoded,
+            framesDropped,
+            fps: framesEncoded > 0 ? framesEncoded / 2 : 0,
             iceState,
-            reconnectCount,
-            diagnosticType: diag
+            reconnectCount: 0,
+            diagnosticType: directionalStats.diagnosticType === 'local_uplink' ? 'local_outbound' :
+                            directionalStats.diagnosticType === 'local_downlink' ? 'local_inbound' :
+                            directionalStats.diagnosticType === 'device' ? 'device' :
+                            directionalStats.diagnosticType === 'server_recovery' ? 'media_server_recovery' : 'healthy'
           });
         }
-
-        if (this.localScreenAudioTrack) {
-          // Republish screen audio track
-          this.screenAudioShareProducer = await this.sendTransport.produce({
-            track: this.localScreenAudioTrack,
-            appData: { source: 'screen-audio' }
-          });
-        }
-
       } catch (e) {
       }
-    }, this.networkConfig.networkMonitorIntervalMs);
+    }, 2000);
   }
   
   private broadcastNetworkLabelChange(label: NetworkQualityLabel) {
@@ -2094,6 +2082,11 @@ export class WebRTCClient {
           track: activeTrack,
           appData: { source: 'mic' },
           codec: opusCodec,
+          codecOptions: {
+            opusFec: true,
+            opusDtx: true,
+            opusMaxAverageBitrate: 32000
+          },
           disableTrackOnPause: true,
           zeroRtpOnPause: true
         });
@@ -2632,6 +2625,24 @@ export class WebRTCClient {
       });
 
       this.consumers.set(consumer.id, consumer);
+
+      this.registerConsumerMetadata({
+        consumerId: consumer.id,
+        producerId,
+        participantId: producerParticipantId,
+        userId: producerUserId,
+        kind: consumerKind as 'audio' | 'video',
+        source: source as 'camera' | 'screen' | 'mic' | 'screen-audio',
+        isScreenShare: source === 'screen',
+        isActiveSpeaker: false,
+        isPinned: false,
+        isVisibleOnScreen: true,
+        maxSpatialLayers: source === 'screen' ? 1 : 3
+      });
+
+      consumer.on('transportclose', () => {
+        this.unregisterConsumerMetadata(consumer.id);
+      });
       
       // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
       // We explicitly DO NOT update UI state (isCameraOn/isMuted) here because BWE can cause rapid oscillation.
