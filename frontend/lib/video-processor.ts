@@ -113,7 +113,7 @@ export class VideoProcessor {
     // Fix aspect ratio distortion: set canvas size from stream settings BEFORE captureStream
     const track = rawStream.getVideoTracks()[0];
     if (track) {
-      const settings = track.getSettings();
+      const settings = typeof track.getSettings === 'function' ? track.getSettings() : (track as any)._settings || {};
       if (settings.width && settings.height) {
         let targetWidth = settings.width;
         let targetHeight = settings.height;

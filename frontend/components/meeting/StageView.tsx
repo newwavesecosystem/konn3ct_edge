@@ -827,6 +827,7 @@ function ScreenShareLayout({
       setContainerSize({ width: el.clientWidth, height: el.clientHeight });
     };
     updateSize();
+    if (typeof ResizeObserver === 'undefined') return;
     const obs = new ResizeObserver(updateSize);
     obs.observe(el);
     return () => obs.disconnect();

@@ -1757,8 +1757,8 @@ export function MeetingProvider({
 
         client.onRecordingStopped = () => {
           setIsRecording(false);
-          setRecordingStatus('processing');
-          toast.info("Recording has stopped and is being processed.", { id: 'recording_status' });
+          setRecordingStatus('idle');
+          toast.info("Recording has stopped.", { id: 'recording_status' });
         };
 
         client.onParticipantsList = (backendParticipants) => {
@@ -1767,19 +1767,43 @@ export function MeetingProvider({
             let duplicatesDetected = false;
             let staleRemoved = false;
             
+            const localUserId = initialCurrentUser.id;
+            const localPartId = clientParticipantId || initialCurrentUser.id;
+
             // Add local user
-            const localUser = prev.find(p => p.id === (clientParticipantId || initialCurrentUser.id));
+            const localUser = prev.find(p => p.id === localPartId || p.id === localUserId || p.userId === localUserId);
             if (localUser) nextParticipants.push(localUser);
 
             const seenParticipantIds = new Set<string>();
-            if (localUser) seenParticipantIds.add(localUser.id);
+            const seenUserIds = new Set<string>();
+
+            if (localUser) {
+              if (localUser.id) seenParticipantIds.add(localUser.id);
+              if (localUser.userId) seenUserIds.add(localUser.userId);
+            }
+            if (localPartId) seenParticipantIds.add(localPartId);
+            if (localUserId) seenUserIds.add(localUserId);
 
             for (const p of backendParticipants) {
-              if (seenParticipantIds.has(p.participantId)) {
+              const isLocalUser = (p.userId && seenUserIds.has(p.userId)) || (p.participantId && seenParticipantIds.has(p.participantId));
+
+              if (isLocalUser) {
+                if (localUser) {
+                  localUser.role = (p.role as any) || localUser.role;
+                  if (p.participantId && !localUser.id.startsWith('part_')) {
+                    localUser.id = p.participantId;
+                  }
+                }
                 duplicatesDetected = true;
                 continue;
               }
-              seenParticipantIds.add(p.participantId);
+
+              if (seenParticipantIds.has(p.participantId) || (p.userId && seenUserIds.has(p.userId))) {
+                duplicatesDetected = true;
+                continue;
+              }
+              if (p.participantId) seenParticipantIds.add(p.participantId);
+              if (p.userId) seenUserIds.add(p.userId);
 
               // Match existing by participantId OR userId to preserve state across ID transitions
               const existing = prev.find(existing => existing.id === p.participantId || existing.userId === p.userId || existing.id === p.userId);
@@ -1827,7 +1851,6 @@ export function MeetingProvider({
             if (duplicatesDetected) client?.emitTelemetry('duplicate_participant_detected');
             if (staleRemoved) client?.emitTelemetry('stale_participant_removed');
             client?.emitTelemetry('participant_list_reconciled');
-
 
             return nextParticipants;
           });
@@ -2446,10 +2469,12 @@ export function MeetingProvider({
     }
   }, [isScreenSharing, initialCurrentUser.id]);
   const toggleRecording = useCallback(async () => {
-    if (recordingStatus === 'recording' || recordingStatus === 'starting') {
+    if (recordingStatus === 'recording') {
       webrtcClient.current?.sendStopRecording();
       setRecordingStatus('processing');
-      toast.success("Recording stopped. It is being processed and will be saved to cloud.", { id: 'recording_status' });
+      toast.success("Recording stopping. It will be saved to cloud.", { id: 'recording_status' });
+    } else if (recordingStatus === 'starting' || recordingStatus === 'processing') {
+      return;
     } else {
       webrtcClient.current?.sendStartRecording();
       setRecordingStatus('starting');
@@ -2666,8 +2691,14 @@ export function MeetingProvider({
 
   const leaveMeeting = useCallback(() => {
     hasLeftMeetingRef.current = true;
-    webrtcClient.current?.sendLeaveMeeting();
-    webrtcClient.current?.disconnect();
+    try {
+      webrtcClient.current?.sendLeaveMeeting();
+    } catch (e) {
+      console.warn("Failed to send leave_meeting", e);
+    }
+    setTimeout(() => {
+      webrtcClient.current?.disconnect();
+    }, 50);
   }, []);
 
   const broadcastECinema = useCallback((link: string | null) => {
@@ -2926,7 +2957,8 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
       const now = Date.now();
       let changed = false;
 
-      const currentParticipantIds = new Set(audioParticipants.filter(p => p.audioTrack && p.id !== currentUserId).map(p => p.id));
+      const isLocal = (p: Participant) => p.id === currentUserId || p.userId === currentUserId;
+      const currentParticipantIds = new Set(audioParticipants.filter(p => p.audioTrack && !isLocal(p)).map(p => p.id));
       
       // 1. Remove participants that left the room or don't have an audioTrack anymore
       for (let i = 0; i < MAX_AUDIO_SLOTS; i++) {
@@ -2937,7 +2969,7 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
       }
 
       // 2. Update lastActive for anyone currently speaking
-      const speakingIds = new Set(audioParticipants.filter(p => p.audioTrack && p.id !== currentUserId && p.isSpeaking).map(p => p.id));
+      const speakingIds = new Set(audioParticipants.filter(p => p.audioTrack && !isLocal(p) && p.isSpeaking).map(p => p.id));
       for (let i = 0; i < MAX_AUDIO_SLOTS; i++) {
         if (newSlots[i].participantId && speakingIds.has(newSlots[i].participantId!)) {
           if (newSlots[i].lastActive !== now) {
@@ -2948,7 +2980,7 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
       }
 
       // 3. Assign tracks to empty slots or evict oldest silent participant
-      const allAudioParticipants = audioParticipants.filter(p => p.audioTrack && p.id !== currentUserId);
+      const allAudioParticipants = audioParticipants.filter(p => p.audioTrack && !isLocal(p));
       
       // Sort candidates: Speakers first, then Hosts/Presenters, then others
       const candidates = [...allAudioParticipants].sort((a, b) => {

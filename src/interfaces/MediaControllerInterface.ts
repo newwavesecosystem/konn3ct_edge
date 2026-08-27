@@ -24,8 +24,10 @@ export interface MediaControllerInterface {
   restartIce(transportId: string, roomId?: string): Promise<{ iceParameters: any }>;
 
   // --- Producers ---
-  createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }): Promise<{ id: string }>;
+  createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }, appData?: any, paused?: boolean): Promise<{ id: string }>;
   closeProducer(producerId: string, roomId?: string): Promise<void>;
+  pauseProducer(producerId: string, roomId?: string): Promise<void>;
+  resumeProducer(producerId: string, roomId?: string): Promise<void>;
   getProducer(producerId: string, roomId?: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null>;
 
   // --- Consumers ---

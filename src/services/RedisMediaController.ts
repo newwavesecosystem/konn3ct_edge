@@ -190,6 +190,12 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
   async closeProducer(producerId: string, roomId?: string): Promise<void> {
     return this.rpcCall('closeProducer', [producerId], roomId);
   }
+  async pauseProducer(producerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('pauseProducer', [producerId], roomId);
+  }
+  async resumeProducer(producerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('resumeProducer', [producerId], roomId);
+  }
   async getProducer(producerId: string, roomId?: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null> {
     return this.rpcCall('getProducer', [producerId], roomId);
   }

@@ -1755,10 +1755,14 @@ export function initializeSignaling(server: Server) {
           const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
 
           if (isGloballyEmpty) {
-            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
+            logger.info(`Room ${roomId} is globally empty after disconnect timeout. Closing meeting instance and wiping room state.`);
+            await closeActiveMeetingInstance(roomId, client.meetingInstanceId).catch(e => logger.warn('closeActiveMeetingInstance error', e));
+            await redis.del(`room:${roomId}:participants`).catch(e => logger.warn('Redis del error', e));
+            await redis.del(`room:${roomSlug}:participants`).catch(e => logger.warn('Redis del error', e));
+            await redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             mediaController.cleanupAudioObserver(roomId); // Clean up talking indicator
             mediaController.closeRouter(roomId); // Prevent Mediasoup Router memory leaks
-            redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            await redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             redis.publish('signaling:room:broadcast', JSON.stringify({
@@ -2603,10 +2607,14 @@ export function initializeSignaling(server: Server) {
           const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
 
           if (isGloballyEmpty) {
-            redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
+            logger.info(`Room ${roomId} is globally empty after explicit leave. Closing meeting instance and wiping room state.`);
+            await closeActiveMeetingInstance(roomId, client.meetingInstanceId).catch(e => logger.warn('closeActiveMeetingInstance error', e));
+            await redis.del(`room:${roomId}:participants`).catch(e => logger.warn('Redis del error', e));
+            await redis.del(`room:${client.roomSlug}:participants`).catch(e => logger.warn('Redis del error', e));
+            await redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
             mediaController.cleanupAudioObserver(roomId);
             mediaController.closeRouter(roomId);
-            redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
+            await redis.del(`room:${client.roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
             redis.publish('signaling:room:broadcast', JSON.stringify({
@@ -2616,9 +2624,9 @@ export function initializeSignaling(server: Server) {
           }
         }
         // If there's an existing disconnect timeout, clear it so it doesn't fire later
-        if (disconnectTimeouts.has(`${userId}:${roomId}`)) {
-          clearTimeout(disconnectTimeouts.get(`${userId}:${roomId}`)!);
-          disconnectTimeouts.delete(`${userId}:${roomId}`);
+        if (disconnectTimeouts.has(`${client.participantId}:${roomId}`)) {
+          clearTimeout(disconnectTimeouts.get(`${client.participantId}:${roomId}`)!);
+          disconnectTimeouts.delete(`${client.participantId}:${roomId}`);
         }
         try { client.ws.close(); } catch(e) { logger.warn('ws.close() error on leave_meeting', e); }
         break;
@@ -2971,11 +2979,20 @@ export function initializeSignaling(server: Server) {
         client.isMuted = data.isMuted;
         syncRoomStateToRedis(roomId, client.roomSlug);
         
-        // Pause or resume transcription based on mute state
+        // Pause or resume Mediasoup audio producer and transcription based on mute state
         const producersList = await getRoomProducers(roomId);
         if (producersList) {
           const audioProducer = producersList.find((p: any) => p.participantId === client.participantId && p.kind === 'audio');
           if (audioProducer) {
+             try {
+               if (data.isMuted) {
+                 await mediaController.pauseProducer(audioProducer.producerId, roomId);
+               } else {
+                 await mediaController.resumeProducer(audioProducer.producerId, roomId);
+               }
+             } catch (err) {
+               logger.warn(`Failed to update producer pause state for ${audioProducer.producerId}:`, err);
+             }
              mediaController.handleTranscriptionMute(audioProducer.producerId, roomId, userId, client.name, data.isMuted, { isBot: client.isBot, role: client.role });
           }
         }
@@ -2987,7 +3004,8 @@ export function initializeSignaling(server: Server) {
           serverEventId,
           roomId,
           userId,
-          senderParticipantId: userId,
+          participantId: client.participantId,
+          senderParticipantId: client.participantId,
           isMuted: data.isMuted,
           broadcastAt: new Date().toISOString()
         });
@@ -3419,7 +3437,7 @@ export function initializeSignaling(server: Server) {
         }
 
         const isAudioMic = data.kind === 'audio' && source !== 'screen-audio';
-        const startPaused = isAudioMic ? (client.isMuted ?? data.paused ?? true) : !!data.paused;
+        const startPaused = isAudioMic ? (data.paused !== undefined ? !!data.paused : (client.isMuted ?? false)) : !!data.paused;
 
         const producerRes = await mediaController.createProducer(
           data.transportId, 
