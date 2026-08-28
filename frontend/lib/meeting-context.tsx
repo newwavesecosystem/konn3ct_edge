@@ -1946,12 +1946,12 @@ export function MeetingProvider({
           }
         };
 
-        client.onRoleChanged = (userId, newRole) => {
+        client.onRoleChanged = (userId, newRole, participantId) => {
           const targetId = resolveUserId(userId);
           setParticipants((prev) => prev.map(p => 
-            (p.id === targetId || p.userId === userId) ? { ...p, role: newRole as any } : p
+            (p.id === targetId || p.userId === userId || (participantId && p.id === participantId)) ? { ...p, role: newRole as any } : p
           ));
-          if (targetId === (clientParticipantId || initialCurrentUser.id)) {
+          if (targetId === (clientParticipantId || initialCurrentUser.id) || (participantId && participantId === (clientParticipantId || initialCurrentUser.id)) || userId === client?.userId) {
             toast.info(`Your role has been updated to ${newRole}`);
           }
         };
@@ -2683,6 +2683,9 @@ export function MeetingProvider({
 
   const changeUserRole = useCallback((userId: string, newRole: string) => {
     webrtcClient.current?.sendChangeRole(userId, newRole);
+    setParticipants(prev => prev.map(p => 
+      (p.id === userId || p.userId === userId) ? { ...p, role: newRole as any } : p
+    ));
   }, []);
 
   const forceMuteUser = useCallback((userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => {

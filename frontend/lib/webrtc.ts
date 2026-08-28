@@ -572,7 +572,9 @@ export class WebRTCClient {
           break;
         case 'role_changed':
           this.onRoleChanged?.(msg.userId, msg.role, msg.participantId);
-          if (msg.userId === this.userId) this.userRole = msg.role;
+          if (msg.userId === this.userId || (msg.participantId && msg.participantId === this.userId)) {
+            this.userRole = msg.role;
+          }
           break;
         case 'chat':
           this.onChatMessage?.(msg);

@@ -578,17 +578,19 @@ async function processAdminCommand(data: any) {
     }
     case 'change_role': {
       for (const targetClient of roomClients.values()) {
-        if (targetClient.userId === data.userId && data.newRole && data.userId !== data.sourceUserId) {
+        if ((targetClient.userId === data.userId || targetClient.participantId === data.userId) && data.newRole && targetClient.userId !== data.sourceUserId) {
           targetClient.role = data.newRole;
-          logger.info(`Host ${data.sourceUserId} changed role of ${data.userId} to ${data.newRole}`);
+          logger.info(`Host ${data.sourceUserId} changed role of ${targetClient.userId} (${targetClient.participantId}) to ${data.newRole}`);
           broadcastToRoom(roomId, { 
             type: 'role_changed', 
             userId: targetClient.userId, 
             participantId: targetClient.participantId,
             role: targetClient.role 
           });
+          if (data.slug) {
+            await executeSyncRoomStateToRedis(roomId, data.slug);
+          }
           broadcastRoomState(roomId);
-          if (data.slug) syncRoomStateToRedis(roomId, data.slug);
         }
       }
       break;
