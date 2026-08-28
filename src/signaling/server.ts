@@ -717,6 +717,7 @@ async function processAdminCommand(data: any) {
             status: 'active', 
             recovered: false, 
             userId: c.userId, 
+            participantId: c.participantId,
             name: c.name, 
             role: c.role,
             meetingStartedAt: meetingStartedAt || undefined,
@@ -1079,6 +1080,27 @@ async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
     
     // First, sync local clients to the global hash
     if (clients && clients.size > 0) {
+      const activeParticipantIds = new Set(Array.from(clients.values()).map(c => c.participantId));
+      const activeUserIds = new Map<string, string>();
+      for (const client of clients.values()) {
+        if (client.status === 'active') {
+          activeUserIds.set(client.userId, client.participantId);
+        }
+      }
+
+      const globalParticipantsHash = await redis.hgetall(`room:${roomId}:participants`);
+      for (const [pId, pJson] of Object.entries(globalParticipantsHash)) {
+        try {
+          const parsed = JSON.parse(pJson);
+          if (parsed.userId && activeUserIds.has(parsed.userId)) {
+            const currentPartId = activeUserIds.get(parsed.userId);
+            if (pId !== currentPartId && !activeParticipantIds.has(pId)) {
+              await redis.hdel(`room:${roomId}:participants`, pId);
+            }
+          }
+        } catch (e) {}
+      }
+
       for (const client of clients.values()) {
         if (client.status === 'active') {
           const pData = {
@@ -1424,12 +1446,17 @@ export function initializeSignaling(server: Server) {
     let initialStatus: 'waiting' | 'active' | 'denied' = 'waiting';
     let isRecovered = false;
 
-    if (admission?.status === 'ACTIVE') {
+    if (role === 'host' || role === 'bot') {
+      initialStatus = 'active';
+      if (admission?.status === 'ACTIVE') {
+        isRecovered = true;
+      }
+    } else if (admission?.status === 'ACTIVE') {
       initialStatus = 'active';
       isRecovered = true;
     } else if (admission?.status === 'REMOVED') {
       initialStatus = 'denied';
-    } else if (role === 'host' || role === 'bot' || bypassWaitingRoom || !isWaitingRoomActive) {
+    } else if (bypassWaitingRoom || !isWaitingRoomActive) {
       initialStatus = 'active';
     } else {
       initialStatus = 'waiting';
@@ -1443,8 +1470,8 @@ export function initializeSignaling(server: Server) {
     let plainResumeToken: string | undefined;
 
     if (initialStatus === 'active' && meetingInstanceId) {
-      plainResumeToken = generateResumeToken();
       if (!admission || admission.status !== 'ACTIVE') {
+        plainResumeToken = generateResumeToken();
         admission = {
           status: 'ACTIVE',
           admittedAt: Date.now(),
@@ -1458,7 +1485,7 @@ export function initializeSignaling(server: Server) {
         };
         await setMeetingAdmission(meetingInstanceId, identityKey, admission);
       } else {
-        admission.tokenHash = hashResumeToken(plainResumeToken);
+        plainResumeToken = rotateResumeToken(admission);
         await setMeetingAdmission(meetingInstanceId, identityKey, admission);
       }
 
@@ -1568,6 +1595,7 @@ export function initializeSignaling(server: Server) {
         recovered: true, 
         status: client.status,
         userId: client.userId,
+        participantId: client.participantId,
         name: client.name,
         role: client.role,
         roomName,
@@ -1617,6 +1645,7 @@ export function initializeSignaling(server: Server) {
         recovered: isRecovered, 
         status: client.status,
         userId: client.userId,
+        participantId: client.participantId,
         name: client.name,
         role: client.role,
         roomName,
@@ -1961,23 +1990,43 @@ export function initializeSignaling(server: Server) {
       case 'resume_session': {
         const { meetingInstanceId, resumeToken, lastSessionGeneration } = data;
         const identityKey = getParticipantIdentityKey(client.userId);
+        const roomSettings = roomSettingsMap.get(roomId);
+        const isWaitingRoomActive = roomSettings?.bypassWaitingRoom !== undefined
+          ? !roomSettings.bypassWaitingRoom
+          : true;
+        const bypassWaitingRoom = !isWaitingRoomActive;
+
         if (!meetingInstanceId || !resumeToken) {
+          const fallbackStatus = (client.role === 'host' || !isWaitingRoomActive || bypassWaitingRoom) ? 'active' : 'waiting';
           client.ws.send(JSON.stringify({ 
             type: 'session_status', 
-            status: 'denied', 
+            status: fallbackStatus, 
+            recovered: false,
             reason: 'INVALID_RESUME_CREDENTIALS', 
             meetingInstanceId: meetingInstanceId || '',
-            sessionStateVersion: 999999 
+            sessionStateVersion: client.sessionStateVersion 
           }));
           break;
         }
 
         const adm = await getMeetingAdmission(meetingInstanceId, identityKey);
         if (!adm || adm.status !== 'ACTIVE' || !verifyResumeToken(adm, resumeToken)) {
-          logger.warn(`[WebRTC] Resume failed for user ${client.userId}: invalid token or not active (status=${adm?.status})`);
+          logger.warn(`[WebRTC] Resume unrecovered for user ${client.userId}: invalid token or not active (status=${adm?.status})`);
+          
+          let fallbackStatus: 'active' | 'waiting' | 'denied' = 'active';
+          if (adm?.status === 'REMOVED' && client.role !== 'host') {
+            fallbackStatus = 'denied';
+          } else if (adm?.status === 'WAITING' && client.role !== 'host') {
+            fallbackStatus = 'waiting';
+          } else if (client.role === 'host' || !isWaitingRoomActive || bypassWaitingRoom) {
+            fallbackStatus = 'active';
+          } else {
+            fallbackStatus = 'waiting';
+          }
+
           client.ws.send(JSON.stringify({ 
             type: 'session_status', 
-            status: adm?.status === 'WAITING' ? 'waiting' : 'denied', 
+            status: fallbackStatus, 
             recovered: false,
             meetingInstanceId,
             admissionGeneration: adm?.admissionGeneration || 1,
@@ -2014,6 +2063,7 @@ export function initializeSignaling(server: Server) {
           recovered: true,
           status: 'active',
           userId: client.userId,
+          participantId: client.participantId,
           name: client.name,
           role: client.role,
           roomName: client.roomSlug,

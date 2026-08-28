@@ -62,7 +62,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare, pingParticipant } = useMeeting();
+  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare, pingParticipant, clientParticipantId } = useMeeting();
   const [showMenu, setShowMenu] = useState(false);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -86,7 +86,10 @@ export function ParticipantTile({
     return () => observer.disconnect();
   }, [isRecorderMode]);
 
-  const isSelf = participant.id === currentUser.id;
+  const isSelf =
+    participant.id === currentUser.id ||
+    (!!participant.userId && !!currentUser.userId && participant.userId === currentUser.userId) ||
+    (!!clientParticipantId && (participant.id === clientParticipantId || participant.userId === clientParticipantId));
 
   const handleRecover = React.useCallback(() => {
     // If recovery is triggered, we can try to re-attach the track to the srcObject

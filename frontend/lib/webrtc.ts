@@ -128,6 +128,7 @@ export class WebRTCClient {
 
   public onNewConsumer?: (consumer: Consumer, userId: string, userName?: string) => void;
   public onConnectionStateChange?: (state: string) => void;
+  public onSessionStatus?: (msg: any) => void;
   
   // Participant Management Callbacks
   public onUserJoined?: (user: { userId: string, participantId?: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
@@ -479,6 +480,7 @@ export class WebRTCClient {
 
           this.sessionStatus = msg.status;
           if (msg.userId) this.userId = msg.userId;
+          if (msg.participantId) this.participantId = msg.participantId;
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
@@ -495,8 +497,13 @@ export class WebRTCClient {
             this.meetingStartedAt = msg.meetingStartedAt;
             this.onMeetingStartedAt?.(msg.meetingStartedAt);
           }
+          this.onSessionStatus?.(msg);
           
           if (msg.status === 'denied') {
+            if (this.userRole === 'host') {
+              console.warn('[WebRTC] Ignoring denied status for host');
+              return;
+            }
             this.onConnectionStateChange?.('denied');
             this.isIntentionalDisconnect = true;
             this.disconnect();

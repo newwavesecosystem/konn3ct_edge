@@ -69,6 +69,7 @@ interface MeetingContextValue {
   meetingDuration: number; // seconds (overall meeting session)
   userDuration: number; // seconds (individual user's time in meeting)
   meetingStartedAt: number | null; // ms timestamp
+  clientParticipantId: string | null;
   isMobilePanelOpen: boolean;
   webrtcStatus: string;
   eCinemaLink: string | null;
@@ -446,7 +447,17 @@ export function MeetingProvider({
     }
   }, [clientParticipantId]);
 
-  const currentUser = useMemo(() => participants.find(p => p.id === clientParticipantId) || initialCurrentUser, [participants, clientParticipantId, initialCurrentUser]);
+  const currentUser = useMemo(() => {
+    return (
+      participants.find(p =>
+        p.id === clientParticipantId ||
+        p.id === initialCurrentUser.id ||
+        (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId) ||
+        (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) ||
+        (!!webrtcClient.current?.userId && p.userId === webrtcClient.current.userId)
+      ) || initialCurrentUser
+    );
+  }, [participants, clientParticipantId, initialCurrentUser]);
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
@@ -1295,26 +1306,79 @@ export function MeetingProvider({
           );
         };
 
-        const resolveUserId = (id: string) => id === webrtcClient.current?.userId ? (clientParticipantId || initialCurrentUser.id) : id;
+        client.onSessionStatus = (msg) => {
+          if (msg.participantId) {
+            setClientParticipantId(msg.participantId);
+            setParticipants(prev => prev.map(p => {
+              if (
+                p.id === clientParticipantId ||
+                p.id === initialCurrentUser.id ||
+                p.id === 'pending' ||
+                p.id === 'ssr-placeholder' ||
+                (p.userId && (p.userId === msg.userId || p.userId === initialCurrentUser.userId))
+              ) {
+                return {
+                  ...p,
+                  id: msg.participantId,
+                  userId: msg.userId || p.userId,
+                  name: msg.name || p.name,
+                  role: (msg.role as any) || p.role
+                };
+              }
+              return p;
+            }));
+          }
+        };
+
+        const isLocalIdentifier = (id?: string) => {
+          if (!id) return false;
+          return (
+            id === webrtcClient.current?.userId ||
+            id === webrtcClient.current?.participantId ||
+            id === clientParticipantId ||
+            id === initialCurrentUser.id ||
+            id === initialCurrentUser.userId ||
+            id === currentUser.id ||
+            id === currentUser.userId
+          );
+        };
+
+        const resolveUserId = (id: string) => {
+          if (isLocalIdentifier(id)) {
+            return clientParticipantId || webrtcClient.current?.participantId || initialCurrentUser.id;
+          }
+          return id;
+        };
 
         client.onAudioStatusChanged = (status) => {
           setParticipants((prev) => prev.map(p =>
-            p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, audioConnectionStatus: status as any } : p
+            (isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)))
+              ? { ...p, audioConnectionStatus: status as any }
+              : p
           ));
         };
 
         client.onRemoteAudioConnectionStatus = (msg) => {
+          const isLocal = isLocalIdentifier(msg.participantId) || isLocalIdentifier(msg.userId);
           const targetId = resolveUserId(msg.participantId || msg.userId);
-          setParticipants((prev) => prev.map(p =>
-            p.id === targetId ? { ...p, audioConnectionStatus: msg.audioConnectionStatus } : p
-          ));
+          setParticipants((prev) => prev.map(p => {
+            if (isLocal) {
+              return (isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)))
+                ? { ...p, audioConnectionStatus: msg.audioConnectionStatus }
+                : p;
+            }
+            return (p.id === targetId || p.id === msg.participantId || (msg.userId && p.userId === msg.userId))
+              ? { ...p, audioConnectionStatus: msg.audioConnectionStatus }
+              : p;
+          }));
         };
 
         client.onMuteState = (msg) => {
-          const targetId = resolveUserId(msg.userId);
+          const isLocal = isLocalIdentifier(msg.userId) || isLocalIdentifier(msg.participantId);
+          const targetId = resolveUserId(msg.participantId || msg.userId);
           setParticipants((prev) => {
-            const user = prev.find(p => p.id === targetId || p.userId === msg.userId);
-            if (user && user.isMuted !== msg.isMuted && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
+            const user = prev.find(p => isLocal ? (isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId))) : (p.id === targetId || p.id === msg.participantId || p.userId === msg.userId));
+            if (user && user.isMuted !== msg.isMuted && !isLocal) {
               if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showMuteUnmuteToasts) {
                 toast.info(`${user.name} is now ${msg.isMuted ? 'muted' : 'unmuted'}`);
               }
@@ -1322,9 +1386,16 @@ export function MeetingProvider({
                 playNotificationSound(msg.isMuted ? 300 : 500, 0.1, 0.05);
               }
             }
-            return prev.map(p =>
-              (p.id === targetId || p.userId === msg.userId) ? { ...p, isMuted: msg.isMuted } : p
-            );
+            return prev.map(p => {
+              if (isLocal) {
+                return (isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)))
+                  ? { ...p, isMuted: msg.isMuted }
+                  : p;
+              }
+              return (p.id === targetId || p.id === msg.participantId || (msg.userId && p.userId === msg.userId))
+                ? { ...p, isMuted: msg.isMuted }
+                : p;
+            });
           });
         };
 
@@ -1333,27 +1404,43 @@ export function MeetingProvider({
         };
 
         client.onCameraState = (msg) => {
-          const targetId = resolveUserId(msg.userId);
-          setParticipants((prev) => prev.map(p =>
-            (p.id === targetId || p.userId === msg.userId) ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason } : p
-          ));
+          const isLocal = isLocalIdentifier(msg.userId) || isLocalIdentifier(msg.participantId);
+          const targetId = resolveUserId(msg.participantId || msg.userId);
+          setParticipants((prev) => prev.map(p => {
+            if (isLocal) {
+              return (isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)))
+                ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason }
+                : p;
+            }
+            return (p.id === targetId || p.id === msg.participantId || (msg.userId && p.userId === msg.userId))
+              ? { ...p, isCameraOn: msg.isCameraOn, audioOnlyMode: msg.audioOnlyMode, videoSuspendedReason: msg.videoSuspendedReason }
+              : p;
+          }));
         };
 
         client.onHandRaise = (msg) => {
-          const targetId = resolveUserId(msg.userId);
+          const isLocal = isLocalIdentifier(msg.userId) || isLocalIdentifier(msg.participantId);
+          const targetId = resolveUserId(msg.participantId || msg.userId);
           
           setParticipants((prev) => {
-            const updated = prev.map(p =>
-              (p.id === targetId || p.userId === msg.userId) ? { ...p, isHandRaised: msg.isHandRaised } : p
-            );
+            const updated = prev.map(p => {
+              if (isLocal) {
+                return (isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)))
+                  ? { ...p, isHandRaised: msg.isHandRaised }
+                  : p;
+              }
+              return (p.id === targetId || p.id === msg.participantId || (msg.userId && p.userId === msg.userId))
+                ? { ...p, isHandRaised: msg.isHandRaised }
+                : p;
+            });
             
-            if (msg.isHandRaised && msg.userId !== webrtcClient.current?.userId) {
+            if (msg.isHandRaised && !isLocal) {
               // Always play sound (playNotificationSound respects enableAllSounds internally)
               playNotificationSound(880, 0.3, 0.1);
               
               if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
                 // Must use latest state to find user to avoid stale closure
-                const user = updated.find(p => p.id === targetId || p.userId === msg.userId);
+                const user = updated.find(p => p.id === targetId || p.id === msg.participantId || p.userId === msg.userId);
                 if (user) {
                   // Use a small timeout to avoid React state update warnings in StrictMode for toasts
                   setTimeout(() => toast.info(`${user.name} raised their hand`), 0);
@@ -1803,12 +1890,20 @@ export function MeetingProvider({
             let duplicatesDetected = false;
             let staleRemoved = false;
             
-            const localUserId = initialCurrentUser.id;
-            const localPartId = clientParticipantId || initialCurrentUser.id;
+            const localUserId = initialCurrentUser.userId || initialCurrentUser.id;
+            const currentPartId = clientParticipantId || webrtcClient.current?.participantId || initialCurrentUser.id;
 
-            // Add local user
-            const localUser = prev.find(p => p.id === localPartId || p.id === localUserId || p.userId === localUserId);
-            if (localUser) nextParticipants.push(localUser);
+            // Find local user in previous state
+            const localUser = prev.find(p =>
+              p.id === currentPartId ||
+              p.id === initialCurrentUser.id ||
+              (!!p.userId && p.userId === localUserId) ||
+              (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId)
+            );
+
+            if (localUser) {
+              nextParticipants.push(localUser);
+            }
 
             const seenParticipantIds = new Set<string>();
             const seenUserIds = new Set<string>();
@@ -1817,17 +1912,26 @@ export function MeetingProvider({
               if (localUser.id) seenParticipantIds.add(localUser.id);
               if (localUser.userId) seenUserIds.add(localUser.userId);
             }
-            if (localPartId) seenParticipantIds.add(localPartId);
+            if (currentPartId) seenParticipantIds.add(currentPartId);
             if (localUserId) seenUserIds.add(localUserId);
+            if (webrtcClient.current?.participantId) seenParticipantIds.add(webrtcClient.current.participantId);
+            if (webrtcClient.current?.userId) seenUserIds.add(webrtcClient.current.userId);
 
             for (const p of backendParticipants) {
-              const isLocalUser = (p.userId && seenUserIds.has(p.userId)) || (p.participantId && seenParticipantIds.has(p.participantId));
+              const isLocalUser =
+                (p.userId && seenUserIds.has(p.userId)) ||
+                (p.participantId && seenParticipantIds.has(p.participantId)) ||
+                (p.participantId && p.participantId === webrtcClient.current?.participantId) ||
+                (p.userId && p.userId === webrtcClient.current?.userId);
 
               if (isLocalUser) {
                 if (localUser) {
                   localUser.role = (p.role as any) || localUser.role;
-                  if (p.participantId && !localUser.id.startsWith('part_')) {
+                  if (p.participantId) {
                     localUser.id = p.participantId;
+                  }
+                  if (p.userId) {
+                    localUser.userId = p.userId;
                   }
                 }
                 duplicatesDetected = true;
@@ -1842,8 +1946,12 @@ export function MeetingProvider({
               if (p.userId) seenUserIds.add(p.userId);
 
               // Match existing by participantId OR userId to preserve state across ID transitions
-              const existing = prev.find(existing => existing.id === p.participantId || existing.userId === p.userId || existing.id === p.userId);
-              const validName = p.name?.trim() ? p.name.trim() : (existing?.name?.trim() ? existing.name : `Participant ${p.participantId.substring(5, 9)}`);
+              const existing = prev.find(existing =>
+                (p.participantId && existing.id === p.participantId) ||
+                (p.userId && existing.userId === p.userId) ||
+                (p.userId && existing.id === p.userId)
+              );
+              const validName = p.name?.trim() ? p.name.trim() : (existing?.name?.trim() ? existing.name : `Participant ${p.participantId.substring(0, 8)}`);
 
               if (existing) {
                 nextParticipants.push({ 
@@ -2361,7 +2469,11 @@ export function MeetingProvider({
       if (isMuted) {
         if (localIsSpeakingRef.current) {
           localIsSpeakingRef.current = false;
-          setParticipants((prev) => prev.map(p => p.id === currentUser.id ? { ...p, isSpeaking: false } : p));
+          setParticipants((prev) => prev.map(p =>
+            (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+              ? { ...p, isSpeaking: false }
+              : p
+          ));
         }
 
         if (average > 15 && Date.now() - lastAlertTime > 5000) {
@@ -2377,7 +2489,11 @@ export function MeetingProvider({
         const currentlySpeaking = average > 5;
         if (currentlySpeaking !== localIsSpeakingRef.current) {
           localIsSpeakingRef.current = currentlySpeaking;
-          setParticipants((prev) => prev.map(p => p.id === currentUser.id ? { ...p, isSpeaking: currentlySpeaking } : p));
+          setParticipants((prev) => prev.map(p =>
+            (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+              ? { ...p, isSpeaking: currentlySpeaking }
+              : p
+          ));
         }
 
         if (average === 0) {
@@ -2412,7 +2528,7 @@ export function MeetingProvider({
       audioContext.close().catch(() => { });
       trackToMonitor.removeEventListener("mute", handleHardwareMute);
     };
-  }, [isMuted, audioTrackVersion]);
+  }, [isMuted, audioTrackVersion, clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId]);
 
   // ── Actions ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
@@ -2423,8 +2539,12 @@ export function MeetingProvider({
     else webrtcClient.current?.resumeMic();
     webrtcClient.current?.sendMuteState(newState);
     setIsMuted(newState);
-    setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isMuted: newState } : p));
-  }, [isMuted, initialCurrentUser.id]);
+    setParticipants(prev => prev.map(p =>
+      (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+        ? { ...p, isMuted: newState }
+        : p
+    ));
+  }, [isMuted, clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId]);
 
   const cameraOperationInProgress = useRef(false);
 
@@ -2443,7 +2563,11 @@ export function MeetingProvider({
         localCameraTrackRef.current = null;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isCameraOn: newState, videoTrack: undefined } : p));
+        setParticipants(prev => prev.map(p =>
+          (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+            ? { ...p, isCameraOn: newState, videoTrack: undefined }
+            : p
+        ));
         console.log('camera_switch_completed');
       } finally {
         cameraOperationInProgress.current = false;
@@ -2465,7 +2589,11 @@ export function MeetingProvider({
         localCameraTrackRef.current = finalTrack;
         webrtcClient.current?.sendCameraState(newState);
         setIsCameraOn(newState);
-        setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined } : p));
+        setParticipants(prev => prev.map(p =>
+          (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+            ? { ...p, isCameraOn: newState, videoTrack: finalTrack, audioOnlyMode: false, videoSuspendedReason: undefined }
+            : p
+        ));
       }).catch(err => {
         console.log('camera_switch_failed_preserved_old_track');
         console.error("Failed to enable camera:", err);
@@ -2480,7 +2608,7 @@ export function MeetingProvider({
         cameraOperationInProgress.current = false;
       });
     }
-  }, [isCameraOn, initialCurrentUser.id, vbMode, vbImageUrl]);
+  }, [isCameraOn, clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId, vbMode, vbImageUrl]);
 
   const toggleScreenShare = useCallback(async () => {
     try {
@@ -2488,20 +2616,26 @@ export function MeetingProvider({
         await webrtcClient.current?.disableScreenShare();
         setIsScreenSharing(false);
         setParticipants(prev => prev.map(p =>
-          p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: false, screenTrack: null } : p
+          (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+            ? { ...p, isScreenSharing: false, screenTrack: null }
+            : p
         ));
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
           setIsScreenSharing(true);
           setParticipants(prev => prev.map(p =>
-            p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: true, screenTrack } : p
+            (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+              ? { ...p, isScreenSharing: true, screenTrack }
+              : p
           ));
           screenTrack.onended = async () => {
             await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
             setParticipants(prev => prev.map(p =>
-              p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: false, screenTrack: null } : p
+              (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+                ? { ...p, isScreenSharing: false, screenTrack: null }
+                : p
             ));
           };
         }
@@ -2509,7 +2643,7 @@ export function MeetingProvider({
     } catch (e) {
       console.error("Screen share error:", e);
     }
-  }, [isScreenSharing, initialCurrentUser.id]);
+  }, [isScreenSharing, clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId]);
   const toggleRecording = useCallback(async () => {
     if (recordingStatus === 'recording') {
       webrtcClient.current?.sendStopRecording();
@@ -2527,8 +2661,12 @@ export function MeetingProvider({
     const newState = !isHandRaised;
     setIsHandRaised(newState);
     webrtcClient.current?.sendHandRaise(newState);
-    setParticipants(prev => prev.map(p => p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isHandRaised: newState } : p));
-  }, [isHandRaised, initialCurrentUser.id]);
+    setParticipants(prev => prev.map(p =>
+      (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
+        ? { ...p, isHandRaised: newState }
+        : p
+    ));
+  }, [isHandRaised, clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId]);
 
   const sendMessage = useCallback(
     (content: string, targetUserId?: string, fileUrl?: string) => {
@@ -2810,6 +2948,7 @@ export function MeetingProvider({
         meetingDuration,
         userDuration,
         meetingStartedAt,
+        clientParticipantId,
         isMobilePanelOpen,
         webrtcStatus,
         isCaptionsEnabled,
