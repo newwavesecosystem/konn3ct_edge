@@ -501,7 +501,10 @@ export function MeetingProvider({
   const effectiveScreenSharePermission = useMemo<MeetingContextValue['effectiveScreenSharePermission']>(() => {
     const isHost = ['host', 'admin'].includes(currentUser.role);
     const isCoHost = currentUser.role === 'co-host';
-    const explicit = participantScreenSharePermissions[clientParticipantId || initialCurrentUser.id] || 'DEFAULT';
+    const explicit = participantScreenSharePermissions[clientParticipantId || initialCurrentUser.id] ||
+                     (currentUser.userId ? participantScreenSharePermissions[currentUser.userId] : undefined) ||
+                     (currentUser.id ? participantScreenSharePermissions[currentUser.id] : undefined) ||
+                     'DEFAULT';
 
     if (isHost) return { allowed: true, reason: 'ALLOWED' };
     if (explicit === 'BLOCK') return { allowed: false, reason: 'PARTICIPANT_BLOCKED' };
@@ -1367,14 +1370,31 @@ export function MeetingProvider({
           }
         };
 
-        client.onScreenShareStopped = (userId, producerId) => {
+        client.onScreenShareStopped = (userId, producerId, participantId) => {
           const targetId = resolveUserId(userId);
-          setParticipants((prev) => prev.map(p =>
-            (p.id === targetId || p.userId === userId) ? { ...p, isScreenSharing: false, screenTrack: null } : p
-          ));
-          if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
-            toast.info(`Screen sharing ended`);
+          const isSelf = targetId === (clientParticipantId || initialCurrentUser.id) ||
+                         (participantId && participantId === (clientParticipantId || initialCurrentUser.id)) ||
+                         userId === currentUser.id ||
+                         userId === currentUser.userId ||
+                         targetId === currentUser.userId;
+
+          if (isSelf) {
+            setIsScreenSharing(false);
+            client?.disableScreenShare({ serverAlreadyClosed: true });
+            if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+              toast.info("Your screen sharing has ended");
+            }
+          } else {
+            if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showSystemToasts) {
+              toast.info(`Screen sharing ended`);
+            }
           }
+
+          setParticipants((prev) => prev.map(p =>
+            (p.id === targetId || p.userId === userId || (participantId && p.id === participantId) || (isSelf && (p.id === currentUser.id || p.id === clientParticipantId)))
+              ? { ...p, isScreenSharing: false, screenTrack: null }
+              : p
+          ));
         };
 
         client.onConsumerClosed = (producerId, appData) => {

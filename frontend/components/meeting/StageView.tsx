@@ -42,7 +42,7 @@ export function StageView() {
   }, [screenSharers, activeScreenSharerId]);
 
   const screenSharer = screenSharers.find(p => p.id === activeScreenSharerId) || screenSharers[0];
-  const isSomeoneSharing = !!screenSharer || isScreenSharing;
+  const isSomeoneSharing = !!screenSharer;
 
   // Grid view sorting (no active speaker rearranging)
   const gridSorted = useMemo(() => {
@@ -868,7 +868,7 @@ function ScreenShareLayout({
   }, []);
 
   const sharerName = screenSharer?.name ?? "You";
-  const isMe = screenSharer?.id === currentUserId;
+  const isMe = (screenSharer && (screenSharer.id === currentUserId || screenSharer.userId === currentUserId)) || isCurrentUserSharing;
 
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 

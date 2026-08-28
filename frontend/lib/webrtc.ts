@@ -208,7 +208,7 @@ export class WebRTCClient {
   public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
-  public onScreenShareStopped?: (userId: string, producerId: string) => void;
+  public onScreenShareStopped?: (userId: string, producerId: string, participantId?: string) => void;
   public onScreenSharePolicyChanged?: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', version: number) => void;
   public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number) => void;
   public onScreenShareStoppedByHost?: (userId: string, producerId: string) => void;
@@ -664,12 +664,15 @@ export class WebRTCClient {
         case 'ecinema_action':
           this.onECinemaAction?.(msg);
           break;
-        case 'screen_share_started':
-          this.onScreenShareStarted?.(msg.userId, msg.producerId);
+        case 'screen_share_stopped': {
+          const isSelf = (msg.participantId && msg.participantId === this.participantId) || 
+                         (msg.userId && msg.userId === this.userId);
+          if (isSelf && (this.screenShareProducer || this.localScreenTrack)) {
+            this.stopScreenShareProducer({ serverAlreadyClosed: true });
+          }
+          this.onScreenShareStopped?.(msg.userId, msg.producerId, msg.participantId);
           break;
-        case 'screen_share_stopped':
-          this.onScreenShareStopped?.(msg.userId, msg.producerId);
-          break;
+        }
         case 'producer_closed':
           // The remote producer was closed — clean up our local consumer
           this.consumers.forEach((consumer, consumerId) => {
@@ -2516,28 +2519,48 @@ export class WebRTCClient {
         }));
       }
       // Stop the track so the OS browser sharing indicator disappears
-      this.screenShareProducer.track?.stop();
-      this.screenShareProducer.close();
+      try {
+        this.screenShareProducer.track?.stop();
+      } catch (e) {}
+      try {
+        this.screenShareProducer.close();
+      } catch (e) {}
       this.screenShareProducer = null;
       
       if (!options?.serverAlreadyClosed) {
-        this.onScreenShareStopped?.(this.userId || '', producerId);
+        this.onScreenShareStopped?.(this.userId || '', producerId, this.participantId);
       }
+    }
+
+    if (this.localScreenTrack) {
+      try {
+        this.localScreenTrack.stop();
+      } catch (e) {}
       this.localScreenTrack = null;
     }
     
     if (this.screenAudioShareProducer) {
       const audioProducerId = this.screenAudioShareProducer.id;
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (!options?.serverAlreadyClosed && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
           type: 'stop_producer',
           producerId: audioProducerId,
           appData: { source: 'screen-audio' }
         }));
       }
-      this.screenAudioShareProducer.track?.stop();
-      this.screenAudioShareProducer.close();
+      try {
+        this.screenAudioShareProducer.track?.stop();
+      } catch (e) {}
+      try {
+        this.screenAudioShareProducer.close();
+      } catch (e) {}
       this.screenAudioShareProducer = null;
+    }
+
+    if (this.localScreenAudioTrack) {
+      try {
+        this.localScreenAudioTrack.stop();
+      } catch (e) {}
       this.localScreenAudioTrack = null;
     }
   }
