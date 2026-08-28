@@ -174,6 +174,23 @@ export async function getActiveMeetingInstanceId(roomId: string, createIfMissing
 }
 
 /**
+ * Gets or creates the meeting startedAt timestamp atomically across all pods.
+ */
+export async function getOrCreateMeetingStartedAt(roomId: string, createIfMissing = true): Promise<number | null> {
+  const startedAtKey = `room:${roomId}:startedAt`;
+  let startedAtStr = await redis.get(startedAtKey);
+  if (!startedAtStr && createIfMissing) {
+    const now = Date.now();
+    const result = await redis.set(startedAtKey, String(now), 'NX');
+    if (result === 'OK') {
+      return now;
+    }
+    startedAtStr = await redis.get(startedAtKey);
+  }
+  return startedAtStr ? parseInt(startedAtStr, 10) : null;
+}
+
+/**
  * Marks meeting instance as ended and cleans up active pointer.
  */
 export async function closeActiveMeetingInstance(roomId: string, meetingInstanceId?: string): Promise<void> {
@@ -182,7 +199,8 @@ export async function closeActiveMeetingInstance(roomId: string, meetingInstance
     const current = await redis.get(activeKey);
     if (!meetingInstanceId || current === meetingInstanceId) {
       await redis.del(activeKey);
-      logger.info(`[MeetingInstance] Cleaned active meetingInstanceId=${current} for room=${roomId}`);
+      await redis.del(`room:${roomId}:startedAt`);
+      logger.info(`[MeetingInstance] Cleaned active meetingInstanceId=${current} and startedAt for room=${roomId}`);
     }
     if (meetingInstanceId) {
       // Set short expiration on ended meeting records for eventual cleanup (2 hours)

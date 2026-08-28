@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import { useMeeting } from "@/lib/meeting-context";
-import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift } from "lucide-react";
+import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift, Timer } from "lucide-react";
 
 export function MeetingInfoPanel() {
   const { 
     meetingInfo, 
     participants, 
     meetingDuration, 
+    userDuration,
     totalDonations, 
     currentUser, 
     roomFeatureFlags, 
@@ -30,8 +31,10 @@ export function MeetingInfoPanel() {
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
     if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
   };
 
   return (
@@ -85,8 +88,13 @@ export function MeetingInfoPanel() {
         <div className="grid grid-cols-2 gap-3">
           <InfoStat
             icon={<Clock className="w-4 h-4" />}
-            label="Duration"
+            label="Meeting Duration"
             value={formatDuration(meetingDuration)}
+          />
+          <InfoStat
+            icon={<Timer className="w-4 h-4" />}
+            label="Your Time"
+            value={formatDuration(userDuration)}
           />
           <InfoStat
             icon={<Users className="w-4 h-4" />}

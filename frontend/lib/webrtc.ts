@@ -218,6 +218,9 @@ export class WebRTCClient {
   public onPingStatus?: (status: any) => void;
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
+  // Meeting start time
+  public meetingStartedAt?: number;
+  public onMeetingStartedAt?: (timestamp: number) => void;
   // Recording
   public onRecordingStarted?: () => void;
   public onRecordingStopped?: () => void;
@@ -488,6 +491,10 @@ export class WebRTCClient {
           }
           if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
           if (typeof msg.isWaitingRoomEnabled === 'boolean') this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
+          if (typeof msg.meetingStartedAt === 'number') {
+            this.meetingStartedAt = msg.meetingStartedAt;
+            this.onMeetingStartedAt?.(msg.meetingStartedAt);
+          }
           
           if (msg.status === 'denied') {
             this.onConnectionStateChange?.('denied');
@@ -687,6 +694,12 @@ export class WebRTCClient {
           break;
         case 'active_speaker':
           this.onActiveSpeaker?.(msg.userIds, msg.participantIds || []);
+          break;
+        case 'meeting_started_at':
+          if (typeof msg.meetingStartedAt === 'number') {
+            this.meetingStartedAt = msg.meetingStartedAt;
+            this.onMeetingStartedAt?.(msg.meetingStartedAt);
+          }
           break;
         case 'server_load_high':
           this.onServerLoadHigh?.();

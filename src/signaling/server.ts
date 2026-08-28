@@ -38,6 +38,7 @@ import {
   rotateResumeToken,
   verifyResumeToken,
   getActiveMeetingInstanceId,
+  getOrCreateMeetingStartedAt,
   closeActiveMeetingInstance,
   setMeetingAdmission,
   getMeetingAdmission,
@@ -396,6 +397,8 @@ async function processAdminCommand(data: any) {
             await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, targetClient.connectionId || '', nextAdmissionGen);
           }
 
+          const meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
+
           targetClient.ws.send(JSON.stringify({ 
             type: 'session_status', 
             status: 'active', 
@@ -403,6 +406,7 @@ async function processAdminCommand(data: any) {
             userId: targetClient.userId, 
             name: targetClient.name, 
             role: targetClient.role,
+            meetingStartedAt: meetingStartedAt || undefined,
             meetingInstanceId: meetingInstanceId || '',
             resumeToken: plainResumeToken,
             sessionGeneration: targetClient.sessionGeneration || 1,
@@ -706,6 +710,8 @@ async function processAdminCommand(data: any) {
           c.resumeToken = plainResumeToken;
           c.meetingInstanceId = meetingInstanceId || undefined;
 
+          const meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
+
           c.ws.send(JSON.stringify({ 
             type: 'session_status', 
             status: 'active', 
@@ -713,6 +719,7 @@ async function processAdminCommand(data: any) {
             userId: c.userId, 
             name: c.name, 
             role: c.role,
+            meetingStartedAt: meetingStartedAt || undefined,
             meetingInstanceId: meetingInstanceId || '',
             resumeToken: plainResumeToken,
             sessionGeneration: c.sessionGeneration || 1,
@@ -994,6 +1001,11 @@ export async function sendRoomHistoryAndState(client: Client) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   try {
+    const meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, false);
+    if (meetingStartedAt && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'meeting_started_at', meetingStartedAt }));
+    }
+
     const activeParticipants = await getActiveRoomParticipants(roomId);
     ws.send(JSON.stringify({ type: 'participants_list', participants: activeParticipants }));
 
@@ -1540,6 +1552,13 @@ export function initializeSignaling(server: Server) {
         localScreenSharePermission: userPerm
       };
 
+      let meetingStartedAt: number | null = null;
+      if (client.status === 'active') {
+        meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
+      } else {
+        meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, false);
+      }
+
       if (existingClient) {
         await cleanupParticipantMedia(existingClient, roomId);
       }
@@ -1553,6 +1572,7 @@ export function initializeSignaling(server: Server) {
         role: client.role,
         roomName,
         isWaitingRoomEnabled: isWaitingRoomActive,
+        meetingStartedAt: meetingStartedAt || undefined,
         meetingInstanceId: meetingInstanceId || '',
         resumeToken: plainResumeToken,
         sessionGeneration: client.sessionGeneration,
@@ -1566,13 +1586,17 @@ export function initializeSignaling(server: Server) {
     } else {
       logger.info(`User ${userId} (${role}) joined room ${roomId} with status ${client.status}`);
 
+      let meetingStartedAt: number | null = null;
       if (client.status === 'active') {
         try {
           await mediaController.getOrCreateRouter(roomId);
           mediaController.setupAudioObserver(roomId).catch(e => logger.error('Failed to setup audio observer on active join', e));
+          meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
         } catch (e) {
           logger.error('Failed to pre-warm router on join', e);
         }
+      } else {
+        meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, false);
       }
 
       const [roomPerms, userPerm] = await Promise.all([
@@ -1597,6 +1621,7 @@ export function initializeSignaling(server: Server) {
         role: client.role,
         roomName,
         isWaitingRoomEnabled: isWaitingRoomActive,
+        meetingStartedAt: meetingStartedAt || undefined,
         meetingInstanceId: meetingInstanceId || '',
         resumeToken: plainResumeToken,
         sessionGeneration: client.sessionGeneration,
@@ -1978,9 +2003,10 @@ export function initializeSignaling(server: Server) {
         client.sessionStateVersion = leaseResult.session!.sessionStateVersion;
         client.resumeToken = newResumeToken;
 
-        const [roomPerms, userPerm] = await Promise.all([
+        const [roomPerms, userPerm, meetingStartedAt] = await Promise.all([
           getRoomPermissions(roomId),
-          getParticipantScreenSharePermission(roomId, identityKey)
+          getParticipantScreenSharePermission(roomId, identityKey),
+          getOrCreateMeetingStartedAt(roomId, false)
         ]);
 
         client.ws.send(JSON.stringify({
@@ -1991,6 +2017,7 @@ export function initializeSignaling(server: Server) {
           name: client.name,
           role: client.role,
           roomName: client.roomSlug,
+          meetingStartedAt: meetingStartedAt || undefined,
           meetingInstanceId,
           resumeToken: newResumeToken,
           sessionGeneration: client.sessionGeneration,

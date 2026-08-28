@@ -66,7 +66,9 @@ interface MeetingContextValue {
   showLeaveDialog: boolean;
   showReactionPicker: boolean;
   showDonationModal: boolean;
-  meetingDuration: number; // seconds
+  meetingDuration: number; // seconds (overall meeting session)
+  userDuration: number; // seconds (individual user's time in meeting)
+  meetingStartedAt: number | null; // ms timestamp
   isMobilePanelOpen: boolean;
   webrtcStatus: string;
   eCinemaLink: string | null;
@@ -551,7 +553,10 @@ export function MeetingProvider({
   const [camError, setCamError] = useState<{ name: string; message: string } | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
+  const [meetingStartedAt, setMeetingStartedAt] = useState<number | null>(null);
   const [meetingDuration, setMeetingDuration] = useState(0);
+  const [userDuration, setUserDuration] = useState(0);
+  const userJoinedAtRef = useRef<number>(Date.now());
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
   const [webrtcStatus, setWebrtcStatus] = useState("disconnected");
   const [eCinemaLink, setECinemaLink] = useState<string | null>(null);
@@ -1424,6 +1429,10 @@ export function MeetingProvider({
           }));
         };
 
+        client.onMeetingStartedAt = (timestamp: number) => {
+          setMeetingStartedAt(timestamp);
+        };
+
         client.onWaitingRoomRequest = (msg) => {
           if (notifiedWaitingUsersRef.current.has(msg.userId)) {
             return;
@@ -1549,6 +1558,9 @@ export function MeetingProvider({
                     } 
                   : p
               ));
+              if (webrtcClient.current?.meetingStartedAt) {
+                setMeetingStartedAt(webrtcClient.current.meetingStartedAt);
+              }
               if (webrtcClient.current?.roomName || webrtcClient.current?.maxParticipants || webrtcClient.current?.isWaitingRoomEnabled !== undefined) {
                 setMeetingInfo(prev => ({ 
                   ...prev, 
@@ -2292,16 +2304,22 @@ export function MeetingProvider({
     }
   }, [initialCurrentUser.id]);
 
-  // ── Timer ────────────────────────────────────────────
+  // ── Timers (Overall Meeting Duration & Personal Time in Meeting) ───────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setMeetingDuration((d) => d + 1);
-    }, 1000);
+    const updateTimers = () => {
+      const now = Date.now();
+      const start = meetingStartedAt || userJoinedAtRef.current;
+      setMeetingDuration(Math.max(0, Math.floor((now - start) / 1000)));
+      setUserDuration(Math.max(0, Math.floor((now - userJoinedAtRef.current) / 1000)));
+    };
+
+    updateTimers();
+    timerRef.current = setInterval(updateTimers, 1000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, []);
+  }, [meetingStartedAt]);
 
   // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
   const [audioTrackVersion, setAudioTrackVersion] = useState(0);
@@ -2790,6 +2808,8 @@ export function MeetingProvider({
         showReactionPicker,
         showDonationModal,
         meetingDuration,
+        userDuration,
+        meetingStartedAt,
         isMobilePanelOpen,
         webrtcStatus,
         isCaptionsEnabled,
