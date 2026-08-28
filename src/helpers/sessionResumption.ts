@@ -4,7 +4,7 @@ import { logger } from '../logger';
 import { getParticipantIdentityKey } from './roomPermissions';
 
 export interface AdmissionRecord {
-  status: 'ACTIVE' | 'WAITING' | 'REMOVED';
+  status: 'ACTIVE' | 'WAITING' | 'REMOVED' | 'LEFT';
   admittedAt: number;
   admittedBy: string;
   admissionGeneration: number;
@@ -300,12 +300,83 @@ export async function releaseSessionLease(
       sessionsKey,
       identityKey,
       connectionId,
-      sessionGeneration.toString()
+      sessionGeneration
     );
     return res === 1;
   } catch (e) {
     logger.error('Error releasing session lease', e);
     return false;
+  }
+}
+
+export interface MeetingInstanceSettings {
+  waitingRoomEnabled: boolean;
+  settingsVersion: number;
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
+export async function getMeetingInstanceSettings(
+  meetingInstanceId: string,
+  defaultWaitingRoom: boolean = true
+): Promise<MeetingInstanceSettings> {
+  try {
+    const key = `meeting:${meetingInstanceId}:settings`;
+    const data = await redis.hgetall(key);
+    if (!data || Object.keys(data).length === 0) {
+      const initial: MeetingInstanceSettings = {
+        waitingRoomEnabled: defaultWaitingRoom,
+        settingsVersion: 1,
+        updatedAt: Date.now(),
+        updatedBy: 'system'
+      };
+      await redis.hset(key, {
+        waitingRoomEnabled: String(initial.waitingRoomEnabled),
+        settingsVersion: String(initial.settingsVersion),
+        updatedAt: String(initial.updatedAt),
+        updatedBy: initial.updatedBy!
+      });
+      await redis.expire(key, 86400 * 2);
+      return initial;
+    }
+    return {
+      waitingRoomEnabled: data.waitingRoomEnabled === 'true',
+      settingsVersion: parseInt(data.settingsVersion || '1', 10),
+      updatedAt: data.updatedAt ? parseInt(data.updatedAt, 10) : undefined,
+      updatedBy: data.updatedBy
+    };
+  } catch (e) {
+    logger.error('Error fetching meeting instance settings', e);
+    return {
+      waitingRoomEnabled: defaultWaitingRoom,
+      settingsVersion: 1
+    };
+  }
+}
+
+export async function setMeetingInstanceWaitingRoom(
+  meetingInstanceId: string,
+  waitingRoomEnabled: boolean,
+  updatedBy: string
+): Promise<{ settingsVersion: number; waitingRoomEnabled: boolean }> {
+  try {
+    const key = `meeting:${meetingInstanceId}:settings`;
+    const nowMs = Date.now();
+    const results = await redis.multi()
+      .hset(key, {
+        waitingRoomEnabled: String(waitingRoomEnabled),
+        updatedAt: String(nowMs),
+        updatedBy
+      })
+      .hincrby(key, 'settingsVersion', 1)
+      .expire(key, 86400 * 2)
+      .exec();
+
+    const newVersion = (results && results[1] && results[1][1]) ? (results[1][1] as number) : 1;
+    return { settingsVersion: newVersion, waitingRoomEnabled };
+  } catch (e) {
+    logger.error('Error setting meeting instance waiting room', e);
+    return { settingsVersion: 1, waitingRoomEnabled };
   }
 }
 

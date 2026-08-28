@@ -179,15 +179,14 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
             </div>
             <div className="max-h-[170px] overflow-y-auto space-y-2 pr-1 meeting-scrollbar">
               {filteredParticipants.map(p => {
-                const targetId = p.userId || p.id;
+                const targetParticipantId = p.id;
                 const isAllowed =
-                  participantScreenSharePermissions[targetId] === 'ALLOW' ||
-                  (p.userId ? participantScreenSharePermissions[p.userId] === 'ALLOW' : false) ||
-                  (p.id ? participantScreenSharePermissions[p.id] === 'ALLOW' : false);
+                  participantScreenSharePermissions[targetParticipantId] === 'ALLOW' ||
+                  (p.userId ? participantScreenSharePermissions[p.userId] === 'ALLOW' : false);
 
                 return (
                   <label
-                    key={targetId}
+                    key={targetParticipantId}
                     className="flex items-center space-x-2.5 py-1 px-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors"
                   >
                     <input
@@ -195,7 +194,7 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
                       checked={isAllowed}
                       onChange={(e) => {
                         setParticipantScreenSharePermission(
-                          targetId,
+                          targetParticipantId,
                           e.target.checked ? 'ALLOW' : 'DEFAULT'
                         );
                       }}

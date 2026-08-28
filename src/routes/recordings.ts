@@ -7,6 +7,7 @@ import { launchRecorderBot } from '../services/recorderLauncher';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
+import { setRecordingControlState, getRecordingControlState } from '../helpers/recordingControl';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
@@ -125,6 +126,7 @@ recordingsRouter.post('/start', requireAuth, async (req: Request, res: Response)
     }
 
     const recording = result.newRecording!;
+    await setRecordingControlState(recording.id, 'STARTING', 'ANY');
 
     const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     
@@ -145,6 +147,7 @@ recordingsRouter.post('/start', requireAuth, async (req: Request, res: Response)
     });
 
     if (!launchResult.queued) {
+      await setRecordingControlState(recording.id, 'STOPPED', 'ANY');
       await db.recording.update({
         where: { id: recording.id },
         data: { status: 'failed' }
@@ -185,12 +188,15 @@ recordingsRouter.post('/:id/stop', requireAuth, async (req: Request, res: Respon
       return res.status(400).json({ error: 'Invalid state transition' });
     }
 
-    await db.recording.update({
-      where: { id },
+    // Set sticky STOP_REQUESTED control state via CAS
+    await setRecordingControlState(id, 'STOP_REQUESTED', 'ANY');
+
+    await db.recording.updateMany({
+      where: { id, status: { in: ['starting', 'recording'] } },
       data: { status: 'stopping', endedAt: new Date() }
     });
 
-    redis.publish(`recorder:stop:${recording.roomId}`, JSON.stringify({ recordingId: id, reason: 'host_requested_stop' })).catch(e => logger.error("Failed to publish stop signal", e));
+    redis.publish(`recorder:stop:${id}`, JSON.stringify({ recordingId: id, reason: 'host_requested_stop' })).catch(e => logger.error("Failed to publish stop signal", e));
 
     res.status(200).json({ message: 'Stop signal sent to recording bot', status: 'stopping' });
   } catch (error) {
@@ -220,13 +226,24 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
       return res.status(403).json({ error: 'Token mismatch' });
     }
 
+    // CAS transition: STARTING -> RECORDING only if current state == STARTING
+    const transition = await setRecordingControlState(id, 'RECORDING', 'STARTING');
+    if (!transition.success) {
+      logger.warn(`[Recording] /callback/started rejected for ${id}: current control state is ${transition.currentState}`);
+      return res.status(200).json({ 
+        success: false, 
+        currentState: transition.currentState,
+        stopRequested: transition.currentState === 'STOP_REQUESTED' || transition.currentState === 'STOPPING' || transition.currentState === 'STOPPED'
+      });
+    }
+
     const rec = await db.recording.findUnique({ where: { id } });
     if (!rec || rec.status !== 'starting') {
       return res.status(400).json({ error: 'Invalid state transition' });
     }
 
-    await db.recording.update({
-      where: { id },
+    await db.recording.updateMany({
+      where: { id, status: 'starting' },
       data: { status: 'recording' }
     });
 

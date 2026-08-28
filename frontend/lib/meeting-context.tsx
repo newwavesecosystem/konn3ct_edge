@@ -61,7 +61,7 @@ interface MeetingContextValue {
     reason: 'ALLOWED' | 'PARTICIPANT_BLOCKED' | 'HOST_DISABLED_SCREEN_SHARING' | 'NOT_SELECTED_FOR_SCREEN_SHARING' | 'ROLE_NOT_AUTHORIZED';
   };
   isRecording: boolean;
-  recordingStatus: 'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed';
+  recordingStatus: 'idle' | 'starting' | 'recording' | 'stopping' | 'processing' | 'ready' | 'failed';
   isHandRaised: boolean;
   showLeaveDialog: boolean;
   showReactionPicker: boolean;
@@ -93,8 +93,8 @@ interface MeetingContextValue {
   toggleCamera: () => void;
   toggleScreenShare: () => void;
   setScreenSharePolicy: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', stopExistingShares: boolean) => void;
-  setParticipantScreenSharePermission: (targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => void;
-  stopParticipantScreenShare: (targetUserId: string) => void;
+  setParticipantScreenSharePermission: (targetParticipantId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => void;
+  stopParticipantScreenShare: (targetParticipantId: string) => void;
   stopAllParticipantScreenShares: () => void;
   toggleRecording: () => void;
   toggleHandRaise: () => void;
@@ -537,7 +537,7 @@ export function MeetingProvider({
     }
   }, [screenSharePolicyMode, participantScreenSharePermissions, currentUser.role, clientParticipantId, initialCurrentUser.id]);
 
-  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'processing' | 'ready' | 'failed'>('idle');
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'stopping' | 'processing' | 'ready' | 'failed'>('idle');
   const [isRecording, setIsRecording] = useState(false);
 
   // Sync isRecording with the presence of a bot participant
@@ -546,8 +546,8 @@ export function MeetingProvider({
     setIsRecording(hasBot);
     setRecordingStatus((prev) => {
       if (hasBot) {
-        // Prevent aggressive override if the user already initiated a stop ('processing') or start ('starting')
-        if (prev !== 'processing' && prev !== 'starting') {
+        // Prevent aggressive override if the user already initiated a stop ('stopping' / 'processing') or start ('starting')
+        if (prev !== 'stopping' && prev !== 'processing' && prev !== 'starting') {
           return 'recording';
         }
         return prev;
@@ -1878,6 +1878,11 @@ export function MeetingProvider({
           toast.info("Recording has started.", { id: 'recording_status' });
         };
 
+        client.onRecordingStopping = () => {
+          setRecordingStatus('stopping');
+          toast.info("Recording is stopping and finalizing...", { id: 'recording_status' });
+        };
+
         client.onRecordingStopped = () => {
           setIsRecording(false);
           setRecordingStatus('idle');
@@ -2824,13 +2829,13 @@ export function MeetingProvider({
     webrtcClient.current?.setScreenSharePolicy(mode, stopExistingShares);
   }, []);
 
-  const setParticipantScreenSharePermission = useCallback((targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => {
-    setParticipantScreenSharePermissions(prev => ({ ...prev, [targetUserId]: permission }));
-    webrtcClient.current?.setParticipantScreenSharePermission(targetUserId, permission);
+  const setParticipantScreenSharePermission = useCallback((targetParticipantId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => {
+    setParticipantScreenSharePermissions(prev => ({ ...prev, [targetParticipantId]: permission }));
+    webrtcClient.current?.setParticipantScreenSharePermission(targetParticipantId, permission);
   }, []);
 
-  const stopParticipantScreenShare = useCallback((targetUserId: string) => {
-    webrtcClient.current?.stopParticipantScreenShare(targetUserId);
+  const stopParticipantScreenShare = useCallback((targetParticipantId: string) => {
+    webrtcClient.current?.stopParticipantScreenShare(targetParticipantId);
   }, []);
 
   const stopAllParticipantScreenShares = useCallback(() => {

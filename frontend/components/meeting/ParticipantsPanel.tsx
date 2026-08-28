@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { isSystemParticipant, getVisibleHumanParticipants } from "@/lib/participants";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,7 @@ export function ParticipantsPanel() {
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const participants = allParticipants.filter(p => 
-    p.role !== "bot" && p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    !isSystemParticipant(p) && (p.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const hosts = participants.filter(

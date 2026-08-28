@@ -21,8 +21,9 @@ export interface PermissionContext {
  */
 export function getParticipantIdentityKey(userId: string): string {
   if (!userId) return 'guest:unknown';
-  if (userId.startsWith('guest-') || userId.startsWith('anon-')) {
-    return `guest:${userId}`;
+  if (userId.startsWith('guest-') || userId.startsWith('guest_') || userId.startsWith('anon-') || userId.startsWith('anon_')) {
+    const cleanId = userId.replace(/^(guest[-_]|anon[-_])/, '');
+    return `guest:${cleanId}`;
   }
   return `user:${userId}`;
 }

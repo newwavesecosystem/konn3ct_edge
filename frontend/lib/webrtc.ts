@@ -224,6 +224,7 @@ export class WebRTCClient {
   public onMeetingStartedAt?: (timestamp: number) => void;
   // Recording
   public onRecordingStarted?: () => void;
+  public onRecordingStopping?: () => void;
   public onRecordingStopped?: () => void;
   public onSyncPanel?: (panel: string | null) => void;
   public onVbDegraded?: (severity: 'warning' | 'emergency') => void;
@@ -773,6 +774,9 @@ export class WebRTCClient {
           break;
         case 'recording_started':
           this.onRecordingStarted?.();
+          break;
+        case 'recording_stopping':
+          this.onRecordingStopping?.();
           break;
         case 'recording_stopped':
           this.onRecordingStopped?.();
@@ -2883,15 +2887,15 @@ export class WebRTCClient {
     }
   }
 
-  public setParticipantScreenSharePermission(targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') {
+  public setParticipantScreenSharePermission(targetParticipantId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'set_participant_screen_share_permission', targetUserId, permission }));
+      this.ws.send(JSON.stringify({ type: 'set_participant_screen_share_permission', targetParticipantId, permission }));
     }
   }
 
-  public stopParticipantScreenShare(targetUserId: string) {
+  public stopParticipantScreenShare(targetParticipantId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'stop_participant_screen_share', targetUserId }));
+      this.ws.send(JSON.stringify({ type: 'stop_participant_screen_share', targetParticipantId }));
     }
   }
 

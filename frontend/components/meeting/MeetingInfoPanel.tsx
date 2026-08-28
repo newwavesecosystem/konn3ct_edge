@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { getVisibleHumanParticipants } from "@/lib/participants";
 import { Copy, Check, Link2, Clock, Users, Shield, Radio, Gift, Timer } from "lucide-react";
 
 export function MeetingInfoPanel() {
@@ -99,7 +100,7 @@ export function MeetingInfoPanel() {
           <InfoStat
             icon={<Users className="w-4 h-4" />}
             label="Participants"
-            value={`${participants.length}/${meetingInfo.maxParticipants}`}
+            value={`${getVisibleHumanParticipants(participants).length}/${meetingInfo.maxParticipants}`}
           />
           <InfoStat
             icon={<Shield className="w-4 h-4" />}

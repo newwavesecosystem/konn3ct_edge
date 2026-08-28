@@ -217,18 +217,50 @@ async function processRecordingJob(job) {
     recordingId, roomId, startedAt: new Date().toISOString(), validationStatus: 'pending'
   });
   
+  async function isStopRequested() {
+    try {
+      const val = await redis.get(`recording:${recordingId}:control`);
+      return val === 'STOP_REQUESTED' || val === 'STOPPING' || val === 'STOPPED';
+    } catch (e) {
+      return false;
+    }
+  }
+
   try {
     console.log(JSON.stringify({ event: "recorder_job_display_allocated", recordingId, displayId }));
+
+    // Check if stop was requested before doing heavy work
+    if (await isStopRequested()) {
+      console.log(JSON.stringify({ event: "recorder_stop_observed_before_startup", recordingId }));
+      return;
+    }
+
+    // Set control state with CAS protection: do not overwrite STOP_REQUESTED
+    const casRes = await redis.eval(`
+      local key = KEYS[1]
+      local current = redis.call('GET', key)
+      if current == 'STOP_REQUESTED' or current == 'STOPPING' or current == 'STOPPED' then
+        return {0, current}
+      end
+      redis.call('SET', key, 'RECORDING', 'EX', 86400)
+      return {1, 'RECORDING'}
+    `, 1, `recording:${recordingId}:control`);
+    if (casRes && casRes[0] === 0) {
+      console.log(JSON.stringify({ event: "recorder_stop_observed_during_startup", recordingId }));
+      return;
+    }
 
     // 1. Start Xvfb
     xvfbProc = spawn('Xvfb', [displayId, '-screen', '0', '1920x1080x24', '-ac']);
     await new Promise(r => setTimeout(r, 1000)); // wait for Xvfb to start
     console.log(JSON.stringify({ event: "recorder_xvfb_started", recordingId, displayId }));
 
+    if (await isStopRequested()) {
+      console.log(JSON.stringify({ event: "recorder_stop_observed_after_xvfb", recordingId }));
+      return;
+    }
+
     // 2. Start PulseAudio
-    // Usually it runs as a daemon, but we can start it per container if needed.
-    // In Docker, pulseaudio --start might fail if it's already running, but we can just use pactl if running system-wide.
-    // We'll spawn it or just use pactl directly if it's already running.
     try { execSync('pulseaudio --start --exit-idle-time=-1'); } catch(e) {}
     console.log(JSON.stringify({ event: "recorder_pulseaudio_started", recordingId }));
 
@@ -249,6 +281,11 @@ async function processRecordingJob(job) {
       throw new Error(`PulseAudio monitor ${sinkName}.monitor not found`);
     }
     console.log(JSON.stringify({ event: "recorder_audio_monitor_detected", recordingId, monitor: `${sinkName}.monitor` }));
+
+    if (await isStopRequested()) {
+      console.log(JSON.stringify({ event: "recorder_stop_observed_before_chrome", recordingId }));
+      return;
+    }
 
     // 4. Launch Chrome with Puppeteer
     const puppeteer = require('puppeteer');
@@ -293,6 +330,11 @@ async function processRecordingJob(job) {
     const context = browser.defaultBrowserContext();
     await context.overridePermissions(new URL(url).origin, ['camera', 'microphone']);
 
+    if (await isStopRequested()) {
+      console.log(JSON.stringify({ event: "recorder_stop_observed_before_navigation", recordingId }));
+      return;
+    }
+
     // Navigate to the meeting URL
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(e => console.log('Goto error:', e));
 
@@ -318,8 +360,13 @@ async function processRecordingJob(job) {
     
     // Extra 1s buffer for Framer Motion animations to finish
     await new Promise(r => setTimeout(r, 1000));
+
+    if (await isStopRequested()) {
+      console.log(JSON.stringify({ event: "recorder_stop_observed_before_ffmpeg", recordingId }));
+      return;
+    }
     
-// 5. Spawn FFmpeg
+    // 5. Spawn FFmpeg
     const ffmpegArgs = [
       '-y',
       '-thread_queue_size', '1024',
@@ -346,7 +393,7 @@ async function processRecordingJob(job) {
     // Notify Backend that recording has started
     await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/started`, recordingId, job.jobId, botToken, "callback_started");
 
-    // Subscribe to stop event and browser crashes
+    // Subscribe to recordingId stop event and browser crashes
     await new Promise((resolve, reject) => {
       let isStopping = false;
       let killTimeout = null;
@@ -390,6 +437,7 @@ async function processRecordingJob(job) {
           
           await redis.set(`recorder:transcode:lease:${recordingId}`, Date.now(), 'EX', 1 * 60 * 60);
           await redis.set(`recorder:transcode:lease:${recordingId}:pid`, child.pid, 'EX', 1 * 60 * 60);
+          await redis.set(`recording:${recordingId}:control`, 'STOPPED', 'EX', 86400);
           child.unref();
           resolve();
         } catch (err) {
@@ -398,9 +446,10 @@ async function processRecordingJob(job) {
       });
 
       const stopHandler = async (channel, message) => {
-        if (channel === `recorder:stop:${roomId}` && !isStopping) {
+        if (channel === `recorder:stop:${recordingId}` && !isStopping) {
           isStopping = true;
           pubsub.removeListener('message', stopHandler);
+          await redis.set(`recording:${recordingId}:control`, 'STOPPING', 'EX', 86400);
           
           console.log(JSON.stringify({ event: "recorder_ffmpeg_sigint_sent", recordingId }));
           if (ffmpegProc.stdin && ffmpegProc.stdin.writable) {
@@ -417,11 +466,20 @@ async function processRecordingJob(job) {
         }
       };
 
-      pubsub.subscribe(`recorder:stop:${roomId}`);
+      pubsub.subscribe(`recorder:stop:${recordingId}`);
       pubsub.on('message', stopHandler);
-      
+
+      // Periodic check in case Redis pub/sub was missed
+      const pollInterval = setInterval(async () => {
+        if (!isStopping && await isStopRequested()) {
+          clearInterval(pollInterval);
+          stopHandler(`recorder:stop:${recordingId}`, 'polled_stop');
+        }
+      }, 2000);
+
       setTimeout(() => {
-        if (!isStopping) stopHandler(`recorder:stop:${roomId}`, '');
+        clearInterval(pollInterval);
+        if (!isStopping) stopHandler(`recorder:stop:${recordingId}`, 'timeout');
       }, 4 * 60 * 60 * 1000);
     });
 

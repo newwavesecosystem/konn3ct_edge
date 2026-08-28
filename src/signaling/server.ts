@@ -44,7 +44,10 @@ import {
   getMeetingAdmission,
   acquireSessionLease,
   releaseSessionLease,
+  getMeetingInstanceSettings,
+  setMeetingInstanceWaitingRoom,
 } from '../helpers/sessionResumption';
+import { setRecordingControlState } from '../helpers/recordingControl';
 
 // --- Event Loop & GC Telemetry ---
 const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
@@ -182,17 +185,10 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
         logger.info(`Saved recording ${data.recordingUrl} to DB for room ${data.roomId}`);
       }
       
-      // Notify active users in the room that recording is fully ready
-      const clients = rooms.get(data.roomId);
-      if (clients) {
-        const payload = JSON.stringify({ type: 'recording_ready', url: data.recordingUrl });
-        for (const client of clients.values()) {
-          if (client.ws.readyState === WebSocket.OPEN) {
-            client.ws.send(payload);
-          }
-        }
-        logger.info(`Recording completed for room ${data.roomId}`);
-      }
+      // Notify active users in the room that recording has stopped and is fully ready
+      broadcastToRoom(data.roomId, { type: 'recording_stopped', recordingId: data.recordingId, url: data.recordingUrl });
+      broadcastToRoom(data.roomId, { type: 'recording_ready', url: data.recordingUrl });
+      logger.info(`Recording completed for room ${data.roomId}`);
     } catch (e) {
       logger.error('Failed to process recorder:completed message', e);
     }
@@ -385,40 +381,67 @@ async function processAdminCommand(data: any) {
         await setMeetingAdmission(meetingInstanceId, identityKey, admissionRec);
       }
 
-      for (const targetClient of roomClients.values()) {
-        if (targetClient.userId === userId && targetClient.status === 'waiting') {
-          targetClient.status = 'active';
-          targetClient.admissionGeneration = nextAdmissionGen;
-          targetClient.sessionStateVersion = nextStateVer;
-          targetClient.resumeToken = plainResumeToken;
-          targetClient.meetingInstanceId = meetingInstanceId || undefined;
+      // Find current waiting client(s) for this identity
+      const matchingWaitingClients = Array.from(roomClients.values()).filter(
+        c => (c.userId === userId || c.participantId === data.participantId || getParticipantIdentityKey(c.userId) === identityKey) && c.status === 'waiting'
+      );
 
-          if (meetingInstanceId) {
-            await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, targetClient.connectionId || '', nextAdmissionGen);
-          }
+      // Select authoritative target (prefer specified participantId or most recent connection)
+      const targetClient = (data.participantId ? roomClients.get(data.participantId) : null) || matchingWaitingClients.pop();
 
-          const meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
-
-          targetClient.ws.send(JSON.stringify({ 
-            type: 'session_status', 
-            status: 'active', 
-            recovered: false, 
-            userId: targetClient.userId, 
-            name: targetClient.name, 
-            role: targetClient.role,
-            meetingStartedAt: meetingStartedAt || undefined,
-            meetingInstanceId: meetingInstanceId || '',
-            resumeToken: plainResumeToken,
-            sessionGeneration: targetClient.sessionGeneration || 1,
-            admissionGeneration: nextAdmissionGen,
-            sessionStateVersion: nextStateVer
-          }));
-          
-          if (slug) await executeSyncRoomStateToRedis(roomId, slug);
-          broadcastToRoom(roomId, { type: 'user_joined', userId: targetClient.userId, participantId: targetClient.participantId, name: targetClient.name, role: targetClient.role, isMuted: targetClient.isMuted }, targetClient.participantId);
-          broadcastRoomState(roomId);
-          sendRoomHistoryAndState(targetClient);
+      // Clean up / fence out any other stale waiting sockets for this identity
+      for (const staleClient of matchingWaitingClients) {
+        if (staleClient !== targetClient) {
+          try {
+            staleClient.ws.close();
+            roomClients.delete(staleClient.participantId);
+          } catch(e){}
         }
+      }
+
+      if (targetClient && targetClient.status === 'waiting') {
+        targetClient.status = 'active';
+        targetClient.admissionGeneration = nextAdmissionGen;
+        targetClient.sessionStateVersion = nextStateVer;
+        targetClient.resumeToken = plainResumeToken;
+        targetClient.meetingInstanceId = meetingInstanceId || undefined;
+
+        if (meetingInstanceId) {
+          const leaseRes = await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, targetClient.connectionId || '', nextAdmissionGen);
+          if (leaseRes.session) {
+            targetClient.sessionGeneration = leaseRes.session.sessionGeneration;
+          }
+        }
+
+        const meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
+
+        targetClient.ws.send(JSON.stringify({ 
+          type: 'session_status', 
+          status: 'active', 
+          recovered: false, 
+          userId: targetClient.userId, 
+          participantId: targetClient.participantId,
+          name: targetClient.name, 
+          role: targetClient.role,
+          meetingStartedAt: meetingStartedAt || undefined,
+          meetingInstanceId: meetingInstanceId || '',
+          resumeToken: plainResumeToken,
+          sessionGeneration: targetClient.sessionGeneration || 1,
+          admissionGeneration: nextAdmissionGen,
+          sessionStateVersion: nextStateVer
+        }));
+        
+        if (slug) await executeSyncRoomStateToRedis(roomId, slug);
+        broadcastToRoom(roomId, { 
+          type: 'user_joined', 
+          userId: targetClient.userId, 
+          participantId: targetClient.participantId, 
+          name: targetClient.name, 
+          role: targetClient.role, 
+          isMuted: targetClient.isMuted 
+        }, targetClient.participantId);
+        broadcastRoomState(roomId);
+        sendRoomHistoryAndState(targetClient);
       }
       break;
     }
@@ -541,11 +564,15 @@ async function processAdminCommand(data: any) {
       const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
       if (meetingInstanceId) {
         await closeActiveMeetingInstance(roomId, meetingInstanceId);
+        redis.del(`meeting:${meetingInstanceId}:sessions`).catch(e => logger.warn('Redis del error', e));
+        redis.del(`meeting:${meetingInstanceId}:admissions`).catch(e => logger.warn('Redis del error', e));
+        redis.del(`meeting:${meetingInstanceId}:settings`).catch(e => logger.warn('Redis del error', e));
       }
       rooms.delete(roomId);
       cleanupRoomData(roomId);
       redis.del(`room:${roomId}:producers`).catch(e => logger.warn('Redis del error', e));
       redis.del(`room:${roomId}:participants`).catch(e => logger.warn('Redis del error', e));
+      if (slug) redis.del(`room:${slug}:participants`).catch(e => logger.warn('Redis del error', e));
       roomAdmissions.delete(roomId);
       mediaController.cleanupAudioObserver(roomId);
       if (slug) redis.del(`room:${slug}:pod`).catch(e => logger.warn('Redis del error', e));
@@ -555,19 +582,40 @@ async function processAdminCommand(data: any) {
       roomSettingsMap.delete(roomId);
 
       for (const [id, c] of roomClients.entries()) {
-        if (c.userId !== data.userId) { // Using data.userId instead of userId, but data has userId
+        try {
           c.ws.send(JSON.stringify({ type: 'session_status', recovered: false, status: 'ended', sessionStateVersion: 999999 }));
-        }
+        } catch(e) {}
         
+        if (disconnectTimeouts.has(`${c.participantId}:${roomId}`)) {
+          clearTimeout(disconnectTimeouts.get(`${c.participantId}:${roomId}`)!);
+          disconnectTimeouts.delete(`${c.participantId}:${roomId}`);
+        }
         if (disconnectTimeouts.has(`${c.userId}:${roomId}`)) {
           clearTimeout(disconnectTimeouts.get(`${c.userId}:${roomId}`)!);
           disconnectTimeouts.delete(`${c.userId}:${roomId}`);
         }
-        c.ws.close();
+
+        cleanupParticipantMedia(c, roomId).catch(e => logger.warn('cleanupParticipantMedia on end_meeting', e));
+        try { c.ws.close(); } catch(e) {}
       }
       
-      const reason = 'meeting_ended';
-      redis.publish(`recorder:stop:${roomId}`, JSON.stringify({ reason })).catch(e => logger.error("Failed to stop recording on end_meeting", e));
+      // Stop and finalize active recording
+      try {
+        const activeRec = await db.recording.findFirst({
+          where: { roomId, status: { in: ['starting', 'recording'] } },
+          orderBy: { createdAt: 'desc' }
+        });
+        if (activeRec) {
+          await setRecordingControlState(activeRec.id, 'STOP_REQUESTED', 'ANY');
+          await db.recording.updateMany({
+            where: { id: activeRec.id, status: { in: ['starting', 'recording'] } },
+            data: { status: 'stopping', endedAt: new Date() }
+          });
+          redis.publish(`recorder:stop:${activeRec.id}`, JSON.stringify({ reason: 'meeting_ended', recordingId: activeRec.id })).catch(e => logger.error("Failed to stop recording on end_meeting", e));
+        }
+      } catch (recErr) {
+        logger.error('Error stopping recording on end_meeting', recErr);
+      }
       
       db.liveStream.findMany({ where: { roomId, status: { in: ['live', 'processing'] } } })
         .then((streams: { id: string }[]) => {
@@ -1432,21 +1480,22 @@ export function initializeSignaling(server: Server) {
 
     logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
-    const roomSettings = roomSettingsMap.get(clientData.roomId);
-    const isWaitingRoomActive = roomSettings?.bypassWaitingRoom !== undefined
-      ? !roomSettings.bypassWaitingRoom
-      : (isWaitingRoomEnabled ?? true);
-    const bypassWaitingRoom = !isWaitingRoomActive;
     const identityKey = getParticipantIdentityKey(userId);
     const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
+    const instanceSettings = meetingInstanceId 
+      ? await getMeetingInstanceSettings(meetingInstanceId, isWaitingRoomEnabled ?? true)
+      : { waitingRoomEnabled: isWaitingRoomEnabled ?? true, settingsVersion: 1 };
+
+    const isWaitingRoomActive = instanceSettings.waitingRoomEnabled;
+    const isHostOrBot = role === 'host' || role === 'bot' || role === 'recorder';
 
     let admission = meetingInstanceId ? await getMeetingAdmission(meetingInstanceId, identityKey) : null;
     
-    // Determine initial status based on durable meeting instance admission
+    // Determine initial status based on durable meeting instance admission and authoritative settings
     let initialStatus: 'waiting' | 'active' | 'denied' = 'waiting';
     let isRecovered = false;
 
-    if (role === 'host' || role === 'bot') {
+    if (isHostOrBot) {
       initialStatus = 'active';
       if (admission?.status === 'ACTIVE') {
         isRecovered = true;
@@ -1456,7 +1505,9 @@ export function initializeSignaling(server: Server) {
       isRecovered = true;
     } else if (admission?.status === 'REMOVED') {
       initialStatus = 'denied';
-    } else if (bypassWaitingRoom || !isWaitingRoomActive) {
+    } else if (admission?.status === 'LEFT' || !admission) {
+      initialStatus = isWaitingRoomActive ? 'waiting' : 'active';
+    } else if (!isWaitingRoomActive) {
       initialStatus = 'active';
     } else {
       initialStatus = 'waiting';
@@ -1688,11 +1739,12 @@ export function initializeSignaling(server: Server) {
             }
           }
         }
-      } else {
-        // Send a request to hosts for admission
+      } else if (client.status === 'waiting' && admission?.status !== 'ACTIVE') {
+        // Send a request to hosts for admission only if genuinely waiting (not resolving resume)
         broadcastToHosts(roomId, {
           type: 'waiting_room_request',
           userId,
+          participantId: client.participantId,
           name,
         });
       }
@@ -1990,14 +2042,14 @@ export function initializeSignaling(server: Server) {
       case 'resume_session': {
         const { meetingInstanceId, resumeToken, lastSessionGeneration } = data;
         const identityKey = getParticipantIdentityKey(client.userId);
-        const roomSettings = roomSettingsMap.get(roomId);
-        const isWaitingRoomActive = roomSettings?.bypassWaitingRoom !== undefined
-          ? !roomSettings.bypassWaitingRoom
-          : true;
-        const bypassWaitingRoom = !isWaitingRoomActive;
+        const instanceSettings = meetingInstanceId 
+          ? await getMeetingInstanceSettings(meetingInstanceId, true)
+          : { waitingRoomEnabled: true, settingsVersion: 1 };
+        const isWaitingRoomActive = instanceSettings.waitingRoomEnabled;
+        const isHostOrBot = client.role === 'host' || client.role === 'bot' || client.role === 'recorder';
 
         if (!meetingInstanceId || !resumeToken) {
-          const fallbackStatus = (client.role === 'host' || !isWaitingRoomActive || bypassWaitingRoom) ? 'active' : 'waiting';
+          const fallbackStatus = (isHostOrBot || !isWaitingRoomActive) ? 'active' : 'waiting';
           client.ws.send(JSON.stringify({ 
             type: 'session_status', 
             status: fallbackStatus, 
@@ -2014,11 +2066,13 @@ export function initializeSignaling(server: Server) {
           logger.warn(`[WebRTC] Resume unrecovered for user ${client.userId}: invalid token or not active (status=${adm?.status})`);
           
           let fallbackStatus: 'active' | 'waiting' | 'denied' = 'active';
-          if (adm?.status === 'REMOVED' && client.role !== 'host') {
+          if (adm?.status === 'REMOVED' && !isHostOrBot) {
             fallbackStatus = 'denied';
-          } else if (adm?.status === 'WAITING' && client.role !== 'host') {
+          } else if (adm?.status === 'LEFT' && !isHostOrBot) {
+            fallbackStatus = isWaitingRoomActive ? 'waiting' : 'active';
+          } else if (adm?.status === 'WAITING' && !isHostOrBot) {
             fallbackStatus = 'waiting';
-          } else if (client.role === 'host' || !isWaitingRoomActive || bypassWaitingRoom) {
+          } else if (isHostOrBot || !isWaitingRoomActive) {
             fallbackStatus = 'active';
           } else {
             fallbackStatus = 'waiting';
@@ -2317,7 +2371,19 @@ export function initializeSignaling(server: Server) {
           if (d.micLocked !== undefined) newSettings.micLocked = d.micLocked;
           if (d.videoLocked !== undefined) newSettings.videoLocked = d.videoLocked;
           if (d.chatLocked !== undefined) newSettings.chatLocked = d.chatLocked;
-          if (d.bypassWaitingRoom !== undefined) newSettings.bypassWaitingRoom = d.bypassWaitingRoom;
+          const waitingRoomEnabled = d.waitingRoomEnabled !== undefined 
+            ? d.waitingRoomEnabled 
+            : (d.bypassWaitingRoom !== undefined ? !d.bypassWaitingRoom : undefined);
+
+          if (waitingRoomEnabled !== undefined) {
+            newSettings.bypassWaitingRoom = !waitingRoomEnabled;
+            const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
+            if (meetingInstanceId) {
+              const updated = await setMeetingInstanceWaitingRoom(meetingInstanceId, waitingRoomEnabled, client.userId);
+              (newSettings as any).settingsVersion = updated.settingsVersion;
+              (newSettings as any).waitingRoomEnabled = updated.waitingRoomEnabled;
+            }
+          }
           
           if (d.networkDetectionEnabled !== undefined) newSettings.networkDetectionEnabled = d.networkDetectionEnabled;
           if (d.poorNetworkRttMs !== undefined) {
@@ -2403,21 +2469,27 @@ export function initializeSignaling(server: Server) {
         });
 
         if (stopExistingShares) {
-           // Iterate all producers and stop screen shares of non-hosts
+           // Iterate all producers and stop screen shares of non-hosts (Co-host, Presenter, Attendees)
            const producersObj = await redis.hgetall(`room:${roomId}:producers`);
+           const roomClients = rooms.get(roomId);
            for (const [pid, pStr] of Object.entries(producersObj)) {
                const p = JSON.parse(pStr);
-               if (p.kind === 'video' && p.appData?.source === 'screen' && p.appData?.role !== 'host') {
-                   try { await mediaController.closeProducer(pid, roomId); } catch(e){}
-                   await redis.hdel(`room:${roomId}:producers`, pid);
-                   broadcastToRoom(roomId, {
-                     type: 'screen_share_stopped',
-                     actionType: 'screen_share_stopped',
-                     producerId: pid,
-                     participantId: p.participantId,
-                     userId: p.userId
-                   });
-                   logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
+               const isScreen = p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen');
+               if (isScreen) {
+                   const ownerClient = roomClients?.get(p.participantId) || Array.from(roomClients?.values() || []).find(c => c.userId === p.userId);
+                   const authoritativeRole = ownerClient?.role || p.role || 'attendee';
+                   if (authoritativeRole !== 'host') {
+                       try { await mediaController.closeProducer(pid, roomId); } catch(e){}
+                       await redis.hdel(`room:${roomId}:producers`, pid);
+                       broadcastToRoom(roomId, {
+                         type: 'screen_share_stopped',
+                         actionType: 'screen_share_stopped',
+                         producerId: pid,
+                         participantId: p.participantId,
+                         userId: p.userId
+                       });
+                       logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} (${authoritativeRole}) | Producer: ${pid}`);
+                   }
                }
            }
         }
@@ -2428,15 +2500,26 @@ export function initializeSignaling(server: Server) {
         if (!['host', 'co-host', 'admin'].includes(client.role)) {
            return;
         }
-        const { targetUserId, permission } = data; // permission: 'DEFAULT' | 'ALLOW' | 'BLOCK'
-        const identityKey = getParticipantIdentityKey(targetUserId);
+        const { targetParticipantId, permission } = data; // permission: 'DEFAULT' | 'ALLOW' | 'BLOCK'
+        if (!targetParticipantId) return;
+
+        const roomClients = rooms.get(roomId);
+        const targetClient = roomClients?.get(targetParticipantId);
+        if (!targetClient) {
+          logger.warn(`set_participant_screen_share_permission rejected: targetParticipantId ${targetParticipantId} not found in room ${roomId}`);
+          return;
+        }
+
+        const authoritativeUserId = targetClient.userId;
+        const identityKey = getParticipantIdentityKey(authoritativeUserId);
         const newVersion = await setParticipantScreenSharePermissionCommand(roomId, identityKey, permission);
 
-        logger.info(`[AUDIT] PARTICIPANT_SCREEN_SHARE_PERMISSION_CHANGED | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Permission: ${permission} | Version: ${newVersion}`);
+        logger.info(`[AUDIT] PARTICIPANT_SCREEN_SHARE_PERMISSION_CHANGED | Room: ${roomId} | Actor: ${userId} | TargetParticipant: ${targetParticipantId} | TargetIdentity: ${identityKey} | Permission: ${permission} | Version: ${newVersion}`);
 
         broadcastToRoom(roomId, {
           type: 'participant_screen_share_permission_changed',
-          targetUserId,
+          targetUserId: authoritativeUserId,
+          targetParticipantId,
           permission,
           version: newVersion
         });
@@ -2446,7 +2529,7 @@ export function initializeSignaling(server: Server) {
           const producersObj = await redis.hgetall(`room:${roomId}:producers`);
           for (const [pid, pStr] of Object.entries(producersObj)) {
               const p = JSON.parse(pStr);
-              if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
+              if (p.participantId === targetParticipantId && p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen')) {
                   try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                   await redis.hdel(`room:${roomId}:producers`, pid);
                   broadcastToRoom(roomId, {
@@ -2456,7 +2539,7 @@ export function initializeSignaling(server: Server) {
                     participantId: p.participantId,
                     userId: p.userId
                   });
-                  logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Producer: ${pid}`);
+                  logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
               }
           }
         }
@@ -2467,12 +2550,21 @@ export function initializeSignaling(server: Server) {
         if (!['host', 'co-host', 'admin'].includes(client.role)) {
            return;
         }
-        const { targetUserId } = data;
+        const { targetParticipantId } = data;
+        if (!targetParticipantId) return;
+
+        const roomClients = rooms.get(roomId);
+        const targetClient = roomClients?.get(targetParticipantId);
+        if (!targetClient) {
+          logger.warn(`stop_participant_screen_share rejected: targetParticipantId ${targetParticipantId} not found in room ${roomId}`);
+          return;
+        }
+
         let stoppedCount = 0;
         const producersObj = await redis.hgetall(`room:${roomId}:producers`);
         for (const [pid, pStr] of Object.entries(producersObj)) {
             const p = JSON.parse(pStr);
-            if (p.userId === targetUserId && p.kind === 'video' && p.appData?.source === 'screen') {
+            if (p.participantId === targetParticipantId && p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen')) {
                 try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                 await redis.hdel(`room:${roomId}:producers`, pid);
                 stoppedCount++;
@@ -2483,10 +2575,10 @@ export function initializeSignaling(server: Server) {
                   participantId: p.participantId,
                   userId: p.userId
                 });
-                logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${targetUserId} | Producer: ${pid}`);
+                logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Actor: ${userId} | Target: ${p.userId} | Producer: ${pid}`);
             }
         }
-        client.ws.send(JSON.stringify({ type: 'stop_participant_screen_share_result', targetUserId, stoppedCount }));
+        client.ws.send(JSON.stringify({ type: 'stop_participant_screen_share_result', targetParticipantId, stoppedCount }));
         break;
       }
 
@@ -2667,7 +2759,19 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'leave_meeting':
-        logger.info(`User ${userId} explicitly left room ${roomId}. Skipping grace period.`);
+        logger.info(`User ${userId} explicitly left room ${roomId}. Skipping grace period and invalidating session resumption.`);
+        if (client.meetingInstanceId) {
+          const identityKey = getParticipantIdentityKey(client.userId);
+          await releaseSessionLease(client.meetingInstanceId, identityKey, client.connectionId || '', client.sessionGeneration || 1);
+          const adm = await getMeetingAdmission(client.meetingInstanceId, identityKey);
+          if (adm) {
+            adm.status = 'LEFT';
+            adm.tokenHash = '';
+            adm.previousTokenHash = undefined;
+            adm.admissionGeneration = (adm.admissionGeneration || 0) + 1;
+            await setMeetingAdmission(client.meetingInstanceId, identityKey, adm);
+          }
+        }
         const rc = rooms.get(roomId);
         if (rc) {
           rc.delete(client.participantId);
@@ -3168,6 +3272,9 @@ export function initializeSignaling(server: Server) {
                 }
               });
 
+              // 1. Create durable STARTING control state and DB record
+              await setRecordingControlState(recording.id, 'STARTING', 'ANY');
+
               // 2. Generate secure short-lived token for the bot
               const participantId = crypto.randomUUID();
               const botToken = jwt.sign(
@@ -3193,6 +3300,7 @@ export function initializeSignaling(server: Server) {
                   try {
                     const check = await db.recording.findUnique({ where: { id: recording.id } });
                     if (check && check.status === 'starting') {
+                      await setRecordingControlState(recording.id, 'STOPPED', 'ANY');
                       await db.recording.update({
                         where: { id: recording.id },
                         data: { 
@@ -3209,6 +3317,7 @@ export function initializeSignaling(server: Server) {
                   }
                 }, 120000); // 120 seconds (allows time for bot to spin up and load media)
               } else {
+                await setRecordingControlState(recording.id, 'STOPPED', 'ANY');
                 await db.recording.update({
                   where: { id: recording.id },
                   data: { status: 'failed' }
@@ -3224,10 +3333,24 @@ export function initializeSignaling(server: Server) {
 
       case 'stop_recording':
         if (client.role === 'host' || client.role === 'co-host') {
-          // Publish stop event to the worker
           const reason = data.reason || 'manual_stop';
-          redis.publish(`recorder:stop:${roomId}`, JSON.stringify({ reason })).catch(e => logger.error("Failed to publish stop recording", e));
-          broadcastToRoom(roomId, { type: 'recording_stopped' });
+          const activeRec = await db.recording.findFirst({
+            where: { roomId, status: { in: ['starting', 'recording'] } },
+            orderBy: { createdAt: 'desc' }
+          });
+          if (activeRec) {
+            await setRecordingControlState(activeRec.id, 'STOP_REQUESTED', 'ANY');
+            await db.recording.updateMany({
+              where: { id: activeRec.id, status: { in: ['starting', 'recording'] } },
+              data: { status: 'stopping', endedAt: new Date() }
+            });
+            redis.publish(`recorder:stop:${activeRec.id}`, JSON.stringify({ reason, recordingId: activeRec.id })).catch(e => logger.error("Failed to publish stop recording", e));
+            broadcastToRoom(roomId, { type: 'recording_stopping', recordingId: activeRec.id });
+          } else if (data.recordingId) {
+            await setRecordingControlState(data.recordingId, 'STOP_REQUESTED', 'ANY');
+            redis.publish(`recorder:stop:${data.recordingId}`, JSON.stringify({ reason, recordingId: data.recordingId })).catch(e => logger.error("Failed to publish stop recording", e));
+            broadcastToRoom(roomId, { type: 'recording_stopping', recordingId: data.recordingId });
+          }
         }
         break;
 

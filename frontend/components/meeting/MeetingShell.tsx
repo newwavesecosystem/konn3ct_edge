@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { getVisibleHumanParticipants } from "@/lib/participants";
 import { useSearchParams, useRouter } from "next/navigation";
 import { StageView } from "./StageView";
 import { MeetingControls } from "./MeetingControls";
@@ -275,7 +276,7 @@ export function MeetingShell() {
             style={{ color: "var(--mt-text-faint)" }}
           >
             {meetingInfo.roomType === "webinar" ? "Webinar" : "Meeting"} ·{" "}
-            {participants.filter(p => p.role !== 'bot').length} participants
+            {getVisibleHumanParticipants(participants).length} participants
           </span>
         </div>
       </div>
