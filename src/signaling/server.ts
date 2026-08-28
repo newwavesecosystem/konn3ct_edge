@@ -1279,11 +1279,13 @@ export function initializeSignaling(server: Server) {
           relayProvisionThresholdPercent: room.relayProvisionThresholdPercent,
         });
 
+        const initialBypass = room.isWaitingRoomEnabled !== undefined ? !room.isWaitingRoomEnabled : false;
+
         roomSettingsMap.set(room.id, {
           micLocked: false,
           videoLocked: false,
           chatLocked: false,
-          bypassWaitingRoom: false,
+          bypassWaitingRoom: initialBypass,
           networkDetectionEnabled: room.networkDetectionEnabled,
           poorNetworkRttMs: room.poorNetworkRttMs,
           poorNetworkLossPercent: room.poorNetworkLossPercent,
@@ -1395,7 +1397,10 @@ export function initializeSignaling(server: Server) {
     logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
     const roomSettings = roomSettingsMap.get(clientData.roomId);
-    const bypassWaitingRoom = roomSettings?.bypassWaitingRoom === true;
+    const isWaitingRoomActive = roomSettings?.bypassWaitingRoom !== undefined
+      ? !roomSettings.bypassWaitingRoom
+      : (isWaitingRoomEnabled ?? true);
+    const bypassWaitingRoom = !isWaitingRoomActive;
     const identityKey = getParticipantIdentityKey(userId);
     const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
 
@@ -1410,7 +1415,7 @@ export function initializeSignaling(server: Server) {
       isRecovered = true;
     } else if (admission?.status === 'REMOVED') {
       initialStatus = 'denied';
-    } else if (role === 'host' || role === 'bot' || bypassWaitingRoom || !isWaitingRoomEnabled) {
+    } else if (role === 'host' || role === 'bot' || bypassWaitingRoom || !isWaitingRoomActive) {
       initialStatus = 'active';
     } else {
       initialStatus = 'waiting';
@@ -1545,7 +1550,7 @@ export function initializeSignaling(server: Server) {
         name: client.name,
         role: client.role,
         roomName,
-        isWaitingRoomEnabled,
+        isWaitingRoomEnabled: isWaitingRoomActive,
         meetingInstanceId: meetingInstanceId || '',
         resumeToken: plainResumeToken,
         sessionGeneration: client.sessionGeneration,
@@ -1588,7 +1593,7 @@ export function initializeSignaling(server: Server) {
         name: client.name,
         role: client.role,
         roomName,
-        isWaitingRoomEnabled,
+        isWaitingRoomEnabled: isWaitingRoomActive,
         meetingInstanceId: meetingInstanceId || '',
         resumeToken: plainResumeToken,
         sessionGeneration: client.sessionGeneration,

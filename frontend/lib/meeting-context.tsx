@@ -1726,6 +1726,10 @@ export function MeetingProvider({
                });
             }
             
+            if (newSettings.bypassWaitingRoom !== undefined) {
+              setMeetingInfo(m => ({ ...m, isWaitingRoomEnabled: !newSettings.bypassWaitingRoom }));
+            }
+            
             return { ...prev, ...newSettings };
           });
           if (updatedBy && updatedBy !== currentUser.name) {
@@ -2698,9 +2702,12 @@ export function MeetingProvider({
   }, []);
 
   const updateRoomSettings = useCallback((settings: Partial<RoomSettings>) => {
-    webrtcClient.current?.sendUpdateRoomSettings(settings);
+    webrtcClient.current?.updateRoomSettings(settings);
     // Optimistic update
     setRoomSettings(prev => ({ ...prev, ...settings }));
+    if (settings.bypassWaitingRoom !== undefined) {
+      setMeetingInfo(prev => ({ ...prev, isWaitingRoomEnabled: !settings.bypassWaitingRoom }));
+    }
   }, []);
 
   const endMeetingForAll = useCallback(() => {

@@ -96,7 +96,13 @@ export function MeetingInfoPanel() {
           <InfoStat
             icon={<Shield className="w-4 h-4" />}
             label="Waiting Room"
-            value={(meetingInfo.isWaitingRoomEnabled && !roomSettings?.bypassWaitingRoom) ? "Enabled" : "Disabled"}
+            value={
+              (roomSettings?.bypassWaitingRoom !== undefined
+                ? !roomSettings.bypassWaitingRoom
+                : meetingInfo.isWaitingRoomEnabled)
+                ? "Enabled"
+                : "Disabled"
+            }
           />
           <InfoStat
             icon={<Radio className="w-4 h-4" />}
