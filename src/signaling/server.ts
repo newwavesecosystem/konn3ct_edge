@@ -1567,6 +1567,7 @@ export function initializeSignaling(server: Server) {
       if (client.status === 'active') {
         try {
           await mediaController.getOrCreateRouter(roomId);
+          mediaController.setupAudioObserver(roomId).catch(e => logger.error('Failed to setup audio observer on active join', e));
         } catch (e) {
           logger.error('Failed to pre-warm router on join', e);
         }

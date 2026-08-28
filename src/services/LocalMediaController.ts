@@ -122,6 +122,12 @@ export class LocalMediaController extends EventEmitter {
     return sfu.closeRouter(roomId);
   }
 
+  async setupAudioObserver(roomId: string): Promise<void> {
+    await sfu.setupAudioObserver(roomId, (producerIds: string[]) => {
+      this.emit('activeSpeaker', { roomId, producerIds });
+    });
+  }
+
   async cleanupAudioObserver(roomId: string): Promise<void> {
     await sfu.cleanupAudioObserver(roomId);
   }
