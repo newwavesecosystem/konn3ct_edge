@@ -220,4 +220,45 @@ describe('StageView - Mobile Rotation & Multi Screen Share', () => {
     expect(container.querySelector('.lg\\:w-44')).toBeInTheDocument();
     expect(container.querySelector('.lg\\:w-72')).not.toBeInTheDocument();
   });
+
+  it('correctly switches to other user shared screen when current user is also sharing screen', () => {
+    const toggleScreenShareMock = vi.fn();
+    mocks.meetingState = {
+      participants: [
+        { id: 'p_me', userId: 'user_me', name: 'Alice (Me)', isScreenSharing: true, screenTrack: {} as any },
+        { id: 'p_bob', userId: 'user_bob', name: 'Bob', isScreenSharing: true, screenTrack: {} as any, screenStats: { consumerExists: true } }
+      ],
+      layoutMode: 'grid',
+      isScreenSharing: true,
+      toggleScreenShare: toggleScreenShareMock,
+      currentUser: { id: 'p_me', userId: 'user_me', role: 'host' },
+      clientParticipantId: 'p_me',
+    };
+
+    render(<StageView />);
+
+    // Initially viewing own screen
+    expect(screen.getByText('You are sharing')).toBeInTheDocument();
+    expect(screen.getByText('Your screen is being shared to the room')).toBeInTheDocument();
+    expect(screen.getByText('Stop Sharing')).toBeInTheDocument();
+
+    // Multi-share pills exist
+    const bobPill = screen.getByText("Bob's Screen");
+    const myPill = screen.getByText('Your Screen');
+    expect(bobPill).toBeInTheDocument();
+    expect(myPill).toBeInTheDocument();
+
+    // Switch to Bob's screen share
+    fireEvent.click(bobPill);
+
+    // Header must now say "Bob is sharing"
+    expect(screen.getByText('Bob is sharing')).toBeInTheDocument();
+    expect(screen.queryByText('You are sharing')).not.toBeInTheDocument();
+
+    // The mock infinity mirror text should NOT be present
+    expect(screen.queryByText('Your screen is being shared to the room')).not.toBeInTheDocument();
+
+    // A "Stop My Share" button is still available
+    expect(screen.getByText('Stop My Share')).toBeInTheDocument();
+  });
 });

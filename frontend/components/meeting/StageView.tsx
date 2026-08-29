@@ -29,7 +29,7 @@ import YouTube from "react-youtube";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function StageView() {
-  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef } =
+  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef, clientParticipantId } =
     useMeeting();
 
   const screenSharers = participants.filter((p) => p.isScreenSharing);
@@ -76,6 +76,7 @@ export function StageView() {
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
         currentUserId={currentUser.id}
+        clientParticipantId={clientParticipantId}
       />
     );
   }
@@ -771,6 +772,7 @@ function ScreenShareLayout({
   isCurrentUserSharing,
   onStopSharing,
   currentUserId,
+  clientParticipantId,
 }: {
   participants: Participant[];
   screenSharer: Participant | undefined;
@@ -780,8 +782,9 @@ function ScreenShareLayout({
   isCurrentUserSharing: boolean;
   onStopSharing: () => void;
   currentUserId: string;
+  clientParticipantId?: string | null;
 }) {
-  const { webrtcClientRef } = useMeeting();
+  const { webrtcClientRef, currentUser } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [rotation, setRotation] = React.useState<0 | 90 | 180 | 270>(0);
   const [primaryView, setPrimaryView] = React.useState<"screen" | "participants">("screen");
@@ -867,8 +870,15 @@ function ScreenShareLayout({
     } catch {}
   }, []);
 
-  const sharerName = screenSharer?.name ?? "You";
-  const isMe = (screenSharer && (screenSharer.id === currentUserId || screenSharer.userId === currentUserId)) || isCurrentUserSharing;
+  const isViewingMyOwnScreen = Boolean(
+    screenSharer && (
+      screenSharer.id === currentUserId ||
+      (clientParticipantId && screenSharer.id === clientParticipantId) ||
+      (screenSharer.userId && (screenSharer.userId === currentUserId || (currentUser?.userId && screenSharer.userId === currentUser.userId)))
+    )
+  );
+  const sharerName = isViewingMyOwnScreen ? "You" : (screenSharer?.name ?? "Participant");
+  const isMe = isViewingMyOwnScreen;
 
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
@@ -1033,20 +1043,27 @@ function ScreenShareLayout({
         {screenSharers.length > 1 && (
           <div className="absolute top-4 left-0 right-0 z-30 px-4 flex justify-center pointer-events-none">
             <div className="flex items-center gap-2 p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-xl overflow-x-auto w-max max-w-full no-scrollbar pointer-events-auto snap-x">
-              {screenSharers.map((sharer) => (
-                <button
-                  key={sharer.id}
-                  onClick={() => setActiveScreenSharerId(sharer.id)}
-                  className={cn(
-                    "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
-                    activeScreenSharerId === sharer.id
-                      ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
-                      : "bg-white/10 text-white hover:bg-white/20"
-                  )}
-                >
-                  <span className="truncate block">{sharer.name}&apos;s Screen</span>
-                </button>
-              ))}
+              {screenSharers.map((sharer) => {
+                const isThisSharerMe = Boolean(
+                  sharer.id === currentUserId ||
+                  (clientParticipantId && sharer.id === clientParticipantId) ||
+                  (sharer.userId && (sharer.userId === currentUserId || (currentUser?.userId && sharer.userId === currentUser.userId)))
+                );
+                return (
+                  <button
+                    key={sharer.id}
+                    onClick={() => setActiveScreenSharerId(sharer.id)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
+                      (activeScreenSharerId ? activeScreenSharerId === sharer.id : screenSharer?.id === sharer.id)
+                        ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
+                        : "bg-white/10 text-white hover:bg-white/20"
+                    )}
+                  >
+                    <span className="truncate block">{isThisSharerMe ? "Your Screen" : `${sharer.name}'s Screen`}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1150,13 +1167,13 @@ function ScreenShareLayout({
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
-              {isMe && (
+              {isCurrentUserSharing && (
                 <button
                   onClick={onStopSharing}
                   className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95 shrink-0"
                 >
                   <MonitorOff className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Stop Sharing</span>
+                  <span className="hidden sm:inline">{isViewingMyOwnScreen ? "Stop Sharing" : "Stop My Share"}</span>
                   <span className="sm:hidden">Stop</span>
                 </button>
               )}
