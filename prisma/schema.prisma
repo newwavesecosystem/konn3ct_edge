@@ -180,9 +180,40 @@ model Recording {
   owner User @relation(fields: [ownerId], references: [id])
   room  Room? @relation(fields: [roomId], references: [id])
   payments PaymentTransaction[]
+  segments RecordingSegment[]
 
   @@index([ownerId])
   @@index([roomId])
+}
+
+model RecordingSegment {
+  id                  String   @id @default(cuid())
+  recordingId         String
+  segmentIndex        Int
+
+  recordingGeneration Int      @default(1)
+  workerGeneration    Int      @default(1)
+
+  status              String
+
+  startedAt           DateTime?
+  endedAt             DateTime?
+  durationMs          Int?
+
+  storageKey          String?
+  url                 String?
+  fileSize            Int?
+  checksum            String?
+
+  failureReason       String?
+  uploadedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  
+  @@unique([recordingId, segmentIndex])
+  @@index([recordingId])
 }
 
 model DialInNumber {

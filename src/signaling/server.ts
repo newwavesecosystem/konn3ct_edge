@@ -1,3 +1,4 @@
+import { startRecordingSupervisor } from './supervisor';
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
 import { URL } from 'url';

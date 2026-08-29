@@ -253,6 +253,101 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
   }
 });
 
+recordingsRouter.post('/:id/segments', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing token' });
+    }
+    const token = authHeader.split(' ')[1];
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback');
+    } catch (err) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    if (decoded.purpose !== 'recording_bot' || decoded.recordingId !== id) {
+      return res.status(403).json({ error: 'Token mismatch' });
+    }
+
+    const { segmentIndex, url, durationMs, fileSize, status, storageKey, workerGeneration, recordingGeneration, checksum } = req.body;
+    
+    if (segmentIndex === undefined) {
+      return res.status(400).json({ error: 'Missing segment metadata' });
+    }
+
+    // Fence by explicit immutable segment ownership
+    const redis = require('../config/redis').redis;
+    const ownerKey = `recording:${id}:segment:${segmentIndex}:owner`;
+    const reservedOwner = await redis.get(ownerKey);
+    
+    if (reservedOwner) {
+        const reservedGen = parseInt(reservedOwner.split(':')[1], 10);
+        if (workerGeneration !== undefined && workerGeneration !== reservedGen) {
+            return res.status(409).json({ error: 'Worker generation does not match immutable segment reservation.' });
+        }
+    } else {
+        // If not explicitly reserved, fallback to the intrinsic range offset
+        const implicitOwnerGen = Math.floor(segmentIndex / 10000);
+        if (workerGeneration !== undefined && workerGeneration !== implicitOwnerGen && implicitOwnerGen > 0) {
+            return res.status(409).json({ error: 'Worker generation does not own this segment.' });
+        }
+    }
+
+    const existingSegment = await db.recordingSegment.findUnique({
+      where: { recordingId_segmentIndex: { recordingId: id, segmentIndex: segmentIndex } }
+    });
+
+    if (existingSegment) {
+       if (existingSegment.status === 'UPLOADED_VERIFIED' || existingSegment.status === 'uploaded') {
+           if (existingSegment.checksum === checksum && existingSegment.fileSize === fileSize) {
+               return res.status(200).json({ message: 'Idempotent success' });
+           }
+           return res.status(409).json({ error: 'Immutable segment already finalized' });
+       }
+    }
+
+    const segment = await db.recordingSegment.upsert({
+      where: {
+        recordingId_segmentIndex: {
+          recordingId: id,
+          segmentIndex: segmentIndex
+        }
+      },
+      update: {
+        url,
+        durationMs: durationMs || 0,
+        fileSize: fileSize || 0,
+        status: status || 'uploaded',
+        storageKey: storageKey,
+        workerGeneration: workerGeneration || 1,
+        recordingGeneration: recordingGeneration || 1,
+        uploadedAt: status === 'uploaded' ? new Date() : undefined
+      },
+      create: {
+        recordingId: id,
+        segmentIndex,
+        url,
+        durationMs: durationMs || 0,
+        fileSize: fileSize || 0,
+        status: status || 'uploaded',
+        storageKey: storageKey,
+        workerGeneration: workerGeneration || 1,
+        recordingGeneration: recordingGeneration || 1,
+        uploadedAt: status === 'uploaded' ? new Date() : undefined
+      }
+    });
+
+    res.status(200).json({ success: true, segment });
+  } catch (err) {
+    logger.error('Error saving segment:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 recordingsRouter.post('/:id/callback/status', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
