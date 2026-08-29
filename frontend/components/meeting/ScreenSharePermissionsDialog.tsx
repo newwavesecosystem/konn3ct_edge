@@ -103,7 +103,7 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
               onChange={() => setStopExisting(true)}
               className="w-4 h-4 text-brand-green bg-transparent border-[var(--mt-border)]"
             />
-            <span className="text-sm">Prevent new shares and stop current non-host shares</span>
+            <span className="text-sm">Prevent new shares and stop current participant shares (hosts & co-hosts remain sharing)</span>
           </label>
         </div>
         <div className="px-6 py-4 shrink-0 border-t border-[var(--mt-border)] flex justify-end gap-2 bg-[var(--mt-bg-elevated)]">
@@ -220,7 +220,7 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
             onClick={() => stopAllParticipantScreenShares()}
           >
             <ShieldAlert className="w-4 h-4" />
-            Stop all non-host screen shares
+            Stop all non-host/co-host screen shares
           </Button>
         </div>
       </div>

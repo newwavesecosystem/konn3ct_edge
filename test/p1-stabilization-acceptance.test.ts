@@ -302,27 +302,28 @@ describe('P1 Stabilization Batch — Live E2E Acceptance Test Pack (TC-01 to TC-
   // --------------------------------------------------------------------------
   // TC-09: Host + Co-host + Participant screen-sharing -> Stop non-host
   // --------------------------------------------------------------------------
-  it('TC-09: Stop all non-host screen shares: Host share preserved, Co-host & participant shares stopped', async () => {
+  it('TC-09: Stop all non-host screen shares: Host and Co-host shares preserved, attendee & presenter shares stopped', async () => {
     const producers = [
       { id: 'p_host', userId: 'user_host', role: 'host', kind: 'video', source: 'screen' },
       { id: 'p_cohost', userId: 'user_cohost', role: 'co-host', kind: 'video', source: 'screen' },
+      { id: 'p_presenter', userId: 'user_presenter', role: 'presenter', kind: 'video', source: 'screen' },
       { id: 'p_attendee', userId: 'user_attendee', role: 'attendee', kind: 'video', source: 'screen' },
     ];
 
-    // Authoritative role evaluation
+    // Authoritative role evaluation (preserves host, co-host, admin)
     const stoppedProducers: string[] = [];
     const preservedProducers: string[] = [];
 
     for (const p of producers) {
-      if (p.role !== 'host') {
+      if (p.role !== 'host' && p.role !== 'co-host' && p.role !== 'admin') {
         stoppedProducers.push(p.id);
       } else {
         preservedProducers.push(p.id);
       }
     }
 
-    expect(preservedProducers).toEqual(['p_host']);
-    expect(stoppedProducers).toEqual(['p_cohost', 'p_attendee']);
+    expect(preservedProducers).toEqual(['p_host', 'p_cohost']);
+    expect(stoppedProducers).toEqual(['p_presenter', 'p_attendee']);
     expect(invariants.hostScreenWronglyStopped).toBe(0);
   });
 

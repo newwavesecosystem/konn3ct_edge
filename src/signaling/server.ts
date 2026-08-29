@@ -702,18 +702,23 @@ async function processAdminCommand(data: any) {
       const producersObj = await redis.hgetall(`room:${roomId}:producers`);
       for (const [pid, pStr] of Object.entries(producersObj)) {
           const p = JSON.parse(pStr);
-          if (p.kind === 'video' && p.appData?.source === 'screen' && p.role !== 'host' && p.role !== 'admin') {
-              try { await mediaController.closeProducer(pid, roomId); } catch(e){}
-              await redis.hdel(`room:${roomId}:producers`, pid);
-              stoppedCount++;
-              broadcastToRoom(roomId, {
-                type: 'screen_share_stopped',
-                actionType: 'screen_share_stopped',
-                producerId: pid,
-                participantId: p.participantId,
-                userId: p.userId
-              });
-              logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Target: ${p.userId} | Producer: ${pid}`);
+          const isScreen = p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen');
+          if (isScreen) {
+              const ownerClient = roomClients?.get(p.participantId) || Array.from(roomClients?.values() || []).find(c => c.userId === p.userId);
+              const authoritativeRole = ownerClient?.role || p.role || 'attendee';
+              if (authoritativeRole !== 'host' && authoritativeRole !== 'co-host' && authoritativeRole !== 'admin') {
+                  try { await mediaController.closeProducer(pid, roomId); } catch(e){}
+                  await redis.hdel(`room:${roomId}:producers`, pid);
+                  stoppedCount++;
+                  broadcastToRoom(roomId, {
+                    type: 'screen_share_stopped',
+                    actionType: 'screen_share_stopped',
+                    producerId: pid,
+                    participantId: p.participantId,
+                    userId: p.userId
+                  });
+                  logger.info(`[AUDIT] SCREEN_SHARE_STOPPED_BY_HOST | Room: ${roomId} | Target: ${p.userId} (${authoritativeRole}) | Producer: ${pid}`);
+              }
           }
       }
       logger.info(`[AUDIT] ALL_NON_HOST_SCREEN_SHARES_STOPPED | Room: ${roomId} | Stopped: ${stoppedCount}`);
@@ -2469,7 +2474,7 @@ export function initializeSignaling(server: Server) {
         });
 
         if (stopExistingShares) {
-           // Iterate all producers and stop screen shares of non-hosts (Co-host, Presenter, Attendees)
+           // Iterate all producers and stop screen shares of attendees / non-hosts
            const producersObj = await redis.hgetall(`room:${roomId}:producers`);
            const roomClients = rooms.get(roomId);
            for (const [pid, pStr] of Object.entries(producersObj)) {
@@ -2478,7 +2483,7 @@ export function initializeSignaling(server: Server) {
                if (isScreen) {
                    const ownerClient = roomClients?.get(p.participantId) || Array.from(roomClients?.values() || []).find(c => c.userId === p.userId);
                    const authoritativeRole = ownerClient?.role || p.role || 'attendee';
-                   if (authoritativeRole !== 'host') {
+                   if (authoritativeRole !== 'host' && authoritativeRole !== 'co-host' && authoritativeRole !== 'admin') {
                        try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                        await redis.hdel(`room:${roomId}:producers`, pid);
                        broadcastToRoom(roomId, {
