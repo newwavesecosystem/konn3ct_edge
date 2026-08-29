@@ -178,6 +178,9 @@ export async function getActiveMeetingInstanceId(roomId: string, createIfMissing
     if (result === 'OK') {
       instanceId = newId;
       logger.info(`[MeetingInstance] Created new active meetingInstanceId=${instanceId} for room=${roomId}`);
+      // Wipe stale participant and producer hashes from previous meetings/days
+      await redis.del(`room:${roomId}:participants`).catch(() => {});
+      await redis.del(`room:${roomId}:producers`).catch(() => {});
     } else {
       instanceId = await redis.get(activeKey);
     }
@@ -212,6 +215,8 @@ export async function closeActiveMeetingInstance(roomId: string, meetingInstance
     if (!meetingInstanceId || current === meetingInstanceId) {
       await redis.del(activeKey);
       await redis.del(`room:${roomId}:startedAt`);
+      await redis.del(`room:${roomId}:participants`).catch(() => {});
+      await redis.del(`room:${roomId}:producers`).catch(() => {});
       logger.info(`[MeetingInstance] Cleaned active meetingInstanceId=${current} and startedAt for room=${roomId}`);
     }
     if (meetingInstanceId) {

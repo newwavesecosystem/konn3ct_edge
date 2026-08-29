@@ -382,6 +382,16 @@ export function MeetingProvider({
   const isMobileClient = typeof navigator !== 'undefined' ? 
     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) : false;
 
+  // ── WebRTC & Media Instance Refs ─────────────────────
+  const webrtcClient = useRef<WebRTCClient | null>(null);
+  const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
+  const localIsSpeakingRef = useRef<boolean>(false);
+  const hasLeftMeetingRef = useRef<boolean>(false);
+  const pingDedupeRef = useRef<Set<string>>(new Set());
+  const lastPingSoundTimeRef = useRef<number>(0);
+
   const [clientParticipantId, setClientParticipantId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -784,15 +794,7 @@ export function MeetingProvider({
     audioOutput: "default",
   });
 
-  // ── WebRTC Instance ──────────────────────────────────
-  const webrtcClient = useRef<WebRTCClient | null>(null);
-  const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
-  const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
-  const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
-  const localIsSpeakingRef = useRef<boolean>(false);
-  const hasLeftMeetingRef = useRef<boolean>(false);
-  const pingDedupeRef = useRef<Set<string>>(new Set());
-  const lastPingSoundTimeRef = useRef<number>(0);
+
 
   useEffect(() => {
     if (

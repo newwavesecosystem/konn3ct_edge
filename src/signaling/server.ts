@@ -876,9 +876,56 @@ export async function getActiveRoomParticipants(roomId: string) {
   const activeParticipants: Array<{ userId: string, participantId: string, name: string, role: string, isMobile: boolean, isCameraOn?: boolean, isMuted: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }> = [];
   
   try {
+    const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
     const globalParticipantsHash = await redis.hgetall(`room:${roomId}:participants`);
-    for (const pStr of Object.values(globalParticipantsHash)) {
-      activeParticipants.push(JSON.parse(pStr));
+
+    // If no active meeting instance exists, only return currently connected active local clients
+    if (!meetingInstanceId) {
+      const localClients = rooms.get(roomId);
+      if (localClients && localClients.size > 0) {
+        for (const c of localClients.values()) {
+          if (c.status === 'active') {
+            activeParticipants.push({
+              userId: c.userId,
+              participantId: c.participantId,
+              name: c.name,
+              role: c.role,
+              isMobile: c.isMobile,
+              isCameraOn: c.isCameraOn,
+              isMuted: c.isMuted
+            });
+          }
+        }
+      }
+      return activeParticipants;
+    }
+
+    // Fetch active session leases in this meeting instance
+    const activeSessions = await redis.hgetall(`meeting:${meetingInstanceId}:sessions`);
+    const activeIdentityKeys = new Set(Object.keys(activeSessions));
+    const localClients = rooms.get(roomId);
+    const toDelete: string[] = [];
+
+    for (const [pId, pStr] of Object.entries(globalParticipantsHash)) {
+      try {
+        const p = JSON.parse(pStr);
+        const idKey = getParticipantIdentityKey(p.userId);
+        const isLocalActive = localClients?.get(p.participantId)?.status === 'active';
+
+        if (activeIdentityKeys.has(idKey) || isLocalActive) {
+          activeParticipants.push(p);
+        } else {
+          // Stale ghost participant from previous day / ungraceful disconnect
+          toDelete.push(pId);
+        }
+      } catch (e) {
+        toDelete.push(pId);
+      }
+    }
+
+    if (toDelete.length > 0) {
+      await redis.hdel(`room:${roomId}:participants`, ...toDelete);
+      logger.info(`[PRESENCE] Purged ${toDelete.length} stale ghost participants from room ${roomId}`);
     }
   } catch (e) {
     logger.error('Failed to get active room participants from Redis', e);
@@ -1126,12 +1173,13 @@ export function syncRoomStateToRedis(roomId: string, roomSlug: string) {
     syncRoomTimeouts.delete(roomId);
   }, 1000); // 1 second debounce
   
-  syncRoomTimeouts.set(roomId, timeout);
+syncRoomTimeouts.set(roomId, timeout);
 }
 
 async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
   try {
     const clients = rooms.get(roomId);
+    const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
     
     // First, sync local clients to the global hash
     if (clients && clients.size > 0) {
@@ -1143,17 +1191,27 @@ async function executeSyncRoomStateToRedis(roomId: string, roomSlug: string) {
         }
       }
 
+      let activeIdentityKeys: Set<string> | null = null;
+      if (meetingInstanceId) {
+        const activeSessions = await redis.hgetall(`meeting:${meetingInstanceId}:sessions`);
+        activeIdentityKeys = new Set(Object.keys(activeSessions));
+      }
+
       const globalParticipantsHash = await redis.hgetall(`room:${roomId}:participants`);
       for (const [pId, pJson] of Object.entries(globalParticipantsHash)) {
         try {
           const parsed = JSON.parse(pJson);
-          if (parsed.userId && activeUserIds.has(parsed.userId)) {
-            const currentPartId = activeUserIds.get(parsed.userId);
-            if (pId !== currentPartId && !activeParticipantIds.has(pId)) {
-              await redis.hdel(`room:${roomId}:participants`, pId);
-            }
+          const idKey = getParticipantIdentityKey(parsed.userId);
+          const isLocalActive = activeParticipantIds.has(pId);
+          const hasActiveSession = activeIdentityKeys ? activeIdentityKeys.has(idKey) : false;
+
+          // If not active locally and has no active cluster session lease, prune it!
+          if (!isLocalActive && !hasActiveSession) {
+            await redis.hdel(`room:${roomId}:participants`, pId);
           }
-        } catch (e) {}
+        } catch (e) {
+          await redis.hdel(`room:${roomId}:participants`, pId);
+        }
       }
 
       for (const client of clients.values()) {
