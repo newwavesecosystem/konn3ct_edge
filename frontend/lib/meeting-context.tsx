@@ -36,6 +36,15 @@ let leaveBatchCount = 0;
 let leaveBatchTimeout: ReturnType<typeof setTimeout> | null = null;
 export const REACTION_DURATION = 10000;
 
+function getParticipantIdentityKey(userId?: string): string {
+  if (!userId) return 'guest:unknown';
+  if (userId.startsWith('guest-') || userId.startsWith('guest_') || userId.startsWith('anon-') || userId.startsWith('anon_')) {
+    const cleanId = userId.replace(/^(guest[-_]|anon[-_])/, '');
+    return `guest:${cleanId}`;
+  }
+  return `user:${userId}`;
+}
+
 interface MeetingContextValue {
   // State
   participants: Participant[];
@@ -450,6 +459,11 @@ export function MeetingProvider({
 
   // Start with only the current user, so real users are dynamically added
   const [participants, setParticipants] = useState<Participant[]>([initialCurrentUser]);
+  const participantsRef = useRef<Participant[]>(participants);
+
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
 
   useEffect(() => {
     if (clientParticipantId) {
@@ -525,7 +539,7 @@ export function MeetingProvider({
     const role = currentUser.role || webrtcClient.current?.userRole || 'attendee';
     const isHost = ['host', 'admin'].includes(role);
     const isCoHost = role === 'co-host';
-    const myIds = [
+    const rawIds = [
       clientParticipantId,
       initialCurrentUser.id,
       initialCurrentUser.userId,
@@ -534,6 +548,13 @@ export function MeetingProvider({
       webrtcClient.current?.participantId,
       webrtcClient.current?.userId
     ].filter(Boolean) as string[];
+
+    const myIds: string[] = [];
+    for (const id of rawIds) {
+      if (!myIds.includes(id)) myIds.push(id);
+      const identityKey = getParticipantIdentityKey(id);
+      if (!myIds.includes(identityKey)) myIds.push(identityKey);
+    }
 
     let explicit: 'DEFAULT' | 'ALLOW' | 'BLOCK' = 'DEFAULT';
     for (const id of myIds) {
@@ -545,6 +566,7 @@ export function MeetingProvider({
 
     if (isHost) return { allowed: true, reason: 'ALLOWED' };
     if (explicit === 'BLOCK') return { allowed: false, reason: 'PARTICIPANT_BLOCKED' };
+    if (explicit === 'ALLOW') return { allowed: true, reason: 'ALLOWED' };
     if (isCoHost) return { allowed: true, reason: 'ALLOWED' }; // Configurable co-host policy mapped here as true by default
 
     switch (screenSharePolicyMode) {
@@ -553,9 +575,7 @@ export function MeetingProvider({
       case 'HOSTS_ONLY':
         return { allowed: false, reason: 'HOST_DISABLED_SCREEN_SHARING' };
       case 'SELECTED':
-        return explicit === 'ALLOW' 
-          ? { allowed: true, reason: 'ALLOWED' } 
-          : { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING' };
+        return { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING' };
       default:
         return { allowed: true, reason: 'ALLOWED' };
     }
@@ -1727,8 +1747,17 @@ export function MeetingProvider({
           const myUserId = currentUser.userId || initialCurrentUser.userId || webrtcClient.current?.userId;
           setParticipantScreenSharePermissions(prev => {
             const next = { ...prev };
-            if (myParticipantId) next[myParticipantId] = perms.localScreenSharePermission;
-            if (myUserId) next[myUserId] = perms.localScreenSharePermission;
+            if (perms.allParticipantPermissions) {
+              Object.assign(next, perms.allParticipantPermissions);
+            }
+            if (myParticipantId) {
+              next[myParticipantId] = perms.localScreenSharePermission;
+              next[getParticipantIdentityKey(myParticipantId)] = perms.localScreenSharePermission;
+            }
+            if (myUserId) {
+              next[myUserId] = perms.localScreenSharePermission;
+              next[getParticipantIdentityKey(myUserId)] = perms.localScreenSharePermission;
+            }
             return next;
           });
         };
@@ -1740,8 +1769,27 @@ export function MeetingProvider({
         client.onParticipantScreenSharePermissionChanged = (userId, permission, version, targetParticipantId) => {
           setParticipantScreenSharePermissions(prev => {
             const next = { ...prev };
-            if (userId) next[userId] = permission;
-            if (targetParticipantId) next[targetParticipantId] = permission;
+            if (userId) {
+              next[userId] = permission;
+              next[getParticipantIdentityKey(userId)] = permission;
+            }
+            if (targetParticipantId) {
+              next[targetParticipantId] = permission;
+              next[getParticipantIdentityKey(targetParticipantId)] = permission;
+            }
+            const matchedParticipant = participantsRef.current?.find(p => 
+              p.id === targetParticipantId || p.userId === userId || p.id === userId || p.userId === targetParticipantId
+            );
+            if (matchedParticipant) {
+              if (matchedParticipant.id) {
+                next[matchedParticipant.id] = permission;
+                next[getParticipantIdentityKey(matchedParticipant.id)] = permission;
+              }
+              if (matchedParticipant.userId) {
+                next[matchedParticipant.userId] = permission;
+                next[getParticipantIdentityKey(matchedParticipant.userId)] = permission;
+              }
+            }
             return next;
           });
         };

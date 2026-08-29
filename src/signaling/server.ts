@@ -1682,9 +1682,10 @@ export function initializeSignaling(server: Server) {
       disconnectTimeouts.delete(`${participantId}:${roomId}`);
       logger.info(`Participant ${participantId} (User ${userId}) reconnected to room ${roomId} during grace period`);
 
-      const [roomPerms, userPerm] = await Promise.all([
+      const [roomPerms, userPerm, allParticipantPerms] = await Promise.all([
         getRoomPermissions(roomId),
-        getParticipantScreenSharePermission(roomId, identityKey)
+        getParticipantScreenSharePermission(roomId, identityKey),
+        redis.hgetall(`room:${roomId}:participantPermissions`)
       ]);
 
       const permissionsPayload = {
@@ -1692,7 +1693,8 @@ export function initializeSignaling(server: Server) {
         participantScreenSharingEnabled: roomPerms.participantScreenSharingEnabled,
         coHostScreenSharingEnabled: roomPerms.coHostScreenSharingEnabled,
         screenSharePolicyVersion: roomPerms.screenSharePolicyVersion,
-        localScreenSharePermission: userPerm
+        localScreenSharePermission: userPerm,
+        allParticipantPermissions: allParticipantPerms || {}
       };
 
       let meetingStartedAt: number | null = null;
@@ -1743,9 +1745,10 @@ export function initializeSignaling(server: Server) {
         meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, false);
       }
 
-      const [roomPerms, userPerm] = await Promise.all([
+      const [roomPerms, userPerm, allParticipantPerms] = await Promise.all([
         getRoomPermissions(roomId),
-        getParticipantScreenSharePermission(roomId, identityKey)
+        getParticipantScreenSharePermission(roomId, identityKey),
+        redis.hgetall(`room:${roomId}:participantPermissions`)
       ]);
 
       const permissionsPayload = {
@@ -1753,7 +1756,8 @@ export function initializeSignaling(server: Server) {
         participantScreenSharingEnabled: roomPerms.participantScreenSharingEnabled,
         coHostScreenSharingEnabled: roomPerms.coHostScreenSharingEnabled,
         screenSharePolicyVersion: roomPerms.screenSharePolicyVersion,
-        localScreenSharePermission: userPerm
+        localScreenSharePermission: userPerm,
+        allParticipantPermissions: allParticipantPerms || {}
       };
 
       ws.send(JSON.stringify({ 
@@ -2597,23 +2601,19 @@ export function initializeSignaling(server: Server) {
         const { targetParticipantId, permission } = data; // permission: 'DEFAULT' | 'ALLOW' | 'BLOCK'
         if (!targetParticipantId) return;
 
-        const roomClients = rooms.get(roomId);
-        const targetClient = roomClients?.get(targetParticipantId);
-        if (!targetClient) {
-          logger.warn(`set_participant_screen_share_permission rejected: targetParticipantId ${targetParticipantId} not found in room ${roomId}`);
-          return;
-        }
-
-        const authoritativeUserId = targetClient.userId;
+        const targetClient = findClientInRoom(roomId, targetParticipantId);
+        const authoritativeUserId = targetClient?.userId || targetParticipantId;
         const identityKey = getParticipantIdentityKey(authoritativeUserId);
+        const targetPartId = targetClient?.participantId || targetParticipantId;
+
         const newVersion = await setParticipantScreenSharePermissionCommand(roomId, identityKey, permission);
 
-        logger.info(`[AUDIT] PARTICIPANT_SCREEN_SHARE_PERMISSION_CHANGED | Room: ${roomId} | Actor: ${userId} | TargetParticipant: ${targetParticipantId} | TargetIdentity: ${identityKey} | Permission: ${permission} | Version: ${newVersion}`);
+        logger.info(`[AUDIT] PARTICIPANT_SCREEN_SHARE_PERMISSION_CHANGED | Room: ${roomId} | Actor: ${userId} | TargetParticipant: ${targetPartId} | TargetIdentity: ${identityKey} | Permission: ${permission} | Version: ${newVersion}`);
 
         broadcastToRoom(roomId, {
           type: 'participant_screen_share_permission_changed',
           targetUserId: authoritativeUserId,
-          targetParticipantId,
+          targetParticipantId: targetPartId,
           permission,
           version: newVersion
         });
@@ -2623,7 +2623,7 @@ export function initializeSignaling(server: Server) {
           const producersObj = await redis.hgetall(`room:${roomId}:producers`);
           for (const [pid, pStr] of Object.entries(producersObj)) {
               const p = JSON.parse(pStr);
-              if (p.participantId === targetParticipantId && p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen')) {
+              if ((p.participantId === targetPartId || p.userId === authoritativeUserId) && p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen')) {
                   try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                   await redis.hdel(`room:${roomId}:producers`, pid);
                   broadcastToRoom(roomId, {
@@ -2647,18 +2647,15 @@ export function initializeSignaling(server: Server) {
         const { targetParticipantId } = data;
         if (!targetParticipantId) return;
 
-        const roomClients = rooms.get(roomId);
-        const targetClient = roomClients?.get(targetParticipantId);
-        if (!targetClient) {
-          logger.warn(`stop_participant_screen_share rejected: targetParticipantId ${targetParticipantId} not found in room ${roomId}`);
-          return;
-        }
+        const targetClient = findClientInRoom(roomId, targetParticipantId);
+        const authoritativeUserId = targetClient?.userId || targetParticipantId;
+        const targetPartId = targetClient?.participantId || targetParticipantId;
 
         let stoppedCount = 0;
         const producersObj = await redis.hgetall(`room:${roomId}:producers`);
         for (const [pid, pStr] of Object.entries(producersObj)) {
             const p = JSON.parse(pStr);
-            if (p.participantId === targetParticipantId && p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen')) {
+            if ((p.participantId === targetPartId || p.userId === authoritativeUserId) && p.kind === 'video' && (p.appData?.source === 'screen' || p.source === 'screen')) {
                 try { await mediaController.closeProducer(pid, roomId); } catch(e){}
                 await redis.hdel(`room:${roomId}:producers`, pid);
                 stoppedCount++;

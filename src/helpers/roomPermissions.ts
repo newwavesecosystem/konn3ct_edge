@@ -126,6 +126,10 @@ export async function canParticipantShareScreenAdvanced(
     return { allowed: false, reason: 'PARTICIPANT_BLOCKED', version: v };
   }
 
+  if (explicit === 'ALLOW') {
+    return { allowed: true, version: v };
+  }
+
   if (isCoHost) {
     return roomPerms.coHostScreenSharingEnabled 
       ? { allowed: true, version: v }
@@ -140,9 +144,7 @@ export async function canParticipantShareScreenAdvanced(
       return { allowed: false, reason: 'HOST_DISABLED_SCREEN_SHARING', version: v };
 
     case 'SELECTED':
-      return explicit === 'ALLOW'
-        ? { allowed: true, version: v }
-        : { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING', version: v };
+      return { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING', version: v };
         
     default:
       return roomPerms.participantScreenSharingEnabled 

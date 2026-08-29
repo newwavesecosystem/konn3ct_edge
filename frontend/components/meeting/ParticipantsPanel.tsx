@@ -377,24 +377,54 @@ function ParticipantRow({
                     Ping participant
                   </button>
                   <div className="px-3 py-1.5 text-xs font-semibold text-[var(--mt-text-muted)]">Screen sharing</div>
-                  <button
-                    className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center justify-between"
-                    onClick={() => { setParticipantScreenSharePermission(participant.userId, 'ALLOW'); setShowMenu(false); }}
-                  >
-                    Allow {participantScreenSharePermissions[participant.userId] === 'ALLOW' && <Check className="w-4 h-4 text-brand-green" />}
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] text-red-400 hover:text-red-500 flex items-center justify-between"
-                    onClick={() => { setParticipantScreenSharePermission(participant.userId, 'BLOCK'); setShowMenu(false); }}
-                  >
-                    Block {participantScreenSharePermissions[participant.userId] === 'BLOCK' && <Check className="w-4 h-4 text-red-500" />}
-                  </button>
+                  {(() => {
+                    const isAllowed = (participant.userId && participantScreenSharePermissions[participant.userId] === 'ALLOW') ||
+                                      (participant.id && participantScreenSharePermissions[participant.id] === 'ALLOW');
+                    const isBlocked = (participant.userId && participantScreenSharePermissions[participant.userId] === 'BLOCK') ||
+                                      (participant.id && participantScreenSharePermissions[participant.id] === 'BLOCK');
+                    const targetId = participant.id || participant.userId;
+
+                    return (
+                      <>
+                        <button
+                          className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center justify-between"
+                          onClick={() => {
+                            const newPerm = isAllowed ? 'DEFAULT' : 'ALLOW';
+                            setParticipantScreenSharePermission(targetId, newPerm);
+                            setShowMenu(false);
+                            if (newPerm === 'ALLOW') {
+                              toast.success(`Screen sharing allowed for ${participant.name}`);
+                            } else {
+                              toast.info(`Screen sharing permission reset for ${participant.name}`);
+                            }
+                          }}
+                        >
+                          Allow {isAllowed && <Check className="w-4 h-4 text-brand-green" />}
+                        </button>
+                        <button
+                          className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] text-red-400 hover:text-red-500 flex items-center justify-between"
+                          onClick={() => {
+                            const newPerm = isBlocked ? 'DEFAULT' : 'BLOCK';
+                            setParticipantScreenSharePermission(targetId, newPerm);
+                            setShowMenu(false);
+                            if (newPerm === 'BLOCK') {
+                              toast.error(`Screen sharing blocked for ${participant.name}`);
+                            } else {
+                              toast.info(`Screen sharing block removed for ${participant.name}`);
+                            }
+                          }}
+                        >
+                          Block {isBlocked && <Check className="w-4 h-4 text-red-500" />}
+                        </button>
+                      </>
+                    );
+                  })()}
                   {participant.isScreenSharing && (
                     <>
                       <div className="h-px bg-[var(--mt-border)] my-1" />
                       <button
                         className="w-full text-left px-3 py-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-500"
-                        onClick={() => { stopParticipantScreenShare(participant.userId); setShowMenu(false); }}
+                        onClick={() => { stopParticipantScreenShare(participant.id || participant.userId); setShowMenu(false); }}
                       >
                         Stop current screen share
                       </button>

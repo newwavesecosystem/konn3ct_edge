@@ -55,11 +55,11 @@ describe('P1 Stabilization Batch — Live E2E Acceptance Test Pack (TC-01 to TC-
 
   beforeAll(async () => {
     meetingInstanceId = (await getActiveMeetingInstanceId(testRoomId, true))!;
-  });
+  }, 30000);
 
   afterAll(async () => {
     await closeActiveMeetingInstance(testRoomId, meetingInstanceId);
-  });
+  }, 30000);
 
   // --------------------------------------------------------------------------
   // TC-01: Waiting Room OFF -> Host turns ON -> new user joins

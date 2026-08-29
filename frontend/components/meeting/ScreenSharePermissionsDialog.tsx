@@ -4,6 +4,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ShieldAlert, Search } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -61,12 +62,8 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
   );
 
   const handleSave = () => {
-    if (localMode !== "EVERYONE" && screenSharePolicyMode === "EVERYONE") {
-      // Prompt confirmation
-      setShowConfirm(true);
-      return;
-    }
     commitChanges(false);
+    toast.success("Screen sharing permissions updated");
   };
 
   const commitChanges = (stopActive: boolean) => {
@@ -179,22 +176,24 @@ export function ScreenSharePermissionsDialog({ open, onOpenChange }: Props) {
             </div>
             <div className="max-h-[170px] overflow-y-auto space-y-2 pr-1 meeting-scrollbar">
               {filteredParticipants.map(p => {
-                const targetParticipantId = p.id;
+                const targetId = p.id || p.userId;
                 const isAllowed =
-                  participantScreenSharePermissions[targetParticipantId] === 'ALLOW' ||
-                  (p.userId ? participantScreenSharePermissions[p.userId] === 'ALLOW' : false);
+                  (p.id && participantScreenSharePermissions[p.id] === 'ALLOW') ||
+                  (p.userId && participantScreenSharePermissions[p.userId] === 'ALLOW') ||
+                  (p.userId && participantScreenSharePermissions[`user:${p.userId}`] === 'ALLOW') ||
+                  (p.userId && participantScreenSharePermissions[`guest:${p.userId.replace(/^(guest[-_]|anon[-_])/, '')}`] === 'ALLOW');
 
                 return (
                   <label
-                    key={targetParticipantId}
+                    key={targetId}
                     className="flex items-center space-x-2.5 py-1 px-1.5 rounded hover:bg-white/5 cursor-pointer transition-colors"
                   >
                     <input
                       type="checkbox"
-                      checked={isAllowed}
+                      checked={!!isAllowed}
                       onChange={(e) => {
                         setParticipantScreenSharePermission(
-                          targetParticipantId,
+                          targetId,
                           e.target.checked ? 'ALLOW' : 'DEFAULT'
                         );
                       }}
