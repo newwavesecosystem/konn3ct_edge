@@ -12,9 +12,17 @@ export interface AdmissionRecord {
   tokenHash?: string;
   previousTokenHash?: string;
   previousTokenValidUntil?: number;
+  disconnectedAt?: number;
   role: string;
   name: string;
   userId: string;
+}
+
+export const RESUME_WINDOW_MS = 60000; // 60 seconds secure session resumption window
+
+export function isResumptionExpired(admission: AdmissionRecord, maxResumeWindowMs = RESUME_WINDOW_MS): boolean {
+  if (!admission.disconnectedAt) return false;
+  return Date.now() - admission.disconnectedAt > maxResumeWindowMs;
 }
 
 export interface SessionLease {
@@ -126,6 +134,10 @@ export function rotateResumeToken(admission: AdmissionRecord): string {
 
 export function verifyResumeToken(admission: AdmissionRecord, token: string): boolean {
   if (!admission || !token) return false;
+  if (isResumptionExpired(admission)) {
+    logger.info(`[ResumeToken] Resumption window expired (>60s) for user=${admission.userId}`);
+    return false;
+  }
   try {
     const hashed = hashResumeToken(token);
     const hashBuf = Buffer.from(hashed, 'utf8');
@@ -306,6 +318,24 @@ export async function releaseSessionLease(
   } catch (e) {
     logger.error('Error releasing session lease', e);
     return false;
+  }
+}
+
+/**
+ * Fetches current session lease from Redis.
+ */
+export async function getSessionLease(
+  meetingInstanceId: string,
+  identityKey: string
+): Promise<SessionLease | null> {
+  try {
+    const key = `meeting:${meetingInstanceId}:sessions`;
+    const raw = await redis.hget(key, identityKey);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    logger.error('Failed to parse session lease from Redis', e);
+    return null;
   }
 }
 

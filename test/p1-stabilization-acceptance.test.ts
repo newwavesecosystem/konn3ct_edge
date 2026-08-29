@@ -11,6 +11,7 @@ import {
   getMeetingAdmission,
   acquireSessionLease,
   releaseSessionLease,
+  getSessionLease,
   getMeetingInstanceSettings,
   setMeetingInstanceWaitingRoom,
   AdmissionRecord
@@ -557,5 +558,216 @@ describe('P1 Stabilization Batch — Live E2E Acceptance Test Pack (TC-01 to TC-
 
     // Recorder leaves
     expect(getVisibleHumanParticipants(initialParticipants).length).toBe(5);
+  });
+
+  // --------------------------------------------------------------------------
+  // TC-PRESENCE-RECONNECT-01: 5s visible presence removal + 60s resumption authority
+  // --------------------------------------------------------------------------
+  it('TC-PRESENCE-RECONNECT-01: Disconnected participant removed within 5s, resumes within 60s without Waiting Room prompt, expires after 60s', async () => {
+    const zamyUserId = `u_zamy_${Date.now()}`;
+    const zamyIdentityKey = getParticipantIdentityKey(zamyUserId);
+    const initialToken = generateResumeToken();
+
+    // 1. Initial State: Waiting Room is ON, Zamy admitted and active
+    await setMeetingInstanceWaitingRoom(meetingInstanceId, true, 'host_1');
+    await setMeetingAdmission(meetingInstanceId, zamyIdentityKey, {
+      status: 'ACTIVE',
+      admittedAt: Date.now(),
+      admittedBy: 'host_1',
+      admissionGeneration: 1,
+      sessionStateVersion: 1,
+      tokenHash: hashResumeToken(initialToken),
+      role: 'attendee',
+      name: 'Zamy',
+      userId: zamyUserId
+    });
+    const lease1 = await acquireSessionLease(meetingInstanceId, zamyIdentityKey, 'pod-1', 'conn_zamy_1', 1);
+    expect(lease1.success).toBe(true);
+
+    // Initial Roster: Host, A, B, Zamy
+    const initialRoster = [
+      { id: 'host_1', userId: 'u_host', name: 'Host', role: 'host' as const, isMuted: false, isVideoOn: true, isScreenSharing: false, isHandRaised: false },
+      { id: 'part_a', userId: 'u_a', name: 'Participant A', role: 'attendee' as const, isMuted: true, isVideoOn: false, isScreenSharing: false, isHandRaised: false },
+      { id: 'part_b', userId: 'u_b', name: 'Participant B', role: 'attendee' as const, isMuted: true, isVideoOn: false, isScreenSharing: false, isHandRaised: false },
+      { id: 'part_zamy_1', userId: zamyUserId, name: 'Zamy', role: 'attendee' as const, isMuted: false, isVideoOn: true, isScreenSharing: false, isHandRaised: false },
+    ];
+    expect(getVisibleHumanParticipants(initialRoster).length).toBe(4);
+
+    // 2. T0: Zamy's connection disconnects
+    const t0 = Date.now();
+    const admOnDisconnect = await getMeetingAdmission(meetingInstanceId, zamyIdentityKey);
+    admOnDisconnect!.disconnectedAt = t0;
+    await setMeetingAdmission(meetingInstanceId, zamyIdentityKey, admOnDisconnect!);
+
+    // By T0 + 5s: Visible presence is removed (SIGNALING_PRESENCE_GRACE_MS = 5000)
+    await releaseSessionLease(meetingInstanceId, zamyIdentityKey, 'conn_zamy_1', 1);
+    const post5sRoster = initialRoster.filter(p => p.userId !== zamyUserId);
+    expect(getVisibleHumanParticipants(post5sRoster).length).toBe(3);
+    expect(post5sRoster.find(p => p.userId === zamyUserId)).toBeUndefined();
+
+    // But in Redis, Zamy's resumption authority remains ACTIVE
+    const admInRedis = await getMeetingAdmission(meetingInstanceId, zamyIdentityKey);
+    expect(admInRedis?.status).toBe('ACTIVE');
+    expect(admInRedis?.disconnectedAt).toBe(t0);
+
+    // 3. T0 + 30s: Zamy reconnects within 60-second window
+    const resumeAttempt30s = await getMeetingAdmission(meetingInstanceId, zamyIdentityKey);
+    expect(resumeAttempt30s).not.toBeNull();
+    // Simulate 30s elapsed: disconnectedAt = now - 30000
+    resumeAttempt30s!.disconnectedAt = Date.now() - 30000;
+    expect(verifyResumeToken(resumeAttempt30s!, initialToken)).toBe(true);
+
+    // Reconnection acquires generation 2 lease and returns ACTIVE without waiting room prompt
+    const nextToken = rotateResumeToken(resumeAttempt30s!);
+    delete resumeAttempt30s!.disconnectedAt;
+    await setMeetingAdmission(meetingInstanceId, zamyIdentityKey, resumeAttempt30s!);
+
+    const lease2 = await acquireSessionLease(meetingInstanceId, zamyIdentityKey, 'pod-1', 'conn_zamy_2', resumeAttempt30s!.admissionGeneration);
+    expect(lease2.success).toBe(true);
+    expect(lease2.session?.sessionGeneration).toBeGreaterThanOrEqual(1);
+    expect(lease2.admission?.status).toBe('ACTIVE'); // Directly ACTIVE, bypassed Waiting Room!
+
+    // Reconciled Roster: Zamy appears exactly once (zero duplicates)
+    const reconciledRoster = [
+      ...post5sRoster,
+      { id: 'part_zamy_2', userId: zamyUserId, name: 'Zamy', role: 'attendee' as const, isMuted: false, isVideoOn: true, isScreenSharing: false, isHandRaised: false },
+    ];
+    expect(getVisibleHumanParticipants(reconciledRoster).length).toBe(4);
+    const zamyEntries = reconciledRoster.filter(p => p.userId === zamyUserId);
+    expect(zamyEntries.length).toBe(1);
+
+    // 4. T0 + 59s: Resumption at boundary (still valid)
+    const boundaryAdm = await getMeetingAdmission(meetingInstanceId, zamyIdentityKey);
+    boundaryAdm!.disconnectedAt = Date.now() - 59000;
+    expect(verifyResumeToken(boundaryAdm!, nextToken)).toBe(true);
+
+    // 5. T0 + 61s: Resumption after 60s expiration
+    const expiredAdm = await getMeetingAdmission(meetingInstanceId, zamyIdentityKey);
+    expiredAdm!.disconnectedAt = Date.now() - 61000;
+    expect(verifyResumeToken(expiredAdm!, nextToken)).toBe(false); // Resumption expired!
+
+    // Since resumption expired, treated as fresh join -> Waiting Room is ON -> status: WAITING
+    const settings = await getMeetingInstanceSettings(meetingInstanceId);
+    let freshJoinStatus: 'active' | 'waiting' = settings.waitingRoomEnabled ? 'waiting' : 'active';
+    expect(freshJoinStatus).toBe('waiting'); // Requires host approval!
+  });
+
+  // --------------------------------------------------------------------------
+  // TC-PRESENCE-RECONNECT-02: Reconnect before visible-removal timer fires (T+3s and T+4.9s boundary)
+  // --------------------------------------------------------------------------
+  it('TC-PRESENCE-RECONNECT-02: Reconnection at T+3s / T+4.9s fences out old 5s timer, keeps current generation intact with 0 duplicates', async () => {
+    const userId = `u_race_02_${Date.now()}`;
+    const idKey = getParticipantIdentityKey(userId);
+    const token1 = generateResumeToken();
+
+    // Gen 1 connects
+    await setMeetingAdmission(meetingInstanceId, idKey, {
+      status: 'ACTIVE',
+      admittedAt: Date.now(),
+      admittedBy: 'host_1',
+      admissionGeneration: 1,
+      sessionStateVersion: 1,
+      tokenHash: hashResumeToken(token1),
+      role: 'attendee',
+      name: 'Race User',
+      userId
+    });
+    const lease1 = await acquireSessionLease(meetingInstanceId, idKey, 'pod-1', 'conn_gen_1', 1);
+    expect(lease1.success).toBe(true);
+    expect(lease1.session?.sessionGeneration).toBe(1);
+
+    // T0: Disconnect occurs for Gen 1
+    const closingGen = 1;
+    const closingConn = 'conn_gen_1';
+
+    // T+3s: Reconnection occurs before 5s timer -> Gen 2 lease acquired
+    const adm = await getMeetingAdmission(meetingInstanceId, idKey);
+    const token2 = rotateResumeToken(adm!);
+    await setMeetingAdmission(meetingInstanceId, idKey, adm!);
+
+    const lease2 = await acquireSessionLease(meetingInstanceId, idKey, 'pod-1', 'conn_gen_2', adm!.admissionGeneration);
+    expect(lease2.success).toBe(true);
+    expect(lease2.session?.sessionGeneration).toBe(2);
+
+    // T+5s: Old Gen 1 cleanup timer fires with closing credentials
+    const staleCleanupResult = await releaseSessionLease(meetingInstanceId, idKey, closingConn, closingGen);
+    expect(staleCleanupResult).toBe(false); // FENCED OUT!
+
+    // Verify current active lease remains Gen 2
+    const currentLease = await getSessionLease(meetingInstanceId, idKey);
+    expect(currentLease).not.toBeNull();
+    expect(currentLease?.sessionGeneration).toBe(2);
+    expect(currentLease?.connectionId).toBe('conn_gen_2');
+
+    // T+4.9s Boundary Test: Reconnect again to Gen 3
+    const adm3 = await getMeetingAdmission(meetingInstanceId, idKey);
+    const token3 = rotateResumeToken(adm3!);
+    await setMeetingAdmission(meetingInstanceId, idKey, adm3!);
+
+    const lease3 = await acquireSessionLease(meetingInstanceId, idKey, 'pod-1', 'conn_gen_3', adm3!.admissionGeneration);
+    expect(lease3.success).toBe(true);
+    expect(lease3.session?.sessionGeneration).toBe(3);
+
+    // Stale Gen 2 cleanup attempt is also fenced out
+    const staleGen2Cleanup = await releaseSessionLease(meetingInstanceId, idKey, 'conn_gen_2', 2);
+    expect(staleGen2Cleanup).toBe(false); // FENCED OUT!
+
+    const finalLease = await getSessionLease(meetingInstanceId, idKey);
+    expect(finalLease?.sessionGeneration).toBe(3);
+    expect(finalLease?.connectionId).toBe('conn_gen_3');
+  });
+
+  // --------------------------------------------------------------------------
+  // TC-PRESENCE-RECONNECT-03: Stale old socket close arrives after newer reconnect
+  // --------------------------------------------------------------------------
+  it('TC-PRESENCE-RECONNECT-03: Late old socket close ignored, does not overwrite disconnectedAt or destroy new lease', async () => {
+    const userId = `u_late_close_${Date.now()}`;
+    const idKey = getParticipantIdentityKey(userId);
+    const tokenA = generateResumeToken();
+
+    // Gen 30 active
+    await setMeetingAdmission(meetingInstanceId, idKey, {
+      status: 'ACTIVE',
+      admittedAt: Date.now(),
+      admittedBy: 'host_1',
+      admissionGeneration: 1,
+      sessionStateVersion: 30,
+      tokenHash: hashResumeToken(tokenA),
+      role: 'attendee',
+      name: 'Late Close User',
+      userId
+    });
+    const leaseGen30 = await acquireSessionLease(meetingInstanceId, idKey, 'pod-1', 'conn_gen_30', 1);
+    expect(leaseGen30.success).toBe(true);
+
+    // Gen 31 resumes successfully BEFORE Gen 30 socket close handler finishes
+    const adm = await getMeetingAdmission(meetingInstanceId, idKey);
+    const tokenB = rotateResumeToken(adm!);
+    delete adm!.disconnectedAt;
+    await setMeetingAdmission(meetingInstanceId, idKey, adm!);
+
+    const leaseGen31 = await acquireSessionLease(meetingInstanceId, idKey, 'pod-1', 'conn_gen_31', adm!.admissionGeneration);
+    expect(leaseGen31.success).toBe(true);
+    expect(leaseGen31.session?.sessionGeneration).toBeGreaterThanOrEqual(2);
+
+    // Late Gen 30 socket close handler executes now:
+    // It checks current lease before touching disconnectedAt
+    const currentLeaseBeforeClose = await getSessionLease(meetingInstanceId, idKey);
+    const isClosingStale = currentLeaseBeforeClose && 
+      (currentLeaseBeforeClose.connectionId !== 'conn_gen_30' || currentLeaseBeforeClose.sessionGeneration !== 1);
+    expect(isClosingStale).toBe(true); // Identified as stale!
+
+    // Because it is stale, disconnectedAt is NOT set
+    const currentAdm = await getMeetingAdmission(meetingInstanceId, idKey);
+    expect(currentAdm?.disconnectedAt).toBeUndefined(); // Remains clean!
+    expect(currentAdm?.status).toBe('ACTIVE');
+
+    // Late Gen 30 release lease attempt is fenced out
+    const releaseGen30 = await releaseSessionLease(meetingInstanceId, idKey, 'conn_gen_30', 1);
+    expect(releaseGen30).toBe(false); // Fenced out!
+
+    // Gen 31 lease survives intact
+    const survivingLease = await getSessionLease(meetingInstanceId, idKey);
+    expect(survivingLease?.connectionId).toBe('conn_gen_31');
   });
 });

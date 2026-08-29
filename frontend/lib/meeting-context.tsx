@@ -512,12 +512,26 @@ export function MeetingProvider({
   const [participantScreenSharePermissions, setParticipantScreenSharePermissions] = useState<Record<string, 'DEFAULT' | 'ALLOW' | 'BLOCK'>>({});
   
   const effectiveScreenSharePermission = useMemo<MeetingContextValue['effectiveScreenSharePermission']>(() => {
-    const isHost = ['host', 'admin'].includes(currentUser.role);
-    const isCoHost = currentUser.role === 'co-host';
-    const explicit = participantScreenSharePermissions[clientParticipantId || initialCurrentUser.id] ||
-                     (currentUser.userId ? participantScreenSharePermissions[currentUser.userId] : undefined) ||
-                     (currentUser.id ? participantScreenSharePermissions[currentUser.id] : undefined) ||
-                     'DEFAULT';
+    const role = currentUser.role || webrtcClient.current?.userRole || 'attendee';
+    const isHost = ['host', 'admin'].includes(role);
+    const isCoHost = role === 'co-host';
+    const myIds = [
+      clientParticipantId,
+      initialCurrentUser.id,
+      initialCurrentUser.userId,
+      currentUser.id,
+      currentUser.userId,
+      webrtcClient.current?.participantId,
+      webrtcClient.current?.userId
+    ].filter(Boolean) as string[];
+
+    let explicit: 'DEFAULT' | 'ALLOW' | 'BLOCK' = 'DEFAULT';
+    for (const id of myIds) {
+      if (participantScreenSharePermissions[id] && participantScreenSharePermissions[id] !== 'DEFAULT') {
+        explicit = participantScreenSharePermissions[id];
+        break;
+      }
+    }
 
     if (isHost) return { allowed: true, reason: 'ALLOWED' };
     if (explicit === 'BLOCK') return { allowed: false, reason: 'PARTICIPANT_BLOCKED' };
@@ -535,7 +549,7 @@ export function MeetingProvider({
       default:
         return { allowed: true, reason: 'ALLOWED' };
     }
-  }, [screenSharePolicyMode, participantScreenSharePermissions, currentUser.role, clientParticipantId, initialCurrentUser.id]);
+  }, [screenSharePolicyMode, participantScreenSharePermissions, currentUser.role, currentUser.id, currentUser.userId, clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId]);
 
   const [recordingStatus, setRecordingStatus] = useState<'idle' | 'starting' | 'recording' | 'stopping' | 'processing' | 'ready' | 'failed'>('idle');
   const [isRecording, setIsRecording] = useState(false);
@@ -1707,20 +1721,27 @@ export function MeetingProvider({
 
         client.onInitialPermissions = (perms) => {
           setScreenSharePolicyMode(perms.screenSharePolicyMode);
-          if (currentUser.id) {
-             setParticipantScreenSharePermissions(prev => ({
-               ...prev,
-               [clientParticipantId || initialCurrentUser.id]: perms.localScreenSharePermission
-             }));
-          }
+          const myParticipantId = clientParticipantId || initialCurrentUser.id || webrtcClient.current?.participantId;
+          const myUserId = currentUser.userId || initialCurrentUser.userId || webrtcClient.current?.userId;
+          setParticipantScreenSharePermissions(prev => {
+            const next = { ...prev };
+            if (myParticipantId) next[myParticipantId] = perms.localScreenSharePermission;
+            if (myUserId) next[myUserId] = perms.localScreenSharePermission;
+            return next;
+          });
         };
 
         client.onScreenSharePolicyChanged = (mode, version) => {
           setScreenSharePolicyMode(mode);
         };
 
-        client.onParticipantScreenSharePermissionChanged = (userId, permission, version) => {
-          setParticipantScreenSharePermissions(prev => ({ ...prev, [userId]: permission }));
+        client.onParticipantScreenSharePermissionChanged = (userId, permission, version, targetParticipantId) => {
+          setParticipantScreenSharePermissions(prev => {
+            const next = { ...prev };
+            if (userId) next[userId] = permission;
+            if (targetParticipantId) next[targetParticipantId] = permission;
+            return next;
+          });
         };
 
         client.onScreenShareStoppedByHost = (userId, producerId) => {
@@ -1732,6 +1753,70 @@ export function MeetingProvider({
               p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, isScreenSharing: false, screenTrack: null } : p
             ));
           }
+        };
+
+        client.onScreenShareStopped = (userId, producerId, participantId) => {
+          const isSelf = (participantId && (participantId === (clientParticipantId || initialCurrentUser.id) || participantId === client?.participantId)) ||
+                         (userId && (userId === client?.userId || userId === initialCurrentUser.userId || userId === currentUser.userId));
+          if (isSelf) {
+            setIsScreenSharing(false);
+            client?.disableScreenShare({ serverAlreadyClosed: true });
+          }
+          setParticipants(prev => prev.map(p => {
+            const matches = (participantId && (p.id === participantId || p.userId === participantId)) ||
+                            (userId && (p.id === userId || p.userId === userId)) ||
+                            (producerId && (p.screenProducerId === producerId || p.screenAudioProducerId === producerId));
+            if (matches) {
+              return {
+                ...p,
+                isScreenSharing: false,
+                screenTrack: undefined,
+                screenAudioTrack: undefined,
+                screenProducerId: undefined,
+                screenConsumerId: undefined,
+                screenTrackId: undefined,
+                screenAudioProducerId: undefined,
+                screenAudioConsumerId: undefined,
+                screenAudioTrackId: undefined,
+                screenStats: undefined
+              };
+            }
+            return p;
+          }));
+        };
+
+        client.onConsumerClosed = (producerId, appData) => {
+          setParticipants(prev => prev.map(p => {
+            if (p.screenProducerId === producerId || p.screenAudioProducerId === producerId || (appData as any)?.source === 'screen') {
+              if (p.screenProducerId === producerId || p.screenAudioProducerId === producerId || p.id === (appData as any)?.participantId || p.userId === (appData as any)?.userId) {
+                return {
+                  ...p,
+                  isScreenSharing: false,
+                  screenTrack: undefined,
+                  screenAudioTrack: undefined,
+                  screenProducerId: undefined,
+                  screenConsumerId: undefined,
+                  screenTrackId: undefined,
+                  screenAudioProducerId: undefined,
+                  screenAudioConsumerId: undefined,
+                  screenAudioTrackId: undefined,
+                  screenStats: undefined
+                };
+              }
+            }
+            if (p.cameraProducerId === producerId) {
+              return {
+                ...p,
+                isCameraOn: false,
+                videoTrack: undefined,
+                cameraProducerId: undefined,
+                cameraConsumerId: undefined,
+                cameraTrackId: undefined,
+                cameraStats: undefined
+              };
+            }
+            return p;
+          }));
         };
 
         client.onParticipantPingReceived = (ping) => {
@@ -2830,9 +2915,15 @@ export function MeetingProvider({
   }, []);
 
   const setParticipantScreenSharePermission = useCallback((targetParticipantId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') => {
-    setParticipantScreenSharePermissions(prev => ({ ...prev, [targetParticipantId]: permission }));
+    const target = participants.find(p => p.id === targetParticipantId || p.userId === targetParticipantId);
+    setParticipantScreenSharePermissions(prev => {
+      const next = { ...prev, [targetParticipantId]: permission };
+      if (target?.userId) next[target.userId] = permission;
+      if (target?.id) next[target.id] = permission;
+      return next;
+    });
     webrtcClient.current?.setParticipantScreenSharePermission(targetParticipantId, permission);
-  }, []);
+  }, [participants]);
 
   const stopParticipantScreenShare = useCallback((targetParticipantId: string) => {
     webrtcClient.current?.stopParticipantScreenShare(targetParticipantId);

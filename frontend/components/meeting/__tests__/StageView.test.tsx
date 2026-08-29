@@ -261,4 +261,45 @@ describe('StageView - Mobile Rotation & Multi Screen Share', () => {
     // A "Stop My Share" button is still available
     expect(screen.getByText('Stop My Share')).toBeInTheDocument();
   });
+
+  it('removes screen share display and returns to grid mode when the sharing participant disconnects or stops sharing', () => {
+    // 1. Initially Bob is sharing
+    mocks.meetingState = {
+      participants: [
+        { id: 'p_alice', userId: 'user_alice', name: 'Alice', role: 'attendee', isCameraOn: true, isScreenSharing: false },
+        { id: 'p_bob', userId: 'user_bob', name: 'Bob', role: 'attendee', isCameraOn: true, isScreenSharing: true, screenTrack: {} as any },
+      ],
+      layoutMode: 'grid',
+      isScreenSharing: false,
+      toggleScreenShare: vi.fn(),
+      currentUser: { id: 'p_alice', userId: 'user_alice', role: 'attendee' },
+      clientParticipantId: 'p_alice',
+    };
+
+    const { rerender } = render(<StageView />);
+
+    // Screen share layout is active
+    expect(screen.getByText('Bob is sharing')).toBeInTheDocument();
+
+    // 2. Bob disconnects (removed from participants list)
+    mocks.meetingState = {
+      participants: [
+        { id: 'p_alice', userId: 'user_alice', name: 'Alice', role: 'attendee', isCameraOn: true, isScreenSharing: false },
+      ],
+      layoutMode: 'grid',
+      isScreenSharing: false,
+      toggleScreenShare: vi.fn(),
+      currentUser: { id: 'p_alice', userId: 'user_alice', role: 'attendee' },
+      clientParticipantId: 'p_alice',
+    };
+
+    rerender(<StageView />);
+
+    // Screen share layout is completely removed
+    expect(screen.queryByText('Bob is sharing')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Stop Sharing')).not.toBeInTheDocument();
+
+    // Alice tile is visible in grid layout
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
 });

@@ -44,6 +44,7 @@ import {
   getMeetingAdmission,
   acquireSessionLease,
   releaseSessionLease,
+  getSessionLease,
   getMeetingInstanceSettings,
   setMeetingInstanceWaitingRoom,
 } from '../helpers/sessionResumption';
@@ -1810,9 +1811,31 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      const SIGNALING_PRESENCE_GRACE_MS = 35000;
-      const graceExpiresAt = new Date(Date.now() + SIGNALING_PRESENCE_GRACE_MS).toISOString();
-      logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${SIGNALING_PRESENCE_GRACE_MS}, graceExpiresAt: ${graceExpiresAt}`);
+      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 5000;
+      const graceExpiresAt = new Date(Date.now() + VISIBLE_PRESENCE_DISCONNECT_GRACE_MS).toISOString();
+      logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${VISIBLE_PRESENCE_DISCONNECT_GRACE_MS}, graceExpiresAt: ${graceExpiresAt}`);
+
+      const closingSessionGen = client.sessionGeneration || 1;
+      const closingConnId = client.connectionId || '';
+      const closingParticipantId = participantId;
+      const closingMeetingInstanceId = client.meetingInstanceId;
+      const identityKey = getParticipantIdentityKey(userId);
+
+      // Record disconnectedAt on admission record for 60s resumption tracking ONLY if this is the current active session
+      if (closingMeetingInstanceId) {
+        getSessionLease(closingMeetingInstanceId, identityKey).then(currentLease => {
+          if (!currentLease || (currentLease.connectionId === closingConnId && currentLease.sessionGeneration === closingSessionGen)) {
+            getMeetingAdmission(closingMeetingInstanceId, identityKey).then(adm => {
+              if (adm && adm.status === 'ACTIVE') {
+                adm.disconnectedAt = Date.now();
+                setMeetingAdmission(closingMeetingInstanceId, identityKey, adm).catch(e => logger.warn('Failed to update disconnectedAt', e));
+              }
+            }).catch(e => logger.warn('Failed to get admission on close', e));
+          } else {
+            logger.info(`[CLEANUP] Stale disconnect close: user ${userId} has already resumed with newer session generation ${currentLease.sessionGeneration} (closing: ${closingSessionGen})`);
+          }
+        }).catch(() => {});
+      }
 
       // Clean up consumer owners to prevent invalid ownership spam
       for (const [consumerId, owner] of consumerOwners.entries()) {
@@ -1822,27 +1845,33 @@ export function initializeSignaling(server: Server) {
       }
 
       const timeout = setTimeout(async () => {
-        logger.info(`Participant ${participantId} (User ${userId}) grace period expired. Cleaning up session.`);
+        logger.info(`Participant ${closingParticipantId} (User ${userId}) visible presence grace expired. Cleaning up visible presence.`);
         logger.info(`[CLEANUP] client_cleanup_completed for user ${userId} in room ${roomId}`);
 
-        if (client.meetingInstanceId && client.sessionGeneration) {
-          const identityKey = getParticipantIdentityKey(userId);
+        if (closingMeetingInstanceId && closingSessionGen) {
           const released = await releaseSessionLease(
-            client.meetingInstanceId,
+            closingMeetingInstanceId,
             identityKey,
-            client.connectionId || '',
-            client.sessionGeneration
+            closingConnId,
+            closingSessionGen
           );
           if (!released) {
-            logger.info(`[CLEANUP] Disconnect cleanup for ${userId} ignored: session generation ${client.sessionGeneration} superseded by newer session.`);
-            disconnectTimeouts.delete(`${participantId}:${roomId}`);
+            logger.info(`[CLEANUP] Disconnect cleanup for ${userId} ignored: session generation ${closingSessionGen} superseded by newer session.`);
+            disconnectTimeouts.delete(`${closingParticipantId}:${roomId}`);
             return;
           }
         }
 
         const roomClients = rooms.get(roomId);
         if (roomClients) {
-          roomClients.delete(participantId);
+          const currentRoomClient = roomClients.get(closingParticipantId);
+          if (currentRoomClient && currentRoomClient.connectionId && currentRoomClient.connectionId !== closingConnId) {
+            logger.info(`[CLEANUP] Disconnect cleanup for ${userId} ignored: local room client replaced by connection ${currentRoomClient.connectionId}`);
+            disconnectTimeouts.delete(`${closingParticipantId}:${roomId}`);
+            return;
+          }
+
+          roomClients.delete(closingParticipantId);
           
           // Close transports on expiry
           client.transports.forEach(tId => {
@@ -1855,10 +1884,10 @@ export function initializeSignaling(server: Server) {
           client.transports = [];
 
           // 1. Remove their producers globally
-          await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === participantId);
+          await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === closingParticipantId);
           
           // 2. Remove them from global participants
-          await redis.hdel(`room:${roomId}:participants`, participantId);
+          await redis.hdel(`room:${roomId}:participants`, closingParticipantId);
 
           // 3. Clean up local maps if local room is empty
           if (roomClients.size === 0) {
@@ -1891,8 +1920,8 @@ export function initializeSignaling(server: Server) {
             broadcastRoomState(roomId);
           }
         }
-        disconnectTimeouts.delete(`${participantId}:${roomId}`);
-      }, SIGNALING_PRESENCE_GRACE_MS);
+        disconnectTimeouts.delete(`${closingParticipantId}:${roomId}`);
+      }, VISIBLE_PRESENCE_DISCONNECT_GRACE_MS);
 
       disconnectTimeouts.set(`${participantId}:${roomId}`, timeout);
     });
@@ -2094,7 +2123,8 @@ export function initializeSignaling(server: Server) {
           break;
         }
 
-        // Rotate resume token with bounded 60s retry overlap window
+        // Clear disconnectedAt and rotate resume token with bounded 60s retry overlap window
+        delete adm.disconnectedAt;
         const newResumeToken = rotateResumeToken(adm);
         await setMeetingAdmission(meetingInstanceId, identityKey, adm);
 

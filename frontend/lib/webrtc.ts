@@ -211,7 +211,7 @@ export class WebRTCClient {
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
   public onScreenShareStopped?: (userId: string, producerId: string, participantId?: string) => void;
   public onScreenSharePolicyChanged?: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', version: number) => void;
-  public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number) => void;
+  public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number, targetParticipantId?: string) => void;
   public onScreenShareStoppedByHost?: (userId: string, producerId: string) => void;
   public onInitialPermissions?: (permissions: any) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
@@ -463,6 +463,29 @@ export class WebRTCClient {
               resolver.reject(new Error(`Failed to consume: ${msg.errorCode || msg.reason}`));
               if (queue.length === 0) {
                 this.pendingRequests.delete('consumed');
+              }
+            }
+          }
+          break;
+        case 'produce_failed':
+          if (this.pendingRequests.has('produced')) {
+            const queue = this.pendingRequests.get('produced')!;
+            if (msg.requestId) {
+              const index = queue.findIndex(req => req.requestId === msg.requestId);
+              if (index !== -1) {
+                const [resolver] = queue.splice(index, 1);
+                clearTimeout(resolver.timeoutId);
+                resolver.reject(new Error(msg.message || msg.errorCode || 'Failed to produce'));
+                if (queue.length === 0) {
+                  this.pendingRequests.delete('produced');
+                }
+              }
+            } else if (queue.length > 0) {
+              const resolver = queue.shift()!;
+              clearTimeout(resolver.timeoutId);
+              resolver.reject(new Error(msg.message || msg.errorCode || 'Failed to produce'));
+              if (queue.length === 0) {
+                this.pendingRequests.delete('produced');
               }
             }
           }
@@ -744,7 +767,7 @@ export class WebRTCClient {
           this.onScreenSharePolicyChanged?.(msg.mode, msg.version);
           break;
         case 'participant_screen_share_permission_changed':
-          this.onParticipantScreenSharePermissionChanged?.(msg.targetUserId, msg.permission, msg.version);
+          this.onParticipantScreenSharePermissionChanged?.(msg.targetUserId, msg.permission, msg.version, msg.targetParticipantId);
           break;
         case 'screen_share_stopped':
           // Existing handling might be generic, but we explicitly handle host stops

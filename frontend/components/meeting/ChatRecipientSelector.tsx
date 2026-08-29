@@ -343,7 +343,7 @@ export function ChatRecipientSelector({
                         )}
                       </div>
                       <p className="text-[10px] flex items-center gap-1 truncate text-emerald-400/80">
-                        <Lock className="w-2.5 h-2.5 shrink-0" /> Direct message (Private)
+                        <Lock className="w-2.5 h-2.5 shrink-0" /> Private message
                       </p>
                     </div>
                   </div>

@@ -500,6 +500,7 @@ function ControlBtn({
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={tooltip}
       data-testid={testId}
       className={cn(
