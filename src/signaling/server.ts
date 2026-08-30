@@ -1298,6 +1298,7 @@ export async function removeRoomProducersByPredicate(roomId: string, predicate: 
 }
 
 export function initializeSignaling(server: Server) {
+  startRecordingSupervisor();
   const wss = new WebSocketServer({ noServer: true });
 
   mediaController.on('producerClose', (data) => {

@@ -289,6 +289,7 @@ async function processRecordingJob(job, workerId) {
              const lockKey = `recording:${recordingId}:segment:${sIndex}:upload-lock`;
              const lockAcquired = await redis.set(lockKey, 'locked', 'EX', 600, 'NX');
              if (lockAcquired) {
+                 console.log(JSON.stringify({ event: "recorder_cleanup_upload_queued", recordingId, segmentIndex: sIndex, file }));
                  const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, filePath, stdoutPath, stderrPath, sIndex, workerGeneration, isCrashStr], {
                    detached: true, stdio: 'ignore'
                  });
