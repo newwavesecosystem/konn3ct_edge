@@ -44,6 +44,11 @@ spec:
     spec:
       containers:
         - name: recorder
+          env:
+            - name: MAX_CONCURRENT_BROWSERS
+              value: "2"
+            - name: MAX_CONCURRENT_TRANSCODES
+              value: "2"
           resources:
             requests:
               cpu: "500m"

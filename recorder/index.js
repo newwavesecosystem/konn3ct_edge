@@ -400,18 +400,19 @@ async function processRecordingJob(job, workerId) {
            }
            
            if (lastSegment) {
-               console.log(`[Segment Finalized] ${lastSegment}. Queuing for upload.`);
+               const segmentToUpload = lastSegment; // capture immediately for closure
+               console.log(`[Segment Finalized] ${segmentToUpload}. Queuing for upload.`);
                const transcoderPath = require('path').join(__dirname, 'transcoder.js');
-               const stdoutPath = require('path').join(isolatedDir, `${lastSegment}_stdout.log`);
-               const stderrPath = require('path').join(isolatedDir, `${lastSegment}_stderr.log`);
+               const stdoutPath = require('path').join(isolatedDir, `${segmentToUpload}_stdout.log`);
+               const stderrPath = require('path').join(isolatedDir, `${segmentToUpload}_stderr.log`);
                
-               const lsMatch = lastSegment.match(/_(\d+)\.mp4$/);
+               const lsMatch = segmentToUpload.match(/_(\d+)\.mp4$/);
                const lsIndex = lsMatch ? parseInt(lsMatch[1], 10) : 0;
                
                const lockKey = `recording:${recordingId}:segment:${lsIndex}:upload-lock`;
                redis.set(lockKey, 'locked', 'EX', 600, 'NX').then(lockAcquired => {
                    if (lockAcquired) {
-                       const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, require('path').join(isolatedDir, lastSegment), stdoutPath, stderrPath, lsIndex, workerGeneration, 'false'], {
+                       const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, require('path').join(isolatedDir, segmentToUpload), stdoutPath, stderrPath, lsIndex, workerGeneration, 'false'], {
                          detached: true, stdio: ['ignore', 'inherit', 'inherit']
                        });
                        child.unref();

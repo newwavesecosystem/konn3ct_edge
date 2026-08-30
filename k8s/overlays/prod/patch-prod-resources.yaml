@@ -82,6 +82,11 @@ spec:
             topologyKey: kubernetes.io/hostname
       containers:
         - name: recorder
+          env:
+            - name: MAX_CONCURRENT_BROWSERS
+              value: "5"
+            - name: MAX_CONCURRENT_TRANSCODES
+              value: "5"
           resources:
             requests:
               cpu: "1000m"
