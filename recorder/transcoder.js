@@ -39,7 +39,7 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, botToke
       };
       const response = await fetch(url, options);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      success = true;
+      success = true; console.log(`[${recordingId}] spaces_upload_db_synced: ${JSON.stringify(payload)}`);
     } catch (err) {
       retries--;
       if (retries > 0) await new Promise(r => setTimeout(r, 2000));

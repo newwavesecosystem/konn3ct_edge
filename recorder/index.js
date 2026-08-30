@@ -291,7 +291,7 @@ async function processRecordingJob(job, workerId) {
              if (lockAcquired) {
                  console.log(JSON.stringify({ event: "recorder_cleanup_upload_queued", recordingId, segmentIndex: sIndex, file }));
                  const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, filePath, stdoutPath, stderrPath, sIndex, workerGeneration, isCrashStr], {
-                   detached: true, stdio: 'ignore'
+                   detached: true, stdio: ['ignore', 'inherit', 'inherit']
                  });
                  child.unref();
              } else {
@@ -412,7 +412,7 @@ async function processRecordingJob(job, workerId) {
                redis.set(lockKey, 'locked', 'EX', 600, 'NX').then(lockAcquired => {
                    if (lockAcquired) {
                        const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, require('path').join(isolatedDir, lastSegment), stdoutPath, stderrPath, lsIndex, workerGeneration, 'false'], {
-                         detached: true, stdio: 'ignore'
+                         detached: true, stdio: ['ignore', 'inherit', 'inherit']
                        });
                        child.unref();
                    }

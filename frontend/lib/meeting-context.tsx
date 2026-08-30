@@ -587,16 +587,22 @@ export function MeetingProvider({
   // Sync isRecording with the presence of a bot participant
   useEffect(() => {
     const hasBot = participants.some((p) => p.role === "bot");
-    setIsRecording(hasBot);
     setRecordingStatus((prev) => {
       if (hasBot) {
+        setIsRecording(true);
         // Prevent aggressive override if the user already initiated a stop ('stopping' / 'processing') or start ('starting')
         if (prev !== 'stopping' && prev !== 'processing' && prev !== 'starting') {
           return 'recording';
         }
         return prev;
+      } else {
+        // If we don't have a bot, only clear isRecording if we aren't currently waiting for one to join or process
+        if (prev === 'starting' || prev === 'stopping' || prev === 'processing') {
+          return prev;
+        }
+        setIsRecording(false);
+        return 'idle';
       }
-      return prev === 'processing' ? 'processing' : 'idle';
     });
   }, [participants]);
   const [isHandRaised, setIsHandRaised] = useState(false);
