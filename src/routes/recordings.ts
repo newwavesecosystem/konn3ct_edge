@@ -280,7 +280,6 @@ recordingsRouter.post('/:id/segments', async (req: Request, res: Response) => {
     }
 
     // Fence by explicit immutable segment ownership
-    const redis = require('../config/redis').redis;
     const ownerKey = `recording:${id}:segment:${segmentIndex}:owner`;
     const reservedOwner = await redis.get(ownerKey);
     
