@@ -16,6 +16,7 @@ import { Konn3ctAIPanel } from "./panels/Konn3ctAIPanel";
 import StreamingPanel from "./StreamingPanel";
 import { ReactionsLayer } from "./ReactionsLayer";
 import { LeaveDialog } from "./LeaveDialog";
+import { RecordingConsentModal } from "./RecordingConsentModal";
 import { MicIssueDialog } from "./MicIssueDialog";
 import { CamIssueDialog } from "./CamIssueDialog";
 import { CaptionsOverlay } from "./CaptionsOverlay";
@@ -401,6 +402,7 @@ export function MeetingShell() {
       <NetworkDebugOverlay />
       <ReactionsLayer />
       <LeaveDialog />
+      <RecordingConsentModal />
       <MicIssueDialog />
       <CamIssueDialog />
       {showDonationModal && <DonationModal onClose={() => setShowDonationModal(false)} />}
