@@ -589,18 +589,25 @@ export function MeetingProvider({
     const hasBot = participants.some((p) => p.role === "bot");
     setRecordingStatus((prev) => {
       if (hasBot) {
-        setIsRecording(true);
+        // If we are actively stopping, we should NOT force isRecording back to true
+        if (prev !== 'stopping' && prev !== 'processing') {
+           setIsRecording(true);
+        }
         // Prevent aggressive override if the user already initiated a stop ('stopping' / 'processing') or start ('starting')
         if (prev !== 'stopping' && prev !== 'processing' && prev !== 'starting') {
           return 'recording';
         }
         return prev;
       } else {
-        // If we don't have a bot, only clear isRecording if we aren't currently waiting for one to join or process
-        if (prev === 'starting' || prev === 'stopping' || prev === 'processing') {
+        // If we don't have a bot, only preserve isRecording if we are STARTING (waiting for bot)
+        if (prev === 'starting') {
           return prev;
         }
+        // If stopping or processing, we keep the status but definitely drop the visual red badge
         setIsRecording(false);
+        if (prev === 'stopping' || prev === 'processing') {
+           return prev;
+        }
         return 'idle';
       }
     });
@@ -2020,6 +2027,7 @@ export function MeetingProvider({
         };
 
         client.onRecordingStopping = () => {
+          setIsRecording(false);
           setRecordingStatus('stopping');
           toast.info("Recording is stopping and finalizing...", { id: 'recording_status' });
         };
