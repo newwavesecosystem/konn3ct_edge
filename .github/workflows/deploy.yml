@@ -26,21 +26,21 @@ jobs:
       - name: Log in to DigitalOcean Container Registry
         run: docker login registry.digitalocean.com -u ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} -p ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      - name: Build and Push Backend Docker Image
-        if: github.ref != 'refs/heads/1gov_stag'
-        run: |
-          IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
-          docker build -t $IMAGE_NAME:${{ github.sha }} .
-          docker push $IMAGE_NAME:${{ github.sha }}
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
-            docker push $IMAGE_NAME:staging-latest
-          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
-            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
-            docker push $IMAGE_NAME:prod-latest
-          fi
+      # - name: Build and Push Backend Docker Image
+      #   if: github.ref != 'refs/heads/1gov_stag'
+      #   run: |
+      #     IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-backend"
+      #     docker build -t $IMAGE_NAME:${{ github.sha }} .
+      #     docker push $IMAGE_NAME:${{ github.sha }}
+      #     if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
+      #       docker push $IMAGE_NAME:staging-latest
+      #     elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+      #       docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+      #       docker push $IMAGE_NAME:prod-latest
+      #     fi
 
-      - name: Build and Push Frontend Docker Image
+      # - name: Build and Push Frontend Docker Image
         run: |
           IMAGE_NAME="registry.digitalocean.com/konn3ct-registry/conn3ct-frontend"
           docker build \

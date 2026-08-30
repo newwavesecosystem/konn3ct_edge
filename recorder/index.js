@@ -1,4 +1,4 @@
-const { launch, getStream } = require('puppeteer-stream');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 const Redis = require('ioredis');
@@ -357,7 +357,7 @@ async function processRecordingJob(job, workerId) {
     const silentWavPath = require('path').join(__dirname, 'silent.wav');
     if (fs.existsSync(silentWavPath)) browserArgs.push(`--use-file-for-fake-audio-capture=${silentWavPath}`);
 
-    browser = await launch({
+    browser = await puppeteer.launch({
       executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
       headless: false, defaultViewport: null, ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
       env: { DISPLAY: displayId, PULSE_SERVER: `unix:${pulseSocketPath}`, ...process.env }, args: browserArgs
