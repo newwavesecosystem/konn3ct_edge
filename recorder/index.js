@@ -205,7 +205,6 @@ async function processRecordingJob(job, workerId) {
   
   let browser = null;
   let xvfbProc = null;
-  let pulseProc = null;
   let ffmpegProc = null;
   
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
@@ -268,7 +267,7 @@ async function processRecordingJob(job, workerId) {
       } catch(e){}
     }
     if (browser) { try { await browser.close(); } catch(e){} }
-    if (pulseProc) { try { pulseProc.kill('SIGKILL'); } catch(e){} }
+    try { execSync(`pactl unload-module module-null-sink`); } catch(e){}
     if (xvfbProc) { try { xvfbProc.kill('SIGKILL'); } catch(e){} }
     
     // Check local disk for any segments that haven't been successfully unlinked by the transcoder yet
@@ -332,17 +331,16 @@ async function processRecordingJob(job, workerId) {
     xvfbProc = spawn('Xvfb', [displayId, '-screen', '0', '1920x1080x24', '-ac', '-nolisten', 'tcp']);
     await new Promise(r => setTimeout(r, 1000));
     
-    const pulseDir = `/tmp/pulse_${generationId}`;
-    fs.mkdirSync(pulseDir, { recursive: true });
-    pulseProc = spawn('pulseaudio', [
-      '-n', '-F', '/dev/null', '--exit-idle-time=-1', '--daemonize=false', `-p`, pulseDir,
-      `--load=module-null-sink sink_name=RecorderSink_${generationId} sink_properties=device.description=RecorderSink`,
-      `--load=module-native-protocol-unix socket=${pulseDir}/pulse-socket`
-    ], { env: { ...process.env, DISPLAY: displayId, PULSE_RUNTIME_PATH: pulseDir } });
-    await new Promise(r => setTimeout(r, 1500));
-    
-    const pulseSocketPath = `${pulseDir}/pulse-socket`;
+    // Load null sink for this job using the system PulseAudio daemon
     const sinkName = `RecorderSink_${generationId}`;
+    try {
+      execSync(`pactl load-module module-null-sink sink_name=${sinkName} sink_properties=device.description=RecorderSink_${recordingId}`);
+      execSync(`pactl set-default-sink ${sinkName}`);
+    } catch(e) {
+      console.warn("Failed to set pulseaudio sink", e.toString());
+    }
+    console.log(JSON.stringify({ event: "recorder_audio_sink_created", recordingId, sinkName }));
+
 
     const browserArgs = [
       '--window-size=1920,1080', '--kiosk', '--no-sandbox', '--disable-setuid-sandbox',
@@ -360,7 +358,7 @@ async function processRecordingJob(job, workerId) {
     browser = await puppeteer.launch({
       executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
       headless: false, defaultViewport: null, ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
-      env: { DISPLAY: displayId, PULSE_SERVER: `unix:${pulseSocketPath}`, ...process.env }, args: browserArgs
+      env: { DISPLAY: displayId, PULSE_SINK: sinkName, ...process.env }, args: browserArgs
     });
 
     const pages = await browser.pages();
@@ -437,7 +435,8 @@ async function processRecordingJob(job, workerId) {
     ];
     
     console.log(JSON.stringify({ event: "recorder_ffmpeg_capture_started", recordingId, workerGeneration, nextSegmentIndex }));
-    ffmpegProc = spawn('ffmpeg', ffmpegArgs);
+    ffmpegProc = spawn('ffmpeg', ffmpegArgs, { env: { ...process.env, DISPLAY: displayId }});
+    ffmpegProc.stderr.on('data', d => console.error('FFMPEG_STDERR:', d.toString()));
     
     await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/started`, recordingId, job.jobId, botToken, "callback_started");
 
