@@ -13,9 +13,11 @@ spec:
       labels:
         app: minio
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
       containers:
       - name: minio
-        image: minio/minio:latest
+        image: quay.io/minio/minio:latest
         args:
         - server
         - /data
