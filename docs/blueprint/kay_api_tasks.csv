@@ -1,0 +1,205 @@
+id,name,Description,start Date,Deadline,Priority,Tags,Assignees
+API-001,API-001 - Admin Authentication & Token Generation Endpoint,"Implement POST /api/v1/admin/auth/login endpoint handling credentials verification, MFA check, and issuing signed JWT access/refresh tokens with admin claims. Expectation: Returns HTTP 200 with tokens on success; rate-limits failed login attempts.
+
+Acceptance Criteria:
+- Accepts email and password payload with input validation
+- Verifies password hash using argon2/bcrypt
+- Issues short-lived Access Token (15 min) and HTTP-only Refresh Token cookie (7 days)
+- Returns Admin Profile object including permissions array
+- Returns 401 Unauthorized for invalid credentials and logs failed attempt",8/7/2026,8/9/2026,High,"Backend, Auth, API",Johnson Kayode
+API-002,API-002 - Token Refresh & Session Verification Endpoint,"Implement POST /api/v1/admin/auth/refresh endpoint to handle token rotation and session validation. Expectation: Rotates refresh token cleanly and revokes old tokens.
+
+Acceptance Criteria:
+- Validates HTTP-only refresh token cookie
+- Checks database session state to verify token is not revoked or blacklisted
+- Issues new Access Token and rotated Refresh Token
+- Returns 401 if refresh token is expired or revoked",8/9/2026,8/10/2026,High,"Backend, Auth",Johnson Kayode
+API-003,API-003 - Admin Logout & Token Revocation Endpoint,"Implement POST /api/v1/admin/auth/logout endpoint to invalidate active session tokens. Expectation: Blacklists active access token and clears cookies.
+
+Acceptance Criteria:
+- Blacklists current Access Token JTI in Redis/Database cache
+- Clears HTTP-only Refresh Token cookie
+- Emits AUDIT_LOG_ADMIN_LOGOUT event
+- Returns HTTP 200 OK success message",8/10/2026,8/11/2026,Medium,"Backend, Auth",Johnson Kayode
+API-004,API-004 - Paginated Users List & Search API Endpoint,"Implement GET /api/v1/admin/users endpoint supporting full-text search, pagination, and multi-field filtering. Expectation: Sub-100ms response time with indexed DB queries.
+
+Acceptance Criteria:
+- Accepts query parameters: page, limit, search, role, status, sortBy, sortOrder
+- Performs case-insensitive search across Name, Email, and User ID
+- Returns paginated JSON response with data array and meta pagination object
+- Enforces RBAC permission users:read",8/11/2026,8/14/2026,High,"Backend, User Management",Johnson Kayode
+API-005,API-005 - User Profile & Activity History Detail API,"Implement GET /api/v1/admin/users/{id} endpoint returning full user profile, meeting history, and active subscriptions. Expectation: Consolidated payload for admin drawer view.
+
+Acceptance Criteria:
+- Returns user profile metadata, verification status, and registration IP
+- Includes array of recent 10 meetings hosted/joined
+- Includes active subscription details and payment status
+- Returns 404 Not Found if user ID does not exist",8/14/2026,8/16/2026,Medium,"Backend, User Management",Johnson Kayode
+API-006,API-006 - User Account Suspension API Endpoint,"Implement POST /api/v1/admin/users/{id}/suspend endpoint to update user status and revoke current active meeting tokens. Expectation: Mandates reason string in request body and triggers audit log.
+
+Acceptance Criteria:
+- Requires JSON body: { ""reason"": ""string (min 10 chars)"" }
+- Updates user status in DB to SUSPENDED
+- Invalidate user's active meeting join tokens in Redis
+- Emits AUDIT_USER_SUSPENDED log with reason and admin ID
+- Returns HTTP 200 with updated user state",8/16/2026,8/18/2026,High,"Backend, Security",Johnson Kayode
+API-007,API-007 - User Ban & Immediate Session Purge API,"Implement POST /api/v1/admin/users/{id}/ban endpoint for severe account termination. Expectation: Instantly kicks user from any active WebRTC meeting rooms and revokes all refresh tokens.
+
+Acceptance Criteria:
+- Requires JSON body: { ""reason"": ""string"", ""confirmationCode"": ""CONFIRM BAN"" }
+- Updates user status in DB to BANNED
+- Dispatches WebSockets/Redis pub-sub signal to WebRTC SFU to drop participant connections
+- Revokes all refresh tokens for the user in Redis
+- Emits high-priority AUDIT_USER_BANNED event",8/18/2026,8/20/2026,High,"Backend, Security, SFU Integration",Johnson Kayode
+API-008,API-008 - Organization Management & Seat Allocation API,"Implement GET and PATCH /api/v1/admin/organizations endpoints to list enterprise accounts and update seat allocations. Expectation: Updates seat caps and syncs with Odoo.
+
+Acceptance Criteria:
+- GET endpoint returns list of Organizations, Admin Contact, Seat Limit, and Plan
+- PATCH endpoint updates seat allocation limit or plan tier
+- Emits AUDIT_ORG_UPDATED event
+- Triggers background sync event to Zammy's Odoo 19 instance",8/20/2026,8/22/2026,Medium,"Backend, Org Management",Johnson Kayode
+API-009,API-009 - Payment Transactions & Webhook Log API,"Implement GET /api/v1/admin/financials/transactions endpoint returning payment attempts and raw gateway payloads. Expectation: Filterable by payment type, status, and gateway.
+
+Acceptance Criteria:
+- Paginated results of transactions (Ref, Amount, Currency, Status, Gateway)
+- Query params: status, paymentType, gateway, startDate, endDate
+- Endpoint includes raw_webhook_payload JSON field for detailed diagnostic view
+- Enforces RBAC permission financials:read",8/22/2026,8/25/2026,High,"Backend, Financials",Johnson Kayode
+API-010,API-010 - Manual Comp Access Grant API Endpoint,"Implement POST /api/v1/admin/financials/entitlements/grant endpoint to issue manual access to paid events or replays. Expectation: Creates entitlement record and emits strict audit event.
+
+Acceptance Criteria:
+- Payload: { ""userId"": ""string"", ""targetType"": ""EVENT""|""REPLAY"", ""targetId"": ""string"", ""expiryDate"": ""ISOString"", ""reason"": ""string"" }
+- Inserts access entitlement record into DB
+- Emits AUDIT_MANUAL_ENTITLEMENT_GRANTED with admin ID and reason
+- Syncs entitlement update to Zammy's Odoo 19 subscription records",8/25/2026,8/27/2026,High,"Backend, Financial Overrides",Johnson Kayode
+API-011,API-011 - Entitlement Revocation API Endpoint,"Implement POST /api/v1/admin/financials/entitlements/revoke endpoint to remove access. Expectation: Immediately invalidates entitlement and updates DB.
+
+Acceptance Criteria:
+- Payload: { ""entitlementId"": ""string"", ""reason"": ""string"" }
+- Marks entitlement as REVOKED in database
+- Clears cache key in Redis so media server blocks access
+- Emits AUDIT_ENTITLEMENT_REVOKED event",8/27/2026,8/29/2026,Medium,"Backend, Financial Overrides",Johnson Kayode
+API-012,API-012 - Active Live Meetings Overview API Endpoint,"Implement GET /api/v1/admin/diagnostics/meetings/active endpoint pulling real-time meeting room counts and participant loads from Redis/SFU. Expectation: Response under 50ms.
+
+Acceptance Criteria:
+- Queries Redis/SFU state for live meeting count, total connected participants, and aggregate bandwidth
+- Returns list of active room summary objects (Room ID, Host Name, Duration, Participant Count, Server Node)
+- Includes cache control headers for short TTL (5 seconds)",8/29/2026,8/31/2026,High,"Backend, WebRTC Diagnostics",Johnson Kayode
+API-013,API-013 - Meeting WebRTC Stream Quality Metrics API,"Implement GET /api/v1/admin/diagnostics/meetings/{id}/webrtc-stats endpoint returning stream metrics. Expectation: Returns time-series stats of bitrate, packet loss, and jitter.
+
+Acceptance Criteria:
+- Fetches real-time or recent WebRTC stats for room ID from Redis timeseries / SFU telemetry
+- Returns structured JSON containing average packet loss %, jitter (ms), audio bitrate, video bitrate
+- Flags threshold warnings in response if packet loss > 3%",8/31/2026,9/2/2026,High,"Backend, WebRTC",Johnson Kayode
+API-014,API-014 - Meeting Live Participant Inspector API,"Implement GET /api/v1/admin/diagnostics/meetings/{id}/participants endpoint listing connected clients and media states. Expectation: Lists all connected sockets in room.
+
+Acceptance Criteria:
+- Returns list of connected participants (Name, Client Type [Web/iOS/Android], Join Time, Audio Muted, Video Enabled)
+- Displays client network health score (1-5)
+- Returns 404 if meeting room ID is not active",9/2/2026,9/4/2026,Medium,"Backend, Diagnostics",Johnson Kayode
+API-015,API-015 - Remote Participant Reconnect Signal API,"Implement POST /api/v1/admin/diagnostics/meetings/{id}/reconnect-participant endpoint to issue remote socket reconnect command. Expectation: Publishes socket event to force client media renegotiation.
+
+Acceptance Criteria:
+- Payload: { ""participantId"": ""string"" }
+- Publishes Redis pub-sub message to target SFU node to send RECONNECT_SIGNAL to client socket
+- Returns success response confirmation
+- Emits audit log entry for diagnostic action",9/4/2026,9/6/2026,Medium,"Backend, WebRTC",Johnson Kayode
+API-016,API-016 - Diagnostic Snapshot Exporter API Endpoint,"Implement GET /api/v1/admin/diagnostics/meetings/{id}/export-snapshot endpoint packaging meeting state into JSON download. Expectation: Sanitizes private data while exporting technical logs.
+
+Acceptance Criteria:
+- Assembles room config, SFU telemetry, WebRTC metrics, and recent error logs
+- Sanitizes PII (hashes IP addresses, obfuscates personal emails)
+- Returns downloadable .json content stream with header Content-Disposition: attachment",9/6/2026,9/8/2026,Low,"Backend, Utilities",Johnson Kayode
+API-017,API-017 - AI Services Processing Queue Monitor API,"Implement GET /api/v1/admin/ai/jobs endpoint returning background AI job statuses (Transcripts, Summaries). Expectation: Displays queue health and failure rates.
+
+Acceptance Criteria:
+- Queries BullMQ/Celery/Redis background queue for job statuses
+- Returns list of jobs (Job ID, Meeting ID, Status [PENDING/PROCESSING/COMPLETED/FAILED], Error Message)
+- Filterable by status query parameter",9/8/2026,9/10/2026,Medium,"Backend, AI Services",Johnson Kayode
+API-018,API-018 - AI Failed Job Retry Trigger API,"Implement POST /api/v1/admin/ai/jobs/{id}/retry endpoint to re-enqueue a failed transcript or summary job. Expectation: Re-submits job payload to queue.
+
+Acceptance Criteria:
+- Re-enqueues specified failed AI job ID into worker queue
+- Resets job error attempt counter
+- Emits AUDIT_AI_JOB_RETRIED event
+- Returns HTTP 200 with new job status",9/10/2026,9/11/2026,Medium,"Backend, AI Services",Johnson Kayode
+API-019,API-019 - AI Summary Content Moderation & Publish API,"Implement PATCH /api/v1/admin/ai/summaries/{id} endpoint allowing admins to edit and approve AI summary text before publishing to replays. Expectation: Updates DB and flags summary as approved.
+
+Acceptance Criteria:
+- Accepts updated summary text, takeaways array, and isPublished boolean
+- Updates summary record in DB
+- Emits event to trigger public replay notification if published
+- Logs admin content edit action",9/11/2026,9/13/2026,Low,"Backend, Content Management",Johnson Kayode
+API-020,API-020 - Platform Recordings Metadata API Endpoint,"Implement GET /api/v1/admin/content/recordings endpoint returning paginated list of platform media assets. Expectation: Returns file size, duration, host ID, storage tier, and expiry date.
+
+Acceptance Criteria:
+- Paginated results of recordings metadata stored in DB / S3 / Object Storage
+- Query params: search (meeting title/host), storageTier (HOT/COLD), isPrivate
+- Includes calculated system total storage consumed metric",9/13/2026,9/15/2026,Medium,"Backend, Content Governance",Johnson Kayode
+API-021,API-021 - Break-Glass Emergency Recording Stream Generator API,"Implement POST /api/v1/admin/content/recordings/{id}/break-glass endpoint for temporary admin replay viewing. Expectation: Generates short-lived signed URL and dispatches alert.
+
+Acceptance Criteria:
+- Payload requires: { ""ticketId"": ""string"", ""justification"": ""string"", ""adminPassword"": ""string"" }
+- Verifies admin password hash
+- Generates 15-minute expiring S3/CDN signed URL
+- Dispatches high-priority alert email/Slack message to Security Lead and logs AUDIT_BREAK_GLASS_RECORDING_ACCESS",9/15/2026,9/17/2026,High,"Backend, Security, Governance",Johnson Kayode
+API-022,API-022 - GDPR Hard Delete Recording & Media Purge API,"Implement DELETE /api/v1/admin/content/recordings/{id} endpoint to permanently purge recording files. Expectation: Deletes S3 object and DB metadata.
+
+Acceptance Criteria:
+- Requires confirmation payload: { ""confirmation"": ""DELETE RECORDING"" }
+- Deletes object file from Cloud Storage bucket
+- Deletes DB recording record, transcript, and AI summary
+- Emits AUDIT_RECORDING_PURGED event",9/17/2026,9/19/2026,Medium,"Backend, Compliance",Johnson Kayode
+API-023,API-023 - Primary Headline KPIs Analytics API Endpoint,"Implement GET /api/v1/admin/analytics/kpis/headline endpoint returning Free Users vs Paid Users counts and period growth. Expectation: Powers the top North Star KPI cards.
+
+Acceptance Criteria:
+- Returns Total Free Users count + MTD growth %
+- Returns Total Paid Users count + MTD growth %
+- Cached in Redis with 1-hour TTL for optimal performance
+- Supports query param period (day, week, month, year)",9/19/2026,9/21/2026,High,"Backend, Analytics",Johnson Kayode
+API-024,API-024 - Platform Usage Trends Analytics Aggregator API,"Implement GET /api/v1/admin/analytics/trends endpoint returning time-series data for meetings, replays, and revenue. Expectation: Structured data formatted for charting libraries.
+
+Acceptance Criteria:
+- Aggregates daily/weekly counts for Meetings Hosted, Join Rates, Replay Views, and Revenue
+- Query params: startDate, endDate, granularity (daily/weekly)
+- Handles empty date ranges with zero-filled arrays",9/21/2026,9/23/2026,Medium,"Backend, Analytics",Johnson Kayode
+API-025,API-025 - Country Growth & Distribution Analytics API,"Implement GET /api/v1/admin/analytics/countries endpoint returning user and revenue metrics broken down by country code. Expectation: Powers international growth widget.
+
+Acceptance Criteria:
+- Returns list of objects: Country Code, Country Name, Free Users, Paid Users, Free-to-Paid Conversion Rate %
+- Sortable by Free Users or Paid Users
+- Includes support ticket count per country",9/23/2026,9/25/2026,Low,"Backend, Analytics",Johnson Kayode
+API-026,API-026 - Odoo 19 User Registration Event Dispatcher Worker,"Develop background queue worker emitting USER_REGISTERED payload to Zammy's Odoo 19 XML-RPC/REST endpoint. Expectation: Pushes User ID, Name, Email, Country, Referral Code, and Lead Source.
+
+Acceptance Criteria:
+- Listens to USER_REGISTERED event on message queue
+- Constructs JSON payload with User ID, Email, Country Code, Referral Code, Lead Source, and Registration IP
+- Posts to Zammy's Odoo 19 konn3ct_subscriber_sync endpoint
+- Retries up to 5 times with exponential backoff on failure",9/25/2026,9/27/2026,High,"Backend, Odoo 19 Integration, Worker",Johnson Kayode
+API-027,API-027 - Odoo 19 Platform Usage Metrics Dispatcher Worker,"Develop background queue worker publishing Usage Signals (Meetings Hosted, Meetings Joined, Replay Views, AI Notes Used) to Zammy's Odoo 19 instance. Expectation: Powers Zammy's Customer Health Score engine in Odoo 19.
+
+Acceptance Criteria:
+- Aggregates user daily activity: Meetings Hosted, Meetings Joined, Watch Time, AI Summaries Used
+- Dispatches payload to Zammy's Odoo 19 konn3ct_usage_intelligence endpoint
+- Includes User ID, Activity Type, Count, and Timestamp
+- Enables Zammy to compute Customer Health Score (0-100) in Odoo 19",9/27/2026,9/29/2026,High,"Backend, Odoo 19 Integration, Metrics",Johnson Kayode
+API-028,API-028 - Odoo 19 Payment Success & Failure Signal Dispatcher,"Develop worker publishing PAYMENT_SUCCESS and PAYMENT_FAILED payloads (including Abandoned Checkout flags) to Zammy's Odoo 19 instance. Expectation: Powers Odoo 19 Invoicing and Payment Recovery campaigns.
+
+Acceptance Criteria:
+- Listens to PAYMENT_SUCCESS and PAYMENT_FAILED queue events
+- Includes Tx Ref, User ID, Amount, Currency, Plan/Event ID, Gateway, Error Code, and Abandoned Cart Flag
+- Posts payload to Zammy's Odoo 19 payment recovery listener
+- Idempotency key (Tx Ref) prevents duplicate invoice creation in Odoo 19",9/29/2026,10/1/2026,High,"Backend, Odoo 19 Integration, Payment",Johnson Kayode
+API-029,API-029 - Odoo 19 Helpdesk Diagnostic Data Sync Worker,"Develop worker pushing Konn3ct support ticket events and Diagnostic Snapshot JSON URLs to Zammy's Odoo 19 Helpdesk module. Expectation: Connects platform diagnostics directly to Odoo 19 tickets.
+
+Acceptance Criteria:
+- Pushes Ticket ID, User Email, Issue Category, and Diagnostic Snapshot URL to Zammy's Odoo 19 Helpdesk API
+- Maps payment tier to ticket priority (Paid User = High Priority in Odoo 19)
+- Handles webhook updates from Zammy's Odoo 19 instance when ticket status changes",10/1/2026,10/3/2026,Medium,"Backend, Odoo 19 Integration, Helpdesk",Johnson Kayode
+API-030,API-030 - Immutable Audit Log Reader & Event Dispatcher Service,"Implement GET /api/v1/admin/audit-logs and backend interceptor decorator @AuditLog for state changes. Expectation: Read-only audit log API and non-blocking event emission.
+
+Acceptance Criteria:
+- GET /api/v1/admin/audit-logs returns read-only array of audit logs (Timestamp, Admin ID, Action, Target ID, Payload JSON, IP)
+- Interceptor @AuditLog automatically extracts Admin Session ID, IP, User Agent, and Target ID
+- Enforces strict SuperAdmin role check (returns 403 for non-SuperAdmins)
+- Asynchronously writes audit records without blocking response",10/3/2026,10/5/2026,High,"Backend, Security, Audit",Johnson Kayode

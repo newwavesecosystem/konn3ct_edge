@@ -1,4 +1,4 @@
-import { redis } from './server';
+import { redis } from '../redis';
 import { db } from '../db';
 import { logger } from '../logger';
 import crypto from 'crypto';
@@ -57,11 +57,6 @@ export async function loadRoomHistoryFromDb(roomId: string, roomCreatedDate: Dat
         where: { 
           roomId: roomId, 
           createdAt: { gte: roomCreatedDate },
-          OR: [
-            { isPrivate: false },
-            { targetUserId: participantId || undefined },
-            { userId: userId || undefined }
-          ]
         },
         orderBy: { createdAt: 'asc' },
         take: 50,

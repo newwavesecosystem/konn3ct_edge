@@ -24,6 +24,13 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
   const lastRecoveryTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
   const healthyStartTimeRef = useRef<number>(0);
+  const trackAttachTimeRef = useRef<number>(Date.now());
+
+  // Reset warm-up timer when track changes
+  useEffect(() => {
+    trackAttachTimeRef.current = Date.now();
+    stallCountRef.current = 0;
+  }, [track?.id]);
 
   const logDev = (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -97,6 +104,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
 
     const checkHealth = () => {
       tickCounter++;
+      const isWarmingUp = Date.now() - trackAttachTimeRef.current < 6000;
       
       // 1. Timeout for recovering state (5 seconds)
       if (health === 'recovering' && recoveryStartTimeRef.current > 0) {
@@ -144,7 +152,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           // currentTime is stalled
           const isSafariQuirk = currentTime === 0 && !checkBlackFrame(video);
           
-          if (isSafariQuirk) {
+          if (isSafariQuirk || isWarmingUp) {
              stallCountRef.current = 0;
              if (health !== 'healthy') {
                 console.log('participant_tile_video_recovered');
@@ -155,7 +163,7 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           } else {
              if (health !== 'recovering' && !video.paused) {
                 stallCountRef.current++;
-                if (stallCountRef.current > 4) {
+                if (stallCountRef.current > 6) {
                   if (health !== 'stalled') {
                     console.log('participant_tile_video_stalled');
                     setHealth('stalled');
@@ -166,17 +174,20 @@ export function useVideoHealth({ videoRef, track, isVisible, onRecover }: UseVid
           }
         }
       } else {
-        // Missing dimensions or readyState
+        // Missing dimensions or readyState - skip disruptive recoveries during warm-up
+        if (isWarmingUp) {
+          return;
+        }
         if (video.readyState < 2) {
           stallCountRef.current++;
-          if (stallCountRef.current > 5) {
+          if (stallCountRef.current > 8) {
             triggerRecovery('readyState stuck below 2');
           }
           return;
         }
         if (video.videoWidth === 0 || video.videoHeight === 0) {
           stallCountRef.current++;
-          if (stallCountRef.current > 5) {
+          if (stallCountRef.current > 8) {
             triggerRecovery('Zero dimensions');
             return;
           }

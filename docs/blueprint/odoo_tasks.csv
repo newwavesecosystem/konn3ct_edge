@@ -1,0 +1,105 @@
+id,name,Description,start Date,Deadline,Priority,Tags
+ODOO-001,ODOO-001 - Odoo Enterprise Instance Deployment & Infrastructure Setup,"Deploy Odoo 16/17 Enterprise instance on cloud hosting / Kubernetes cluster with PostgreSQL database backend and SSL configuration. Expectation: Production and Staging instances online with secure secrets management.
+
+Acceptance Criteria:
+- Odoo Enterprise instance running with high availability PostgreSQL
+- HTTPS enabled with valid SSL certificate
+- Staging instance created and isolated from production
+- Backup and restore procedures automated and verified",08/10/2026,08/12/2026,High,"Odoo, Setup, Infra"
+ODOO-002,ODOO-002 - Core Standard Odoo Modules Activation & Configuration,"Activate standard Odoo modules: CRM, Sales, Subscriptions, Invoicing, Events, Marketing Automation, Email Marketing, Helpdesk, Knowledge, Survey. Expectation: Standard workflows configured for Konn3ct terminology.
+
+Acceptance Criteria:
+- All 10 core modules installed and enabled
+- Basic company details, currencies, and tax rules configured
+- User access roles assigned for Sales, Support, and Finance teams
+- Verified basic navigation and module accessibility",08/12/2026,08/14/2026,High,"Odoo, Modules"
+ODOO-003,ODOO-003 - Custom Odoo Fields and Tags Configuration,"Add custom fields and tags to CRM, Contacts, and Subscriptions models as specified in Volume 5. Expectation: Fields created via Odoo Studio/Python models for segmentation.
+
+Acceptance Criteria:
+- Created custom fields: `x_konn3ct_user_id`, `x_account_status`, `x_current_plan`, `x_customer_health_score`
+- Created custom tags: `Competitor Pain Signal`, `Upcoming Event Opportunity`, `Creator Monetization`, `Replay Demand`, `Payment Recovery`, `Renewal Window`
+- Verified custom fields appear in Lead and Contact forms",08/14/2026,08/16/2026,Medium,"Odoo, Configuration"
+ODOO-004,ODOO-004 - Custom Addon: konn3ct_subscriber_sync Development,"Develop custom Odoo addon `konn3ct_subscriber_sync` for bi-directional user and subscription state sync. Expectation: Exposes clean XML-RPC/REST endpoints for Konn3ct workers.
+
+Acceptance Criteria:
+- Addon module structure created (`__manifest__.py`, models, controllers)
+- Exposes API endpoints to create/update Contacts and Subscription records
+- Validates API tokens on every sync request
+- Idempotency check prevents duplicate record creation",08/16/2026,08/19/2026,High,"Odoo, Custom Addon, Python"
+ODOO-005,ODOO-005 - Custom Addon: konn3ct_usage_intelligence Development,"Develop custom Odoo addon `konn3ct_usage_intelligence` to ingest platform usage signals. Expectation: Updates user engagement score based on meetings hosted, replays watched, and AI notes generated.
+
+Acceptance Criteria:
+- Models created for tracking meeting usage, replay views, and AI summaries count
+- Calculates composite `Customer Health Score` (0-100) dynamically
+- Triggers alert task for account manager if health score drops below 40
+- Unit tests written and passing for score calculation logic",08/19/2026,08/22/2026,Medium,"Odoo, Custom Addon, Data"
+ODOO-006,ODOO-006 - Custom Addon: konn3ct_paid_events Integration,"Develop custom addon `konn3ct_paid_events` extending `event.event` and `sale.order` for webinar ticket access. Expectation: Generates access tokens upon ticket payment.
+
+Acceptance Criteria:
+- Links ticket sale orders to Konn3ct room IDs
+- Generates event access entitlement upon invoice payment confirmation
+- Fires webhook to Konn3ct API to grant user room access
+- Verified ticket purchase flow end-to-end",08/22/2026,08/25/2026,High,"Odoo, Paid Events"
+ODOO-007,ODOO-007 - Custom Addon: konn3ct_replay_monetization Integration,"Develop custom addon `konn3ct_replay_monetization` to track paid video replays, view access limits, and host revenue splits. Expectation: Accurately logs creator earnings.
+
+Acceptance Criteria:
+- Tracks paid replay sales and host revenue percentage split
+- Generates monthly creator revenue summary reports
+- Webhook integration to revoke replay access when expiry date passes
+- Verified revenue calculations in Odoo Accounting",08/25/2026,08/28/2026,Medium,"Odoo, Monetization"
+ODOO-008,ODOO-008 - Custom Addon: konn3ct_partner_attribution Development,"Develop custom addon `konn3ct_partner_attribution` to track ambassador referral codes and Country Hub operator commissions. Expectation: Automated commission calculation.
+
+Acceptance Criteria:
+- Links referral codes to specific Partner/Ambassador Contact cards
+- Automatically calculates commission amount on every invoice payment
+- Tracks Country Hub regional revenue attributions
+- Monthly partner payout summary report generated",08/28/2026,08/31/2026,Medium,"Odoo, Partnerships"
+ODOO-009,ODOO-009 - 4-Tier Lead Scoring Engine Implementation,"Configure Odoo automated lead scoring rules combining Fit Score, Intent Score, Engagement Score, and Revenue Potential Score (Volume 5). Expectation: Leads automatically tagged as Cold, Warm, Hot, or Strategic.
+
+Acceptance Criteria:
+- Scoring weights configured: Fit (25pt), Intent (25pt), Engagement (25pt), Revenue (25pt)
+- Automated rule updates composite score upon signal ingestion
+- Hot leads (Score >= 65) automatically assigned to senior salesperson
+- Strategic leads (Score >= 85) trigger immediate email alert to Leadership",08/31/2026,09/03/2026,High,"Odoo, Lead Scoring"
+ODOO-010,ODOO-010 - Marketing Automation Nurture Sequences Setup,"Configure automated email and WhatsApp nurture sequences in Odoo Marketing Automation module. Expectation: Segment-specific campaigns for Free User activation.
+
+Acceptance Criteria:
+- Onboarding 7-day email drip sequence for new signups
+- Webinar attendance follow-up sequence with replay links
+- WhatsApp template integration for high-intent leads
+- Opt-out / Unsubscribe logic verified to comply with privacy rules",09/03/2026,09/06/2026,Medium,"Odoo, Marketing Automation"
+ODOO-011,ODOO-011 - Abandoned Checkout & Payment Recovery Workflow,"Configure Odoo automated workflow to detect failed payment webhooks and trigger recovery campaigns. Expectation: Automated reminders for abandoned checkout.
+
+Acceptance Criteria:
+- Triggers on `x_payment_status == Failed` or abandoned cart event
+- Dispatches payment reminder email after 1 hour and 24 hours
+- Generates support follow-up ticket for high-value enterprise accounts
+- Tracks recovery success rate in Odoo CRM dashboard",09/06/2026,09/09/2026,High,"Odoo, Payment Recovery"
+ODOO-012,ODOO-012 - Odoo Helpdesk SLA & Ticket Escalation Rules Setup,"Configure Odoo Helpdesk module with SLA rules, priority mapping, and support team assignment. Expectation: Ticket priority mapped to user subscription tier.
+
+Acceptance Criteria:
+- SLA policies established: Paid Users (2-hour response), Free Users (24-hour response)
+- Automatic ticket assignment based on issue category (Billing, Technical, Account)
+- Diagnostic Snapshot JSON URL field added to Helpdesk ticket view
+- Automated escalation rule triggers if SLA deadline is breached",09/09/2026,09/12/2026,Medium,"Odoo, Helpdesk, Support"
+ODOO-013,ODOO-013 - Inbound Connector Worker Integration (Konn3ct -> Odoo),"Develop background message queue consumer in Konn3ct backend to push platform events to Odoo REST API. Expectation: Non-blocking, resilient sync queue.
+
+Acceptance Criteria:
+- Workers listen to `USER_REGISTERED`, `MEETING_CREATED`, `PAYMENT_SUCCESS` queue events
+- Calls Odoo API endpoints with exponential backoff on network failure (5 retries max)
+- Failed events logged to error queue for manual inspection
+- Idempotency key checked to prevent duplicate creation",09/12/2026,09/15/2026,High,"Backend, Odoo Connector"
+ODOO-014,ODOO-014 - Outbound Webhook Handler Integration (Odoo -> Konn3ct),"Build API webhook handlers in Konn3ct to process state changes from Odoo. Expectation: Konn3ct entitlements update when Odoo subscription/invoice states change.
+
+Acceptance Criteria:
+- Webhook endpoint `/api/v1/integrations/odoo/webhook` verifies Odoo signing secret
+- Processes `SUBSCRIPTION_ACTIVATED`, `SUBSCRIPTION_CANCELLED`, `TICKET_RESOLVED` payloads
+- Updates Konn3ct user access tokens and Redis entitlement cache immediately
+- Returns HTTP 200 OK to Odoo webhook call",09/15/2026,09/18/2026,High,"Backend, Webhooks, Odoo"
+ODOO-015,ODOO-015 - Primary KPI Executive Dashboards in Odoo BI,"Configure custom reporting dashboards in Odoo to track Free Users, Paid Users, MRR, ARR, CAC, and LTV. Expectation: Executive-ready visual reporting.
+
+Acceptance Criteria:
+- Headline KPI tiles for Total Free Users and Total Paid Users
+- Financial charts for Monthly Recurring Revenue (MRR) and Subscription Renewal Rate %
+- Campaign ROI dashboard tracking conversion rate by lead source
+- Exportable PDF/Excel executive reports configured",09/18/2026,09/21/2026,Medium,"Odoo, Analytics, Reporting"

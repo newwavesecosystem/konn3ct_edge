@@ -22,25 +22,26 @@ test.describe('Camera Error Recovery', () => {
     // This overrides HTMLVideoElement.prototype.currentTime to always return 0, 
     // simulating a failure in video rendering or connection data flow
     await page.evaluate(() => {
-      window['__toggleCameraStall'] = (stalled: boolean) => {
+      const win = window as any;
+      win['__toggleCameraStall'] = (stalled: boolean) => {
         if (stalled) {
-          if (!window['__originalCurrentTimeGetter']) {
-            window['__originalCurrentTimeGetter'] = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'currentTime')?.get;
+          if (!win['__originalCurrentTimeGetter']) {
+            win['__originalCurrentTimeGetter'] = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'currentTime')?.get;
           }
           Object.defineProperty(HTMLVideoElement.prototype, 'currentTime', {
             get: function() { return 1.5; },
             configurable: true
           });
         } else {
-          if (window['__originalCurrentTimeGetter']) {
+          if (win['__originalCurrentTimeGetter']) {
             Object.defineProperty(HTMLVideoElement.prototype, 'currentTime', {
-              get: window['__originalCurrentTimeGetter'],
+              get: win['__originalCurrentTimeGetter'],
               configurable: true
             });
           }
         }
       };
-      window['__toggleCameraStall'](true); // Start stalled
+      win['__toggleCameraStall'](true); // Start stalled
     });
 
     // 1. Participant turns camera ON.
@@ -60,7 +61,7 @@ test.describe('Camera Error Recovery', () => {
     // 5. Confirm whether camera eventually connects or remains failed.
     // We now restore the camera to "recover" it
     await page.evaluate(() => {
-      window['__toggleCameraStall'](false);
+      (window as any)['__toggleCameraStall'](false);
     });
 
     // Verify it recovers and the error disappears (it should go back to healthy)

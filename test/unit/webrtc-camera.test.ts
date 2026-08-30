@@ -84,7 +84,8 @@ describe('WebRTCClient Camera Fallback', () => {
         track: { stop: vi.fn() },
         replaceTrack: vi.fn().mockResolvedValue(undefined),
         close: vi.fn(),
-        closed: false
+        closed: false,
+        on: vi.fn()
       })
     } as any;
   });

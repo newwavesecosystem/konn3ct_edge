@@ -48,6 +48,17 @@ const formatDate = (dateStr: string) => {
   }
 };
 
+const formatTime = (dateStr?: string) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+};
+
 export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -99,7 +110,7 @@ export default function AttendanceScreen() {
   const renderAttendanceCard = (meeting: MeetingAttendanceSession, index: number) => {
     const host = meeting.host || meeting.host_name || meeting.hostname || meeting.name || 'Unknown Host';
     const date = meeting.date ? formatDate(meeting.date) : meeting.created_at ? formatDate(meeting.created_at) : 'No date';
-    const time = meeting.time || '—';
+    const time = meeting.time || formatTime(meeting.created_at) || '—';
 
     return (
       <View key={meeting.id || index} style={styles.card}>
@@ -214,34 +225,54 @@ export default function AttendanceScreen() {
                 <Text style={{ color: COLORS.textMuted }}>No participants logged for this session.</Text>
               </View>
             ) : (
-              participantsList.map((participant, i) => (
-                <View key={participant.id || i} style={styles.participantCard}>
-                  <View style={styles.participantHeader}>
-                    <View style={styles.participantAvatar}>
-                      <Text style={styles.participantInitial}>{(participant.name || '?').charAt(0)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.participantName}>{participant.name || 'Unknown User'}</Text>
-                      <Text style={styles.participantEmail}>{participant.email || '—'}</Text>
-                    </View>
-                    {participant.duration && (
-                      <View style={styles.durationBadge}>
-                        <Text style={styles.durationText}>{participant.duration}</Text>
+              participantsList.map((participant, i) => {
+                const joinTimeDisplay = participant.join_time
+                  || participant.joinTime
+                  || (participant.created_at ? formatTime(participant.created_at) : '—');
+                const statusDisplay = participant.status 
+                  ? participant.status.charAt(0).toUpperCase() + participant.status.slice(1)
+                  : 'Joined';
+
+                return (
+                  <View key={participant.id || i} style={styles.participantCard}>
+                    <View style={styles.participantHeader}>
+                      <View style={styles.participantAvatar}>
+                        <Text style={styles.participantInitial}>{(participant.name || '?').charAt(0)}</Text>
                       </View>
-                    )}
-                  </View>
-                  <View style={styles.participantTimeline}>
-                    <View style={styles.timelineItem}>
-                      <Text style={styles.timelineLabel}>Joined</Text>
-                      <Text style={styles.timelineTime}>{participant.join_time || participant.joinTime || '—'}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.participantName}>{participant.name || 'Unknown User'}</Text>
+                        <Text style={styles.participantEmail}>{participant.email || '—'}</Text>
+                      </View>
+                      {participant.duration ? (
+                        <View style={styles.durationBadge}>
+                          <Text style={styles.durationText}>{participant.duration}</Text>
+                        </View>
+                      ) : (
+                        <View style={[styles.durationBadge, { backgroundColor: '#e0f2fe' }]}>
+                          <Text style={[styles.durationText, { color: '#0369a1' }]}>{statusDisplay}</Text>
+                        </View>
+                      )}
                     </View>
-                    <View style={styles.timelineItem}>
-                      <Text style={styles.timelineLabel}>Left</Text>
-                      <Text style={styles.timelineTime}>{participant.leave_time || participant.leaveTime || '—'}</Text>
+                    <View style={styles.participantTimeline}>
+                      <View style={styles.timelineItem}>
+                        <Text style={styles.timelineLabel}>Time Logged</Text>
+                        <Text style={styles.timelineTime}>{joinTimeDisplay}</Text>
+                      </View>
+                      {participant.leave_time || participant.leaveTime ? (
+                        <View style={styles.timelineItem}>
+                          <Text style={styles.timelineLabel}>Left</Text>
+                          <Text style={styles.timelineTime}>{participant.leave_time || participant.leaveTime}</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.timelineItem}>
+                          <Text style={styles.timelineLabel}>Date</Text>
+                          <Text style={styles.timelineTime}>{participant.created_at ? formatDate(participant.created_at) : '—'}</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
-                </View>
-              ))
+                );
+              })
             )}
             <View style={{height: 40}} />
           </ScrollView>

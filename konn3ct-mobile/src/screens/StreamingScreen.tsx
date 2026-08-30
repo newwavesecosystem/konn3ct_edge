@@ -11,9 +11,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { fetchStreamings, startStreaming, startComboStreaming, stopStreaming, StreamingItem } from '../api/streamings';
 import { fetchMyRooms, Room } from '../api/rooms';
 import {
@@ -26,6 +29,9 @@ import {
   Calendar,
   Clock,
   X,
+  ChevronDown,
+  Check,
+  Search,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 
@@ -67,12 +73,22 @@ export default function StreamingScreen() {
 
   // Modal States
   const [isModalVisible, setModalVisible] = React.useState(false);
+  const [showRoomSelect, setShowRoomSelect] = React.useState(false);
+  const [roomSearch, setRoomSearch] = React.useState('');
   const [streamType, setStreamType] = React.useState<'Youtube' | 'Facebook' | 'Combo'>('Youtube');
   const [roomId, setRoomId] = React.useState('');
   const [streamKey, setStreamKey] = React.useState('');
   const [youtubeKey, setYoutubeKey] = React.useState('');
   const [facebookKey, setFacebookKey] = React.useState('');
   const [isStarting, setIsStarting] = React.useState(false);
+
+  const selectedRoom = myRooms.find(r => String(r.id) === String(roomId));
+
+  const filteredRooms = React.useMemo(() => {
+    if (!roomSearch.trim()) return myRooms;
+    const q = roomSearch.toLowerCase();
+    return myRooms.filter(r => (r.name || `Room ${r.id}`).toLowerCase().includes(q));
+  }, [myRooms, roomSearch]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -159,7 +175,7 @@ export default function StreamingScreen() {
     }
   };
 
-  const renderStatCard = (stat: typeof MOCK_STATS[0]) => {
+  const renderStatCard = (stat: { id: string; label: string; value: string; icon: any; color: string }) => {
     const Icon = stat.icon;
     return (
       <View key={stat.id} style={styles.statCard}>
@@ -388,7 +404,10 @@ export default function StreamingScreen() {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Start New Stream</Text>
@@ -397,32 +416,83 @@ export default function StreamingScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              enableOnAndroid={true}
+              enableAutomaticScroll={true}
+              extraScrollHeight={120}
+              extraHeight={120}
+              contentContainerStyle={{ paddingBottom: 80 }}
+            >
               <Text style={styles.inputLabel}>Select Room</Text>
-              {myRooms.length === 0 ? (
-                <Text style={{ color: COLORS.textMuted, fontSize: 13, marginBottom: 12 }}>No rooms available. Create a room first.</Text>
-              ) : (
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8, paddingBottom: 12 }}
-                >
-                  {myRooms.map((r) => {
-                    const rId = String(r.id);
-                    const isSelected = roomId === rId;
-                    return (
-                      <TouchableOpacity
-                        key={rId}
-                        style={[styles.roomChip, isSelected && styles.roomChipActive]}
-                        onPress={() => setRoomId(rId)}
-                      >
-                        <Text style={[styles.roomChipText, isSelected && styles.roomChipTextActive]}>
-                          {r.name || `Room ${rId}`}
-                        </Text>
+              <TouchableOpacity 
+                style={styles.dropdownBtn} 
+                activeOpacity={0.7}
+                onPress={() => setShowRoomSelect(!showRoomSelect)}
+                testID="stream-room-dropdown-btn"
+              >
+                <Text style={[styles.dropdownBtnText, !selectedRoom && { color: COLORS.inactive }]}>
+                  {selectedRoom ? (selectedRoom.name || `Room ${selectedRoom.id}`) : 'Select a room...'}
+                </Text>
+                <ChevronDown size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
+              {showRoomSelect && (
+                <View style={styles.dropdownList}>
+                  {/* Search bar inside dropdown */}
+                  <View style={styles.dropdownSearchRow}>
+                    <Search size={16} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.dropdownSearchInput}
+                      placeholder="Search rooms..."
+                      value={roomSearch}
+                      onChangeText={setRoomSearch}
+                      placeholderTextColor={COLORS.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    {roomSearch.length > 0 && (
+                      <TouchableOpacity onPress={() => setRoomSearch('')} style={{ padding: 4 }}>
+                        <X size={14} color={COLORS.textMuted} />
                       </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+                    )}
+                  </View>
+
+                  <ScrollView
+                    nestedScrollEnabled={true}
+                    style={{ maxHeight: 200 }}
+                    showsVerticalScrollIndicator={true}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {filteredRooms.length === 0 ? (
+                      <Text style={styles.dropdownEmpty}>
+                        {myRooms.length === 0 ? "No rooms found. Create a room first." : "No matching rooms found."}
+                      </Text>
+                    ) : (
+                      filteredRooms.map(r => {
+                        const rId = String(r.id);
+                        const isSelected = roomId === rId;
+                        return (
+                          <TouchableOpacity 
+                            key={rId} 
+                            style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                            onPress={() => {
+                              setRoomId(rId);
+                              setShowRoomSelect(false);
+                              setRoomSearch('');
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, isSelected && { color: COLORS.brandBlue, fontWeight: 'bold' }]}>
+                              {r.name || `Room ${rId}`}
+                            </Text>
+                            {isSelected && <Check size={16} color={COLORS.brandBlue} />}
+                          </TouchableOpacity>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+                </View>
               )}
 
               <Text style={styles.inputLabel}>Platform Type</Text>
@@ -474,22 +544,30 @@ export default function StreamingScreen() {
 
               <TouchableOpacity 
                 testID="start-stream-btn"
-                style={[styles.btnPrimary, { marginTop: 24, marginBottom: 40 }]} 
+                style={[styles.submitBtn, isStarting && { opacity: 0.7 }]} 
                 onPress={handleStartStream}
                 disabled={isStarting}
+                activeOpacity={0.85}
               >
-                {isStarting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Cast color="#ffffff" size={16} />
-                    <Text style={styles.btnPrimaryText}>Start Broadcasting</Text>
-                  </>
-                )}
+                <LinearGradient
+                  colors={[COLORS.brandBlue, COLORS.brandBlueDark]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.submitBtnGradient}
+                >
+                  {isStarting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Cast color="#ffffff" size={18} />
+                      <Text style={styles.submitBtnText}>Start Stream</Text>
+                    </>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -724,7 +802,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '80%',
+    maxHeight: '92%',
+    flexShrink: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -772,24 +851,89 @@ const styles = StyleSheet.create({
   typeBtnTextActive: {
     color: COLORS.brandBlue,
   },
-  roomChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
+  dropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  roomChipActive: {
-    backgroundColor: `${COLORS.brandBlue}10`,
-    borderColor: COLORS.brandBlue,
+  dropdownBtnText: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    fontWeight: '500',
   },
-  roomChipText: {
-    fontSize: 13,
-    fontWeight: '600',
+  dropdownList: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    marginTop: 6,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dropdownSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  dropdownSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  dropdownEmpty: {
+    padding: 14,
     color: COLORS.textMuted,
+    fontSize: 14,
+    textAlign: 'center',
   },
-  roomChipTextActive: {
-    color: COLORS.brandBlue,
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#eff6ff',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  submitBtn: {
+    marginTop: 24,
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  submitBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 10,
+  },
+  submitBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });

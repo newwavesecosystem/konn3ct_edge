@@ -2,9 +2,11 @@
 
 import React from "react";
 import { useMeeting } from "@/lib/meeting-context";
+import { isSystemParticipant, getVisibleHumanParticipants } from "@/lib/participants";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
+
 import {
   Mic,
   MicOff,
@@ -46,7 +48,7 @@ export function ParticipantsPanel() {
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const participants = allParticipants.filter(p => 
-    p.role !== "bot" && p.name.toLowerCase().includes(searchQuery.toLowerCase())
+    !isSystemParticipant(p) && (p.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const hosts = participants.filter(
@@ -217,11 +219,15 @@ function ParticipantRow({
     .slice(0, 2)
     .toUpperCase();
 
-  const { currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole, roomSettings, askToUnmute } = useMeeting();
+  const { 
+    currentUser, forceMuteUser, forceVideoOffUser, kickUser, changeUserRole, roomSettings, askToUnmute,
+    participantScreenSharePermissions, setParticipantScreenSharePermission, stopParticipantScreenShare, pingParticipant
+  } = useMeeting();
   const isSpeaking = participant.isSpeaking;
   const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
   const canManage = isHost && !isMe && participant.role !== 'host';
   const canMakeCoHost = currentUser.role === 'host' && !isMe && participant.role !== 'host';
+  const [showMenu, setShowMenu] = React.useState(false);
 
   return (
     <div className="flex items-center gap-3 px-2 py-2 rounded-xl transition-colors group"
@@ -351,6 +357,85 @@ function ParticipantRow({
           </div>
         )}
         
+        {isHost && !isMe && participant.role !== 'host' && (
+          <div className="relative">
+            <button 
+              onClick={() => setShowMenu(!showMenu)} 
+              className="p-1 rounded-lg hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" 
+              style={{ color: "var(--mt-text-faint)" }}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+            {showMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 w-48 bg-[var(--mt-bg-elevated)] border border-[var(--mt-border)] rounded-md shadow-lg z-50 py-1 flex flex-col text-sm">
+                  <button
+                    className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)]"
+                    onClick={() => { pingParticipant(participant.userId); setShowMenu(false); }}
+                  >
+                    Ping participant
+                  </button>
+                  <div className="px-3 py-1.5 text-xs font-semibold text-[var(--mt-text-muted)]">Screen sharing</div>
+                  {(() => {
+                    const isAllowed = (participant.userId && participantScreenSharePermissions[participant.userId] === 'ALLOW') ||
+                                      (participant.id && participantScreenSharePermissions[participant.id] === 'ALLOW');
+                    const isBlocked = (participant.userId && participantScreenSharePermissions[participant.userId] === 'BLOCK') ||
+                                      (participant.id && participantScreenSharePermissions[participant.id] === 'BLOCK');
+                    const targetId = participant.id || participant.userId;
+
+                    return (
+                      <>
+                        <button
+                          className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] flex items-center justify-between"
+                          onClick={() => {
+                            const newPerm = isAllowed ? 'DEFAULT' : 'ALLOW';
+                            setParticipantScreenSharePermission(targetId, newPerm);
+                            setShowMenu(false);
+                            if (newPerm === 'ALLOW') {
+                              toast.success(`Screen sharing allowed for ${participant.name}`);
+                            } else {
+                              toast.info(`Screen sharing permission reset for ${participant.name}`);
+                            }
+                          }}
+                        >
+                          Allow {isAllowed && <Check className="w-4 h-4 text-brand-green" />}
+                        </button>
+                        <button
+                          className="w-full text-left px-3 py-1.5 text-[var(--mt-text)] hover:bg-[var(--mt-bg-hover)] text-red-400 hover:text-red-500 flex items-center justify-between"
+                          onClick={() => {
+                            const newPerm = isBlocked ? 'DEFAULT' : 'BLOCK';
+                            setParticipantScreenSharePermission(targetId, newPerm);
+                            setShowMenu(false);
+                            if (newPerm === 'BLOCK') {
+                              toast.error(`Screen sharing blocked for ${participant.name}`);
+                            } else {
+                              toast.info(`Screen sharing block removed for ${participant.name}`);
+                            }
+                          }}
+                        >
+                          Block {isBlocked && <Check className="w-4 h-4 text-red-500" />}
+                        </button>
+                      </>
+                    );
+                  })()}
+                  {participant.isScreenSharing && (
+                    <>
+                      <div className="h-px bg-[var(--mt-border)] my-1" />
+                      <button
+                        className="w-full text-left px-3 py-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-500"
+                        onClick={() => { stopParticipantScreenShare(participant.id || participant.userId); setShowMenu(false); }}
+                      >
+                        Stop current screen share
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );

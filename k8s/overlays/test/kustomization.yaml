@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - path: patch-test-resources.yaml
+
+images:
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-backend
+    newTag: staging-latest
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-frontend
+    newTag: staging-latest
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-recorder
+    newTag: staging-latest

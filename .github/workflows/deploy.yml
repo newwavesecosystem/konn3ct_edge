@@ -14,8 +14,6 @@ jobs:
       name: ${{ github.ref == 'refs/heads/1gov_stag' && '1gov_stag' || (github.ref == 'refs/heads/main' && 'staging' || 'production') }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # For staging, replace ':latest' with 'staging-latest'. For production, replace with the exact commit hash.
-      TARGET_TAG: ${{ github.ref == 'refs/heads/main' && 'staging-latest' || github.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -104,11 +102,8 @@ jobs:
       - name: Deploy Manifests to Kubernetes
         if: github.ref != 'refs/heads/1gov_stag'
         run: |
-          # Replace :latest with the environment-specific tag in all k8s manifests
-          sed -i "s/:latest/:${{ env.TARGET_TAG }}/g" k8s/*.yaml
-          
-          # Inject dynamic backend domain into ingress manifest
-          sed -i "s/__NEXT_PUBLIC_BACKEND_DOMAIN__/${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}/g" k8s/ingress.yaml
+          # Inject dynamic backend domain into base ingress manifest
+          sed -i "s/__NEXT_PUBLIC_BACKEND_DOMAIN__/${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}/g" k8s/base/ingress.yaml
           
           # Safely inject GitHub Secrets into a Kubernetes Secret called 'conn3ct-secrets'
           kubectl create secret generic conn3ct-secrets \
@@ -117,6 +112,10 @@ jobs:
             --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
             --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
             --from-literal=DEEPGRAM_API_KEY="${{ secrets.DEEPGRAM_API_KEY }}" \
+            --from-literal=ODOO_URL="${{ vars.ODOO_URL }}" \
+            --from-literal=ODOO_DB="${{ vars.ODOO_DB }}" \
+            --from-literal=ODOO_USER="${{ vars.ODOO_USER }}" \
+            --from-literal=ODOO_API_KEY="${{ secrets.ODOO_API_KEY }}" \
             --from-literal=EXTERNAL_API_KEY="${{ secrets.EXTERNAL_API_KEY }}" \
             --from-literal=BOT_SECRET="${{ secrets.BOT_SECRET }}" \
             --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="${{ secrets.NEXT_PUBLIC_BACKEND_DOMAIN }}" \
@@ -131,28 +130,70 @@ jobs:
             --from-literal=DO_SPACES_REGION="${{ secrets.DO_SPACES_REGION }}" \
             --from-literal=DO_SPACES_KEY="${{ secrets.DO_SPACES_KEY }}" \
             --from-literal=DO_SPACES_SECRET="${{ secrets.DO_SPACES_SECRET }}" \
-            --from-literal=DO_SPACES_BUCKET="${{ secrets.DO_SPACES_BUCKET }}" \
+            --from-literal=DO_SPACES_BUCKET="${{ vars.DO_SPACES_BUCKET }}" \
             --from-literal=S3_FORCE_PATH_STYLE="${{ vars.S3_FORCE_PATH_STYLE }}" \
+            --from-literal=TELEMETRY_S3_BUCKET_NAME="${{ vars.TELEMETRY_S3_BUCKET_NAME }}" \
             --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="${{ secrets.NEXT_PUBLIC_MEETING_ONLY_MODE }}" \
             --from-literal=NEXT_PUBLIC_QA_DIAGNOSTICS="${{ secrets.NEXT_PUBLIC_QA_DIAGNOSTICS }}" \
             --from-literal=NEXT_PUBLIC_MAX_AUDIO_SLOTS="${{ vars.NEXT_PUBLIC_MAX_AUDIO_SLOTS }}" \
+            --from-literal=MAX_CONCURRENT_BROWSERS="${{ vars.MAX_CONCURRENT_BROWSERS || '5' }}" \
+            --from-literal=MAX_CONCURRENT_TRANSCODES="${{ vars.MAX_CONCURRENT_TRANSCODES || '5' }}" \
             --dry-run=client -o yaml | kubectl apply -f -
             
-          # Apply all our deployment, service, and redis yaml files
-          kubectl apply -f k8s/
-          
-          # Only gracefully restart if we are in staging (since we use a floating tag 'staging-latest').
-          # In production, the image tag explicitly changes to the commit hash, so kubectl apply automatically rolls it out!
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            kubectl rollout restart deployment conn3ct-backend
-            kubectl rollout restart deployment conn3ct-frontend
-            kubectl rollout restart deployment conn3ct-recorder
-            # kubectl rollout restart deployment conn3ct-streaming-worker
+          # Apply the appropriate Kustomize overlay based on branch/environment
+          if [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            echo "Applying Production Overlay (prod-latest)..."
+            kubectl apply -k k8s/overlays/prod
+          else
+            echo "Applying Test/Staging Overlay (staging-latest)..."
+            kubectl apply -k k8s/overlays/test
           fi
+          
+          # Gracefully rollout restart deployments so newly pushed images are pulled immediately
+          kubectl rollout restart deployment conn3ct-signaling
+          kubectl rollout restart deployment conn3ct-media
+          kubectl rollout restart deployment conn3ct-frontend
+          kubectl rollout restart deployment conn3ct-recorder
 
-      # - name: Debugging - Print Pod Logs
-      #   run: |
-      #     echo "Waiting up to 3 minutes for the new pod to download the Docker image and start up..."
-      #     kubectl rollout status deployment/conn3ct-backend --timeout=180s
-      #     echo "Pod is successfully running! Fetching logs..."
-      #     kubectl logs -l app=conn3ct-backend --all-containers=true --tail=100
+      - name: Setup Node.js for Odoo Integration
+        if: always()
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Post Evidence to Odoo
+        if: always()
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action post_evidence \
+            --branch-name "${{ github.head_ref || github.ref_name }}" \
+            --pr-title "${{ github.event.pull_request.title }}" \
+            --build-status "${{ job.status }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}" \
+            --success-stage "Completed"
+            
+      - name: Automated Defect Creation
+        if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/prod')
+        env:
+          ODOO_URL: ${{ vars.ODOO_URL }}
+          ODOO_DB: ${{ vars.ODOO_DB }}
+          ODOO_USER: ${{ vars.ODOO_USER }}
+          ODOO_API_KEY: ${{ secrets.ODOO_API_KEY }}
+        run: |
+          node scripts/odoo_integration.js \
+            --action create_defect \
+            --branch-name "${{ github.head_ref || github.ref_name }}" \
+            --pr-title "${{ github.event.pull_request.title }}" \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}" \
+            --commit-sha "${{ github.sha }}" \
+            --commit-message "${{ github.event.head_commit.message }}" \
+            --author "${{ github.actor }}"

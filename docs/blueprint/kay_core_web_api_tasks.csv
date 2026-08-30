@@ -1,0 +1,155 @@
+id,name,Description,start Date,Deadline,Priority,Tags,Assignees
+API-031,API-031 - Meeting Scheduling & Session Creation API,"Implement POST /api/v1/meetings/schedule endpoint handling session creation, recurring rule setup, and invite link generation. Expectation: Inserts room record into DB and returns room payload.
+
+Acceptance Criteria:
+- Accepts title, description, start time, duration, timezone, and security settings (waiting room, passcode)
+- Generates unique Room ID and clean Join URL (/join/{roomId})
+- Validates host authentication token and user entitlements
+- Returns HTTP 201 Created with full meeting object",8/10/2026,8/12/2026,High,"Backend, Meetings, API",Johnson Kayode
+API-032,API-032 - Host Meetings & Replays List API,"Implement GET /api/v1/host/meetings endpoint returning paginated list of upcoming, past, and recorded sessions for the authenticated host. Expectation: Fast response for Feranmi's Host Workspace.
+
+Acceptance Criteria:
+- Accepts query params: status (UPCOMING, PAST, REPLAY), page, limit
+- Returns array of meeting objects with participant counts and replay availability status
+- Filtered strictly by authenticated Host User ID
+- Returns HTTP 200 with pagination metadata",8/12/2026,8/14/2026,High,"Backend, Host Workspace",Johnson Kayode
+API-033,API-033 - Paid Event Configuration API,"Implement POST /api/v1/events/paid/config endpoint configuring paid webinar ticket price, currency, max capacity, and PayGate Shield link. Expectation: Connects event setup to Odoo and payment gateway.
+
+Acceptance Criteria:
+- Accepts room ID, ticket price, currency (USD, NGN, KES), max capacity, and replay access policy
+- Updates event record in DB and dispatches sync event to Zammy's Odoo 19 instance
+- Generates payment gateway pricing references
+- Returns HTTP 200 OK with confirmed event config",8/14/2026,8/16/2026,Medium,"Backend, Paid Events",Johnson Kayode
+API-034,API-034 - Replay Publishing & Visibility Management API,"Implement PATCH /api/v1/replays/{id}/visibility endpoint allowing hosts to set replay access mode (Private, Free Public, Paid Access). Expectation: Updates access entitlements in Redis.
+
+Acceptance Criteria:
+- Accepts visibility state (PRIVATE, FREE_PUBLIC, PAID_ACCESS) and optional replay ticket price
+- Updates replay metadata record in DB
+- Refreshes Redis cache key for replay access enforcement
+- Emits REPLAY_VISIBILITY_UPDATED event",8/16/2026,8/18/2026,Medium,"Backend, Replays",Johnson Kayode
+API-035,API-035 - Pre-Meeting Token & Entitlement Validation API,"Implement POST /api/v1/meetings/validate-join endpoint checking passcodes, waiting room status, user entitlements, and banned user status before room join. Expectation: Secure gatekeeper API.
+
+Acceptance Criteria:
+- Accepts room ID, passcode, user token or guest name
+- Checks if room is active, verifies passcode, checks if user is banned
+- If waiting room enabled, returns status WAITING_ROOM_REQUIRED
+- Returns temporary JOIN_TICKET token required for WebRTC handshake",8/18/2026,8/20/2026,High,"Backend, Security, Join",Johnson Kayode
+API-036,API-036 - Waiting Room Admission Queue Signal API,"Implement POST /api/v1/meetings/{id}/waiting-room/admit endpoint allowing host to admit participants from waiting room. Expectation: Publishes WebSocket signal to move client into room.
+
+Acceptance Criteria:
+- Accepts participant ID and action (ADMIT or REJECT)
+- Validates host permission for specified room ID
+- Publishes Redis pub-sub message to signal client socket to proceed to room join
+- Returns HTTP 200 OK success status",8/20/2026,8/22/2026,Medium,"Backend, Live Room",Johnson Kayode
+API-037,API-037 - WebRTC SFU Session Token & Signaling Handshake API,"Implement POST /api/v1/meetings/{id}/signal-token endpoint issuing short-lived WebRTC signaling tokens. Expectation: Secure token for client-to-SFU media connection.
+
+Acceptance Criteria:
+- Validates JOIN_TICKET from validate-join step
+- Issues signed WebRTC SFU connection token containing room ID, user ID, role (Host/Presenter/Attendee), and media permissions
+- Includes target SFU node WebSocket URL based on geographic routing
+- Token expires in 60 seconds to prevent unauthorized reuse",8/22/2026,8/25/2026,High,"Backend, WebRTC, Signaling",Johnson Kayode
+API-038,API-038 - Live Room In-Meeting Chat Message Dispatcher API,"Implement POST /api/v1/meetings/{id}/chat endpoint handling in-meeting text messages and dispatches to Redis pub-sub. Expectation: Real-time chat distribution with persistence.
+
+Acceptance Criteria:
+- Accepts room ID, message text, and chat target (PUBLIC or HOST_PRIVATE)
+- Sanitizes input text against XSS injection
+- Persists message to DB for meeting chat history logs
+- Publishes socket event to room channels in Redis for instant client distribution",8/25/2026,8/27/2026,Medium,"Backend, Chat, Socket",Johnson Kayode
+API-039,API-039 - In-Meeting Participant List & Hand-Raise Manager API,"Implement GET and POST /api/v1/meetings/{id}/participants/hands endpoints managing hand-raising queue and live participant state. Expectation: Fast state updates.
+
+Acceptance Criteria:
+- GET endpoint returns active room participant list with muted/video/hand-raised states
+- POST endpoint updates user hand-raised state (RAISE / LOWER)
+- Publishes real-time state change to room participants via WebSockets
+- Enables host to trigger Lower All Hands",8/27/2026,8/29/2026,Medium,"Backend, Live Room",Johnson Kayode
+API-040,API-040 - Host In-Meeting Moderation Actions API,"Implement POST /api/v1/meetings/{id}/moderate endpoint for host actions: Mute All, Mute Participant, Kick Participant. Expectation: Instant host command execution.
+
+Acceptance Criteria:
+- Accepts action type (MUTE_ALL, MUTE_PARTICIPANT, KICK_PARTICIPANT, LOCK_ROOM)
+- Validates host/co-host permission
+- Dispatches command via Redis pub-sub to SFU node to mute or drop participant WebRTC track
+- Emits audit log entry for moderation action",8/29/2026,8/31/2026,High,"Backend, Moderation",Johnson Kayode
+API-041,API-041 - Webinar Q&A Submission & Upvoting API,"Implement POST and PATCH /api/v1/webinars/{id}/qa endpoints allowing attendees to submit questions and upvote existing ones. Expectation: Threaded Q&A backend.
+
+Acceptance Criteria:
+- POST creates new Q&A question item with optional isAnonymous flag
+- PATCH handles upvoting (action: UPVOTE) and increments vote count atomically
+- Host endpoint allows marking question as ANSWERED_LIVE or inputting text reply
+- Real-time Q&A list update pushed to webinar clients",8/31/2026,9/2/2026,Medium,"Backend, Webinar Q&A",Johnson Kayode
+API-042,API-042 - Presenter Elevation Signal API,"Implement POST /api/v1/webinars/{id}/promote-presenter endpoint to invite view-only attendee to become a live Presenter. Expectation: Triggers media renegotiation.
+
+Acceptance Criteria:
+- Accepts target attendee user ID
+- Dispatches invitation socket event to target client (PROMOTION_INVITATION)
+- Upon client acceptance payload, updates user room role to PRESENTER in Redis
+- Re-issues WebRTC SFU publish token for camera/mic access",9/2/2026,9/4/2026,Medium,"Backend, Webinar Moderation",Johnson Kayode
+API-043,API-043 - Replay Video Stream Signed URL Generator API,"Implement GET /api/v1/replays/{id}/stream-url endpoint verifying entitlement before returning S3/CDN signed HLS stream URL. Expectation: Enforces PayGate Shield.
+
+Acceptance Criteria:
+- Verifies user authentication and checks entitlement in Redis DB
+- If free public replay, generates signed 2-hour S3/Cloudflare CDN stream URL
+- If paid replay, checks active payment entitlement in DB before issuing URL
+- Returns HTTP 403 Forbidden with PAYMENT_REQUIRED payload if unentitled",9/4/2026,9/7/2026,High,"Backend, Replay Stream",Johnson Kayode
+API-044,API-044 - Replay AI Summary & Chapter Index API,"Implement GET /api/v1/replays/{id}/ai-summary endpoint returning structured AI summary, key points, and timestamp markers. Expectation: Powers Feranmi's summary index.
+
+Acceptance Criteria:
+- Returns summary overview, key takeaways list, and timestamp markers array (e.g. { timestampSeconds: 255, title: 'Architecture' })
+- Verifies replay visibility entitlement
+- Cached in Redis for sub-20ms response time
+- Returns empty array gracefully if AI processing is pending",9/7/2026,9/9/2026,Medium,"Backend, AI Replay",Johnson Kayode
+API-045,API-045 - Synchronized Interactive Transcript Search API,"Implement GET /api/v1/replays/{id}/transcript endpoint returning full transcript with speaker IDs and search filtering. Expectation: Powers interactive transcript sidebar.
+
+Acceptance Criteria:
+- Accepts query param q for full-text search within meeting transcript
+- Returns array of transcript objects: { id, speakerName, timestampSeconds, text }
+- Highlights matching keyword occurrences
+- Fast JSON response optimized for timeline sync",9/9/2026,9/11/2026,Medium,"Backend, Transcript API",Johnson Kayode
+API-046,API-046 - PayGate Shield Checkout Intent API,"Implement POST /api/v1/checkout/intent endpoint creating payment gateway checkout session for paid webinars or replays. Expectation: Returns gateway transaction reference.
+
+Acceptance Criteria:
+- Accepts payload: { targetType: 'EVENT'|'REPLAY', targetId: 'string', gateway: 'PAYSTACK'|'STRIPE' }
+- Calculates ticket price and creates pending transaction record in DB
+- Invokes Paystack/Stripe API to generate checkout URL / reference
+- Returns HTTP 200 with gateway checkout payload",9/11/2026,9/14/2026,High,"Backend, Checkout, PayGate",Johnson Kayode
+API-047,API-047 - Payment Verification & Instant Entitlement Unlock API,"Implement POST /api/v1/checkout/verify endpoint verifying payment status and granting instant room/replay access. Expectation: Instant access grant post-payment.
+
+Acceptance Criteria:
+- Accepts transaction reference and verifies payment with gateway API
+- Updates transaction status to SUCCESS in DB
+- Inserts entitlement record into Redis cache instantly
+- Dispatches background event to Zammy's Odoo 19 instance for invoice logging",9/14/2026,9/16/2026,High,"Backend, Payment Verification",Johnson Kayode
+API-048,API-048 - Low-Bandwidth Stream Adaptation Command API,"Implement POST /api/v1/meetings/{id}/low-bandwidth endpoint allowing clients to signal poor network and mute incoming video tracks. Expectation: Optimizes client data usage.
+
+Acceptance Criteria:
+- Accepts client signal AUDIO_ONLY_MODE
+- Instructs SFU media node to stop forwarding video RTP packets to target socket
+- Reduces client bandwidth consumption significantly
+- Emits telemetry metric tracking network adaptation",9/16/2026,9/18/2026,Low,"Backend, SFU Adaptation",Johnson Kayode
+API-049,API-049 - Client Network Telemetry Collector API,"Implement POST /api/v1/telemetry/client-network endpoint ingesting packet loss and latency logs from client browsers/mobile apps. Expectation: Feeds monitoring dashboards.
+
+Acceptance Criteria:
+- Accepts JSON telemetry batch: RTT latency, packet loss %, frame rate, browser info
+- Ingests telemetry into Redis TimeSeries / Datadog sink
+- Flags meeting room ID if > 15% of participants report poor quality
+- Asynchronous response returning HTTP 202 Accepted",9/18/2026,9/20/2026,Low,"Backend, Telemetry",Johnson Kayode
+API-050,API-050 - Active Recording & AI Note-taker Status API,"Implement GET /api/v1/meetings/{id}/recording-status endpoint returning live status of recording recorder and AI bots. Expectation: Powers top-bar badges in live room.
+
+Acceptance Criteria:
+- Queries active meeting recorder daemon state in Redis
+- Returns object: { isRecording: boolean, isAiSummaryActive: boolean, recordingDurationSeconds: number }
+- Verified cache response under 10ms
+- Returns isRecording: false if session is not being recorded",9/20/2026,9/22/2026,Low,"Backend, Status API",Johnson Kayode
+API-051,API-051 - TrustLock Room Security Policy Enforcement API,"Implement POST and PATCH /api/v1/meetings/{id}/trustlock-policy endpoints configuring dynamic watermarking, room lock, and screen share restrictions (Volume 10). Expectation: Emits instant pub-sub security update to room sockets.
+
+Acceptance Criteria:
+- Accepts payload: { isWatermarkEnabled: boolean, isRoomLocked: boolean, isScreenShareRestricted: boolean }
+- Validates host/co-host permission
+- Updates active room security configuration in Redis
+- Dispatches WebSocket event to all connected room clients to apply dynamic watermarking or security locks",9/22/2026,9/24/2026,High,"Backend, TrustLock, Security",Johnson Kayode
+API-052,API-052 - TrustLock Participant Identity Verification Status API,"Implement GET /api/v1/meetings/{id}/trustlock-verification endpoint returning enterprise SSO identity verification status for connected room participants. Expectation: Powers verified checkmark badges.
+
+Acceptance Criteria:
+- Returns list of objects: { userId, isEnterpriseVerified: boolean, verificationIssuer: string }
+- Verifies SAML/OAuth/SSO identity tokens against enterprise organization directory
+- Used by Feranmi's frontend to render green verified identity badges
+- Returns cached result from Redis",9/24/2026,9/26/2026,Medium,"Backend, TrustLock, Identity",Johnson Kayode

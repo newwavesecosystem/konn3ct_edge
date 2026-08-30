@@ -1,103 +1,69 @@
-# Conn3ct Kubernetes Manifests
+# Conn3ct Kubernetes Manifests (Kustomize Base & Overlays)
 
-This directory contains the Kubernetes deployment manifests for the Conn3ct Meeting infrastructure. The application is built using a microservices architecture, running components for signaling, frontend, meeting recording, streaming, and caching.
+This directory contains the Kubernetes deployment manifests for the Conn3ct Meeting infrastructure, organized with **Kustomize Base & Overlays** to seamlessly support both low-cost single-node testing and multi-node high-availability production environments with identical container images.
 
-## Architecture & Components
+---
 
-The cluster consists of the following components:
+## Directory Structure
 
-- **Backend (`deployment.yaml`, `service.yaml`)**
-  - Handles WebSocket signaling, room management, and WebRTC media streams.
-  - Deploys with `hostNetwork: true` to bypass standard K8s NAT and allow direct UDP WebRTC traffic.
-  - Includes a HorizontalPodAutoscaler (HPA) to scale between 1 and 20 replicas based on CPU utilization.
-  - Exposed via `conn3ct-backend-service` of type `LoadBalancer`.
-
-- **Frontend (`frontend-deployment.yaml`, `frontend-service.yaml`)**
-  - Serves the Next.js user interface.
-  - Connects to the backend via internally routed URLs and domain environment variables.
-
-- **Recorder (`recorder-deployment.yaml`)**
-  - A background worker for recording meetings.
-  - Includes `podAntiAffinity` rules to avoid scheduling on the same nodes as the backend, ensuring backend WebRTC performance isn't degraded.
-
-- **Streaming Worker (`streaming-deployment.yaml`)**
-  - A worker utilizing Puppeteer and FFmpeg for RTMP streaming.
-  - Defaults to `0` replicas, scaling dynamically based on active streaming jobs. Requires `SYS_ADMIN` capability for Puppeteer.
-
-- **Redis (`redis.yaml`)**
-  - A simple Redis Alpine deployment and service (`redis-service`) utilized for pub/sub and distributed state synchronization among instances.
-
-- **Ingress (`ingress.yaml`)**
-  - Configured for the NGINX Ingress Controller.
-  - Vital configuration: Uses `nginx.ingress.kubernetes.io/upstream-hash-by: "$arg_roomId"` to ensure **sticky sessions by Room ID**. This guarantees that all users connecting to the same meeting room are routed to the exact same backend pod, critical for WebRTC SFU mesh logic.
-  - Configures long WebSocket timeouts to prevent disconnections during extended meetings.
-
-## Prerequisites
-
-- A Kubernetes cluster (e.g., DigitalOcean Kubernetes).
-- **NGINX Ingress Controller** installed.
-- Docker images for each component pushed to `registry.digitalocean.com/konn3ct-registry/`.
-
-## Configuration
-
-Before applying these manifests, you **must** create a Kubernetes Secret named `conn3ct-secrets` that holds all environment variables required by the services. 
-
-Example:
-```bash
-kubectl create secret generic conn3ct-secrets \
-  --from-literal=DATABASE_URL="postgres://..." \
-  --from-literal=JWT_SECRET="your-jwt-secret" \
-  --from-literal=GEMINI_API_KEY="..." \
-  --from-literal=EXTERNAL_API_KEY="..." \
-  --from-literal=DEEPGRAM_API_KEY="..." \
-  --from-literal=PAYSTACK_SECRET_KEY="..." \
-  --from-literal=DO_SPACES_ENDPOINT="..." \
-  --from-literal=DO_SPACES_REGION="..." \
-  --from-literal=DO_SPACES_KEY="..." \
-  --from-literal=DO_SPACES_SECRET="..." \
-  --from-literal=DO_SPACES_BUCKET="..." \
-  --from-literal=NEXT_PUBLIC_FRONTEND_URL="..." \
-  --from-literal=NEXT_PUBLIC_FRONTEND_DOMAIN="..." \
-  --from-literal=NEXT_PUBLIC_BACKEND_DOMAIN="..." \
-  --from-literal=NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY="..." \
-  --from-literal=OPENAI_API_KEY="..." \
-  --from-literal=BOT_SECRET="..." \
-  --from-literal=NEXT_PUBLIC_MEETING_ONLY_MODE="..."
+```
+k8s/
+├── base/                              # Shared templates, services, env vars & ingress
+│   ├── kustomization.yaml
+│   ├── frontend-deployment.yaml
+│   ├── frontend-service.yaml
+│   ├── signaling-deployment.yaml
+│   ├── service.yaml                   # Backend LoadBalancer service
+│   ├── media-deployment.yaml          # Mediasoup SFU deployment
+│   ├── recorder-deployment.yaml       # Headless Chromium recording bot
+│   ├── streaming-deployment.yaml      # RTMP streaming worker
+│   ├── redis.yaml                     # State sync and pub/sub
+│   └── ingress.yaml                   # NGINX Ingress with room sticky sessions
+├── overlays/
+│   ├── test/                          # Optimized for 1 Node (4 vCPU / 8 GB RAM)
+│   │   ├── kustomization.yaml
+│   │   └── patch-test-resources.yaml  # Replicas: 1, relaxed affinities, 1-node requests
+│   └── prod/                          # Scaled for Multi-Node High Availability (HA)
+│       ├── kustomization.yaml
+│       ├── patch-prod-resources.yaml  # Multi-replica, Node Anti-Affinity
+│       ├── media-hpa.yaml             # Auto-scaler for media pods
+│       └── signaling-hpa.yaml         # Auto-scaler for signaling pods
 ```
 
-## Deployment
+---
 
-Deploy the entire stack in the following order:
+## Environment Overlays
 
-1. **Deploy Secrets** (as shown above).
-2. **Deploy Redis**:
-   ```bash
-   kubectl apply -f redis.yaml
-   ```
-3. **Deploy Backend**:
-   ```bash
-   kubectl apply -f deployment.yaml
-   kubectl apply -f service.yaml
-   ```
-4. **Deploy Frontend**:
-   ```bash
-   kubectl apply -f frontend-deployment.yaml
-   kubectl apply -f frontend-service.yaml
-   ```
-5. **Deploy Workers**:
-   ```bash
-   kubectl apply -f recorder-deployment.yaml
-   kubectl apply -f streaming-deployment.yaml
-   ```
-6. **Configure Ingress**:
-   Note: GitHub Actions or your CI/CD will dynamically replace `__NEXT_PUBLIC_BACKEND_DOMAIN__` in the ingress file before deployment. To deploy manually, replace it first.
-   ```bash
-   sed 's/__NEXT_PUBLIC_BACKEND_DOMAIN__/api.yourdomain.com/g' ingress.yaml | kubectl apply -f -
-   ```
+### 1. Test / Staging Overlay (`k8s/overlays/test`)
+- **Target Node**: 1 Node (4 vCPU, 8 GB RAM, 50 GB Disk).
+- **Scale**: Replicas set to `1` for all services (`conn3ct-signaling`, `conn3ct-media`, `conn3ct-frontend`, `conn3ct-recorder`, `redis`).
+- **Scheduling**: Clears hard `podAntiAffinity` rules so recorder and media pods schedule smoothly on the single node without getting stuck in `Pending`.
+- **Resource Sizing**: Requests sized at ~1.5 vCPU and ~3.0 GB RAM total across all containers, leaving ample headroom for OS, Kubelet, and Ingress.
 
-## Networking Details
+### 2. Production Overlay (`k8s/overlays/prod`)
+- **Target Architecture**: Multi-Node High Availability (HA).
+- **Scale**: Replicas set to `4` for Signaling, `3` for Media, `2` for Frontend, `1` for Recorder.
+- **Autoscaling**: Connected to `HorizontalPodAutoscaler` (HPA) scaling signaling (4–15) and media (3–10).
+- **Node Isolation**: Strict `podAntiAffinity` prevents CPU-heavy recording jobs from sharing nodes with live WebRTC media routers.
 
-Due to the intensive network requirements of WebRTC:
-- The **Backend** pods run with `hostNetwork: true`. This binds the Node.js server directly to the host node's IP, avoiding SNAT/DNAT overhead for UDP packets. 
-- Ensure that your cluster's firewall allows incoming UDP traffic on the specified WebRTC UDP ports (default `10000`).
-- Because of `hostNetwork`, the pod might conflict if multiple backends are scheduled on the same node. Node anti-affinity handles constraints, or ensure nodes have available resources.
+---
+
+## Deployment Instructions
+
+### Deploy to Test / Staging
+```bash
+kubectl apply -k k8s/overlays/test
+```
+
+### Deploy to Production
+```bash
+kubectl apply -k k8s/overlays/prod
+```
+
+---
+
+## CI/CD Pipeline (GitHub Actions)
+
+The deployment workflow (`.github/workflows/deploy.yml`) automatically routes deployments based on git branch:
+- **`main` branch** $\rightarrow$ Automatically applies `k8s/overlays/test` (and rolls out restart for `staging-latest`).
+- **`prod` branch** $\rightarrow$ Automatically applies `k8s/overlays/prod` (with image tag matching commit SHA).

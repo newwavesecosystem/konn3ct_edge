@@ -39,7 +39,7 @@ async function notifyBackendWithRetry(backendUrl, endpoint, recordingId, botToke
       };
       const response = await fetch(url, options);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      success = true;
+      success = true; console.log(`[${recordingId}] spaces_upload_db_synced: ${JSON.stringify(payload)}`);
     } catch (err) {
       retries--;
       if (retries > 0) await new Promise(r => setTimeout(r, 2000));
@@ -127,6 +127,7 @@ async function validateMp4(filePath, recordingId) {
   });
 }
 
+
 async function run() {
   const args = process.argv.slice(2);
   const roomId = args[0];
@@ -135,13 +136,17 @@ async function run() {
   const outputPathRaw = args[3];
   const stdoutPath = args[4];
   const stderrPath = args[5];
+  const segmentIndexStr = args[6];
+  const segmentIndex = segmentIndexStr !== undefined ? parseInt(segmentIndexStr) : undefined;
+  const workerGenerationStr = args[7];
+  const workerGeneration = workerGenerationStr ? parseInt(workerGenerationStr) : 1;
+  const isCrash = args[8] === 'true';
 
   if (!roomId || !recordingId || !botToken || !outputPathRaw) {
     console.error("Missing arguments");
     process.exit(1);
   }
 
-  // Setup teeing of console to file
   const originalLog = console.log;
   const originalError = console.error;
   let stdoutStream, stderrStream;
@@ -149,56 +154,64 @@ async function run() {
   if (stderrPath) stderrStream = fs.createWriteStream(stderrPath, { flags: 'a' });
 
   console.log = (...args) => {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ') + '\\n';
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ') + '\n';
     if (stdoutStream) stdoutStream.write(msg);
     originalLog.apply(console, args);
   };
   
   console.error = (...args) => {
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ') + '\\n';
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ') + '\n';
     if (stderrStream) stderrStream.write(msg);
     originalError.apply(console, args);
   };
 
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
   try {
-    console.log(`[${recordingId}] transcoder process started for ${outputPathRaw}`);
+    console.log(`[${recordingId}] transcoder process started for ${outputPathRaw} (Gen: ${workerGeneration})`);
     
     // FFprobe on raw file
-    await checkFfprobe(outputPathRaw, recordingId);
+    let ffprobeResult;
+    try {
+        ffprobeResult = await checkFfprobe(outputPathRaw, recordingId);
+    } catch(err) {
+        if (isCrash) {
+           console.error(`[${recordingId}] Crash segment is completely invalid or empty.`, err);
+           await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/segments`, recordingId, botToken, {
+             segmentIndex: segmentIndex,
+             url: null,
+             durationMs: 0,
+             fileSize: fs.existsSync(outputPathRaw) ? fs.statSync(outputPathRaw).size : 0,
+             status: 'CORRUPT',
+             workerGeneration
+           });
+           process.exit(0); // Exit successfully since we reported the corruption
+        } else {
+           throw err;
+        }
+    }
 
-    // Notify transcoding
-    await notifyBackendWithRetry(
-      backendUrl, 
-      `/api/recordings/${recordingId}/callback/status`,
-      recordingId, botToken,
-      { status: 'transcoding' }
-    );
     const outputPathMp4 = outputPathRaw;
 
     let finalDuration = 0;
+    let finalStatus = 'uploaded';
     try {
       finalDuration = await validateMp4(outputPathMp4, recordingId);
     } catch (e) {
-      console.error(`[${recordingId}] Validation failed:`, e);
-      await notifyBackendWithRetry(
-        backendUrl, 
-        `/api/recordings/${recordingId}/callback/status`,
-        recordingId, botToken,
-        { status: 'failed', error: e.message }
-      );
-      process.exit(1);
+      if (isCrash) {
+          console.log(`[${recordingId}] Crash segment has defects but we will upload as PARTIAL.`, e.message);
+          finalStatus = 'PARTIAL';
+          // Estimate duration from ffprobe if validateMp4 failed but it's a crash
+          if (ffprobeResult && ffprobeResult.format && ffprobeResult.format.duration) {
+              finalDuration = parseFloat(ffprobeResult.format.duration);
+          }
+      } else {
+          console.error(`[${recordingId}] Validation failed:`, e);
+          process.exit(1);
+      }
     }
 
-    // Notify uploading
-    await notifyBackendWithRetry(
-      backendUrl, 
-      `/api/recordings/${recordingId}/callback/status`,
-      recordingId, botToken,
-      { status: 'uploading' }
-    );
+    // Upload
     console.log(`[${recordingId}] spaces_upload_started`);
-
     const fileStreamForUpload = fs.createReadStream(outputPathMp4);
     const uploadParams = {
       client: s3Client,
@@ -207,14 +220,13 @@ async function run() {
         Key: `recordings/${roomId}/${Date.now()}.mp4`,
         Body: fileStreamForUpload,
         ContentType: 'video/mp4',
-        ACL: 'private', // Security fix: no longer public-read
+        ACL: 'private',
       },
-      queueSize: 4, // Concurrent parts
-      partSize: 5 * 1024 * 1024 // 5 MB part size
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024
     };
     
     const uploader = new Upload(uploadParams);
-    
     uploader.on("httpUploadProgress", (progress) => {
       console.log(`[${recordingId}] spaces_upload_progress: ${progress.loaded} / ${progress.total}`);
     });
@@ -222,55 +234,37 @@ async function run() {
     const data = await uploader.done();
     console.log(`[${recordingId}] spaces_upload_completed`);
 
-    // Notify completed
-    await notifyBackendWithRetry(
-      backendUrl, 
-      `/api/recordings/${recordingId}/callback/status`,
-      recordingId, botToken,
-      {
-        status: 'completed',
-        url: data.Location,
-        storageKey: uploadParams.params.Key,
-        storageBucket: uploadParams.params.Bucket,
-        contentType: uploadParams.params.ContentType,
-        duration: 0
-      }
-    );
+    if (segmentIndex !== undefined && !isNaN(segmentIndex)) {
+        await notifyBackendWithRetry(
+          backendUrl, 
+          `/api/recordings/${recordingId}/segments`,
+          recordingId, botToken,
+          {
+            segmentIndex: segmentIndex,
+            url: data.Location,
+            durationMs: finalDuration * 1000,
+            fileSize: fs.statSync(outputPathMp4).size,
+            status: finalStatus,
+            workerGeneration
+          }
+        );
+    } else {
+        await notifyBackendWithRetry(
+          backendUrl, 
+          `/api/recordings/${recordingId}/callback/status`,
+          recordingId, botToken,
+          {
+            status: 'completed',
+            url: data.Location,
+            duration: finalDuration
+          }
+        );
+    }
 
-    // Cleanup
     try { fs.unlinkSync(outputPathMp4); } catch(e) {}
-    
-    const Redis = require('ioredis');
-    const redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
-    await redis.del(`recorder:transcode:lease:${recordingId}`);
-    await redis.del(`recorder:transcode:lease:${recordingId}:pid`);
-    console.log(JSON.stringify({ event: "recorder_transcode_slot_released", recordingId }));
-    await redis.quit();
-    
     process.exit(0);
   } catch (err) {
     console.error(`[${recordingId}] spaces_upload_failed or transcode_failed`, err);
-    try {
-      await notifyBackendWithRetry(
-        backendUrl, 
-        `/api/recordings/${recordingId}/callback/status`,
-        recordingId, botToken,
-        {
-          status: 'failed',
-          failureReason: err.toString()
-        }
-      );
-    } catch (e) {}
-    
-    try {
-      const Redis = require('ioredis');
-      const redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
-      await redis.del(`recorder:transcode:lease:${recordingId}`);
-      await redis.del(`recorder:transcode:lease:${recordingId}:pid`);
-      console.log(JSON.stringify({ event: "recorder_transcode_slot_released", recordingId }));
-      await redis.quit();
-    } catch(e) {}
-    
     process.exit(1);
   }
 }

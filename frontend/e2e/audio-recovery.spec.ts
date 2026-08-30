@@ -13,6 +13,8 @@ test.describe('Audio Recovery', () => {
     // 1. Host joins the meeting to provide a remote audio track
     await hostPage.goto('/join/playwright-webrtc-room');
     await hostPage.locator('#join-name').fill('Host Speaker');
+    const hostEmail = hostPage.locator('#join-email');
+    if (await hostEmail.isVisible()) await hostEmail.fill('host@konn3ct.test');
     await hostPage.locator('#join-meeting-btn').click();
     // Wait for host to enter
     await expect(hostPage.locator('button[title="Mute"], button[title="Unmute"]').first()).toBeVisible({ timeout: 20000 });
@@ -26,6 +28,8 @@ test.describe('Audio Recovery', () => {
     // 2. Attendee joins the meeting
     await attendeePage.goto('/join/playwright-webrtc-room');
     await attendeePage.locator('#join-name').fill('Audio Test Attendee');
+    const attEmail = attendeePage.locator('#join-email');
+    if (await attEmail.isVisible()) await attEmail.fill('attendee@konn3ct.test');
     await attendeePage.locator('#join-meeting-btn').click();
 
     // Wait for the meeting controls to indicate we are inside the room

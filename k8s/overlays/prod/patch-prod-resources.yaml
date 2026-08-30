@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conn3ct-signaling
+spec:
+  replicas: 4
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - conn3ct-recorder
+                  - conn3ct-signaling
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: backend
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "3500m"
+              memory: "6Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conn3ct-media
+spec:
+  replicas: 3
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - conn3ct-recorder
+                  - conn3ct-media
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: backend
+          resources:
+            requests:
+              cpu: "1500m"
+              memory: "2Gi"
+            limits:
+              cpu: "3500m"
+              memory: "6Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conn3ct-recorder
+spec:
+  replicas: 1
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - conn3ct-backend
+                - conn3ct-media
+                - conn3ct-signaling
+            topologyKey: kubernetes.io/hostname
+      containers:
+        - name: recorder
+          env:
+            - name: MAX_CONCURRENT_BROWSERS
+              value: "5"
+            - name: MAX_CONCURRENT_TRANSCODES
+              value: "5"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "7Gi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conn3ct-frontend
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: frontend
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

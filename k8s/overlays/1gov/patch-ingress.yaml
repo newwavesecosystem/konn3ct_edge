@@ -1,0 +1,48 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: conn3ct-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  $patch: replace
+  tls:
+  - hosts:
+    - meetingapi.1gov.ng
+    - meetingapp2.1gov.ng
+    secretName: conn3ct-tls-secret
+  - hosts:
+    - meetingstorage.1gov.ng
+    secretName: minio-tls-secret
+  rules:
+  - host: meetingapi.1gov.ng
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: conn3ct-backend-service
+            port:
+              number: 80
+  - host: meetingapp2.1gov.ng
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: conn3ct-frontend
+            port:
+              number: 80
+  - host: meetingstorage.1gov.ng
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio-service
+            port:
+              number: 9000

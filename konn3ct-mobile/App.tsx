@@ -42,6 +42,8 @@ import NotificationsScreen from './src/screens/NotificationsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { useAuthStore, registerForPushNotificationsAsync } from './src/store/useAuthStore';
+import { useSettingsStore } from './src/store/useSettingsStore';
+import NotificationSoundService from './src/services/NotificationSoundService';
 import * as Notifications from 'expo-notifications';
 
 Notifications.setNotificationHandler({
@@ -96,7 +98,11 @@ export default function App() {
 
   useEffect(() => {
     // Restore saved session from SecureStore, then hide the splash screen
-    hydrate().finally(() => {
+    Promise.all([
+      hydrate(),
+      useSettingsStore.getState().hydrate(),
+      NotificationSoundService.initialize(),
+    ]).finally(() => {
       SplashScreen.hideAsync().catch(console.warn);
     });
   }, []);

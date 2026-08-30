@@ -19,14 +19,16 @@ export interface MediaControllerInterface {
     iceCandidates: any[];
     dtlsParameters: DtlsParameters;
   }>;
-  connectTransport(transportId: string, dtlsParameters: DtlsParameters): Promise<void>;
-  closeTransport(transportId: string): Promise<void>;
-  restartIce(transportId: string): Promise<{ iceParameters: any }>;
+  connectTransport(transportId: string, dtlsParameters: DtlsParameters, roomId?: string): Promise<void>;
+  closeTransport(transportId: string, roomId?: string): Promise<void>;
+  restartIce(transportId: string, roomId?: string): Promise<{ iceParameters: any }>;
 
   // --- Producers ---
-  createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }): Promise<{ id: string }>;
-  closeProducer(producerId: string): Promise<void>;
-  getProducer(producerId: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null>;
+  createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }, appData?: any, paused?: boolean): Promise<{ id: string }>;
+  closeProducer(producerId: string, roomId?: string): Promise<void>;
+  pauseProducer(producerId: string, roomId?: string): Promise<void>;
+  resumeProducer(producerId: string, roomId?: string): Promise<void>;
+  getProducer(producerId: string, roomId?: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null>;
 
   // --- Consumers ---
   createConsumer(
@@ -41,9 +43,10 @@ export interface MediaControllerInterface {
     rtpParameters: RtpParameters;
     appData?: any;
   }>;
-  resumeConsumer(consumerId: string): Promise<void>;
-  pauseConsumer(consumerId: string): Promise<void>;
-  requestConsumerKeyFrame(consumerId: string): Promise<void>;
+  resumeConsumer(consumerId: string, roomId?: string): Promise<void>;
+  pauseConsumer(consumerId: string, roomId?: string): Promise<void>;
+  requestConsumerKeyFrame(consumerId: string, roomId?: string): Promise<void>;
+  setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number, roomId?: string): Promise<void>;
 
   // --- Features ---
   setupAudioObserver(roomId: string): Promise<void>;

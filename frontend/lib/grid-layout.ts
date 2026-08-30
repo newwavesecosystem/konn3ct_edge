@@ -12,6 +12,16 @@ export const computeDynamicGrid = (c: number, w: number, h: number, paddingX: nu
   let best: GridSolution = { cols: 1, rows: c, tileW: 0, tileH: 0 };
   let bestScore = -Infinity;
 
+  // Mobile portrait override for 3 to 5 users
+  const isMobilePortrait = w < h && w <= 768;
+  if (isMobilePortrait && c >= 3 && c <= 5) {
+    const cols = 2;
+    const rows = Math.ceil(c / cols);
+    const tileW = (availW - gap * (cols - 1)) / cols;
+    const tileH = (availH - gap * (rows - 1)) / rows;
+    return { cols, rows, tileW, tileH };
+  }
+
   const maxCols = Math.min(c, 6);
 
   for (let cols = 1; cols <= maxCols; cols++) {

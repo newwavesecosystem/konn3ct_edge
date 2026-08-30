@@ -17,7 +17,11 @@ import {
   ChevronRight,
   Users,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  RotateCw,
+  ZoomIn,
+  ZoomOut,
+  ArrowLeftRight
 } from "lucide-react";
 import { useVideoHealth } from "@/hooks/useVideoHealth";
 
@@ -25,7 +29,7 @@ import YouTube from "react-youtube";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 export function StageView() {
-  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef } =
+  const { participants, layoutMode, isScreenSharing, toggleScreenShare, currentUser, eCinemaLink, webrtcClientRef, clientParticipantId } =
     useMeeting();
 
   const screenSharers = participants.filter((p) => p.isScreenSharing);
@@ -38,7 +42,7 @@ export function StageView() {
   }, [screenSharers, activeScreenSharerId]);
 
   const screenSharer = screenSharers.find(p => p.id === activeScreenSharerId) || screenSharers[0];
-  const isSomeoneSharing = !!screenSharer || isScreenSharing;
+  const isSomeoneSharing = !!screenSharer;
 
   // Grid view sorting (no active speaker rearranging)
   const gridSorted = useMemo(() => {
@@ -72,6 +76,7 @@ export function StageView() {
         isCurrentUserSharing={isScreenSharing}
         onStopSharing={toggleScreenShare}
         currentUserId={currentUser.id}
+        clientParticipantId={clientParticipantId}
       />
     );
   }
@@ -767,6 +772,7 @@ function ScreenShareLayout({
   isCurrentUserSharing,
   onStopSharing,
   currentUserId,
+  clientParticipantId,
 }: {
   participants: Participant[];
   screenSharer: Participant | undefined;
@@ -776,11 +782,103 @@ function ScreenShareLayout({
   isCurrentUserSharing: boolean;
   onStopSharing: () => void;
   currentUserId: string;
+  clientParticipantId?: string | null;
 }) {
-  const { webrtcClientRef } = useMeeting();
+  const { webrtcClientRef, currentUser } = useMeeting();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  const sharerName = screenSharer?.name ?? "You";
-  const isMe = screenSharer?.id === currentUserId;
+  const [rotation, setRotation] = React.useState<0 | 90 | 180 | 270>(0);
+  const [primaryView, setPrimaryView] = React.useState<"screen" | "participants">("screen");
+  const contentContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const [containerSize, setContainerSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
+  // Zoom & Pan state (Cross-platform)
+  const ZOOM_STEPS = [1, 1.25, 1.5, 2, 2.5, 3];
+  const [zoomIndex, setZoomIndex] = React.useState(0);
+  const zoom = ZOOM_STEPS[zoomIndex];
+  const [pan, setPan] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = React.useState(false);
+  const dragStartRef = React.useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+
+  const handleZoomIn = React.useCallback(() => {
+    setZoomIndex((prev) => Math.min(prev + 1, ZOOM_STEPS.length - 1));
+  }, [ZOOM_STEPS.length]);
+
+  const handleZoomOut = React.useCallback(() => {
+    setZoomIndex((prev) => {
+      const next = Math.max(prev - 1, 0);
+      if (next === 0) setPan({ x: 0, y: 0 });
+      return next;
+    });
+  }, []);
+
+  const handleResetZoom = React.useCallback(() => {
+    setZoomIndex(0);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  React.useEffect(() => {
+    setRotation(0);
+    setZoomIndex(0);
+    setPan({ x: 0, y: 0 });
+    setPrimaryView("screen");
+  }, [activeScreenSharerId]);
+
+  React.useEffect(() => {
+    const el = contentContainerRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+    };
+    updateSize();
+    if (typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(updateSize);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const handlePointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (zoom <= 1) return;
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }, [zoom, pan]);
+
+  const handlePointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || !dragStartRef.current || zoom <= 1) return;
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+
+    const maxPanX = ((zoom - 1) * (containerSize.width || 400)) / 2;
+    const maxPanY = ((zoom - 1) * (containerSize.height || 300)) / 2;
+
+    const newPanX = Math.max(-maxPanX, Math.min(maxPanX, dragStartRef.current.panX + deltaX));
+    const newPanY = Math.max(-maxPanY, Math.min(maxPanY, dragStartRef.current.panY + deltaY));
+
+    setPan({ x: newPanX, y: newPanY });
+  }, [isDragging, zoom, containerSize]);
+
+  const handlePointerUp = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+    dragStartRef.current = null;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    } catch {}
+  }, []);
+
+  const isViewingMyOwnScreen = Boolean(
+    screenSharer && (
+      screenSharer.id === currentUserId ||
+      (clientParticipantId && screenSharer.id === clientParticipantId) ||
+      (screenSharer.userId && (screenSharer.userId === currentUserId || (currentUser?.userId && screenSharer.userId === currentUser.userId)))
+    )
+  );
+  const sharerName = isViewingMyOwnScreen ? "You" : (screenSharer?.name ?? "Participant");
+  const isMe = isViewingMyOwnScreen;
 
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
@@ -911,12 +1009,31 @@ function ScreenShareLayout({
       clearTimeout(timeout2);
     };
   }, [isMe, screenSharer?.screenConsumerId, screenSharer?.screenTrack, screenSharer?.screenStats?.firstFrameRendered]);
+  const isRotated90or270 = rotation === 90 || rotation === 270;
+  const transformParts: string[] = [];
+  if (rotation !== 0) transformParts.push(`rotate(${rotation}deg)`);
+  if (pan.x !== 0 || pan.y !== 0) transformParts.push(`translate(${pan.x}px, ${pan.y}px)`);
+  if (zoom !== 1) transformParts.push(`scale(${zoom})`);
+  const transformString = transformParts.length > 0 ? transformParts.join(' ') : undefined;
+
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-1.5 sm:gap-2 p-1.5 sm:p-3 overflow-hidden">
+      {/* When participants are primary: Large Participant Grid on the left */}
+      {primaryView === "participants" && !isFullscreen && (
+        <div className="flex-1 min-h-0 min-w-0 rounded-2xl overflow-hidden flex flex-col">
+          <GridLayout participants={participants} />
+        </div>
+      )}
+
+      {/* Screenshare stage box */}
       <div
         className={cn(
-          "relative rounded-2xl overflow-hidden transition-all duration-300",
-          isFullscreen ? "fixed inset-2 z-50" : "flex-1 min-h-0 min-w-0",
+          "relative rounded-2xl overflow-hidden transition-all duration-300 flex flex-col",
+          isFullscreen
+            ? "fixed inset-2 z-50"
+            : primaryView === "screen"
+            ? "flex-1 min-h-0 min-w-0"
+            : "w-full lg:w-72 xl:w-84 h-64 lg:h-full shrink-0"
         )}
         style={{
           backgroundColor: "var(--mt-bg-screen)",
@@ -926,20 +1043,27 @@ function ScreenShareLayout({
         {screenSharers.length > 1 && (
           <div className="absolute top-4 left-0 right-0 z-30 px-4 flex justify-center pointer-events-none">
             <div className="flex items-center gap-2 p-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-xl overflow-x-auto w-max max-w-full no-scrollbar pointer-events-auto snap-x">
-              {screenSharers.map((sharer) => (
-                <button
-                  key={sharer.id}
-                  onClick={() => setActiveScreenSharerId(sharer.id)}
-                  className={cn(
-                    "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
-                    activeScreenSharerId === sharer.id
-                      ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
-                      : "bg-white/10 text-white hover:bg-white/20"
-                  )}
-                >
-                  <span className="truncate block">{sharer.name}&apos;s Screen</span>
-                </button>
-              ))}
+              {screenSharers.map((sharer) => {
+                const isThisSharerMe = Boolean(
+                  sharer.id === currentUserId ||
+                  (clientParticipantId && sharer.id === clientParticipantId) ||
+                  (sharer.userId && (sharer.userId === currentUserId || (currentUser?.userId && sharer.userId === currentUser.userId)))
+                );
+                return (
+                  <button
+                    key={sharer.id}
+                    onClick={() => setActiveScreenSharerId(sharer.id)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-full text-sm font-medium transition-all shrink-0 snap-center max-w-[120px] sm:max-w-[180px]",
+                      (activeScreenSharerId ? activeScreenSharerId === sharer.id : screenSharer?.id === sharer.id)
+                        ? "bg-[var(--color-brand-green)] text-[var(--mt-bg-base)] shadow-md"
+                        : "bg-white/10 text-white hover:bg-white/20"
+                    )}
+                  >
+                    <span className="truncate block">{isThisSharerMe ? "Your Screen" : `${sharer.name}'s Screen`}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -951,30 +1075,105 @@ function ScreenShareLayout({
               borderBottom: "1px solid var(--mt-border)",
             }}
           >
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2 sm:px-2.5 py-1 rounded-lg">
-                <MonitorUp className="w-3.5 h-3.5" />
-                <span className="text-[11px] sm:text-xs font-semibold">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 bg-blue-500/15 text-blue-400 px-2 sm:px-2.5 py-1 rounded-lg min-w-0">
+                <MonitorUp className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] sm:text-xs font-semibold truncate">
                   {isMe ? "You are sharing" : `${sharerName} is sharing`}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* Zoom controls: Out, Reset/Indicator, In (Cross-platform) */}
+              <div className="flex items-center bg-black/20 hover:bg-black/40 rounded-lg p-0.5 border border-white/5 transition-colors">
+                <button
+                  onClick={handleZoomOut}
+                  disabled={zoomIndex === 0}
+                  className={cn(
+                    "p-1 sm:p-1.5 rounded-md transition-colors",
+                    zoomIndex === 0 ? "opacity-30 cursor-not-allowed text-gray-400" : "hover:bg-white/10 text-white/80 active:scale-95"
+                  )}
+                  title="Zoom Out"
+                  aria-label="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+
+                <button
+                  onClick={handleResetZoom}
+                  disabled={zoomIndex === 0 && pan.x === 0 && pan.y === 0}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono font-medium transition-colors select-none",
+                    zoomIndex !== 0 || pan.x !== 0 || pan.y !== 0
+                      ? "text-brand-green hover:bg-white/10 font-bold"
+                      : "text-white/60"
+                  )}
+                  title="Click to reset zoom & pan (100%)"
+                  aria-label="Reset zoom and pan"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+
+                <button
+                  onClick={handleZoomIn}
+                  disabled={zoomIndex === ZOOM_STEPS.length - 1}
+                  className={cn(
+                    "p-1 sm:p-1.5 rounded-md transition-colors",
+                    zoomIndex === ZOOM_STEPS.length - 1 ? "opacity-30 cursor-not-allowed text-gray-400" : "hover:bg-white/10 text-white/80 active:scale-95"
+                  )}
+                  title="Zoom In"
+                  aria-label="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+              </div>
+
+              {/* Swap Sides button: Toggle Screenshare Main Stage vs Participant Grid Main Stage */}
+              <button
+                onClick={() => setPrimaryView((prev) => (prev === "screen" ? "participants" : "screen"))}
+                className={cn(
+                  "p-1.5 rounded-lg transition-colors hover:bg-white/10 flex items-center justify-center",
+                  primaryView === "participants" ? "text-brand-green bg-brand-green/10" : "text-green/60"
+                )}
+                title={
+                  primaryView === "screen"
+                    ? "Focus audience (show participants large on the left)"
+                    : "Focus screenshare (show screenshare large on the left)"
+                }
+                aria-label="Swap screenshare and participant view sizes"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+              </button>
+
+              {/* Mobile-only in-box Rotate button */}
+              <button
+                onClick={() => setRotation((prev) => ((prev + 90) % 360) as 0 | 90 | 180 | 270)}
+                className="md:hidden p-1.5 rounded-lg transition-colors flex items-center justify-center gap-0.5 hover:bg-white/10"
+                style={{ color: rotation !== 0 ? "var(--color-brand-green)" : "var(--mt-text-faint)" }}
+                title={`Rotate screenshare (${rotation}°)`}
+                aria-label="Rotate screenshare"
+              >
+                <RotateCw className={cn("w-4 h-4 transition-transform duration-300", rotation !== 0 && "text-brand-green")} />
+                {rotation !== 0 && (
+                  <span className="text-[9px] font-bold text-brand-green leading-none">{rotation}°</span>
+                )}
+              </button>
+
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1.5 rounded-lg transition-colors"
+                className="p-1.5 rounded-lg transition-colors hover:bg-white/10"
                 style={{ color: "var(--mt-text-faint)" }}
                 title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
-              {isMe && (
+              {isCurrentUserSharing && (
                 <button
                   onClick={onStopSharing}
-                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95"
+                  className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-semibold transition-all duration-200 active:scale-95 shrink-0"
                 >
                   <MonitorOff className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Stop Sharing</span>
+                  <span className="hidden sm:inline">{isViewingMyOwnScreen ? "Stop Sharing" : "Stop My Share"}</span>
                   <span className="sm:hidden">Stop</span>
                 </button>
               )}
@@ -983,135 +1182,168 @@ function ScreenShareLayout({
 
           {/* Screen content */}
           <div
-            className="flex-1 relative flex items-center justify-center overflow-hidden"
-            style={{ backgroundColor: "var(--mt-bg-screen)" }}
+            ref={contentContainerRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="flex-1 relative flex items-center justify-center overflow-hidden touch-none"
+            style={{ 
+              backgroundColor: "var(--mt-bg-screen)",
+              cursor: zoom > 1 ? (isDragging ? "grabbing" : "grab") : "default"
+            }}
           >
-            {isMe ? (
-              // Show mock UI for the person sharing (to avoid infinity mirror effect)
-              <div
-                className="flex-1 flex items-center justify-center w-full h-full"
-                style={{
-                  background:
-                    "linear-gradient(to bottom right, var(--mt-bg-screen-grad1), var(--mt-bg-screen), var(--mt-bg-screen-grad2))",
-                }}
-              >
-                <div className="flex flex-col items-center gap-3 sm:gap-4 text-center px-4 sm:px-6 max-w-lg">
-                  <div
-                    className="w-full max-w-md aspect-[16/10] rounded-xl p-4 sm:p-6 flex flex-col gap-2 sm:gap-3 shadow-2xl"
-                    style={{
-                      backgroundColor: "var(--mt-bg-screen-content)",
-                      border: "1px solid var(--mt-border)",
-                    }}
-                  >
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-red-400/60" />
-                      <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-yellow-400/60" />
-                      <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-400/60" />
-                      <div className="ml-2 sm:ml-3 h-3 sm:h-4 w-24 sm:w-40 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                    </div>
-                    <div className="flex-1 flex flex-col gap-1.5 sm:gap-2 pt-1 sm:pt-2">
-                      <div className="h-4 sm:h-5 w-3/4 rounded" style={{ backgroundColor: "var(--mt-text-whisper)" }} />
-                      <div className="h-2.5 sm:h-3 w-full rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                      <div className="h-2.5 sm:h-3 w-5/6 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                      <div className="h-2.5 sm:h-3 w-2/3 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
-                      <div className="mt-2 sm:mt-3 flex gap-1.5 sm:gap-2">
-                        <div className="h-10 sm:h-16 flex-1 rounded-lg bg-blue-500/10 border border-blue-500/10" />
-                        <div className="h-10 sm:h-16 flex-1 rounded-lg bg-green-500/10 border border-green-500/10" />
-                        <div className="h-10 sm:h-16 flex-1 rounded-lg bg-purple-500/10 border border-purple-500/10" />
+            <div
+              className="flex items-center justify-center pointer-events-auto"
+              style={
+                isRotated90or270 && containerSize.width > 0 && containerSize.height > 0
+                  ? {
+                      width: `${containerSize.height}px`,
+                      height: `${containerSize.width}px`,
+                      transform: transformString,
+                      transformOrigin: "center center",
+                      transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease, height 0.3s ease",
+                      userSelect: zoom > 1 ? "none" : "auto",
+                    }
+                  : {
+                      width: "100%",
+                      height: "100%",
+                      transform: transformString,
+                      transformOrigin: "center center",
+                      transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                      userSelect: zoom > 1 ? "none" : "auto",
+                    }
+              }
+            >
+              {isMe ? (
+                // Show mock UI for the person sharing (to avoid infinity mirror effect)
+                <div
+                  className="flex-1 flex items-center justify-center w-full h-full"
+                  style={{
+                    background:
+                      "linear-gradient(to bottom right, var(--mt-bg-screen-grad1), var(--mt-bg-screen), var(--mt-bg-screen-grad2))",
+                  }}
+                >
+                  <div className="flex flex-col items-center gap-3 sm:gap-4 text-center px-4 sm:px-6 max-w-lg">
+                    <div
+                      className="w-full max-w-md aspect-[16/10] rounded-xl p-4 sm:p-6 flex flex-col gap-2 sm:gap-3 shadow-2xl"
+                      style={{
+                        backgroundColor: "var(--mt-bg-screen-content)",
+                        border: "1px solid var(--mt-border)",
+                      }}
+                    >
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-red-400/60" />
+                        <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-yellow-400/60" />
+                        <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-green-400/60" />
+                        <div className="ml-2 sm:ml-3 h-3 sm:h-4 w-24 sm:w-40 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                      </div>
+                      <div className="flex-1 flex flex-col gap-1.5 sm:gap-2 pt-1 sm:pt-2">
+                        <div className="h-4 sm:h-5 w-3/4 rounded" style={{ backgroundColor: "var(--mt-text-whisper)" }} />
+                        <div className="h-2.5 sm:h-3 w-full rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                        <div className="h-2.5 sm:h-3 w-5/6 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                        <div className="h-2.5 sm:h-3 w-2/3 rounded" style={{ backgroundColor: "var(--mt-bg-control)" }} />
+                        <div className="mt-2 sm:mt-3 flex gap-1.5 sm:gap-2">
+                          <div className="h-10 sm:h-16 flex-1 rounded-lg bg-blue-500/10 border border-blue-500/10" />
+                          <div className="h-10 sm:h-16 flex-1 rounded-lg bg-green-500/10 border border-green-500/10" />
+                          <div className="h-10 sm:h-16 flex-1 rounded-lg bg-purple-500/10 border border-purple-500/10" />
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2" style={{ color: "var(--mt-text-ghost)" }}>
-                    <MousePointerClick className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    <span className="text-[11px] sm:text-xs">
-                      Your screen is being shared to the room
-                    </span>
+                    <div className="flex items-center gap-2" style={{ color: "var(--mt-text-ghost)" }}>
+                      <MousePointerClick className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      <span className="text-[11px] sm:text-xs">
+                        Your screen is being shared to the room
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              // Show actual video feed for viewers
-              <div className="relative w-full h-full">
-                {(!screenSharer?.screenStats?.consumerExists || !screenSharer?.screenTrack) && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
-                    <div className="flex flex-col items-center gap-3 text-white">
-                      <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
-                      <span className="text-sm font-medium">Connecting screen share...</span>
+              ) : (
+                // Show actual video feed for viewers
+                <div className="relative w-full h-full">
+                  {(!screenSharer?.screenStats?.consumerExists || !screenSharer?.screenTrack) && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
+                      <div className="flex flex-col items-center gap-3 text-white">
+                        <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
+                        <span className="text-sm font-medium">Connecting screen share...</span>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {screenSharer?.screenTrack && (health === 'recovering' || screenTimeoutState === 'recovering') && screenTimeoutState !== 'failed' && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
-                      <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
-                      <span className="text-sm font-medium drop-shadow-md">
-                        Recovering screen share...
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {screenSharer?.screenTrack && screenTimeoutState === 'failed' && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                    <div className="flex items-center gap-2 px-4 py-3 bg-red-900/80 backdrop-blur-md rounded-lg text-white border border-red-500/50">
-                      <span className="text-sm font-medium drop-shadow-md">
-                        Screen share failed to load. Please ask the presenter to restart it.
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                <video
-                  key={remountKey}
-                  ref={videoCallbackRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={cn(
-                    "w-full h-full object-contain",
-                    health === 'recovering' && "opacity-50"
                   )}
-                />
-                
-                {health === 'stalled' && (
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-900/80 border border-yellow-500/50 rounded-lg text-yellow-100 shadow-lg">
-                      <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                      <span className="text-xs font-medium">Screen share connection is slow</span>
+                  {screenSharer?.screenTrack && (health === 'recovering' || screenTimeoutState === 'recovering') && screenTimeoutState !== 'failed' && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-md rounded-lg text-white">
+                        <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                        <span className="text-sm font-medium drop-shadow-md">
+                          Recovering screen share...
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
-                
-                {health === 'black' && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/80">
-                    <div className="flex flex-col items-center gap-2 px-6 py-4 bg-red-900/40 rounded-lg text-white border border-red-500/50">
-                      <AlertTriangle className="w-6 h-6 text-red-500" />
-                      <span className="text-sm font-medium drop-shadow-md">
-                        Screen share feed failed (Black Screen).
-                      </span>
+                  )}
+                  {screenSharer?.screenTrack && screenTimeoutState === 'failed' && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                      <div className="flex items-center gap-2 px-4 py-3 bg-red-900/80 backdrop-blur-md rounded-lg text-white border border-red-500/50">
+                        <span className="text-sm font-medium drop-shadow-md">
+                          Screen share failed to load. Please ask the presenter to restart it.
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+
+                  <video
+                    key={remountKey}
+                    ref={videoCallbackRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={cn(
+                      "w-full h-full object-contain",
+                      health === 'recovering' && "opacity-50"
+                    )}
+                  />
+                  
+                  {health === 'stalled' && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-20">
+                      <div className="flex items-center gap-2 px-3 py-2 bg-yellow-900/80 border border-yellow-500/50 rounded-lg text-yellow-100 shadow-lg">
+                        <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                        <span className="text-xs font-medium">Screen share connection is slow</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {health === 'black' && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/80">
+                      <div className="flex flex-col items-center gap-2 px-6 py-4 bg-red-900/40 rounded-lg text-white border border-red-500/50">
+                        <AlertTriangle className="w-6 h-6 text-red-500" />
+                        <span className="text-sm font-medium drop-shadow-md">
+                          Screen share feed failed (Black Screen).
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Participant filmstrip */}
-      <div className={cn(
-        "shrink-0 overflow-auto no-scrollbar",
-        isFullscreen && "hidden",
-        "flex lg:flex-col gap-1.5 sm:gap-2",
-        "w-full lg:w-44 xl:w-52",
-        "py-1 lg:py-0 h-auto lg:h-full"
-      )}>
-        {participants.map((p) => (
-          <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
-            <ParticipantTile participant={p} fixedAspect />
-          </div>
-        ))}
-      </div>
+      {/* When screen is primary: render the small Participant filmstrip on the right */}
+      {primaryView === "screen" && (
+        <div className={cn(
+          "shrink-0 overflow-auto no-scrollbar",
+          isFullscreen && "hidden",
+          "flex lg:flex-col gap-1.5 sm:gap-2",
+          "w-full lg:w-44 xl:w-52",
+          "py-1 lg:py-0 h-auto lg:h-full"
+        )}>
+          {participants.map((p) => (
+            <div key={p.id} className="w-24 sm:w-32 lg:w-full shrink-0">
+              <ParticipantTile participant={p} fixedAspect />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

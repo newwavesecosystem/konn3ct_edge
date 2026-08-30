@@ -28,8 +28,8 @@ const workers: Worker[] = [];
 let nextWorkerIdx = 0;
 
 const routers = new Map<string, Router>();
-const transports = new Map<string, Transport>();
-const producers = new Map<string, Producer>();
+export const transports = new Map<string, Transport>();
+export const producers = new Map<string, Producer>();
 const consumers = new Map<string, Consumer>();
 const audioObservers = new Map<string, AudioLevelObserver>();
 
@@ -233,6 +233,18 @@ export async function getOrCreateRouter(roomId: string): Promise<Router> {
   }
 }
 
+export function getRouter(routerIdOrRoomId: string): Router | undefined {
+  if (routers.has(routerIdOrRoomId)) {
+    return routers.get(routerIdOrRoomId);
+  }
+  for (const router of routers.values()) {
+    if (router.id === routerIdOrRoomId) {
+      return router;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Close a Router and remove it from memory
  */
@@ -365,11 +377,26 @@ export function getProducer(producerId: string): Producer | undefined {
 /**
  * Create a Producer (client sending media)
  */
-export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }) {
+export async function createProducer(
+  transportId: string, 
+  kind: 'audio' | 'video', 
+  rtpParameters: any, 
+  roomId?: string, 
+  userId?: string, 
+  userName?: string, 
+  clientData?: { isBot?: boolean, role?: string },
+  appData?: any,
+  paused?: boolean
+) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
-  const producer = await transport.produce({ kind, rtpParameters });
+  const producer = await transport.produce({ 
+    kind, 
+    rtpParameters, 
+    appData: appData || {}, 
+    paused: !!paused 
+  });
   producers.set(producer.id, producer);
 
   // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
@@ -386,8 +413,8 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
       });
     }
 
-    // Start server-side transcription
-    if (userId && userName) {
+    // Start server-side transcription only if unpaused/active
+    if (userId && userName && !paused) {
       const router = routers.get(roomId);
       if (router) {
         startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
@@ -408,7 +435,13 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
 /**
  * Create a Consumer (client receiving media)
  */
-export async function createConsumer(transportId: string, producerId: string, rtpCapabilities: any, router: Router) {
+export async function createConsumer(
+  transportId: string,
+  producerId: string,
+  rtpCapabilities: any,
+  router: Router,
+  onProducerClose?: (consumerId: string) => void
+) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
@@ -432,6 +465,9 @@ export async function createConsumer(transportId: string, producerId: string, rt
   consumer.on('producerclose', () => {
     consumer.close();
     consumers.delete(consumer.id);
+    if (onProducerClose) {
+      onProducerClose(consumer.id);
+    }
   });
 
   return {
@@ -475,6 +511,28 @@ export async function resumeConsumer(consumerId: string, clientCleanupStarted?: 
 /**
  * Close a specific producer by ID (used when a client stops screen sharing)
  */
+export async function pauseProducer(producerId: string): Promise<void> {
+  const producer = producers.get(producerId);
+  if (producer && !producer.closed) {
+    await producer.pause();
+  }
+}
+
+export async function resumeProducer(producerId: string): Promise<void> {
+  const producer = producers.get(producerId);
+  if (producer && !producer.closed) {
+    await producer.resume();
+  }
+}
+
+export function closeConsumer(consumerId: string): void {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.closed) {
+    consumer.close();
+    consumers.delete(consumerId);
+  }
+}
+
 export function closeProducer(producerId: string) {
   const producer = producers.get(producerId);
   if (producer && !producer.closed) {
@@ -482,6 +540,7 @@ export function closeProducer(producerId: string) {
     producers.delete(producerId);
   }
 }
+
 
 /**
  * Create a Consumer with an optional producerclose callback so the signaling
@@ -586,6 +645,27 @@ export async function requestConsumerKeyFrame(consumerId: string) {
   }
   
   await consumer.requestKeyFrame();
+}
+
+export async function setConsumerPreferredLayersAndPriority(
+  consumerId: string,
+  spatialLayer?: number,
+  temporalLayer?: number,
+  priority?: number
+) {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.closed && consumer.kind === 'video') {
+    try {
+      if (typeof spatialLayer === 'number') {
+        await consumer.setPreferredLayers({ spatialLayer, temporalLayer });
+      }
+      if (typeof priority === 'number') {
+        await consumer.setPriority(priority);
+      }
+    } catch (err) {
+      logger.warn(`Failed to set layers/priority on consumer ${consumerId}:`, err);
+    }
+  }
 }
 
 export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {

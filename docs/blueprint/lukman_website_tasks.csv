@@ -1,0 +1,64 @@
+id,name,Description,start Date,Deadline,Priority,Tags,Assignees
+LUK-001,LUK-001 - Public Website Next.js Initialization,"Initialize the public-facing marketing website using Next.js App Router and Tailwind CSS. Expectation: A fast, SEO-optimized static site base.
+
+Acceptance Criteria:
+- Next.js project initialized separately from the Admin portal
+- Tailwind CSS and global design tokens configured
+- Setup basic routing for Home, About, Pricing, and Contact
+- Lighthouse performance score > 90 for Desktop and Mobile",8/10/2026,8/13/2026,High,"Frontend, Next.js, Setup",Lukman Adewuyi
+LUK-002,LUK-002 - Country-Specific Landing Page Templates,"Build dynamic route templates for localized marketing funnels (e.g. `/ng`, `/ke`). Expectation: Landing pages adapt copy and images based on the URL region.
+
+Acceptance Criteria:
+- Next.js dynamic routing configured for `/[country]`
+- Content components switch out hero text, testimonials, and trust badges based on country param
+- Default fallback to `/global` if country code is missing or unrecognized
+- Static Site Generation (SSG) utilized for fast loading times",8/13/2026,8/17/2026,High,"Frontend, Marketing, Geo",Lukman Adewuyi
+LUK-003,LUK-003 - Localized Pricing Tables UI,"Build the pricing tier UI that dynamically reflects local currency (Volume 8). Expectation: Nigerian users see NGN, Kenyan users see KES, ROW sees USD.
+
+Acceptance Criteria:
+- Fetches geo-location from Kay's API or Cloudflare headers
+- Pricing toggle (Monthly vs Annual)
+- Displays correct currency symbol and localized price points
+- Clear Call-to-Action (CTA) buttons linking to the signup/checkout flow",8/17/2026,8/20/2026,High,"Frontend, Pricing, UI",Lukman Adewuyi
+LUK-004,LUK-004 - Marketing Funnel Tracking & Analytics,"Integrate Meta Pixel, Google Tag Manager, and PostHog for funnel tracking (Volume 2). Expectation: Marketing can track CAC from ad click to signup.
+
+Acceptance Criteria:
+- GTM data layer pushes events for 'Landing Page View', 'Signup Started'
+- PostHog integration capturing anonymous user journeys
+- Privacy-compliant cookie consent banner implemented
+- Clean UTM parameter extraction and storage in browser session state",8/20/2026,8/24/2026,High,"Frontend, Analytics, Tracking",Lukman Adewuyi
+LUK-005,LUK-005 - Event & Webinar Catalog Page,"Build the public storefront UI where users can browse upcoming paid webinars and past replays. Expectation: A clean, searchable grid of events.
+
+Acceptance Criteria:
+- Grid layout displaying Event Cards (Thumbnail, Title, Date, Host, Price)
+- Search bar and category filters (e.g. 'Tech', 'Faith', 'Education')
+- Pagination or infinite scroll for large catalogs
+- Clicking a card navigates to the detailed Event page",8/24/2026,8/28/2026,Medium,"Frontend, Events, UI",Lukman Adewuyi
+LUK-006,LUK-006 - Detailed Event / Ticket Page,"Build the specific page for a single event, showing details and the 'Buy Ticket' button. Expectation: High-converting event detail page.
+
+Acceptance Criteria:
+- Hero section with event banner, countdown timer, and Host bio
+- Rich text description of what the webinar covers
+- 'Buy Ticket' sticky footer on mobile
+- Price displayed in local currency based on user geo",8/28/2026,9/1/2026,High,"Frontend, Ticketing, UI",Lukman Adewuyi
+LUK-007,LUK-007 - Paystack / Flutterwave Checkout Drop-in,"Integrate the frontend checkout modal for African payments (Paystack/Flutterwave). Expectation: Seamless UI payment flow.
+
+Acceptance Criteria:
+- UI calls Kay's backend API to initialize the transaction and receive an access code
+- Loads the Paystack/Flutterwave inline checkout iframe or popup
+- Handles frontend success callback by displaying a 'Processing...' loading state while polling backend for final verification
+- Handles user cancellation or payment failure gracefully",9/1/2026,9/5/2026,High,"Frontend, Checkout, Payments",Lukman Adewuyi
+LUK-008,LUK-008 - Stripe Checkout Integration UI,"Integrate the frontend flow for Stripe payments (Rest of World). Expectation: Smooth redirect or embedded Stripe Elements flow.
+
+Acceptance Criteria:
+- UI calls Kay's backend to generate a Stripe Checkout Session ID
+- Redirects user to Stripe hosted checkout page OR uses Stripe Elements inline
+- Handles successful redirect back to the Konn3ct 'Success' page
+- Displays 'Verifying Payment' loading state until backend confirms",9/5/2026,9/9/2026,Medium,"Frontend, Checkout, Stripe",Lukman Adewuyi
+LUK-009,LUK-009 - Post-Purchase Success & Digital Ticket UI,"Build the success page displayed after a verified purchase. Expectation: User feels reassured and receives their access links.
+
+Acceptance Criteria:
+- Confetti animation and 'Payment Successful' confirmation
+- Displays the generated Digital Ticket with QR Code (fetched from backend)
+- Clear 'Add to Calendar' buttons (Google, Outlook, iCal)
+- 'Go to Room' button that activates when the event starts",9/9/2026,9/12/2026,Medium,"Frontend, UX, Tickets",Lukman Adewuyi
