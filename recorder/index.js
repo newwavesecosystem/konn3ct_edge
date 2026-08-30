@@ -468,3 +468,5 @@ async function processRecordingJob(job, workerId) {
     await cleanup();
   }
 }
+
+startWorker();
