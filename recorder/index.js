@@ -347,6 +347,8 @@ async function processRecordingJob(job, workerId) {
     const browserArgs = [
       '--window-size=1920,1080', '--kiosk', '--no-sandbox', '--disable-setuid-sandbox',
       '--autoplay-policy=no-user-gesture-required', '--disable-dev-shm-usage', '--disable-gpu',
+      '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', 
+      '--disable-gpu-compositing', '--use-gl=angle', '--use-angle=swiftshader', '--disable-accelerated-video-decode',
       '--auto-select-desktop-capture-source=BotRecord', '--auto-select-tab-capture-source-by-title=BotRecord',
       '--enable-usermedia-screen-capturing', '--use-fake-ui-for-media-stream', '--disable-web-security', '--hide-scrollbars',
       `--user-data-dir=/tmp/chrome_profile_${generationId}`
