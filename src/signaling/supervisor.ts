@@ -85,12 +85,13 @@ export function startRecordingSupervisor() {
         }
       }
 
-      // Check for stopped/stopping recordings that need final stitching (processed sequentially by exact recordingId)
+      // Check for stopped/stopping recordings that need final stitching (prioritize newest first)
       const stoppingRecordings = await db.recording.findMany({
         where: { 
           status: { in: ['stopping', 'processing'] }
         },
-        take: 10
+        orderBy: { createdAt: 'desc' },
+        take: 20
       });
 
       for (const rec of stoppingRecordings) {

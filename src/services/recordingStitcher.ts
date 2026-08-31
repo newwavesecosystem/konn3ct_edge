@@ -86,14 +86,22 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
     });
 
     if (!segments || segments.length === 0) {
-      logger.warn(`[Stitcher] No uploaded segments found for recording ${recordingId}.`);
+      logger.warn(`[Stitcher] No uploaded segments found for recording ${recordingId}. Marking as failed.`);
+      await db.recording.update({
+        where: { id: recordingId },
+        data: { status: 'failed', failureReason: 'No uploaded segments found', endedAt: recording.endedAt || new Date() }
+      });
       return false;
     }
 
     // Filter out segments without valid URLs
     const validSegments = segments.filter(s => s.url && s.url.startsWith('http'));
     if (validSegments.length === 0) {
-      logger.warn(`[Stitcher] No segments with valid HTTP URLs for recording ${recordingId}.`);
+      logger.warn(`[Stitcher] No segments with valid HTTP URLs for recording ${recordingId}. Marking as failed.`);
+      await db.recording.update({
+        where: { id: recordingId },
+        data: { status: 'failed', failureReason: 'No valid segment URLs', endedAt: recording.endedAt || new Date() }
+      });
       return false;
     }
 
