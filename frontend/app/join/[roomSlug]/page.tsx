@@ -322,7 +322,7 @@ export default function JoinPage({
         isMobile: isMobileDevice
       };
       if (accessCode.trim()) {
-        payload.accessCode = accessCode.trim();
+        payload.access_code = accessCode.trim();
       }
 
       let data: any;
