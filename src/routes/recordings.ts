@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
 import { setRecordingControlState, getRecordingControlState } from '../helpers/recordingControl';
+import { stitchRecording } from '../services/recordingStitcher';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
@@ -335,11 +336,20 @@ recordingsRouter.post('/:id/segments', async (req: Request, res: Response) => {
       }
     });
 
-    res.status(200).json({ success: true, segment });
-  } catch (err) {
-    logger.error('Error saving segment:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+      // If the recording was requested to stop or is stopping, trigger stitching of all segments
+      const parentRec = await db.recording.findUnique({ where: { id } });
+      const controlState = await redis.get(`recording:${id}:control`);
+      if (parentRec && (parentRec.status === 'stopping' || parentRec.status === 'processing' || controlState === 'STOP_REQUESTED' || controlState === 'STOPPING' || controlState === 'STOPPED')) {
+        setTimeout(() => {
+          stitchRecording(id).catch(e => logger.error(`[Stitcher] Failed to stitch recording ${id}`, e));
+        }, 2000);
+      }
+
+      res.status(200).json({ success: true, segment });
+    } catch (err) {
+      logger.error('Error saving segment:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 recordingsRouter.post('/:id/callback/status', async (req: Request, res: Response) => {
