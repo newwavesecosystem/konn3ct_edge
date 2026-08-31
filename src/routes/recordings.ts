@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
 import { setRecordingControlState, getRecordingControlState } from '../helpers/recordingControl';
+import { stitchRecording } from '../services/recordingStitcher';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
@@ -226,20 +227,15 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
       return res.status(403).json({ error: 'Token mismatch' });
     }
 
-    // CAS transition: STARTING -> RECORDING only if current state == STARTING
-    const transition = await setRecordingControlState(id, 'RECORDING', 'STARTING');
-    if (!transition.success) {
+    // CAS transition: ensure we are not already stopping/stopped
+    const transition = await setRecordingControlState(id, 'RECORDING', 'ANY');
+    if (transition.currentState === 'STOP_REQUESTED' || transition.currentState === 'STOPPING' || transition.currentState === 'STOPPED') {
       logger.warn(`[Recording] /callback/started rejected for ${id}: current control state is ${transition.currentState}`);
       return res.status(200).json({ 
         success: false, 
         currentState: transition.currentState,
-        stopRequested: transition.currentState === 'STOP_REQUESTED' || transition.currentState === 'STOPPING' || transition.currentState === 'STOPPED'
+        stopRequested: true
       });
-    }
-
-    const rec = await db.recording.findUnique({ where: { id } });
-    if (!rec || rec.status !== 'starting') {
-      return res.status(400).json({ error: 'Invalid state transition' });
     }
 
     await db.recording.updateMany({
@@ -340,11 +336,20 @@ recordingsRouter.post('/:id/segments', async (req: Request, res: Response) => {
       }
     });
 
-    res.status(200).json({ success: true, segment });
-  } catch (err) {
-    logger.error('Error saving segment:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+      // If the recording was requested to stop or is stopping, trigger stitching of all segments
+      const parentRec = await db.recording.findUnique({ where: { id } });
+      const controlState = await redis.get(`recording:${id}:control`);
+      if (parentRec && (parentRec.status === 'stopping' || parentRec.status === 'processing' || controlState === 'STOP_REQUESTED' || controlState === 'STOPPING' || controlState === 'STOPPED')) {
+        setTimeout(() => {
+          stitchRecording(id).catch(e => logger.error(`[Stitcher] Failed to stitch recording ${id}`, e));
+        }, 2000);
+      }
+
+      res.status(200).json({ success: true, segment });
+    } catch (err) {
+      logger.error('Error saving segment:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 recordingsRouter.post('/:id/callback/status', async (req: Request, res: Response) => {

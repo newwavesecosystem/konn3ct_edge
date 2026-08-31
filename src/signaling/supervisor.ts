@@ -2,6 +2,8 @@ import { db } from '../db';
 import { logger } from '../logger';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
+import crypto from 'crypto';
+import { stitchRecording } from '../services/recordingStitcher';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
@@ -44,19 +46,24 @@ export function startRecordingSupervisor() {
                  
                  // Atomic collision-proof range allocation
                  const nextSegmentIndex = nextWorkerGeneration * 10000;
-                 // Mint new credential
+                 
+                 // Mint new credential matching standard recording bot token structure
+                 const participantId = crypto.randomUUID();
                  const validToken = jwt.sign(
-                    { purpose: 'recording_bot', recordingId: rec.id }, 
+                    { role: 'recorder', purpose: 'recording_bot', roomId: room.id, roomSlug: room.slug, recordingId: rec.id, participantId }, 
                     process.env.JWT_SECRET || 'fallback',
-                    { expiresIn: '24h' }
+                    { expiresIn: '4h' }
                  );
 
-                 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+                 const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || process.env.FRONTEND_DOMAIN || 'edge.konn3ct.net';
+                 const protocol = frontendDomain.includes('localhost') ? 'http' : 'https';
+                 const botUrl = `${protocol}://${frontendDomain}/recording/${room.slug}?botToken=${validToken}`;
                  
                  const job = {
                     roomId: room.id,
+                    roomSlug: room.slug,
                     recordingId: rec.id,
-                    url: `${frontendUrl}/room/${room.slug}/recording`,
+                    url: botUrl,
                     botToken: validToken,
                     workerGeneration: nextWorkerGeneration,
                     nextSegmentIndex: nextSegmentIndex,
@@ -68,6 +75,19 @@ export function startRecordingSupervisor() {
                  logger.info(`[Supervisor] Re-queued recording job for ${rec.id} (Gen: ${nextWorkerGeneration}, NextSegment: ${nextSegmentIndex})`);
              }
           }
+        }
+      }
+
+      // Check for stopped/stopping recordings that need final stitching
+      const stoppingRecordings = await db.recording.findMany({
+        where: { status: { in: ['stopping', 'processing'] } }
+      });
+      for (const rec of stoppingRecordings) {
+        const leaseKey = `recording:${rec.id}:lease`;
+        const hasLease = await redis.exists(leaseKey);
+        if (!hasLease) {
+          // Worker is done capturing, trigger stitching
+          stitchRecording(rec.id).catch(e => logger.error(`[Supervisor] Stitching failed for ${rec.id}:`, e));
         }
       }
     } catch (err) {

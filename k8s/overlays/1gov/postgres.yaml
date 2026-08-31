@@ -23,6 +23,8 @@ spec:
       labels:
         app: postgres
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
       containers:
         - name: postgres
           image: postgres:15

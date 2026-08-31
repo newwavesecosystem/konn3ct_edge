@@ -61,21 +61,25 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: ODOO_URL
+                  optional: true
             - name: ODOO_DB
               valueFrom:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: ODOO_DB
+                  optional: true
             - name: ODOO_USER
               valueFrom:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: ODOO_USER
+                  optional: true
             - name: ODOO_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: ODOO_API_KEY
+                  optional: true
             - name: DEEPGRAM_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -116,6 +120,7 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: TELEMETRY_S3_BUCKET_NAME
+                  optional: true
             - name: NEXT_PUBLIC_FRONTEND_URL
               valueFrom:
                 secretKeyRef:

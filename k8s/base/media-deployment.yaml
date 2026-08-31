@@ -99,6 +99,7 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: TELEMETRY_S3_BUCKET_NAME
+                  optional: true
             - name: NEXT_PUBLIC_FRONTEND_URL
               valueFrom:
                 secretKeyRef:

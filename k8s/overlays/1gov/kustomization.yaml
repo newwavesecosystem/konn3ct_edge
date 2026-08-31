@@ -7,6 +7,14 @@ resources:
   - postgres.yaml
   - minio.yaml
 
-patches:
-  - path: patch-ingress.yaml
-  - path: patch-resources.yaml
+patchesStrategicMerge:
+  - patch-ingress.yaml
+  - patch-resources.yaml
+
+images:
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-frontend
+    newTag: 1gov_stag
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-backend
+    newTag: prod-latest
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-recorder
+    newTag: prod-latest

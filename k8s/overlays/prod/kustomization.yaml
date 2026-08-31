@@ -6,8 +6,8 @@ resources:
   - media-hpa.yaml
   - signaling-hpa.yaml
 
-patches:
-  - path: patch-prod-resources.yaml
+patchesStrategicMerge:
+  - patch-prod-resources.yaml
 
 images:
   - name: registry.digitalocean.com/konn3ct-registry/conn3ct-backend

@@ -321,6 +321,9 @@ export default function JoinPage({
         mobile: isMobileDevice,
         isMobile: isMobileDevice
       };
+      if (accessCode.trim()) {
+        payload.accessCode = accessCode.trim();
+      }
 
       let data: any;
       if (resolvedParams.roomSlug?.startsWith('playwright-')) {
@@ -333,7 +336,8 @@ export default function JoinPage({
             email: email.trim(),
             isMobile: isMobileDevice,
             camera: isCameraOn,
-            mic: !isMuted
+            mic: !isMuted,
+            ...(accessCode.trim() ? { accessCode: accessCode.trim() } : {})
           })
         });
         data = await localRes.json();

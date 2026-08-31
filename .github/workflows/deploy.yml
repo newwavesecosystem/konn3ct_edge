@@ -83,6 +83,9 @@ jobs:
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:staging-latest
             docker push $IMAGE_NAME:staging-latest
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:prod-latest
+            docker push $IMAGE_NAME:prod-latest
           fi
 
       # - name: Build and Push Streaming Worker Docker Image
