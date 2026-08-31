@@ -604,7 +604,13 @@ async function processAdminCommand(data: any) {
       // Stop and finalize active recording
       try {
         const activeRec = await db.recording.findFirst({
-          where: { roomId, status: { in: ['starting', 'recording'] } },
+          where: {
+            OR: [
+              { roomId },
+              { room: { slug: roomId } }
+            ],
+            status: { in: ['starting', 'recording'] }
+          },
           orderBy: { createdAt: 'desc' }
         });
         if (activeRec) {
@@ -1968,6 +1974,29 @@ export function initializeSignaling(server: Server) {
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after disconnect timeout. Closing meeting instance and wiping room state.`);
+            try {
+              const recToStop = await db.recording.findFirst({
+                where: {
+                  OR: [
+                    { roomId },
+                    { room: { slug: roomId } },
+                    { room: { slug: roomSlug } }
+                  ],
+                  status: { in: ['starting', 'recording'] }
+                },
+                orderBy: { createdAt: 'desc' }
+              });
+              if (recToStop) {
+                await setRecordingControlState(recToStop.id, 'STOP_REQUESTED', 'ANY');
+                await db.recording.updateMany({
+                  where: { id: recToStop.id, status: { in: ['starting', 'recording'] } },
+                  data: { status: 'stopping', endedAt: new Date() }
+                });
+                redis.publish(`recorder:stop:${recToStop.id}`, JSON.stringify({ reason: 'room_empty', recordingId: recToStop.id })).catch(e => logger.error("Failed to stop recording on room empty", e));
+              }
+            } catch(recErr) {
+              logger.error("Error auto-stopping recording on room empty", recErr);
+            }
             await closeActiveMeetingInstance(roomId, client.meetingInstanceId).catch(e => logger.warn('closeActiveMeetingInstance error', e));
             await redis.del(`room:${roomId}:participants`).catch(e => logger.warn('Redis del error', e));
             await redis.del(`room:${roomSlug}:participants`).catch(e => logger.warn('Redis del error', e));
@@ -3427,7 +3456,7 @@ export function initializeSignaling(server: Server) {
         if (client.role === 'host' || client.role === 'co-host') {
           const reason = data.reason || 'manual_stop';
           const activeRec = await db.recording.findFirst({
-            where: { roomId, status: { in: ['starting', 'recording'] } },
+            where: { OR: [{ roomId }, { room: { slug: roomId } }, { room: { slug: client.roomSlug } }], status: { in: ['starting', 'recording'] } },
             orderBy: { createdAt: 'desc' }
           });
           if (activeRec) {

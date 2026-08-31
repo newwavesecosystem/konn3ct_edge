@@ -226,20 +226,15 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
       return res.status(403).json({ error: 'Token mismatch' });
     }
 
-    // CAS transition: STARTING -> RECORDING only if current state == STARTING
-    const transition = await setRecordingControlState(id, 'RECORDING', 'STARTING');
-    if (!transition.success) {
+    // CAS transition: ensure we are not already stopping/stopped
+    const transition = await setRecordingControlState(id, 'RECORDING', 'ANY');
+    if (transition.currentState === 'STOP_REQUESTED' || transition.currentState === 'STOPPING' || transition.currentState === 'STOPPED') {
       logger.warn(`[Recording] /callback/started rejected for ${id}: current control state is ${transition.currentState}`);
       return res.status(200).json({ 
         success: false, 
         currentState: transition.currentState,
-        stopRequested: transition.currentState === 'STOP_REQUESTED' || transition.currentState === 'STOPPING' || transition.currentState === 'STOPPED'
+        stopRequested: true
       });
-    }
-
-    const rec = await db.recording.findUnique({ where: { id } });
-    if (!rec || rec.status !== 'starting') {
-      return res.status(400).json({ error: 'Invalid state transition' });
     }
 
     await db.recording.updateMany({

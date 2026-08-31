@@ -13,7 +13,7 @@ const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEn
 const s3Client = new S3Client({
   endpoint,
   region: process.env.DO_SPACES_REGION || 'sfo3',
-  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+  forcePathStyle: String(process.env.S3_FORCE_PATH_STYLE).trim().toLowerCase() === 'true',
   credentials: {
     accessKeyId: process.env.DO_SPACES_KEY || '',
     secretAccessKey: process.env.DO_SPACES_SECRET || '',
