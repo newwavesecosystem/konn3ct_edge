@@ -7,6 +7,6 @@ resources:
   - postgres.yaml
   - minio.yaml
 
-patches:
-  - path: patch-ingress.yaml
-  - path: patch-resources.yaml
+patchesStrategicMerge:
+  - patch-ingress.yaml
+  - patch-resources.yaml

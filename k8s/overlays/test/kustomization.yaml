@@ -4,8 +4,8 @@ kind: Kustomization
 resources:
   - ../../base
 
-patches:
-  - path: patch-test-resources.yaml
+patchesStrategicMerge:
+  - patch-test-resources.yaml
 
 images:
   - name: registry.digitalocean.com/konn3ct-registry/conn3ct-backend
