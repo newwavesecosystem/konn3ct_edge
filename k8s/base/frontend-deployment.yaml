@@ -69,6 +69,7 @@ spec:
                 secretKeyRef:
                   name: conn3ct-secrets
                   key: TELEMETRY_S3_BUCKET_NAME
+                  optional: true
             - name: MAX_REJECTION_CPU_LOAD
               value: "90"
             - name: OPENAI_API_KEY
