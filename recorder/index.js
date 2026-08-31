@@ -216,7 +216,7 @@ async function processRecordingJob(job, workerId) {
   
   const outputPathRawTpl = require('path').join(isolatedDir, `${roomId}_%03d.mp4`);
   
-  if (!url) {
+  if (!url || !url.includes('/recording/')) {
     console.error(JSON.stringify({ timestamp: new Date().toISOString(), event: "recorder_invalid_route_detected", roomId, recordingId }));
     activeBrowsers--;
     return;

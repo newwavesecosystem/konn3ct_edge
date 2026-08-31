@@ -10,8 +10,15 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 export function startRecordingSupervisor() {
   setInterval(async () => {
     try {
+      // Leader election: Only one signaling replica runs the supervisor sweep per interval
+      const isLeader = await redis.set('supervisor:leader-lock', 'locked', 'EX', 12, 'NX');
+      if (!isLeader) return;
+
       const activeRecordings = await db.recording.findMany({
-        where: { status: { in: ['starting', 'recording'] } }
+        where: { 
+          status: { in: ['starting', 'recording'] }
+        },
+        take: 10
       });
       
       for (const rec of activeRecordings) {
@@ -78,16 +85,20 @@ export function startRecordingSupervisor() {
         }
       }
 
-      // Check for stopped/stopping recordings that need final stitching
+      // Check for stopped/stopping recordings that need final stitching (processed sequentially by exact recordingId)
       const stoppingRecordings = await db.recording.findMany({
-        where: { status: { in: ['stopping', 'processing'] } }
+        where: { 
+          status: { in: ['stopping', 'processing'] }
+        },
+        take: 10
       });
+
       for (const rec of stoppingRecordings) {
         const leaseKey = `recording:${rec.id}:lease`;
         const hasLease = await redis.exists(leaseKey);
         if (!hasLease) {
-          // Worker is done capturing, trigger stitching
-          stitchRecording(rec.id).catch(e => logger.error(`[Supervisor] Stitching failed for ${rec.id}:`, e));
+          // Worker is done capturing, trigger stitching sequentially by exact recordingId
+          await stitchRecording(rec.id).catch(e => logger.error(`[Supervisor] Stitching failed for ${rec.id}:`, e));
         }
       }
     } catch (err) {
