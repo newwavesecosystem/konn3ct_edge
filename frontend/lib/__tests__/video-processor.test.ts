@@ -152,4 +152,28 @@ describe('VideoProcessor (Always-On Interceptor)', () => {
     expect(mockCanvas.width).toBe(960);
     expect(mockCanvas.height).toBe(720);
   });
+
+  it('should fallback to setTimeout in background when document is hidden (minimized tab)', () => {
+    vi.useFakeTimers();
+    try {
+      Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const processor = new VideoProcessor();
+      processor.setMode('none');
+      processor.startProcessing(mockStream as any);
+
+      // Verify setTimeout was used instead of requestAnimationFrame for scheduling
+      expect(setTimeoutSpy).toHaveBeenCalled();
+
+      // Fast-forward timer to run processFrame
+      vi.advanceTimersByTime(50);
+      expect(mockCtx.drawImage).toHaveBeenCalled();
+
+      processor.stopProcessing();
+    } finally {
+      Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+      vi.useRealTimers();
+    }
+  });
 });

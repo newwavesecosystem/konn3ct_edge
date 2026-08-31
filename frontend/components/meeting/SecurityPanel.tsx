@@ -1,14 +1,17 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useMeeting } from "@/lib/meeting-context";
-import { MicOff, VideoOff, MessageSquareOff, Unlock, Shield } from "lucide-react";
+import { MicOff, VideoOff, MessageSquareOff, Unlock, Shield, MonitorUp } from "lucide-react";
+import { ScreenSharePermissionsDialog } from "./ScreenSharePermissionsDialog";
 
 export function SecurityPanel() {
   const { forceMuteUser, roomSettings, updateRoomSettings } = useMeeting();
+  const [showScreenSharePerms, setShowScreenSharePerms] = useState(false);
 
   return (
     <div className="flex flex-col h-full">
+      <ScreenSharePermissionsDialog open={showScreenSharePerms} onOpenChange={setShowScreenSharePerms} />
       <div
         className="px-4 py-3 flex items-center justify-between"
         style={{ borderBottom: "1px solid var(--mt-border)" }}
@@ -107,6 +110,20 @@ export function SecurityPanel() {
               className="w-4 h-4 rounded border-gray-600 text-brand-green focus:ring-brand-green bg-transparent"
             />
           </label>
+
+          <button 
+            onClick={() => setShowScreenSharePerms(true)}
+            className="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 cursor-pointer border mt-2 text-left" 
+            style={{ borderColor: "var(--mt-border)" }}
+          >
+            <div className="flex items-center gap-3">
+              <MonitorUp className="w-4 h-4 text-brand-green" />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium" style={{ color: "var(--mt-text)" }}>Screen Sharing Permissions</span>
+                <span className="text-xs" style={{ color: "var(--mt-text-faint)" }}>Manage who can share their screen</span>
+              </div>
+            </div>
+          </button>
         </div>
       </div>
     </div>

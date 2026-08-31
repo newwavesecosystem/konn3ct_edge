@@ -7,6 +7,7 @@ import { launchRecorderBot } from '../services/recorderLauncher';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
+import { setRecordingControlState, getRecordingControlState } from '../helpers/recordingControl';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
@@ -125,6 +126,7 @@ recordingsRouter.post('/start', requireAuth, async (req: Request, res: Response)
     }
 
     const recording = result.newRecording!;
+    await setRecordingControlState(recording.id, 'STARTING', 'ANY');
 
     const frontendDomain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'edge.konn3ct.net';
     
@@ -145,6 +147,7 @@ recordingsRouter.post('/start', requireAuth, async (req: Request, res: Response)
     });
 
     if (!launchResult.queued) {
+      await setRecordingControlState(recording.id, 'STOPPED', 'ANY');
       await db.recording.update({
         where: { id: recording.id },
         data: { status: 'failed' }
@@ -185,12 +188,15 @@ recordingsRouter.post('/:id/stop', requireAuth, async (req: Request, res: Respon
       return res.status(400).json({ error: 'Invalid state transition' });
     }
 
-    await db.recording.update({
-      where: { id },
+    // Set sticky STOP_REQUESTED control state via CAS
+    await setRecordingControlState(id, 'STOP_REQUESTED', 'ANY');
+
+    await db.recording.updateMany({
+      where: { id, status: { in: ['starting', 'recording'] } },
       data: { status: 'stopping', endedAt: new Date() }
     });
 
-    redis.publish(`recorder:stop:${recording.roomId}`, JSON.stringify({ recordingId: id, reason: 'host_requested_stop' })).catch(e => logger.error("Failed to publish stop signal", e));
+    redis.publish(`recorder:stop:${id}`, JSON.stringify({ recordingId: id, reason: 'host_requested_stop' })).catch(e => logger.error("Failed to publish stop signal", e));
 
     res.status(200).json({ message: 'Stop signal sent to recording bot', status: 'stopping' });
   } catch (error) {
@@ -220,18 +226,123 @@ recordingsRouter.post('/:id/callback/started', async (req: Request, res: Respons
       return res.status(403).json({ error: 'Token mismatch' });
     }
 
+    // CAS transition: STARTING -> RECORDING only if current state == STARTING
+    const transition = await setRecordingControlState(id, 'RECORDING', 'STARTING');
+    if (!transition.success) {
+      logger.warn(`[Recording] /callback/started rejected for ${id}: current control state is ${transition.currentState}`);
+      return res.status(200).json({ 
+        success: false, 
+        currentState: transition.currentState,
+        stopRequested: transition.currentState === 'STOP_REQUESTED' || transition.currentState === 'STOPPING' || transition.currentState === 'STOPPED'
+      });
+    }
+
     const rec = await db.recording.findUnique({ where: { id } });
     if (!rec || rec.status !== 'starting') {
       return res.status(400).json({ error: 'Invalid state transition' });
     }
 
-    await db.recording.update({
-      where: { id },
+    await db.recording.updateMany({
+      where: { id, status: 'starting' },
       data: { status: 'recording' }
     });
 
     res.status(200).json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+recordingsRouter.post('/:id/segments', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing token' });
+    }
+    const token = authHeader.split(' ')[1];
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback');
+    } catch (err) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    if (decoded.purpose !== 'recording_bot' || decoded.recordingId !== id) {
+      return res.status(403).json({ error: 'Token mismatch' });
+    }
+
+    const { segmentIndex, url, durationMs, fileSize, status, storageKey, workerGeneration, recordingGeneration, checksum } = req.body;
+    
+    if (segmentIndex === undefined) {
+      return res.status(400).json({ error: 'Missing segment metadata' });
+    }
+
+    // Fence by explicit immutable segment ownership
+    const ownerKey = `recording:${id}:segment:${segmentIndex}:owner`;
+    const reservedOwner = await redis.get(ownerKey);
+    
+    if (reservedOwner) {
+        const reservedGen = parseInt(reservedOwner.split(':')[1], 10);
+        if (workerGeneration !== undefined && workerGeneration !== reservedGen) {
+            return res.status(409).json({ error: 'Worker generation does not match immutable segment reservation.' });
+        }
+    } else {
+        // If not explicitly reserved, fallback to the intrinsic range offset
+        const implicitOwnerGen = Math.floor(segmentIndex / 10000);
+        if (workerGeneration !== undefined && workerGeneration !== implicitOwnerGen && implicitOwnerGen > 0) {
+            return res.status(409).json({ error: 'Worker generation does not own this segment.' });
+        }
+    }
+
+    const existingSegment = await db.recordingSegment.findUnique({
+      where: { recordingId_segmentIndex: { recordingId: id, segmentIndex: segmentIndex } }
+    });
+
+    if (existingSegment) {
+       if (existingSegment.status === 'UPLOADED_VERIFIED' || existingSegment.status === 'uploaded') {
+           if (existingSegment.checksum === checksum && existingSegment.fileSize === fileSize) {
+               return res.status(200).json({ message: 'Idempotent success' });
+           }
+           return res.status(409).json({ error: 'Immutable segment already finalized' });
+       }
+    }
+
+    const segment = await db.recordingSegment.upsert({
+      where: {
+        recordingId_segmentIndex: {
+          recordingId: id,
+          segmentIndex: segmentIndex
+        }
+      },
+      update: {
+        url,
+        durationMs: durationMs || 0,
+        fileSize: fileSize || 0,
+        status: status || 'uploaded',
+        storageKey: storageKey,
+        workerGeneration: workerGeneration || 1,
+        recordingGeneration: recordingGeneration || 1,
+        uploadedAt: status === 'uploaded' ? new Date() : undefined
+      },
+      create: {
+        recordingId: id,
+        segmentIndex,
+        url,
+        durationMs: durationMs || 0,
+        fileSize: fileSize || 0,
+        status: status || 'uploaded',
+        storageKey: storageKey,
+        workerGeneration: workerGeneration || 1,
+        recordingGeneration: recordingGeneration || 1,
+        uploadedAt: status === 'uploaded' ? new Date() : undefined
+      }
+    });
+
+    res.status(200).json({ success: true, segment });
+  } catch (err) {
+    logger.error('Error saving segment:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -5,6 +5,7 @@ import { initializeWorkers } from './media/sfu';
 import { logger } from './logger';
 import { redis, duplicateRedis } from './redis';
 import { localMediaController } from './services/LocalMediaController';
+import { transcriberEvents } from './media/transcriber';
 
 const MEDIA_POD_ID = process.env.POD_ID || 'media-' + uuidv4();
 
@@ -114,6 +115,10 @@ async function startMediaServer() {
   
   localMediaController.on('activeSpeaker', (data) => {
     redis.publish(`media:events:activeSpeaker`, JSON.stringify({ podId: MEDIA_POD_ID, ...data }));
+  });
+
+  transcriberEvents.on('caption', (data) => {
+    redis.publish(`media:events:caption`, JSON.stringify({ podId: MEDIA_POD_ID, ...data }));
   });
 
   logger.info(`Media Server ${MEDIA_POD_ID} listening for RPC...`);

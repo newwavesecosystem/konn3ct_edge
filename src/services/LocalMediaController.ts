@@ -45,9 +45,11 @@ export class LocalMediaController extends EventEmitter {
     roomId?: string,
     userId?: string,
     userName?: string,
-    clientData?: { isBot?: boolean; role?: string }
+    clientData?: { isBot?: boolean; role?: string },
+    appData?: any,
+    paused?: boolean
   ) {
-    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData);
+    const producerId = await sfu.createProducer(transportId, kind, rtpParameters, roomId, userId, userName, clientData, appData, paused);
     return { id: producerId };
   }
 
@@ -104,6 +106,10 @@ export class LocalMediaController extends EventEmitter {
     return sfu.requestConsumerKeyFrame(consumerId);
   }
 
+  async setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number) {
+    return sfu.setConsumerPreferredLayersAndPriority(consumerId, spatialLayer, temporalLayer, priority);
+  }
+
   async closeConsumer(consumerId: string) {
     return sfu.closeConsumer(consumerId);
   }
@@ -114,6 +120,12 @@ export class LocalMediaController extends EventEmitter {
 
   async closeRouter(roomId: string) {
     return sfu.closeRouter(roomId);
+  }
+
+  async setupAudioObserver(roomId: string): Promise<void> {
+    await sfu.setupAudioObserver(roomId, (producerIds: string[]) => {
+      this.emit('activeSpeaker', { roomId, producerIds });
+    });
   }
 
   async cleanupAudioObserver(roomId: string): Promise<void> {

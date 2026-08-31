@@ -109,8 +109,9 @@ internalRecordingsRouter.post('/smoke-test', async (req: Request, res: Response)
             data: { status: 'stopping', endedAt: new Date() }
           }).catch((e: any) => logger.error('Failed to update DB for smoke test stop', e));
 
-          // Publish stop command to worker
-          redis.publish(`recorder:stop:${room.id}`, JSON.stringify({ reason: 'smoke_test_auto_stop' }))
+          // Set durable control state and publish stop command to worker
+          redis.set(`recording:${recording.id}:control`, 'STOP_REQUESTED', 'EX', 86400)
+            .then(() => redis.publish(`recorder:stop:${recording.id}`, JSON.stringify({ reason: 'smoke_test_auto_stop', recordingId: recording.id })))
             .then(() => redis.quit())
             .catch(e => logger.error('Failed to publish stop recording for smoke test', e));
         }, durationSeconds * 1000);

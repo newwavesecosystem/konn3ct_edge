@@ -27,6 +27,7 @@ export class VideoProcessor {
   private processedStream: MediaStream | null = null;
   private videoElement: HTMLVideoElement;
   private animationFrameId: number = 0;
+  private backgroundTimerId: any = null;
   private isProcessing: boolean = false;
 
   constructor() {
@@ -113,7 +114,7 @@ export class VideoProcessor {
     // Fix aspect ratio distortion: set canvas size from stream settings BEFORE captureStream
     const track = rawStream.getVideoTracks()[0];
     if (track) {
-      const settings = track.getSettings();
+      const settings = typeof track.getSettings === 'function' ? track.getSettings() : (track as any)._settings || {};
       if (settings.width && settings.height) {
         let targetWidth = settings.width;
         let targetHeight = settings.height;
@@ -139,10 +140,48 @@ export class VideoProcessor {
     }
 
     this.isProcessing = true;
-    this.processFrame();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+    this.scheduleNextFrame();
 
     return this.processedStream;
   }
+
+  private scheduleNextFrame = () => {
+    if (!this.isProcessing || !this.rawStream) return;
+
+    if (this.backgroundTimerId) {
+      clearTimeout(this.backgroundTimerId);
+      this.backgroundTimerId = null;
+    }
+
+    if (typeof document !== 'undefined' && document.hidden) {
+      // Tab is backgrounded/minimized: requestAnimationFrame is paused by browsers,
+      // so fallback to setTimeout (~30fps) to keep camera video streaming to remote participants.
+      this.backgroundTimerId = setTimeout(this.processFrame, 33);
+    } else if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      this.animationFrameId = requestAnimationFrame(this.processFrame);
+    } else {
+      this.backgroundTimerId = setTimeout(this.processFrame, 33);
+    }
+  };
+
+  private handleVisibilityChange = () => {
+    if (!this.isProcessing || !this.rawStream) return;
+
+    if (this.backgroundTimerId) {
+      clearTimeout(this.backgroundTimerId);
+      this.backgroundTimerId = null;
+    }
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = 0;
+    }
+
+    this.processFrame();
+  };
 
   public onDegraded?: (severity: 'warning' | 'emergency') => void;
   private warningFrameCount = 0;
@@ -174,7 +213,7 @@ export class VideoProcessor {
       // Pass-through if mode is none OR if segmenter isn't loaded yet (fallback so we don't show a black screen)
       if (this.mode === 'none' || !this.segmenter) {
         this.ctx.drawImage(this.videoElement, 0, 0, width, height);
-        this.animationFrameId = requestAnimationFrame(this.processFrame);
+        this.scheduleNextFrame();
       } else {
         const startTimeMs = performance.now();
         this.segmenter.segmentForVideo(this.videoElement, startTimeMs, (result) => {
@@ -270,32 +309,46 @@ export class VideoProcessor {
           this.ctx.restore();
           
           if (this.isProcessing) {
-            this.animationFrameId = requestAnimationFrame(this.processFrame);
+            this.scheduleNextFrame();
           }
         });
       }
     } else {
       // If video isn't ready or segmenter isn't loaded yet, try again next frame
-      this.animationFrameId = requestAnimationFrame(this.processFrame);
+      this.scheduleNextFrame();
     }
   };
 
   public stopProcessing() {
     this.isProcessing = false;
-    cancelAnimationFrame(this.animationFrameId);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = 0;
+    }
+    if (this.backgroundTimerId) {
+      clearTimeout(this.backgroundTimerId);
+      this.backgroundTimerId = null;
+    }
     
     if (this.videoElement) {
-      this.videoElement.pause();
+      if (typeof this.videoElement.pause === 'function') this.videoElement.pause();
       this.videoElement.srcObject = null;
-      this.videoElement.removeAttribute('src');
-      this.videoElement.load();
+      if (typeof this.videoElement.removeAttribute === 'function') this.videoElement.removeAttribute('src');
+      if (typeof this.videoElement.load === 'function') this.videoElement.load();
     }
 
     if (this.processedStream) {
-      this.processedStream.getTracks().forEach(t => {
-        t.stop();
-        this.processedStream?.removeTrack(t);
-      });
+      if (typeof this.processedStream.getTracks === 'function') {
+        this.processedStream.getTracks().forEach(t => {
+          if (typeof t.stop === 'function') t.stop();
+          if (typeof this.processedStream?.removeTrack === 'function') {
+            this.processedStream.removeTrack(t);
+          }
+        });
+      }
     }
     
     // Recreate the canvas to prevent Chrome "ended track" bug on subsequent captureStream calls

@@ -182,6 +182,10 @@ export function canParticipantShareScreen(
   roomSettings: LargeRoomSettings,
   currentProducers: RoomProducerItem[]
 ): { allowed: boolean; reason?: string } {
+  if (!isLargeRoomMode(roomSettings)) {
+    return { allowed: true };
+  }
+
   const activeScreenShareCount = currentProducers.filter((p) => p.kind === 'video' && p.appData?.source === 'screen').length;
   const limit = roomSettings.maxScreenShares ?? LARGE_ROOM_CONFIG.maxScreenShares;
 

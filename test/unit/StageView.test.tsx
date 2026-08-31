@@ -7,6 +7,15 @@ vi.mock('@/lib/utils', () => ({ cn: (...args: any[]) => args.join(' ') }));
 vi.mock('lucide-react', () => ({
   AlertTriangle: () => <div data-testid="alert-icon" />,
   RefreshCw: () => <div data-testid="refresh-icon" />,
+  RotateCw: () => <div data-testid="rotate-icon" />,
+  Maximize2: () => <div data-testid="maximize-icon" />,
+  Minimize2: () => <div data-testid="minimize-icon" />,
+  MonitorUp: () => <div data-testid="monitor-up-icon" />,
+  MonitorOff: () => <div data-testid="monitor-off-icon" />,
+  MousePointerClick: () => <div data-testid="mouse-icon" />,
+  ChevronLeft: () => <div data-testid="chevron-left" />,
+  ChevronRight: () => <div data-testid="chevron-right" />,
+  Users: () => <div data-testid="users-icon" />,
 }));
 
 const mockUseVideoHealth = vi.fn().mockReturnValue({ health: 'good', remountKey: 0 });
@@ -109,5 +118,45 @@ describe('StageView - Multi Screen Share', () => {
     // Now Bob's pill should be active
     expect(bobBtn.parentElement?.className).toContain('bg-[var(--color-brand-green)]');
     expect(aliceBtn.parentElement?.className).toContain('bg-white/10');
+  });
+
+  it('cycles rotation through 90, 180, 270, 0 when clicking mobile rotate button', () => {
+    mocks.meetingState = {
+      participants: [
+        { id: '1', name: 'Alice', isScreenSharing: true, screenTrack: {} as any },
+      ],
+      layoutMode: 'grid',
+      isScreenSharing: false,
+      toggleScreenShare: vi.fn(),
+      currentUser: { id: '3', role: 'attendee' },
+    };
+
+    render(<StageView />);
+
+    const rotateBtn = screen.getByTitle(/Rotate screenshare/i);
+    expect(rotateBtn).toBeInTheDocument();
+
+    // Initial state: 0 deg
+    expect(rotateBtn).toHaveAttribute('title', 'Rotate screenshare (0°)');
+
+    // Click 1: 90 deg
+    fireEvent.click(rotateBtn);
+    expect(rotateBtn).toHaveAttribute('title', 'Rotate screenshare (90°)');
+    expect(screen.getByText('90°')).toBeInTheDocument();
+
+    // Click 2: 180 deg
+    fireEvent.click(rotateBtn);
+    expect(rotateBtn).toHaveAttribute('title', 'Rotate screenshare (180°)');
+    expect(screen.getByText('180°')).toBeInTheDocument();
+
+    // Click 3: 270 deg
+    fireEvent.click(rotateBtn);
+    expect(rotateBtn).toHaveAttribute('title', 'Rotate screenshare (270°)');
+    expect(screen.getByText('270°')).toBeInTheDocument();
+
+    // Click 4: 0 deg
+    fireEvent.click(rotateBtn);
+    expect(rotateBtn).toHaveAttribute('title', 'Rotate screenshare (0°)');
+    expect(screen.queryByText('0°')).not.toBeInTheDocument();
   });
 });

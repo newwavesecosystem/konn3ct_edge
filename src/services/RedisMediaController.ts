@@ -15,7 +15,7 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
 
   private async initSubscriber() {
     const sub = duplicateRedis(redis);
-    await sub.subscribe('media:events:producerClose', 'media:events:activeSpeaker');
+    await sub.subscribe('media:events:producerClose', 'media:events:activeSpeaker', 'media:events:caption');
     await sub.psubscribe('media:rpc:response:*');
 
     sub.on('pmessage', (pattern: string, channel: string, message: string) => {
@@ -42,6 +42,8 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
           this.emit('producerClose', data);
         } else if (channel === 'media:events:activeSpeaker') {
           this.emit('activeSpeaker', data);
+        } else if (channel === 'media:events:caption') {
+          this.emit('caption', data);
         }
       } catch (e) {
         logger.error('Failed to parse media event', e);
@@ -182,11 +184,17 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
   }
 
   // --- Producers ---
-  async createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }): Promise<{ id: string }> {
-    return this.rpcCall('createProducer', [transportId, kind, rtpParameters, roomId, userId, userName, clientData], roomId);
+  async createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: RtpParameters, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }, appData?: any, paused?: boolean): Promise<{ id: string }> {
+    return this.rpcCall('createProducer', [transportId, kind, rtpParameters, roomId, userId, userName, clientData, appData, paused], roomId);
   }
   async closeProducer(producerId: string, roomId?: string): Promise<void> {
     return this.rpcCall('closeProducer', [producerId], roomId);
+  }
+  async pauseProducer(producerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('pauseProducer', [producerId], roomId);
+  }
+  async resumeProducer(producerId: string, roomId?: string): Promise<void> {
+    return this.rpcCall('resumeProducer', [producerId], roomId);
   }
   async getProducer(producerId: string, roomId?: string): Promise<{ id: string, kind: string, appData: any, userId?: string, rtpParameters?: any } | null> {
     return this.rpcCall('getProducer', [producerId], roomId);
@@ -204,6 +212,9 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
   }
   async requestConsumerKeyFrame(consumerId: string, roomId?: string): Promise<void> {
     return this.rpcCall('requestConsumerKeyFrame', [consumerId], roomId);
+  }
+  async setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number, roomId?: string): Promise<void> {
+    return this.rpcCall('setConsumerPreferredLayersAndPriority', [consumerId, spatialLayer, temporalLayer, priority], roomId);
   }
 
   // --- Features ---

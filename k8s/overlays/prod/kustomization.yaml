@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - media-hpa.yaml
+  - signaling-hpa.yaml
+
+patchesStrategicMerge:
+  - patch-prod-resources.yaml
+
+images:
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-backend
+    newTag: prod-latest
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-frontend
+    newTag: prod-latest
+  - name: registry.digitalocean.com/konn3ct-registry/conn3ct-recorder
+    newTag: prod-latest

@@ -5,6 +5,7 @@ import express from 'express';
 
 vi.mock('ioredis', () => {
   const globalHandlers: Record<string, Array<(...args: any[]) => void>> = {};
+  const mockHashes: Record<string, Record<string, string>> = {};
   class MockRedis {
     on = vi.fn().mockImplementation((event: string, fn: (...args: any[]) => void) => {
       if (!globalHandlers[event]) globalHandlers[event] = [];
@@ -22,13 +23,35 @@ vi.mock('ioredis', () => {
     subscribe = vi.fn().mockResolvedValue(1);
     psubscribe = vi.fn().mockResolvedValue(1);
     del = vi.fn().mockResolvedValue(1);
-    hgetall = vi.fn().mockResolvedValue({});
-    hset = vi.fn().mockResolvedValue(1);
-    hdel = vi.fn().mockResolvedValue(1);
+    hget = vi.fn().mockImplementation(async (key: string, field: string) => {
+      return mockHashes[key] ? mockHashes[key][field] || null : null;
+    });
+    hset = vi.fn().mockImplementation(async (key: string, field: string, value: string) => {
+      if (!mockHashes[key]) mockHashes[key] = {};
+      mockHashes[key][field] = value;
+      return 1;
+    });
+    hdel = vi.fn().mockImplementation(async (key: string, field: string) => {
+      if (mockHashes[key] && mockHashes[key][field]) {
+        delete mockHashes[key][field];
+        return 1;
+      }
+      return 0;
+    });
+    hgetall = vi.fn().mockImplementation(async (key: string) => {
+      return mockHashes[key] || {};
+    });
+    eval = vi.fn().mockResolvedValue(null);
+    multi = vi.fn().mockReturnValue({
+      hset: vi.fn().mockReturnThis(),
+      hget: vi.fn().mockReturnThis(),
+      hgetall: vi.fn().mockReturnThis(),
+      del: vi.fn().mockReturnThis(),
+      exec: vi.fn().mockResolvedValue([]),
+    });
     setnx = vi.fn().mockResolvedValue(1);
     keys = vi.fn().mockResolvedValue([]);
     ping = vi.fn().mockResolvedValue('PONG');
-    eval = vi.fn().mockResolvedValue(1);
     pipeline = vi.fn().mockImplementation(() => {
       const p: any = { exec: vi.fn().mockResolvedValue([]) };
       return new Proxy(p, {
@@ -54,6 +77,7 @@ vi.mock('../../src/db', () => ({
     meetingPoll: {
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockImplementation(async ({ data }) => data),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     sharedNote: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -71,6 +95,7 @@ vi.mock('../../src/media/sfu', () => ({
   getProducer: vi.fn(),
   closeProducer: vi.fn(),
   closeTransport: vi.fn(),
+  closeRouter: vi.fn(),
   getOrCreateRouter: vi.fn().mockResolvedValue({}),
 }));
 
@@ -294,10 +319,12 @@ describe('Signaling Server Integration', { timeout: 15000 }, () => {
         const msg = JSON.parse(data.toString());
         if (msg.type === 'participants_list') {
           const me = msg.participants.find((p: any) => p.participantId === 'part-viewer-mute');
+          console.log('TEST: participants list size =', msg.participants.length, 'me found?', !!me);
           if (me) {
             expect(me.isMuted).toBeDefined();
 
             // Send mute_state to false
+            console.log('TEST SENDING MUTE_STATE');
             wsViewer.send(JSON.stringify({
               type: 'mute_state',
               isMuted: false

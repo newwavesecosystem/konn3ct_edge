@@ -3,6 +3,12 @@ import type { Device } from 'mediasoup-client';
 import type { Transport, Producer, Consumer } from 'mediasoup-client/lib/types';
 import { VideoProcessor, VirtualBackgroundMode } from './video-processor';
 import { NetworkDetectionConfig } from './types/meeting';
+import { 
+  NetworkAdaptationController, 
+  DirectionalNetworkStats, 
+  ConsumerMetadata, 
+  QualityTier 
+} from './network-adaptation-controller';
 
 
 export type NetworkQualityLabel = 'good' | 'unstable_network' | 'poor_network' | 'reconnecting' | 'connecting_to_media_server' | 'device_performance_issue' | 'remote_receiver_issue' | 'screen_share_performance_issue';
@@ -32,6 +38,15 @@ export class WebRTCClient {
   private pingInterval: NodeJS.Timeout | null = null;
   private statsInterval: NodeJS.Timeout | null = null;
   
+  // NETWORK-RESILIENCE-003 Adaptive Controller
+  public adaptationController = new NetworkAdaptationController(Date.now());
+  public onDirectionalNetworkQualityChange?: (stats: DirectionalNetworkStats) => void;
+  private consumerMetadata = new Map<string, ConsumerMetadata>();
+  private consumerPauseReasons = new Map<string, Set<'NETWORK' | 'PRODUCER' | 'POLICY' | 'USER' | 'VISIBILITY'>>();
+  private desiredCameraOn: boolean = false;
+  private cameraSuppressedByNetwork: boolean = false;
+  private hostCameraBlocked: boolean = false;
+
   public localVideoProducer: Producer | null = null;
   public localAudioProducer: Producer | null = null;
   public localScreenTrack: MediaStreamTrack | null = null;
@@ -86,7 +101,19 @@ export class WebRTCClient {
   public userRole: string | undefined;
   public roomName: string | undefined;
   public maxParticipants: number | undefined;
+  public isWaitingRoomEnabled?: boolean;
   public sessionStatus?: string;
+  public meetingInstanceId: string | null = null;
+  public resumeToken: string | null = null;
+  public sessionGeneration: number = 0;
+  public admissionGeneration: number = 0;
+  public sessionStateVersion: number = 0;
+  public lastPingAt: number = 0;
+  public lastPongAt: number = 0;
+  public pingRtt: number = 0;
+  public socketConnectTime: number = 0;
+  public lastCloseCode: number = 0;
+  public lastCloseReason: string = '';
   public joinSessionId: string = Math.random().toString(36).substring(2, 15);
   public joinStartTime: number = Date.now();
 
@@ -101,6 +128,7 @@ export class WebRTCClient {
 
   public onNewConsumer?: (consumer: Consumer, userId: string, userName?: string) => void;
   public onConnectionStateChange?: (state: string) => void;
+  public onSessionStatus?: (msg: any) => void;
   
   // Participant Management Callbacks
   public onUserJoined?: (user: { userId: string, participantId?: string, name: string, role: string, isMobile?: boolean, isCameraOn?: boolean, audioOnlyMode?: boolean, videoSuspendedReason?: 'network' }) => void;
@@ -133,6 +161,25 @@ export class WebRTCClient {
   public onAudioStatusChanged?: (status: string) => void;
   private audioConnectionTimeoutId?: NodeJS.Timeout;
 
+  // Explicit User/Host Mute Intent State Machine (Single Source of Truth)
+  private desiredMicMuted: boolean = true;
+  private micIntentVersion: number = 0;
+
+  public setDesiredMicMuted(muted: boolean, reason: string = 'USER_ACTION') {
+    const prev = this.desiredMicMuted;
+    this.desiredMicMuted = muted;
+    this.micIntentVersion++;
+    console.log(`[WebRTC] [MIC_INTENT_TRANSITION] prev=${prev} -> next=${muted} | Version=${this.micIntentVersion} | Reason=${reason} | UserId=${this.userId || 'self'}`);
+  }
+
+  public getDesiredMicMuted(): boolean {
+    return this.desiredMicMuted;
+  }
+
+  public getMicIntentVersion(): number {
+    return this.micIntentVersion;
+  }
+
   private setAudioConnectionStatus(status: string) {
     if (this.audioConnectionStatus === status) return;
     this.audioConnectionStatus = status;
@@ -162,9 +209,9 @@ export class WebRTCClient {
   public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
-  public onScreenShareStopped?: (userId: string, producerId: string) => void;
+  public onScreenShareStopped?: (userId: string, producerId: string, participantId?: string) => void;
   public onScreenSharePolicyChanged?: (mode: 'EVERYONE' | 'HOSTS_ONLY' | 'SELECTED', version: number) => void;
-  public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number) => void;
+  public onParticipantScreenSharePermissionChanged?: (userId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK', version: number, targetParticipantId?: string) => void;
   public onScreenShareStoppedByHost?: (userId: string, producerId: string) => void;
   public onInitialPermissions?: (permissions: any) => void;
   public onConsumerClosed?: (producerId: string, appData: Record<string, any>) => void;
@@ -172,8 +219,12 @@ export class WebRTCClient {
   public onPingStatus?: (status: any) => void;
   // Talking indicator
   public onActiveSpeaker?: (userIds: string[], participantIds: string[]) => void;
+  // Meeting start time
+  public meetingStartedAt?: number;
+  public onMeetingStartedAt?: (timestamp: number) => void;
   // Recording
   public onRecordingStarted?: () => void;
+  public onRecordingStopping?: () => void;
   public onRecordingStopped?: () => void;
   public onSyncPanel?: (panel: string | null) => void;
   public onVbDegraded?: (severity: 'warning' | 'emergency') => void;
@@ -318,11 +369,23 @@ export class WebRTCClient {
     this.ws.onopen = async () => {
       try {
         this.reconnectAttempts = 0; // Reset on success
+        this.socketConnectTime = Date.now();
+
+        // If we have an existing session and resumeToken, send resume_session immediately
+        if (this.meetingInstanceId && this.resumeToken) {
+          this.ws?.send(JSON.stringify({
+            type: 'resume_session',
+            meetingInstanceId: this.meetingInstanceId,
+            resumeToken: this.resumeToken,
+            lastSessionGeneration: this.sessionGeneration
+          }));
+        }
 
         // Keep-alive to prevent DO Load Balancer from dropping idle connections
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'ping' }));
+            this.lastPingAt = Date.now();
+            this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
           }
         }, 25000);
 
@@ -375,6 +438,12 @@ export class WebRTCClient {
 
       // Handle server-initiated events
       switch (msg.type) {
+        case 'pong':
+          this.lastPongAt = Date.now();
+          if (msg.timestamp) {
+            this.pingRtt = this.lastPongAt - msg.timestamp;
+          }
+          break;
         case 'consume_failed':
           if (this.pendingRequests.has('consumed')) {
             const queue = this.pendingRequests.get('consumed')!;
@@ -398,21 +467,67 @@ export class WebRTCClient {
             }
           }
           break;
+        case 'produce_failed':
+          if (this.pendingRequests.has('produced')) {
+            const queue = this.pendingRequests.get('produced')!;
+            if (msg.requestId) {
+              const index = queue.findIndex(req => req.requestId === msg.requestId);
+              if (index !== -1) {
+                const [resolver] = queue.splice(index, 1);
+                clearTimeout(resolver.timeoutId);
+                resolver.reject(new Error(msg.message || msg.errorCode || 'Failed to produce'));
+                if (queue.length === 0) {
+                  this.pendingRequests.delete('produced');
+                }
+              }
+            } else if (queue.length > 0) {
+              const resolver = queue.shift()!;
+              clearTimeout(resolver.timeoutId);
+              resolver.reject(new Error(msg.message || msg.errorCode || 'Failed to produce'));
+              if (queue.length === 0) {
+                this.pendingRequests.delete('produced');
+              }
+            }
+          }
+          break;
         case 'action:ack':
           this.onActionAck?.(msg);
           break;
         case 'session_status':
+          if (typeof msg.sessionStateVersion === 'number') {
+            if (msg.sessionStateVersion <= this.sessionStateVersion) {
+              console.warn(`[WebRTC] Ignoring stale session_status version ${msg.sessionStateVersion} (current: ${this.sessionStateVersion})`);
+              return;
+            }
+            this.sessionStateVersion = msg.sessionStateVersion;
+          }
+
           this.sessionStatus = msg.status;
           if (msg.userId) this.userId = msg.userId;
+          if (msg.participantId) this.participantId = msg.participantId;
           if (msg.name) this.userName = msg.name;
           if (msg.role) this.userRole = msg.role;
           if (msg.roomName) this.roomName = msg.roomName;
+          if (msg.meetingInstanceId) this.meetingInstanceId = msg.meetingInstanceId;
+          if (msg.resumeToken) this.resumeToken = msg.resumeToken;
+          if (typeof msg.sessionGeneration === 'number') this.sessionGeneration = msg.sessionGeneration;
+          if (typeof msg.admissionGeneration === 'number') this.admissionGeneration = msg.admissionGeneration;
           if (msg.permissions) {
              this.onInitialPermissions?.(msg.permissions);
           }
           if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
+          if (typeof msg.isWaitingRoomEnabled === 'boolean') this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
+          if (typeof msg.meetingStartedAt === 'number') {
+            this.meetingStartedAt = msg.meetingStartedAt;
+            this.onMeetingStartedAt?.(msg.meetingStartedAt);
+          }
+          this.onSessionStatus?.(msg);
           
           if (msg.status === 'denied') {
+            if (this.userRole === 'host') {
+              console.warn('[WebRTC] Ignoring denied status for host');
+              return;
+            }
             this.onConnectionStateChange?.('denied');
             this.isIntentionalDisconnect = true;
             this.disconnect();
@@ -434,49 +549,50 @@ export class WebRTCClient {
             this.onConnectionStateChange?.('waiting');
             return; // Don't republish yet
           }
-          if (this.device?.loaded) {
-            console.log(`WebSocket reconnected (recovered=${msg.recovered}). Executing Client-Side Auto-Republish because server transports were destroyed...`);
-            if (msg.recovered && this.ws && this.ws.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-            }
-            this.republishMedia().catch(console.error);
-            this.onConnectionStateChange?.('connected');
-          } else if (!this.device?.loaded && msg.status === 'active') {
-            // First time active or recovered after a full page refresh
-            if (msg.recovered) {
-              console.log("Session recovered after a page refresh. Resetting server WebRTC state...");
-              if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
-              }
-            }
-            this.initializeMediasoup().then(async () => {
-              try {
-                const res = await this.request('getProducers', 'producersList');
-                if (res.producers) {
-                  for (const p of res.producers) {
-                    await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
-                  }
-                }
+          if (msg.status === 'active') {
+            if (this.device?.loaded) {
+              // Selective reconciliation: Check if existing transports are still healthy
+              const sendHealthy = this.sendTransport && (this.sendTransport.connectionState === 'connected' || this.sendTransport.connectionState === 'connecting' || this.sendTransport.connectionState === 'new');
+              const recvHealthy = this.recvTransport && (this.recvTransport.connectionState === 'connected' || this.recvTransport.connectionState === 'connecting' || this.recvTransport.connectionState === 'new');
 
-                this.onConnectionStateChange?.('connected');
-              } catch (e) {
-                console.error("Failed to load existing producers:", e);
+              if (sendHealthy && recvHealthy) {
+                console.log("[WebRTC] Session resumed with healthy existing transports. Reconciling remote producers without duplicate republish...");
+                this.request('getProducers', 'producersList').then((res) => {
+                  if (res?.producers) {
+                    for (const p of res.producers) {
+                      if (!this.consumers.has(p.producerId)) {
+                        this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData).catch(console.error);
+                      }
+                    }
+                  }
+                }).catch(console.error);
+              } else {
+                console.log("[WebRTC] Transports interrupted during reconnect. Performing selective media recovery...");
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                  this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+                }
+                this.republishMedia().catch(console.error);
               }
-            }).catch(err => {
-              console.error("Failed to initialize mediasoup", err); 
-              this.onConnectionStateChange?.('failed');
-            });
-          } else if (msg.recovered && msg.status === 'active') {
-            // Session recovered without page refresh (e.g. WiFi -> 4G switch)
-            console.log("Session recovered by server. Forcing WebRTC auto-republish to handle potential IP changes...");
-            this.needsRepublish = false;
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
+              this.onConnectionStateChange?.('connected');
+            } else {
+              // First time active or fresh device load
+              this.initializeMediasoup().then(async () => {
+                try {
+                  const res = await this.request('getProducers', 'producersList');
+                  if (res.producers) {
+                    for (const p of res.producers) {
+                      await this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData);
+                    }
+                  }
+                  this.onConnectionStateChange?.('connected');
+                } catch (e) {
+                  console.error("Failed to load existing producers:", e);
+                }
+              }).catch(err => {
+                console.error("Failed to initialize mediasoup", err); 
+                this.onConnectionStateChange?.('failed');
+              });
             }
-            this.republishMedia().catch(console.error);
-            this.onConnectionStateChange?.('connected');
-          } else if (msg.status === 'active') {
-            this.onConnectionStateChange?.('connected');
           }
           break;
         case 'newProducer':
@@ -494,7 +610,9 @@ export class WebRTCClient {
           break;
         case 'role_changed':
           this.onRoleChanged?.(msg.userId, msg.role, msg.participantId);
-          if (msg.userId === this.userId) this.userRole = msg.role;
+          if (msg.userId === this.userId || (msg.participantId && msg.participantId === this.userId)) {
+            this.userRole = msg.role;
+          }
           break;
         case 'chat':
           this.onChatMessage?.(msg);
@@ -586,12 +704,15 @@ export class WebRTCClient {
         case 'ecinema_action':
           this.onECinemaAction?.(msg);
           break;
-        case 'screen_share_started':
-          this.onScreenShareStarted?.(msg.userId, msg.producerId);
+        case 'screen_share_stopped': {
+          const isSelf = (msg.participantId && msg.participantId === this.participantId) || 
+                         (msg.userId && msg.userId === this.userId);
+          if (isSelf && (this.screenShareProducer || this.localScreenTrack)) {
+            this.stopScreenShareProducer({ serverAlreadyClosed: true });
+          }
+          this.onScreenShareStopped?.(msg.userId, msg.producerId, msg.participantId);
           break;
-        case 'screen_share_stopped':
-          this.onScreenShareStopped?.(msg.userId, msg.producerId);
-          break;
+        }
         case 'producer_closed':
           // The remote producer was closed — clean up our local consumer
           this.consumers.forEach((consumer, consumerId) => {
@@ -604,6 +725,12 @@ export class WebRTCClient {
           break;
         case 'active_speaker':
           this.onActiveSpeaker?.(msg.userIds, msg.participantIds || []);
+          break;
+        case 'meeting_started_at':
+          if (typeof msg.meetingStartedAt === 'number') {
+            this.meetingStartedAt = msg.meetingStartedAt;
+            this.onMeetingStartedAt?.(msg.meetingStartedAt);
+          }
           break;
         case 'server_load_high':
           this.onServerLoadHigh?.();
@@ -640,7 +767,7 @@ export class WebRTCClient {
           this.onScreenSharePolicyChanged?.(msg.mode, msg.version);
           break;
         case 'participant_screen_share_permission_changed':
-          this.onParticipantScreenSharePermissionChanged?.(msg.targetUserId, msg.permission, msg.version);
+          this.onParticipantScreenSharePermissionChanged?.(msg.targetUserId, msg.permission, msg.version, msg.targetParticipantId);
           break;
         case 'screen_share_stopped':
           // Existing handling might be generic, but we explicitly handle host stops
@@ -671,6 +798,9 @@ export class WebRTCClient {
         case 'recording_started':
           this.onRecordingStarted?.();
           break;
+        case 'recording_stopping':
+          this.onRecordingStopping?.();
+          break;
         case 'recording_stopped':
           this.onRecordingStopped?.();
           break;
@@ -684,11 +814,15 @@ export class WebRTCClient {
       console.error('WebSocket Error:', err);
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event: CloseEvent) => {
       if (this.pingInterval) clearInterval(this.pingInterval);
+      if (this.statsInterval) clearInterval(this.statsInterval);
+      this.lastCloseCode = event.code;
+      this.lastCloseReason = event.reason;
+      console.log(`[WebRTC] Signaling socket closed (code=${event.code}, reason="${event.reason}", intentional=${this.isIntentionalDisconnect})`);
+
       if (!this.isIntentionalDisconnect) {
-        this.onConnectionStateChange?.('disconnected');
-        this.needsRepublish = true;
+        this.onConnectionStateChange?.('reconnecting');
         this.attemptReconnect();
       }
     };
@@ -780,9 +914,7 @@ export class WebRTCClient {
   }
 
   public updateRoomSettings(settings: { micLocked?: boolean, videoLocked?: boolean, chatLocked?: boolean, bypassWaitingRoom?: boolean }) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'update_room_settings', settings }));
-    }
+    this.sendUpdateRoomSettings(settings);
   }
 
   public forceMuteUser(userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') {
@@ -967,15 +1099,18 @@ export class WebRTCClient {
       });
 
       this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
-        console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'})...`);
+        const isAudioMic = kind === 'audio' && (appData as any)?.source !== 'screen-audio';
+        const shouldStartPaused = isAudioMic ? this.desiredMicMuted : false;
+        console.log(`[WebRTC] Producing local media (${kind}, source: ${(appData as any)?.source || 'unknown'}, paused: ${shouldStartPaused})...`);
         try {
           const { id } = await this.request('produce', 'produced', {
             transportId: this.sendTransport!.id,
             kind,
             rtpParameters,
-            appData // Forward source tag ('camera' | 'screen') to server
+            appData, // Forward source tag ('camera' | 'screen' | 'mic') to server
+            paused: shouldStartPaused
           });
-          console.log(`[WebRTC] Producer created on server. Producer ID: ${id}`);
+          console.log(`[WebRTC] Producer created on server. Producer ID: ${id} (paused: ${shouldStartPaused})`);
           callback({ id });
         } catch (error: any) {
           console.error(`[WebRTC] Produce error (${kind}):`, error);
@@ -1085,6 +1220,60 @@ export class WebRTCClient {
     }
   }
 
+  public setConsumerPauseReason(
+    consumerId: string, 
+    reason: 'NETWORK' | 'PRODUCER' | 'POLICY' | 'USER' | 'VISIBILITY', 
+    isPaused: boolean
+  ) {
+    let reasons = this.consumerPauseReasons.get(consumerId);
+    if (!reasons) {
+      reasons = new Set();
+      this.consumerPauseReasons.set(consumerId, reasons);
+    }
+
+    if (isPaused) {
+      reasons.add(reason);
+    } else {
+      reasons.delete(reason);
+    }
+
+    const consumer = this.consumers.get(consumerId);
+    if (!consumer || consumer.closed) return;
+
+    const shouldBePaused = reasons.size > 0;
+    if (shouldBePaused && !consumer.paused) {
+      consumer.pause();
+      this.request('pause_consumer', 'consumer_paused', { consumerId }).catch(console.error);
+    } else if (!shouldBePaused && consumer.paused) {
+      this.request('resume', 'resumed', { consumerId }).then(() => {
+        consumer.resume();
+      }).catch(console.error);
+    }
+  }
+
+  public registerConsumerMetadata(meta: ConsumerMetadata) {
+    this.consumerMetadata.set(meta.consumerId, meta);
+  }
+
+  public unregisterConsumerMetadata(consumerId: string) {
+    this.consumerMetadata.delete(consumerId);
+    this.consumerPauseReasons.delete(consumerId);
+    this.adaptationController.removeConsumer(consumerId);
+  }
+
+  public updateConsumerVisibility(consumerId: string, isVisible: boolean) {
+    const meta = this.consumerMetadata.get(consumerId);
+    if (meta) {
+      meta.isVisibleOnScreen = isVisible;
+    }
+  }
+
+  public updateActiveSpeaker(userId: string) {
+    for (const [, meta] of this.consumerMetadata.entries()) {
+      meta.isActiveSpeaker = (meta.userId === userId);
+    }
+  }
+
   private startNetworkMonitor() {
     this.stopNetworkMonitor();
     
@@ -1093,54 +1282,25 @@ export class WebRTCClient {
       return;
     }
     
-    console.log('[WebRTC] network_monitor_started', this.networkConfig);
-
-    const WINDOW_SIZE = this.networkConfig.networkWindowSize;
-    const history: Array<{
-      rtt: number;
-      packetLoss: number;
-      jitter: number;
-      sendBitrate: number;
-      recvBitrate: number;
-      framesDropped: number;
-      framesEncoded: number;
-    }> = [];
-
-    let lastBytesSent = 0;
-    let lastBytesRecv = 0;
-    let lastPacketsSent = 0;
-    let lastPacketsRecv = 0;
-    let lastPacketsLost = 0;
-    let lastOutboundPacketsLost = 0;
-    let lastFramesDropped = 0;
-    let lastFramesEncoded = 0;
-    let lastTime = performance.now();
-    
-    let currentLabel: NetworkQualityLabel = 'good';
-    let labelStreak = 0;
-    let reconnectCount = 0;
+    console.log('[WebRTC] network_monitor_started_adaptive', this.networkConfig);
 
     this.networkInterval = setInterval(async () => {
-      if (performance.now() - this.joinedAtTime < 120000) return;
       if (!this.sendTransport && !this.recvTransport) return;
       
       try {
         const now = performance.now();
-        const dt = (now - lastTime) / 1000;
-        if (dt <= 0) return;
-
         let rtt = 0;
         let jitter = 0;
         let bytesSent = 0;
         let bytesRecv = 0;
         let packetsSent = 0;
         let packetsRecv = 0;
-        let packetsLost = 0;
-        let outboundPacketsLost = 0;
+        let inboundLoss = 0;
+        let outboundLoss = 0;
         let framesDropped = 0;
         let framesEncoded = 0;
         let availableOutgoingBitrate: number | null = null;
-        let iceState = this.sendTransport?.connectionState || 'new';
+        let iceState = this.sendTransport?.connectionState || this.recvTransport?.connectionState || 'new';
 
         if (this.sendTransport) {
           const sendStats = await this.sendTransport.getStats();
@@ -1152,7 +1312,7 @@ export class WebRTCClient {
             if (stat.type === 'remote-inbound-rtp') {
               rtt = Math.max(rtt, stat.roundTripTime ? stat.roundTripTime * 1000 : 0);
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
-              outboundPacketsLost += stat.packetsLost || 0;
+              outboundLoss += stat.packetsLost || 0;
             }
             if (stat.type === 'outbound-rtp') {
               bytesSent += stat.bytesSent || 0;
@@ -1173,159 +1333,107 @@ export class WebRTCClient {
             if (stat.type === 'inbound-rtp') {
               bytesRecv += stat.bytesReceived || 0;
               packetsRecv += stat.packetsReceived || 0;
-              packetsLost += stat.packetsLost || 0;
+              inboundLoss += stat.packetsLost || 0;
               jitter = Math.max(jitter, stat.jitter ? stat.jitter * 1000 : 0);
             }
           });
         }
 
-        // Calculate deltas
-        const dBytesSent = Math.max(0, bytesSent - lastBytesSent);
-        const dBytesRecv = Math.max(0, bytesRecv - lastBytesRecv);
-        const dPacketsSent = Math.max(0, packetsSent - lastPacketsSent);
-        const dPacketsRecv = Math.max(0, packetsRecv - lastPacketsRecv);
-        const dPacketsLost = Math.max(0, packetsLost - lastPacketsLost);
-        const dOutboundPacketsLost = Math.max(0, outboundPacketsLost - lastOutboundPacketsLost);
-        const dFramesDropped = Math.max(0, framesDropped - lastFramesDropped);
-        const dFramesEncoded = Math.max(0, framesEncoded - lastFramesEncoded);
+        // 1. Process directional stats snapshot with EWMA & 3-stage classification
+        const directionalStats = this.adaptationController.processStatsSnapshot({
+          nowMs: now,
+          rttMs: rtt,
+          jitterMs: jitter,
+          totalBytesSent: bytesSent,
+          totalBytesRecv: bytesRecv,
+          totalPacketsSent: packetsSent,
+          totalPacketsRecv: packetsRecv,
+          inboundPacketsLost: inboundLoss,
+          outboundPacketsLost: outboundLoss,
+          framesEncoded,
+          framesDropped,
+          availableOutgoingBitrate,
+          iceState,
+          isRepublishing: this.isRepublishing
+        });
 
-        lastBytesSent = bytesSent;
-        lastBytesRecv = bytesRecv;
-        lastPacketsSent = packetsSent;
-        lastPacketsRecv = packetsRecv;
-        lastPacketsLost = packetsLost;
-        lastOutboundPacketsLost = outboundPacketsLost;
-        lastFramesDropped = framesDropped;
-        lastFramesEncoded = framesEncoded;
-        lastTime = now;
+        // 2. Generate and apply differential adaptation plan
+        const consumersList = Array.from(this.consumerMetadata.values());
+        const plan = this.adaptationController.generateAdaptationPlan(
+          consumersList, 
+          directionalStats.availableDownlinkBps
+        );
 
-        const sendBitrate = (dBytesSent * 8) / dt;
-        const recvBitrate = (dBytesRecv * 8) / dt;
-        
-        // Calculate inbound loss accurately
-        const inboundLoss = (dPacketsRecv + dPacketsLost) > 0 ? (dPacketsLost / (dPacketsRecv + dPacketsLost)) * 100 : 0;
-        
-        // Calculate outbound loss accurately (using remote-inbound-rtp data)
-        const outboundLoss = (dPacketsSent + dOutboundPacketsLost) > 0 ? (dOutboundPacketsLost / (dPacketsSent + dOutboundPacketsLost)) * 100 : 0;
-        
-        // Use the worst of the two directions as our overall packet loss metric
-        const packetLoss = Math.max(inboundLoss, outboundLoss);
-        const fps = dFramesEncoded / dt;
+        // 3. Dispatch batched differential layer/pause updates if changes exist
+        if (plan.changes.length > 0) {
+          // Apply local pause reasons
+          for (const change of plan.changes) {
+            if (typeof change.pausedByNetwork === 'boolean') {
+              this.setConsumerPauseReason(change.consumerId, 'NETWORK', change.pausedByNetwork);
+            }
+          }
 
-        history.push({ rtt, packetLoss, jitter, sendBitrate, recvBitrate, framesDropped: dFramesDropped, framesEncoded: dFramesEncoded });
-        if (history.length > WINDOW_SIZE) history.shift();
-
-        // Averages over window
-        const avgRtt = history.reduce((sum, h) => sum + h.rtt, 0) / history.length;
-        const avgLoss = history.reduce((sum, h) => sum + h.packetLoss, 0) / history.length;
-        const avgJitter = history.reduce((sum, h) => sum + h.jitter, 0) / history.length;
-        const totalFramesDropped = history.reduce((sum, h) => sum + h.framesDropped, 0);
-        const totalFramesEncoded = history.reduce((sum, h) => sum + h.framesEncoded, 0);
-        const frameDropRate = totalFramesEncoded > 0 ? (totalFramesDropped / (totalFramesEncoded + totalFramesDropped)) : 0;
-
-        let candidateLabel: NetworkQualityLabel = 'good';
-        let diag: NetworkDebugSnapshot['diagnosticType'] = 'healthy';
-
-        if (iceState === 'connecting' || iceState === 'checking') {
-          candidateLabel = 'connecting_to_media_server';
-          diag = 'media_server_recovery';
-        } else if (iceState === 'disconnected' || this.isRepublishing) {
-          candidateLabel = 'reconnecting';
-          diag = 'media_server_recovery';
-          reconnectCount++;
-        } else if (frameDropRate > 0.15 && avgLoss < 2 && avgRtt < 150) {
-          candidateLabel = 'device_performance_issue';
-          diag = 'device';
-        } else {
-          const POOR_RTT = this.networkConfig.poorNetworkRttMs;
-          const POOR_LOSS = this.networkConfig.poorNetworkLossPercent;
-          const POOR_JITTER = this.networkConfig.poorNetworkJitterMs;
-
-          // For unstable, we use slightly lower thresholds based on the poor thresholds
-          const UNSTABLE_RTT = Math.max(100, Math.floor(POOR_RTT * 0.7));
-          const UNSTABLE_LOSS = Math.max(1, Math.floor(POOR_LOSS * 0.5));
-          const UNSTABLE_JITTER = Math.max(20, Math.floor(POOR_JITTER * 0.6));
-
-          if (avgRtt > POOR_RTT || avgLoss > POOR_LOSS || avgJitter > POOR_JITTER) {
-            candidateLabel = 'poor_network';
-            diag = 'local_outbound';
-          } else if (avgRtt >= UNSTABLE_RTT || avgLoss >= UNSTABLE_LOSS || avgJitter >= UNSTABLE_JITTER) {
-            candidateLabel = 'unstable_network';
-            diag = 'local_outbound';
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+              type: 'set_consumer_adaptation',
+              adaptationEpoch: plan.adaptationEpoch,
+              changes: plan.changes
+            }));
           }
         }
 
-        // Clean Hysteresis Logic
-        if (candidateLabel === currentLabel) {
-          labelStreak++;
-        } else {
-          if ((this as any).pendingCandidate !== candidateLabel) {
-             (this as any).pendingCandidate = candidateLabel;
-             (this as any).pendingStreak = 1;
-          } else {
-             (this as any).pendingStreak++;
+        // 4. Adapt local webcam uplink
+        if (this.localVideoProducer && !this.localVideoProducer.closed) {
+          if (plan.uplinkPausedByNetwork && !this.cameraSuppressedByNetwork) {
+            this.cameraSuppressedByNetwork = true;
+            this.localVideoProducer.pause();
+            console.log('[ADAPTATION] Camera publication paused by network due to uplink CRITICAL');
+          } else if (!plan.uplinkPausedByNetwork && this.cameraSuppressedByNetwork) {
+            this.cameraSuppressedByNetwork = false;
+            if (this.desiredCameraOn && !this.hostCameraBlocked) {
+              this.localVideoProducer.resume();
+              console.log('[ADAPTATION] Camera publication resumed after uplink recovery');
+            }
+          }
+
+          if (typeof (this.localVideoProducer as any).setMaxSpatialLayer === 'function') {
+            (this.localVideoProducer as any).setMaxSpatialLayer(plan.uplinkMaxSpatialLayer).catch(() => {});
           }
         }
 
-        let nextLabel = currentLabel;
-        const isNetworkLabel = (l: NetworkQualityLabel) => ['good', 'unstable_network', 'poor_network'].includes(l);
-        
-        if (!isNetworkLabel(candidateLabel)) {
-           nextLabel = candidateLabel;
-        } else {
-           if ((this as any).pendingCandidate === candidateLabel && (this as any).pendingStreak >= 3) {
-             nextLabel = candidateLabel;
-           }
-        }
+        // 5. Emit directional telemetry and UI callbacks
+        this.onDirectionalNetworkQualityChange?.(directionalStats);
 
-        if (nextLabel !== currentLabel) {
-          const oldLabel = currentLabel;
-          currentLabel = nextLabel;
-          labelStreak = 1;
-          (this as any).pendingCandidate = null;
-          (this as any).pendingStreak = 0;
-          
-          this.broadcastNetworkLabelChange(currentLabel);
-          
-          this.emitTelemetry('network_quality_label_changed', { old: oldLabel, new: currentLabel, avgRtt, avgLoss });
-          
-          if (currentLabel === 'device_performance_issue') this.emitTelemetry('device_performance_issue_detected');
-          if (currentLabel === 'reconnecting' || currentLabel === 'connecting_to_media_server') this.emitTelemetry('media_connecting_not_network_poor');
-          
-          if (oldLabel === 'poor_network' && currentLabel === 'good' && labelStreak === 1) {
-             this.emitTelemetry('network_quality_false_positive_suspected');
-          }
-        }
+        const mappedLabel: NetworkQualityLabel = 
+          directionalStats.overall === 'CRITICAL' ? 'poor_network' :
+          directionalStats.overall === 'POOR' ? 'poor_network' :
+          directionalStats.overall === 'FAIR' ? 'unstable_network' : 'good';
+
+        this.broadcastNetworkLabelChange(mappedLabel);
 
         if (this.onNetworkDebugSnapshot) {
           this.onNetworkDebugSnapshot({
-            label: currentLabel,
-            rtt: avgRtt,
-            packetLoss: avgLoss,
-            jitter: avgJitter,
-            sendBitrate,
-            recvBitrate,
-            availableOutgoingBitrate,
-            framesEncoded: dFramesEncoded,
-            framesDropped: dFramesDropped,
-            fps,
+            label: mappedLabel,
+            rtt: directionalStats.rttMs,
+            packetLoss: directionalStats.downlinkLossPercent,
+            jitter: directionalStats.jitterMs,
+            sendBitrate: directionalStats.sendBitrateBps,
+            recvBitrate: directionalStats.recvBitrateBps,
+            availableOutgoingBitrate: directionalStats.availableUplinkBps,
+            framesEncoded,
+            framesDropped,
+            fps: framesEncoded > 0 ? framesEncoded / 2 : 0,
             iceState,
-            reconnectCount,
-            diagnosticType: diag
+            reconnectCount: 0,
+            diagnosticType: directionalStats.diagnosticType === 'local_uplink' ? 'local_outbound' :
+                            directionalStats.diagnosticType === 'local_downlink' ? 'local_inbound' :
+                            directionalStats.diagnosticType === 'device' ? 'device' :
+                            directionalStats.diagnosticType === 'server_recovery' ? 'media_server_recovery' : 'healthy'
           });
         }
-
-        if (this.localScreenAudioTrack) {
-          // Republish screen audio track
-          this.screenAudioShareProducer = await this.sendTransport.produce({
-            track: this.localScreenAudioTrack,
-            appData: { source: 'screen-audio' }
-          });
-        }
-
       } catch (e) {
       }
-    }, this.networkConfig.networkMonitorIntervalMs);
+    }, 2000);
   }
   
   private broadcastNetworkLabelChange(label: NetworkQualityLabel) {
@@ -1394,11 +1502,14 @@ export class WebRTCClient {
 
     this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
       try {
+        const isAudioMic = kind === 'audio' && (appData as any)?.source !== 'screen-audio';
+        const shouldStartPaused = isAudioMic ? this.desiredMicMuted : false;
         const { id } = await this.request('produce', 'produced', {
           transportId: this.sendTransport!.id,
           kind,
           rtpParameters,
-          appData
+          appData,
+          paused: shouldStartPaused
         });
         callback({ id });
       } catch (error: any) { errback(error); }
@@ -1489,28 +1600,32 @@ export class WebRTCClient {
         const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
+        if (this.desiredMicMuted) {
+          audioTrack.enabled = false;
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+        }
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: audioTrack, 
           appData: { source: 'mic' },
-          codec: opusCodec
+          codec: opusCodec,
+          disableTrackOnPause: true,
+          zeroRtpOnPause: true
         });
         this.onAudioTrackReplaced?.();
-        if (this.audioConnectionStatus === 'muted') {
+        if (this.desiredMicMuted || this.audioConnectionStatus === 'muted') {
           this.localAudioProducer.pause();
           if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
           if (audioTrack) audioTrack.enabled = false;
         }
       } else {
-        console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware...");
+        console.warn("[WebRTC] Mic track is closed during reconnect. Reacquiring hardware with desiredMicMuted=" + this.desiredMicMuted);
         this.emitTelemetry('mic_track_closed_detected');
         this.emitTelemetry('mic_reacquire_started');
         try {
-          // Preserve mute state and pass it into enableMic
-          const wasMuted = this.audioConnectionStatus === 'muted';
-          await this.enableMic(true, wasMuted);
+          // Preserve explicit user mute intent during reconnect
+          await this.enableMic(true, this.desiredMicMuted);
           this.emitTelemetry('mic_reacquire_success');
-          if (wasMuted) this.pauseMic();
-
+          if (this.desiredMicMuted) this.pauseMic();
         } catch (e) {
           console.error("Failed to reacquire mic during reconnect:", e);
           this.emitTelemetry('mic_reacquire_failed');
@@ -1937,8 +2052,13 @@ export class WebRTCClient {
     }
   }
 
-  public async enableMic(isReconnect = false, startMuted = false): Promise<MediaStreamTrack> {
+  public async enableMic(isReconnect = false, startMuted?: boolean): Promise<MediaStreamTrack> {
     if (!this.device || !this.sendTransport) throw new Error("Device not initialized");
+    if (startMuted !== undefined) {
+      this.setDesiredMicMuted(startMuted, isReconnect ? 'RECONNECT_ENABLE_MIC' : 'INITIAL_ENABLE_MIC');
+    }
+    const snapshotIntentVersion = this.micIntentVersion;
+
     // Clear any pending timeout
     if (this.audioConnectionTimeoutId) {
       clearTimeout(this.audioConnectionTimeoutId);
@@ -1984,10 +2104,15 @@ export class WebRTCClient {
       }
       
       if (!stream) throw new Error("Failed to initialize mic");
-      this.rawAudioTrack = stream.getAudioTracks()[0];
-      if (startMuted) {
-        this.rawAudioTrack.enabled = false;
+
+      // Check intent fencing after async getUserMedia
+      if (this.micIntentVersion !== snapshotIntentVersion) {
+        console.warn(`[WebRTC] [MIC_FENCING] enableMic getUserMedia completed with stale intent version (started at v${snapshotIntentVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
       }
+      let currentDesiredMuted = this.desiredMicMuted;
+
+      this.rawAudioTrack = stream.getAudioTracks()[0];
+      this.rawAudioTrack.enabled = !currentDesiredMuted;
       this.emitTelemetry('audio_track_ready');
       
       let activeTrack = this.rawAudioTrack;
@@ -1997,9 +2122,7 @@ export class WebRTCClient {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
         activeTrack = denoisedStream.getAudioTracks()[0];
-        if (startMuted) {
-          activeTrack.enabled = false;
-        }
+        activeTrack.enabled = !currentDesiredMuted;
       }
       
       if (!this.localAudioProducer || this.localAudioProducer.closed) {
@@ -2010,25 +2133,43 @@ export class WebRTCClient {
         this.localAudioProducer = await this.sendTransport.produce({ 
           track: activeTrack,
           appData: { source: 'mic' },
-          codec: opusCodec
+          codec: opusCodec,
+          codecOptions: {
+            opusFec: true,
+            opusDtx: true,
+            opusMaxAverageBitrate: 32000
+          },
+          disableTrackOnPause: true,
+          zeroRtpOnPause: true
         });
         this.emitTelemetry('audio_producer_created');
       } else {
         await this.localAudioProducer.replaceTrack({ track: activeTrack });
       }
 
-      // Enforce producer pause immediately to prevent state overwriting
-      if (startMuted) {
+      // Final post-produce fencing re-evaluation
+      if (this.micIntentVersion !== snapshotIntentVersion) {
+        currentDesiredMuted = this.desiredMicMuted;
+      }
+
+      // Enforce producer pause and track disabled state immediately if desiredMicMuted
+      if (currentDesiredMuted) {
         this.localAudioProducer.pause();
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
+        if (activeTrack) activeTrack.enabled = false;
+      } else {
+        if (this.localAudioProducer.paused) this.localAudioProducer.resume();
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+        if (activeTrack) activeTrack.enabled = true;
       }
 
       // Handle unexpected track ends (e.g. mic unplugged)
       activeTrack.onended = async () => {
-        console.warn("[WebRTC] Microphone track ended unexpectedly. Re-initializing hardware.");
+        const onendedSnapshotVersion = this.micIntentVersion;
+        console.warn(`[WebRTC] [MIC_INTENT: TRACK_ENDED] Microphone track ended unexpectedly. Re-initializing hardware while preserving desiredMicMuted=${this.desiredMicMuted} (v${onendedSnapshotVersion})`);
         try {
-          const wasMuted = this.audioConnectionStatus === 'muted';
-          await this.enableMic(true, wasMuted);
-          if (wasMuted) {
+          await this.enableMic(true, this.desiredMicMuted);
+          if (this.desiredMicMuted) {
             this.pauseMic();
           }
         } catch (err) {
@@ -2041,7 +2182,7 @@ export class WebRTCClient {
         clearTimeout(this.audioConnectionTimeoutId);
         this.audioConnectionTimeoutId = undefined;
       }
-      this.setAudioConnectionStatus(this.localAudioProducer?.paused ? 'muted' : 'connected');
+      this.setAudioConnectionStatus(currentDesiredMuted || this.localAudioProducer?.paused ? 'muted' : 'connected');
       return activeTrack;
     } catch (err: any) {
       this.emitTelemetry('audio_connection_failed');
@@ -2064,6 +2205,7 @@ export class WebRTCClient {
     }
     
     this.isAINoiseSuppressionEnabled = enable;
+    const noiseSnapshotVersion = this.micIntentVersion;
     
     if (this.localAudioProducer) {
       // Clean up old tracks
@@ -2082,13 +2224,20 @@ export class WebRTCClient {
         } 
       });
       
+      if (this.micIntentVersion !== noiseSnapshotVersion) {
+        console.warn(`[WebRTC] [MIC_FENCING] setAINoiseSuppression completed with stale intent version (started at v${noiseSnapshotVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
+      }
+      const currentDesiredMuted = this.desiredMicMuted;
+
       this.rawAudioTrack = stream.getAudioTracks()[0];
+      this.rawAudioTrack.enabled = !currentDesiredMuted;
       let activeTrack = this.rawAudioTrack;
 
       if (enable) {
         const rawStream = new MediaStream([this.rawAudioTrack]);
         const denoisedStream = await this.purifyInstance.processStream(rawStream);
         activeTrack = denoisedStream.getAudioTracks()[0];
+        activeTrack.enabled = !currentDesiredMuted;
       }
 
       if (!this.localAudioProducer.closed) {
@@ -2097,11 +2246,22 @@ export class WebRTCClient {
         const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: activeTrack, 
+          appData: { source: 'mic' }, 
+          codec: opusCodec, 
+          disableTrackOnPause: true, 
+          zeroRtpOnPause: true 
+        });
       }
-      if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+      if (currentDesiredMuted || this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
         if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
         activeTrack.enabled = false;
+        this.localAudioProducer.pause();
+      } else {
+        if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+        activeTrack.enabled = true;
+        if (this.localAudioProducer.paused) this.localAudioProducer.resume();
       }
       this.onAudioTrackReplaced?.();
       return activeTrack;
@@ -2116,12 +2276,16 @@ export class WebRTCClient {
       throw new Error("Camera switch already in progress");
     }
 
+    const switchSnapshotVersion = this.micIntentVersion;
     let stream: MediaStream;
     let newTrack: MediaStreamTrack;
 
     if (kind === 'audio') {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
       newTrack = stream.getAudioTracks()[0];
+      if (this.desiredMicMuted) {
+        newTrack.enabled = false;
+      }
     } else {
       this.cameraSwitchInProgress = true;
       try {
@@ -2139,11 +2303,17 @@ export class WebRTCClient {
       const oldTrack = producer.track;
 
       if (kind === 'audio') {
+        if (this.micIntentVersion !== switchSnapshotVersion) {
+          console.warn(`[WebRTC] [MIC_FENCING] switchDevice completed with stale intent version (started at v${switchSnapshotVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
+        }
+        const currentDesiredMuted = this.desiredMicMuted;
         this.rawAudioTrack = newTrack;
+        this.rawAudioTrack.enabled = !currentDesiredMuted;
         if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
           const rawStream = new MediaStream([this.rawAudioTrack]);
           const denoisedStream = await this.purifyInstance.processStream(rawStream);
           newTrack = denoisedStream.getAudioTracks()[0];
+          newTrack.enabled = !currentDesiredMuted;
         }
       }
 
@@ -2173,9 +2343,15 @@ export class WebRTCClient {
         }
       } else {
         await producer.replaceTrack({ track: newTrack });
-        if (producer.paused || this.audioConnectionStatus === 'muted') {
+        const currentDesiredMuted = this.desiredMicMuted;
+        if (currentDesiredMuted || producer.paused || this.audioConnectionStatus === 'muted') {
           if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
           newTrack.enabled = false;
+          producer.pause();
+        } else {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+          newTrack.enabled = true;
+          if (producer.paused) producer.resume();
         }
         if (oldTrack) {
           oldTrack.stop();
@@ -2184,20 +2360,37 @@ export class WebRTCClient {
       }
     } else {
       if (kind === 'audio') {
+        if (this.micIntentVersion !== switchSnapshotVersion) {
+          console.warn(`[WebRTC] [MIC_FENCING] switchDevice create completed with stale intent version (started at v${switchSnapshotVersion}, currently v${this.micIntentVersion}). Adopting latest desiredMicMuted=${this.desiredMicMuted}`);
+        }
+        const currentDesiredMuted = this.desiredMicMuted;
         this.rawAudioTrack = newTrack;
+        this.rawAudioTrack.enabled = !currentDesiredMuted;
         let activeTrack = newTrack;
         if (this.isAINoiseSuppressionEnabled && this.purifyInstance) {
           const rawStream = new MediaStream([this.rawAudioTrack]);
           const denoisedStream = await this.purifyInstance.processStream(rawStream);
           activeTrack = denoisedStream.getAudioTracks()[0];
+          activeTrack.enabled = !currentDesiredMuted;
         }
         const opusCodec = this.device?.rtpCapabilities?.codecs?.find(
           (c: any) => c.mimeType.toLowerCase() === 'audio/opus'
         );
-        this.localAudioProducer = await this.sendTransport.produce({ track: activeTrack, appData: { source: 'mic' }, codec: opusCodec });
-        if (this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
+        this.localAudioProducer = await this.sendTransport.produce({ 
+          track: activeTrack, 
+          appData: { source: 'mic' }, 
+          codec: opusCodec, 
+          disableTrackOnPause: true, 
+          zeroRtpOnPause: true 
+        });
+        if (currentDesiredMuted || this.localAudioProducer.paused || this.audioConnectionStatus === 'muted') {
           if (this.rawAudioTrack) this.rawAudioTrack.enabled = false;
           activeTrack.enabled = false;
+          this.localAudioProducer.pause();
+        } else {
+          if (this.rawAudioTrack) this.rawAudioTrack.enabled = true;
+          activeTrack.enabled = true;
+          if (this.localAudioProducer.paused) this.localAudioProducer.resume();
         }
         this.onAudioTrackReplaced?.();
       } else {
@@ -2240,6 +2433,7 @@ export class WebRTCClient {
   // --- Media Controls ---
   
   public pauseMic() {
+    this.setDesiredMicMuted(true, 'USER_PAUSE_MIC');
     if (this.localAudioProducer && !this.localAudioProducer.paused) {
       this.localAudioProducer.pause();
     }
@@ -2258,10 +2452,11 @@ export class WebRTCClient {
   }
 
   public async resumeMic() {
+    this.setDesiredMicMuted(false, 'USER_RESUME_MIC');
     if (!this.localAudioProducer || this.localAudioProducer.closed || this.localAudioProducer.track?.readyState === 'ended' || this.rawAudioTrack?.readyState === 'ended') {
       console.warn("[WebRTC] Microphone track is ended or producer is closed. Re-initializing hardware.");
       try {
-        await this.enableMic(true);
+        await this.enableMic(true, false);
       } catch (e) {
         console.error("[WebRTC] Failed to re-initialize mic during resume:", e);
       }
@@ -2371,28 +2566,48 @@ export class WebRTCClient {
         }));
       }
       // Stop the track so the OS browser sharing indicator disappears
-      this.screenShareProducer.track?.stop();
-      this.screenShareProducer.close();
+      try {
+        this.screenShareProducer.track?.stop();
+      } catch (e) {}
+      try {
+        this.screenShareProducer.close();
+      } catch (e) {}
       this.screenShareProducer = null;
       
       if (!options?.serverAlreadyClosed) {
-        this.onScreenShareStopped?.(this.userId || '', producerId);
+        this.onScreenShareStopped?.(this.userId || '', producerId, this.participantId);
       }
+    }
+
+    if (this.localScreenTrack) {
+      try {
+        this.localScreenTrack.stop();
+      } catch (e) {}
       this.localScreenTrack = null;
     }
     
     if (this.screenAudioShareProducer) {
       const audioProducerId = this.screenAudioShareProducer.id;
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (!options?.serverAlreadyClosed && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({
           type: 'stop_producer',
           producerId: audioProducerId,
           appData: { source: 'screen-audio' }
         }));
       }
-      this.screenAudioShareProducer.track?.stop();
-      this.screenAudioShareProducer.close();
+      try {
+        this.screenAudioShareProducer.track?.stop();
+      } catch (e) {}
+      try {
+        this.screenAudioShareProducer.close();
+      } catch (e) {}
       this.screenAudioShareProducer = null;
+    }
+
+    if (this.localScreenAudioTrack) {
+      try {
+        this.localScreenAudioTrack.stop();
+      } catch (e) {}
       this.localScreenAudioTrack = null;
     }
   }
@@ -2482,6 +2697,24 @@ export class WebRTCClient {
       });
 
       this.consumers.set(consumer.id, consumer);
+
+      this.registerConsumerMetadata({
+        consumerId: consumer.id,
+        producerId,
+        participantId: producerParticipantId,
+        userId: producerUserId,
+        kind: consumerKind as 'audio' | 'video',
+        source: source as 'camera' | 'screen' | 'mic' | 'screen-audio',
+        isScreenShare: source === 'screen',
+        isActiveSpeaker: false,
+        isPinned: false,
+        isVisibleOnScreen: true,
+        maxSpatialLayers: source === 'screen' ? 1 : 3
+      });
+
+      consumer.on('transportclose', () => {
+        this.unregisterConsumerMetadata(consumer.id);
+      });
       
       // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
       // We explicitly DO NOT update UI state (isCameraOn/isMuted) here because BWE can cause rapid oscillation.
@@ -2677,15 +2910,15 @@ export class WebRTCClient {
     }
   }
 
-  public setParticipantScreenSharePermission(targetUserId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') {
+  public setParticipantScreenSharePermission(targetParticipantId: string, permission: 'DEFAULT' | 'ALLOW' | 'BLOCK') {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'set_participant_screen_share_permission', targetUserId, permission }));
+      this.ws.send(JSON.stringify({ type: 'set_participant_screen_share_permission', targetParticipantId, permission }));
     }
   }
 
-  public stopParticipantScreenShare(targetUserId: string) {
+  public stopParticipantScreenShare(targetParticipantId: string) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'stop_participant_screen_share', targetUserId }));
+      this.ws.send(JSON.stringify({ type: 'stop_participant_screen_share', targetParticipantId }));
     }
   }
 
@@ -2707,7 +2940,7 @@ export class WebRTCClient {
     }
   }
 
-  public sendUpdateRoomSettings(settings: { micLocked?: boolean, videoLocked?: boolean, chatLocked?: boolean }) {
+  public sendUpdateRoomSettings(settings: { micLocked?: boolean, videoLocked?: boolean, chatLocked?: boolean, bypassWaitingRoom?: boolean }) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'update_room_settings', settings }));
     }

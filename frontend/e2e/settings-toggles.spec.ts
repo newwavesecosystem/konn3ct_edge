@@ -58,7 +58,7 @@ test.describe('Meeting Settings Toggles', () => {
 
       // Toggle it back to original state to ensure no side effects
       await switchBtn.click();
-      await expect(switchBtn).toHaveAttribute('aria-checked', initialState, { timeout: 3000 });
+      await expect(switchBtn).toHaveAttribute('aria-checked', initialState || '', { timeout: 3000 });
     }
 
     // Specific validation for Mirror Video on UI

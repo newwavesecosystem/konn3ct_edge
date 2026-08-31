@@ -62,7 +62,7 @@ export function ParticipantTile({
   fixedAspect = false,
   className,
 }: ParticipantTileProps) {
-  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare, pingParticipant } = useMeeting();
+  const { roomSettings, currentUser, selectedDevices, isMirrorVideoEnabled, pauseRemoteVideo, resumeRemoteVideo, isRecorderMode, isOriginalRatioEnabled, stopParticipantScreenShare, pingParticipant, clientParticipantId } = useMeeting();
   const [showMenu, setShowMenu] = useState(false);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -86,7 +86,10 @@ export function ParticipantTile({
     return () => observer.disconnect();
   }, [isRecorderMode]);
 
-  const isSelf = participant.id === currentUser.id;
+  const isSelf =
+    participant.id === currentUser.id ||
+    (!!participant.userId && !!currentUser.userId && participant.userId === currentUser.userId) ||
+    (!!clientParticipantId && (participant.id === clientParticipantId || participant.userId === clientParticipantId));
 
   const handleRecover = React.useCallback(() => {
     // If recovery is triggered, we can try to re-attach the track to the srcObject
@@ -121,12 +124,14 @@ export function ParticipantTile({
     }
   }, [isVisible, isSelf, participant.videoTrack, pauseRemoteVideo, resumeRemoteVideo]);
 
-  const initials = participant.name
-    .split(" ")
+  const initials = (participant.name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || (participant.name ? participant.name.slice(0, 2).toUpperCase() : "?");
 
   const toggleFullscreen = React.useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -450,7 +455,7 @@ export function ParticipantTile({
               <MonitorUp className="w-3 h-3" />
               Sharing
             </div>
-            {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+            {['host', 'admin', 'co-host'].includes(currentUser.role) && participant.id !== currentUser.id && (
               <button 
                 onClick={(e) => { e.stopPropagation(); stopParticipantScreenShare(participant.userId); }}
                 className="bg-red-500 hover:bg-red-600 transition-colors backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-1 text-xs text-white font-medium shadow-sm"
@@ -461,7 +466,7 @@ export function ParticipantTile({
           </div>
         )}
         
-        {['host', 'admin'].includes(currentUser.role) && participant.id !== currentUser.id && (
+        {['host', 'admin', 'co-host'].includes(currentUser.role) && participant.id !== currentUser.id && (
           <div className="pointer-events-auto relative">
             <button
               className="p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-white backdrop-blur-sm transition-colors"
@@ -547,7 +552,7 @@ export function ParticipantTile({
             <span className="shrink-0">{roleIcon[participant.role]}</span>
           )}
           <span className="text-white text-xs font-medium truncate">
-            {participant.name}
+            {participant.name || 'Guest'}
           </span>
           {isSelf && (
             <span className="text-white/60 text-[10px] shrink-0">(You)</span>

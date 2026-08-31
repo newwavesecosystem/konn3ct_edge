@@ -377,11 +377,26 @@ export function getProducer(producerId: string): Producer | undefined {
 /**
  * Create a Producer (client sending media)
  */
-export async function createProducer(transportId: string, kind: 'audio' | 'video', rtpParameters: any, roomId?: string, userId?: string, userName?: string, clientData?: { isBot?: boolean, role?: string }) {
+export async function createProducer(
+  transportId: string, 
+  kind: 'audio' | 'video', 
+  rtpParameters: any, 
+  roomId?: string, 
+  userId?: string, 
+  userName?: string, 
+  clientData?: { isBot?: boolean, role?: string },
+  appData?: any,
+  paused?: boolean
+) {
   const transport = transports.get(transportId);
   if (!transport) throw new Error(`Transport ${transportId} not found`);
 
-  const producer = await transport.produce({ kind, rtpParameters });
+  const producer = await transport.produce({ 
+    kind, 
+    rtpParameters, 
+    appData: appData || {}, 
+    paused: !!paused 
+  });
   producers.set(producer.id, producer);
 
   // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
@@ -398,8 +413,8 @@ export async function createProducer(transportId: string, kind: 'audio' | 'video
       });
     }
 
-    // Start server-side transcription
-    if (userId && userName) {
+    // Start server-side transcription only if unpaused/active
+    if (userId && userName && !paused) {
       const router = routers.get(roomId);
       if (router) {
         startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
@@ -630,6 +645,27 @@ export async function requestConsumerKeyFrame(consumerId: string) {
   }
   
   await consumer.requestKeyFrame();
+}
+
+export async function setConsumerPreferredLayersAndPriority(
+  consumerId: string,
+  spatialLayer?: number,
+  temporalLayer?: number,
+  priority?: number
+) {
+  const consumer = consumers.get(consumerId);
+  if (consumer && !consumer.closed && consumer.kind === 'video') {
+    try {
+      if (typeof spatialLayer === 'number') {
+        await consumer.setPreferredLayers({ spatialLayer, temporalLayer });
+      }
+      if (typeof priority === 'number') {
+        await consumer.setPriority(priority);
+      }
+    } catch (err) {
+      logger.warn(`Failed to set layers/priority on consumer ${consumerId}:`, err);
+    }
+  }
 }
 
 export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {

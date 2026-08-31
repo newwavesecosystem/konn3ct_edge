@@ -7,12 +7,13 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "puppeteer": "^22.0.0",
-    "puppeteer-stream": "^2.1.1",
-    "ioredis": "^5.3.2",
-    "dotenv": "^16.3.1",
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/lib-storage": "^3.600.0",
-    "fluent-ffmpeg": "^2.1.2"
+    "chokidar": "^5.0.0",
+    "dotenv": "^16.3.1",
+    "fluent-ffmpeg": "^2.1.2",
+    "ioredis": "^5.3.2",
+    "puppeteer": "^22.0.0",
+    "puppeteer-stream": "^2.1.1"
   }
 }

@@ -21,8 +21,9 @@ export interface PermissionContext {
  */
 export function getParticipantIdentityKey(userId: string): string {
   if (!userId) return 'guest:unknown';
-  if (userId.startsWith('guest-') || userId.startsWith('anon-')) {
-    return `guest:${userId}`;
+  if (userId.startsWith('guest-') || userId.startsWith('guest_') || userId.startsWith('anon-') || userId.startsWith('anon_')) {
+    const cleanId = userId.replace(/^(guest[-_]|anon[-_])/, '');
+    return `guest:${cleanId}`;
   }
   return `user:${userId}`;
 }
@@ -125,6 +126,10 @@ export async function canParticipantShareScreenAdvanced(
     return { allowed: false, reason: 'PARTICIPANT_BLOCKED', version: v };
   }
 
+  if (explicit === 'ALLOW') {
+    return { allowed: true, version: v };
+  }
+
   if (isCoHost) {
     return roomPerms.coHostScreenSharingEnabled 
       ? { allowed: true, version: v }
@@ -139,9 +144,7 @@ export async function canParticipantShareScreenAdvanced(
       return { allowed: false, reason: 'HOST_DISABLED_SCREEN_SHARING', version: v };
 
     case 'SELECTED':
-      return explicit === 'ALLOW'
-        ? { allowed: true, version: v }
-        : { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING', version: v };
+      return { allowed: false, reason: 'NOT_SELECTED_FOR_SCREEN_SHARING', version: v };
         
     default:
       return roomPerms.participantScreenSharingEnabled 
