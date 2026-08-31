@@ -3,6 +3,7 @@ import { logger } from '../logger';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
 import crypto from 'crypto';
+import { stitchRecording } from '../services/recordingStitcher';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
@@ -74,6 +75,19 @@ export function startRecordingSupervisor() {
                  logger.info(`[Supervisor] Re-queued recording job for ${rec.id} (Gen: ${nextWorkerGeneration}, NextSegment: ${nextSegmentIndex})`);
              }
           }
+        }
+      }
+
+      // Check for stopped/stopping recordings that need final stitching
+      const stoppingRecordings = await db.recording.findMany({
+        where: { status: { in: ['stopping', 'processing'] } }
+      });
+      for (const rec of stoppingRecordings) {
+        const leaseKey = `recording:${rec.id}:lease`;
+        const hasLease = await redis.exists(leaseKey);
+        if (!hasLease) {
+          // Worker is done capturing, trigger stitching
+          stitchRecording(rec.id).catch(e => logger.error(`[Supervisor] Stitching failed for ${rec.id}:`, e));
         }
       }
     } catch (err) {
