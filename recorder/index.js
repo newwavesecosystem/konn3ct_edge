@@ -247,11 +247,13 @@ async function processRecordingJob(job, workerId) {
   }, 10000);
 
   let cleanupStarted = false;
+  let emptyRoomWatchdog = null;
 
   const cleanup = async () => {
     if (cleanupStarted) return;
     cleanupStarted = true;
     
+    if (emptyRoomWatchdog) clearInterval(emptyRoomWatchdog);
     clearInterval(heartbeatInterval);
     activeBrowsers--;
     
@@ -441,6 +443,39 @@ async function processRecordingJob(job, workerId) {
     ffmpegProc.stderr.on('data', d => console.error('FFMPEG_STDERR:', d.toString()));
     
     await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/started`, recordingId, job.jobId, botToken, "callback_started");
+
+    // Safety Watchdog: Auto-detect if all human participants left or meeting ended
+    let emptyRoomTicks = 0;
+    emptyRoomWatchdog = setInterval(async () => {
+      try {
+        if (!page || page.isClosed()) {
+          if (emptyRoomWatchdog) clearInterval(emptyRoomWatchdog);
+          return cleanup();
+        }
+
+        // 1. Check if page navigated away from /recording/
+        const currentUrl = page.url();
+        if (!currentUrl.includes('/recording/')) {
+          console.log(JSON.stringify({ event: "recorder_page_navigated_away", recordingId, currentUrl }));
+          if (emptyRoomWatchdog) clearInterval(emptyRoomWatchdog);
+          return cleanup();
+        }
+
+        // 2. Check if global human participants are empty in Redis
+        const participants = await redis.hgetall(`room:${roomId}:participants`);
+        const participantCount = Object.keys(participants || {}).length;
+        if (participantCount === 0) {
+          emptyRoomTicks++;
+          if (emptyRoomTicks >= 3) { // 30s of continuous empty room
+            console.log(JSON.stringify({ event: "recorder_empty_room_detected", recordingId, roomId }));
+            if (emptyRoomWatchdog) clearInterval(emptyRoomWatchdog);
+            return cleanup();
+          }
+        } else {
+          emptyRoomTicks = 0;
+        }
+      } catch (e) {}
+    }, 10000);
 
     const stopHandler = async (channel, message) => {
       if (channel === `recorder:stop:${recordingId}`) {

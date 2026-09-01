@@ -7,6 +7,12 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: ubuntu20
+      hostAliases:
+        - ip: "197.159.74.14"
+          hostnames:
+            - "meetingapp2.1gov.ng"
+            - "meetingapi.1gov.ng"
+            - "meetingstorage.1gov.ng"
       containers:
         - name: backend
           env:
@@ -55,6 +61,12 @@ spec:
           operator: "Equal"
           value: "recorder"
           effect: "NoSchedule"
+      hostAliases:
+        - ip: "197.159.74.14"
+          hostnames:
+            - "meetingapp2.1gov.ng"
+            - "meetingapi.1gov.ng"
+            - "meetingstorage.1gov.ng"
       containers:
         - name: recorder
           env:
