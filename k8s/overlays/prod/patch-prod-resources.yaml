@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: conn3ct-signaling
 spec:
-  replicas: 4
+  replicas: 2
   template:
     spec:
       affinity:
@@ -23,8 +23,8 @@ spec:
         - name: backend
           resources:
             requests:
-              cpu: "500m"
-              memory: "1Gi"
+              cpu: "250m"
+              memory: "512Mi"
             limits:
               cpu: "3500m"
               memory: "6Gi"
@@ -34,7 +34,7 @@ kind: Deployment
 metadata:
   name: conn3ct-media
 spec:
-  replicas: 3
+  replicas: 1
   template:
     spec:
       affinity:
@@ -54,8 +54,8 @@ spec:
         - name: backend
           resources:
             requests:
-              cpu: "1500m"
-              memory: "2Gi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
               cpu: "3500m"
               memory: "6Gi"
@@ -89,8 +89,8 @@ spec:
               value: "5"
           resources:
             requests:
-              cpu: "1000m"
-              memory: "2Gi"
+              cpu: "500m"
+              memory: "1.5Gi"
             limits:
               cpu: "4000m"
               memory: "7Gi"
@@ -100,7 +100,7 @@ kind: Deployment
 metadata:
   name: conn3ct-frontend
 spec:
-  replicas: 2
+  replicas: 1
   template:
     spec:
       containers:

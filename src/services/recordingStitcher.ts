@@ -170,8 +170,18 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
 
     logger.info(`[Stitcher] Found ${validSegments.length} valid segments for recording ${recordingId}.`);
 
-    // CASE 1: Single segment recorded - no stitching needed!
+    // CASE 1: Single segment recorded - only finalize if recording is stopped and capture is done
     if (validSegments.length === 1) {
+      const leaseKey = `recording:${recordingId}:lease`;
+      const hasLease = await redis.exists(leaseKey);
+      const controlState = await redis.get(`recording:${recordingId}:control`);
+      const isStopped = !hasLease && (recording.status === 'stopping' || recording.status === 'processing' || controlState === 'STOP_REQUESTED' || controlState === 'STOPPING' || controlState === 'STOPPED');
+
+      if (!isStopped) {
+        logger.info(`[Stitcher] Recording ${recordingId} has 1 segment uploaded but is still actively recording. Awaiting further segments.`);
+        return false;
+      }
+
       const single = validSegments[0];
       const durationSec = Math.round((single.durationMs || 0) / 1000);
       
