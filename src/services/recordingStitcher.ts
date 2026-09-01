@@ -126,10 +126,18 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
       return false;
     }
 
-    // If already finalized and completed with a master URL, skip
+    const totalSegmentsCount = await db.recordingSegment.count({
+      where: { recordingId, status: { in: ['uploaded', 'UPLOADED_VERIFIED', 'COMPLETED', 'PARTIAL'] } }
+    });
+
+    // If already finalized and completed with a master URL, skip unless new segments arrived
     if (recording.status === 'completed' && recording.url) {
-      logger.info(`[Stitcher] Recording ${recordingId} is already completed.`);
-      return true;
+      if (totalSegmentsCount > 1 && !recording.url.includes('_complete_')) {
+        logger.info(`[Stitcher] Recording ${recordingId} has ${totalSegmentsCount} segments but only single-segment URL. Upgrading to full stitched video.`);
+      } else {
+        logger.info(`[Stitcher] Recording ${recordingId} is already completed.`);
+        return true;
+      }
     }
 
     const segments = await db.recordingSegment.findMany({

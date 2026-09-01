@@ -6,13 +6,22 @@ declare global {
 }
 
 function getDatabaseUrl(): string | undefined {
-  const url = process.env.DATABASE_URL;
+  let url = process.env.DATABASE_URL;
   if (!url) return undefined;
-  if (url.includes('connection_limit=')) return url;
-  const separator = url.includes('?') ? '&' : '?';
+
   const limit = process.env.DB_CONNECTION_LIMIT || '5';
   const timeout = process.env.DB_POOL_TIMEOUT || '20';
-  return `${url}${separator}connection_limit=${limit}&pool_timeout=${timeout}`;
+
+  if (!url.includes('connection_limit=')) {
+    const separator = url.includes('?') ? '&' : '?';
+    url = `${url}${separator}connection_limit=${limit}&pool_timeout=${timeout}`;
+  }
+
+  if (url.includes(':25060') && !url.includes('pgbouncer=true')) {
+    url = `${url}&pgbouncer=true`;
+  }
+
+  return url;
 }
 
 const dbUrl = getDatabaseUrl();
