@@ -2918,6 +2918,29 @@ export function initializeSignaling(server: Server) {
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after explicit leave. Closing meeting instance and wiping room state.`);
+            try {
+              const recToStop = await db.recording.findFirst({
+                where: {
+                  OR: [
+                    { roomId },
+                    { room: { slug: roomId } },
+                    { room: { slug: client.roomSlug } }
+                  ],
+                  status: { in: ['starting', 'recording'] }
+                },
+                orderBy: { createdAt: 'desc' }
+              });
+              if (recToStop) {
+                await setRecordingControlState(recToStop.id, 'STOP_REQUESTED', 'ANY');
+                await db.recording.updateMany({
+                  where: { id: recToStop.id, status: { in: ['starting', 'recording'] } },
+                  data: { status: 'stopping', endedAt: new Date() }
+                });
+                redis.publish(`recorder:stop:${recToStop.id}`, JSON.stringify({ reason: 'room_empty', recordingId: recToStop.id })).catch(e => logger.error("Failed to stop recording on explicit leave empty room", e));
+              }
+            } catch(recErr) {
+              logger.error("Error auto-stopping recording on explicit leave empty room", recErr);
+            }
             await closeActiveMeetingInstance(roomId, client.meetingInstanceId).catch(e => logger.warn('closeActiveMeetingInstance error', e));
             await redis.del(`room:${roomId}:participants`).catch(e => logger.warn('Redis del error', e));
             await redis.del(`room:${client.roomSlug}:participants`).catch(e => logger.warn('Redis del error', e));
