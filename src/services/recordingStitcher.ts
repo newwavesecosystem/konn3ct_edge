@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import Redis from 'ioredis';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -33,16 +33,71 @@ if (accessKeyId && secretAccessKey) {
 }
 
 /**
- * Downloads a remote file to local disk
+ * Downloads a segment from S3 using credentials (or public HTTP fetch as fallback)
  */
-async function downloadFile(url: string, destPath: string): Promise<void> {
-  const res = await fetch(url);
+async function downloadSegment(segment: { url?: string | null; storageKey?: string | null }, destPath: string): Promise<void> {
+  // If S3 client is configured, download directly from S3 (handles private buckets)
+  if (s3Client) {
+    let key = segment.storageKey;
+    let targetBucket = bucket;
+
+    if (segment.url) {
+      try {
+        const parsed = new URL(segment.url);
+        const hostParts = parsed.hostname.split('.');
+        if (hostParts.length >= 4 && hostParts.slice(1).join('.').includes('digitaloceanspaces.com')) {
+          targetBucket = hostParts[0];
+        }
+        if (!key) {
+          key = parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
+          if (targetBucket && key.startsWith(`${targetBucket}/`)) {
+            key = key.slice(targetBucket.length + 1);
+          }
+        }
+      } catch {
+        if (!key) key = segment.url;
+      }
+    }
+
+    if (key && targetBucket) {
+      try {
+        const command = new GetObjectCommand({
+          Bucket: targetBucket,
+          Key: key
+        });
+        const response = await s3Client.send(command);
+        if (response.Body) {
+          const stream = response.Body as any;
+          if (typeof stream.transformToByteArray === 'function') {
+            const bytes = await stream.transformToByteArray();
+            fs.writeFileSync(destPath, Buffer.from(bytes));
+            return;
+          } else {
+            await new Promise<void>((resolve, reject) => {
+              const writer = fs.createWriteStream(destPath);
+              stream.pipe(writer);
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+            return;
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`[Stitcher] Direct S3 download failed for key ${key} from bucket ${targetBucket}: ${err.message}. Trying public fetch.`);
+      }
+    }
+  }
+
+  if (!segment.url) {
+    throw new Error('No URL or storageKey provided to download segment');
+  }
+
+  const res = await fetch(segment.url);
   if (!res.ok) {
-    throw new Error(`Failed to download segment from ${url}: HTTP ${res.status}`);
+    throw new Error(`Failed to download segment from ${segment.url}: HTTP ${res.status}`);
   }
   const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  fs.writeFileSync(destPath, buffer);
+  fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
 }
 
 /**
@@ -135,7 +190,7 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
       const seg = validSegments[i];
       const localFile = path.join(tempDir, `seg_${i}.mp4`);
       logger.info(`[Stitcher] Downloading segment ${seg.segmentIndex} from ${seg.url}...`);
-      await downloadFile(seg.url!, localFile);
+      await downloadSegment(seg, localFile);
       localSegmentFiles.push(localFile);
       totalDurationSec += Math.round((seg.durationMs || 0) / 1000);
     }
