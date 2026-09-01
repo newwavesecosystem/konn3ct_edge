@@ -8,7 +8,7 @@ const { Upload } = require('@aws-sdk/lib-storage');
 require('dotenv').config();
 
 const rawEndpoint = process.env.DO_SPACES_ENDPOINT || 'sfo3.digitaloceanspaces.com';
-const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEndpoint}`;
+const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : (rawEndpoint.includes(':') || rawEndpoint.includes('minio') ? `http://${rawEndpoint}` : `https://${rawEndpoint}`);
 
 const s3Client = new S3Client({
   endpoint,
@@ -234,6 +234,13 @@ async function run() {
     const data = await uploader.done();
     console.log(`[${recordingId}] spaces_upload_completed`);
 
+    let finalUrl = data.Location;
+    const publicStorageUrl = process.env.PUBLIC_STORAGE_URL || (process.env.STORAGE_PUBLIC_DOMAIN ? `https://${process.env.STORAGE_PUBLIC_DOMAIN}` : null);
+    if (publicStorageUrl && finalUrl) {
+      const publicBase = publicStorageUrl.replace(/\/+$/, '');
+      finalUrl = finalUrl.replace(/^https?:\/\/[^\/]+/, publicBase);
+    }
+
     if (segmentIndex !== undefined && !isNaN(segmentIndex)) {
         await notifyBackendWithRetry(
           backendUrl, 
@@ -241,7 +248,7 @@ async function run() {
           recordingId, botToken,
           {
             segmentIndex: segmentIndex,
-            url: data.Location,
+            url: finalUrl,
             durationMs: finalDuration * 1000,
             fileSize: fs.statSync(outputPathMp4).size,
             status: finalStatus,
@@ -255,7 +262,7 @@ async function run() {
           recordingId, botToken,
           {
             status: 'completed',
-            url: data.Location,
+            url: finalUrl,
             duration: finalDuration
           }
         );
