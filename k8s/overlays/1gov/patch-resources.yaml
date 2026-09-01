@@ -5,8 +5,15 @@ metadata:
 spec:
   template:
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
       containers:
         - name: backend
+          env:
+            - name: DO_SPACES_ENDPOINT
+              value: "http://minio-service:9000"
+            - name: PUBLIC_STORAGE_URL
+              value: "https://meetingstorage.1gov.ng"
           resources:
             requests:
               cpu: "1000m"
@@ -22,6 +29,8 @@ metadata:
 spec:
   template:
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
       containers:
         - name: backend
           resources:
@@ -41,9 +50,18 @@ spec:
     spec:
       nodeSelector:
         role: recorder
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "recorder"
+          effect: "NoSchedule"
       containers:
         - name: recorder
           env:
+            - name: DO_SPACES_ENDPOINT
+              value: "http://minio-service:9000"
+            - name: PUBLIC_STORAGE_URL
+              value: "https://meetingstorage.1gov.ng"
             - name: MAX_CONCURRENT_BROWSERS
               value: "20"
             - name: MAX_CONCURRENT_TRANSCODES
