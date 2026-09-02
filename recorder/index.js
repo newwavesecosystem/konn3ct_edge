@@ -366,6 +366,8 @@ async function processRecordingJob(job, workerId) {
 
     const pages = await browser.pages();
     const page = pages[0];
+    page.on('console', msg => console.log(`[PAGE_LOG] [${recordingId}] ${msg.text()}`));
+    page.on('pageerror', err => console.error(`[PAGE_ERROR] [${recordingId}] ${err.toString()}`));
     await browser.defaultBrowserContext().overridePermissions(new URL(url).origin, ['camera', 'microphone']);
     
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });

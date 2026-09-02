@@ -16,8 +16,6 @@ spec:
       containers:
         - name: backend
           env:
-            - name: DO_SPACES_ENDPOINT
-              value: "http://minio-service:9000"
             - name: PUBLIC_STORAGE_URL
               value: "https://meetingstorage.1gov.ng"
           resources:
