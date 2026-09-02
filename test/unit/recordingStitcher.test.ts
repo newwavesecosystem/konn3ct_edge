@@ -5,8 +5,11 @@ const mocks = vi.hoisted(() => {
     recordingFindUnique: vi.fn(),
     recordingUpdate: vi.fn().mockResolvedValue({}),
     segmentFindMany: vi.fn(),
+    segmentCount: vi.fn().mockResolvedValue(1),
     redisSet: vi.fn().mockResolvedValue('OK'),
     redisDel: vi.fn().mockResolvedValue(1),
+    redisExists: vi.fn().mockResolvedValue(0),
+    redisGet: vi.fn().mockResolvedValue('STOPPED'),
     s3Send: vi.fn().mockResolvedValue({}),
   };
 });
@@ -17,6 +20,8 @@ vi.mock('ioredis', () => {
       return {
         set: mocks.redisSet,
         del: mocks.redisDel,
+        exists: mocks.redisExists,
+        get: mocks.redisGet,
       };
     }
   };
@@ -43,6 +48,7 @@ vi.mock('../../src/db', () => ({
     },
     recordingSegment: {
       findMany: mocks.segmentFindMany,
+      count: mocks.segmentCount,
     },
   },
 }));

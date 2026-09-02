@@ -18,7 +18,7 @@ const region = process.env.DO_SPACES_REGION || 'nyc3';
 const accessKeyId = process.env.DO_SPACES_KEY || '';
 const secretAccessKey = process.env.DO_SPACES_SECRET || '';
 const rawEndpoint = process.env.DO_SPACES_ENDPOINT || 'nyc3.digitaloceanspaces.com';
-const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEndpoint}`;
+const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : (rawEndpoint.includes(':') || rawEndpoint.includes('minio') ? `http://${rawEndpoint}` : `https://${rawEndpoint}`);
 const bucket = process.env.DO_SPACES_BUCKET || 'konn3ct-assets';
 const forcePathStyle = String(process.env.S3_FORCE_PATH_STYLE).trim().toLowerCase() === 'true';
 
@@ -259,10 +259,16 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
 
     await s3Client.send(putCommand);
 
-    const cleanEndpoint = rawEndpoint.replace(/^https?:\/\//, '');
-    const masterUrl = forcePathStyle 
-      ? `https://${cleanEndpoint}/${bucket}/${storageKey}`
-      : `https://${bucket}.${cleanEndpoint}/${storageKey}`;
+    const publicStorageUrl = process.env.PUBLIC_STORAGE_URL ? process.env.PUBLIC_STORAGE_URL.replace(/\/+$/, '') : '';
+    let masterUrl = '';
+    if (publicStorageUrl) {
+      masterUrl = `${publicStorageUrl}/${bucket}/${storageKey}`;
+    } else {
+      const cleanEndpoint = rawEndpoint.replace(/^https?:\/\//, '');
+      masterUrl = forcePathStyle 
+        ? `https://${cleanEndpoint}/${bucket}/${storageKey}`
+        : `https://${bucket}.${cleanEndpoint}/${storageKey}`;
+    }
 
     logger.info(`[Stitcher] Successfully uploaded stitched master video: ${masterUrl}`);
 
