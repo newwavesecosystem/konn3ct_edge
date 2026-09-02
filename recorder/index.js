@@ -332,6 +332,8 @@ async function processRecordingJob(job, workerId) {
     if (casRes && casRes[0] === 0) return cleanup();
 
     xvfbProc = spawn('Xvfb', [displayId, '-screen', '0', '1920x1080x24', '-ac', '-nolisten', 'tcp']);
+    xvfbProc.stderr.on('data', d => console.error(`[XVFB_STDERR] [${displayId}]:`, d.toString()));
+    xvfbProc.on('error', err => console.error(`[XVFB_ERROR] [${displayId}]:`, err));
     await new Promise(r => setTimeout(r, 1000));
     
     // Load null sink for this job using the system PulseAudio daemon
@@ -346,12 +348,21 @@ async function processRecordingJob(job, workerId) {
 
 
     const browserArgs = [
-      '--window-size=1920,1080', '--kiosk', '--no-sandbox', '--disable-setuid-sandbox',
-      '--autoplay-policy=no-user-gesture-required', '--disable-dev-shm-usage', '--disable-gpu',
-      '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', 
-      '--disable-gpu-compositing', '--use-gl=angle', '--use-angle=swiftshader', '--disable-accelerated-video-decode',
-      '--auto-select-desktop-capture-source=BotRecord', '--auto-select-tab-capture-source-by-title=BotRecord',
-      '--enable-usermedia-screen-capturing', '--use-fake-ui-for-media-stream', '--disable-web-security', '--hide-scrollbars',
+      '--window-size=1920,1080',
+      '--window-position=0,0',
+      '--start-maximized',
+      '--kiosk',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--autoplay-policy=no-user-gesture-required',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling',
+      '--use-gl=swiftshader',
+      '--enable-webgl',
+      '--disable-web-security',
+      '--hide-scrollbars',
       `--user-data-dir=/tmp/chrome_profile_${generationId}`
     ];
     
@@ -361,13 +372,14 @@ async function processRecordingJob(job, workerId) {
     browser = await puppeteer.launch({
       executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
       headless: false, defaultViewport: null, ignoreDefaultArgs: ['--mute-audio', '--enable-automation'],
-      env: { DISPLAY: displayId, PULSE_SINK: sinkName, ...process.env }, args: browserArgs
+      env: { ...process.env, DISPLAY: displayId, PULSE_SINK: sinkName }, args: browserArgs
     });
 
     const pages = await browser.pages();
     const page = pages[0];
     page.on('console', msg => console.log(`[PAGE_LOG] [${recordingId}] ${msg.text()}`));
     page.on('pageerror', err => console.error(`[PAGE_ERROR] [${recordingId}] ${err.toString()}`));
+    await page.setViewport({ width: 1920, height: 1080 });
     await browser.defaultBrowserContext().overridePermissions(new URL(url).origin, ['camera', 'microphone']);
     
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
