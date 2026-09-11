@@ -1358,6 +1358,13 @@ export function MeetingProvider({
         client.onSessionStatus = (msg) => {
           if (msg.participantId) {
             setClientParticipantId(msg.participantId);
+            setInitialCurrentUser(prev => ({
+              ...prev,
+              id: msg.participantId || prev.id,
+              userId: msg.userId || prev.userId,
+              name: msg.name || prev.name,
+              role: (msg.role as any) || prev.role
+            }));
             setParticipants(prev => prev.map(p => {
               if (
                 p.id === clientParticipantId ||
@@ -2044,15 +2051,17 @@ export function MeetingProvider({
             let duplicatesDetected = false;
             let staleRemoved = false;
             
-            const localUserId = initialCurrentUser.userId || initialCurrentUser.id;
-            const currentPartId = clientParticipantId || webrtcClient.current?.participantId || initialCurrentUser.id;
+            const localUserId = webrtcClient.current?.userId || currentUser.userId || initialCurrentUser.userId || initialCurrentUser.id;
+            const currentPartId = clientParticipantId || webrtcClient.current?.participantId || currentUser.id || initialCurrentUser.id;
 
             // Find local user in previous state
-            const localUser = prev.find(p =>
+            let localUser = prev.find(p =>
               p.id === currentPartId ||
               p.id === initialCurrentUser.id ||
-              (!!p.userId && p.userId === localUserId) ||
-              (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId)
+              (!!p.userId && (p.userId === localUserId || (webrtcClient.current?.userId && p.userId === webrtcClient.current.userId))) ||
+              (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId) ||
+              isLocalIdentifier(p.id) ||
+              (!!p.userId && isLocalIdentifier(p.userId))
             );
 
             if (localUser) {
@@ -2073,8 +2082,8 @@ export function MeetingProvider({
 
             for (const p of backendParticipants) {
               const isLocalUser =
-                (p.userId && seenUserIds.has(p.userId)) ||
-                (p.participantId && seenParticipantIds.has(p.participantId)) ||
+                (p.userId && (seenUserIds.has(p.userId) || isLocalIdentifier(p.userId))) ||
+                (p.participantId && (seenParticipantIds.has(p.participantId) || isLocalIdentifier(p.participantId))) ||
                 (p.participantId && p.participantId === webrtcClient.current?.participantId) ||
                 (p.userId && p.userId === webrtcClient.current?.userId);
 
@@ -2087,6 +2096,26 @@ export function MeetingProvider({
                   if (p.userId) {
                     localUser.userId = p.userId;
                   }
+                } else {
+                  // RESURRECTION FALLBACK: Reconstruct local user from backend entry + local tracks
+                  localUser = {
+                    id: p.participantId || currentPartId,
+                    userId: p.userId || localUserId,
+                    name: p.name?.trim() || initialCurrentUser.name || "Me",
+                    role: (p.role as any) || initialCurrentUser.role || "attendee",
+                    isMuted: isMuted,
+                    isCameraOn: isCameraOn,
+                    audioTrack: localAudioTrackRef.current || undefined,
+                    videoTrack: localCameraTrackRef.current || undefined,
+                    isScreenSharing: isScreenSharing,
+                    isHandRaised: false,
+                    isSpeaking: false,
+                    networkQuality: 'good',
+                    joinedAt: new Date().toISOString(),
+                    isConnecting: false,
+                    isMobile: p.isMobile ?? isMobileClient,
+                  };
+                  nextParticipants.push(localUser);
                 }
                 duplicatesDetected = true;
                 continue;
@@ -2138,6 +2167,39 @@ export function MeetingProvider({
                   joinedAt: new Date().toISOString(),
                   isConnecting: false,
                   isMobile: p.isMobile,
+                });
+              }
+            }
+
+            // SAFETY INVARIANT: Ensure the local user is ALWAYS present in nextParticipants
+            const hasLocalUserInNext = nextParticipants.some(p =>
+              isLocalIdentifier(p.id) ||
+              (p.userId && isLocalIdentifier(p.userId)) ||
+              p.id === currentPartId ||
+              p.id === initialCurrentUser.id ||
+              (!!localUser && p.id === localUser.id)
+            );
+
+            if (!hasLocalUserInNext) {
+              if (localUser) {
+                nextParticipants.unshift(localUser);
+              } else {
+                nextParticipants.unshift({
+                  id: currentPartId,
+                  userId: localUserId,
+                  name: initialCurrentUser.name || "Me",
+                  role: initialCurrentUser.role || "attendee",
+                  isMuted: isMuted,
+                  isCameraOn: isCameraOn,
+                  audioTrack: localAudioTrackRef.current || undefined,
+                  videoTrack: localCameraTrackRef.current || undefined,
+                  isScreenSharing: isScreenSharing,
+                  isHandRaised: false,
+                  isSpeaking: false,
+                  networkQuality: 'good',
+                  joinedAt: new Date().toISOString(),
+                  isConnecting: false,
+                  isMobile: isMobileClient,
                 });
               }
             }
@@ -2232,9 +2294,15 @@ export function MeetingProvider({
 
         client.onUserLeft = (userId) => {
           if (hasLeftMeetingRef.current) return;
+          const isSelf = isLocalIdentifier(userId);
+          if (isSelf) {
+            console.warn(`[MeetingContext] Ignored user_left packet for local user identity: ${userId}`);
+            return;
+          }
+
           setParticipants((prev) => {
-            const user = prev.find(p => p.id === userId);
-            if (user && user.id !== webrtcClient.current?.userId && user.id !== currentUser.id) {
+            const user = prev.find(p => (p.id === userId || p.userId === userId) && !isLocalIdentifier(p.id) && !isLocalIdentifier(p.userId));
+            if (user && !isLocalIdentifier(user.id) && !isLocalIdentifier(user.userId)) {
                if (user.role !== 'bot') {
                  if (prefsRef.current.notifications.enableAllToasts && prefsRef.current.notifications.showJoinLeaveToasts) {
                    leaveBatchCount++;
@@ -2253,7 +2321,7 @@ export function MeetingProvider({
                  }
                }
             }
-            return prev.filter(p => p.id !== userId);
+            return prev.filter(p => !isLocalIdentifier(p.id) && !isLocalIdentifier(p.userId) && p.id !== userId && p.userId !== userId);
           });
         };
 

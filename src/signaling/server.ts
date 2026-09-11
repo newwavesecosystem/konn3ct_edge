@@ -1881,7 +1881,7 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 5000;
+      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 25000;
       const graceExpiresAt = new Date(Date.now() + VISIBLE_PRESENCE_DISCONNECT_GRACE_MS).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${VISIBLE_PRESENCE_DISCONNECT_GRACE_MS}, graceExpiresAt: ${graceExpiresAt}`);
 
@@ -2006,11 +2006,26 @@ export function initializeSignaling(server: Server) {
             await redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
-            redis.publish('signaling:room:broadcast', JSON.stringify({
-              roomId,
-              message: { type: 'user_left', userId, participantId }
-            }));
-            broadcastRoomState(roomId);
+            let userStillActive = false;
+            if (closingMeetingInstanceId) {
+              try {
+                const currentLease = await getSessionLease(closingMeetingInstanceId, identityKey);
+                if (currentLease && currentLease.sessionGeneration > closingSessionGen) {
+                  userStillActive = true;
+                  logger.info(`[CLEANUP] Suppressing user_left broadcast for ${userId}: active lease generation ${currentLease.sessionGeneration} > closing ${closingSessionGen}`);
+                }
+              } catch (e) {
+                logger.warn('Error checking session lease before user_left', e);
+              }
+            }
+
+            if (!userStillActive) {
+              redis.publish('signaling:room:broadcast', JSON.stringify({
+                roomId,
+                message: { type: 'user_left', userId, participantId }
+              }));
+              broadcastRoomState(roomId);
+            }
           }
         }
         disconnectTimeouts.delete(`${closingParticipantId}:${roomId}`);

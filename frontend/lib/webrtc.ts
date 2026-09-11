@@ -37,6 +37,7 @@ export class WebRTCClient {
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private statsInterval: NodeJS.Timeout | null = null;
+  private isVisibilityListenerAttached: boolean = false;
   
   // NETWORK-RESILIENCE-003 Adaptive Controller
   public adaptationController = new NetworkAdaptationController(Date.now());
@@ -381,13 +382,25 @@ export class WebRTCClient {
           }));
         }
 
-        // Keep-alive to prevent DO Load Balancer from dropping idle connections
+        // Keep-alive to prevent DO Load Balancer from dropping idle connections & watchdog
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
-            this.lastPingAt = Date.now();
+            const now = Date.now();
+            // Watchdog: If we sent pings and haven't received a pong for >30s, socket is dead
+            if (this.lastPingAt > 0 && this.lastPongAt > 0 && (now - this.lastPongAt > 30000)) {
+              console.warn(`[WebRTC] Watchdog: No pong received in ${now - this.lastPongAt}ms (threshold 30000ms). Forcing reconnect.`);
+              this.ws.close();
+              return;
+            }
+            this.lastPingAt = now;
             this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
           }
-        }, 25000);
+        }, 12000);
+
+        if (typeof document !== 'undefined' && !this.isVisibilityListenerAttached) {
+          document.addEventListener('visibilitychange', this.handleVisibilityChange);
+          this.isVisibilityListenerAttached = true;
+        }
 
         // WebRTC Client Stats Collection (Every 30s)
         this.statsInterval = setInterval(() => this.collectAndSendStats(), 30000);
@@ -2802,6 +2815,10 @@ export class WebRTCClient {
     if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.networkInterval) clearInterval(this.networkInterval);
     if (this.statsInterval) clearInterval(this.statsInterval);
+    if (typeof document !== 'undefined' && this.isVisibilityListenerAttached) {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      this.isVisibilityListenerAttached = false;
+    }
     this.ws?.close();
     
     // Clear all pending requests and timeouts
@@ -2824,6 +2841,19 @@ export class WebRTCClient {
     this.ws = null;
     this.device = null;
   }
+
+  private handleVisibilityChange = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      console.log('[WebRTC] Tab became visible. Checking signaling connection health...');
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+        console.warn('[WebRTC] Socket dead or closed while backgrounded. Triggering reconnect.');
+        this.attemptReconnect();
+      } else if (this.ws.readyState === WebSocket.OPEN) {
+        this.lastPingAt = Date.now();
+        this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
+      }
+    }
+  };
 
   private async collectAndSendStats() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
