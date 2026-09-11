@@ -158,7 +158,7 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
     }
 
     // Filter out segments without valid URLs
-    const validSegments = segments.filter(s => s.url && s.url.startsWith('http'));
+    const validSegments = segments.filter((s: any) => s.url && s.url.startsWith('http'));
     if (validSegments.length === 0) {
       logger.warn(`[Stitcher] No segments with valid HTTP URLs for recording ${recordingId}. Marking as failed.`);
       await db.recording.update({
