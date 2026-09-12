@@ -127,8 +127,7 @@ export default function JoinPage({
         return;
       }
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
-        const res = await fetch(`${baseUrl}/validate-meeting`, {
+        const res = await fetch(`/api/kv4/validate-meeting`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: resolvedParams.roomSlug })
@@ -367,7 +366,6 @@ export default function JoinPage({
     }
     
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
       const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const payload: any = {
         room: resolvedParams.roomSlug,
@@ -403,8 +401,7 @@ export default function JoinPage({
           data.success = true;
         }
       } else {
-        const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
-        const res = await fetch(`${baseUrl}/join-room`, {
+        const res = await fetch(`/api/kv4/join-room`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
