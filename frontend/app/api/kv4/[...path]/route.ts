@@ -10,8 +10,9 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 const EXTERNAL_API_URL =
+  process.env.KONN3CT_EXTERNAL_API_URL ||
   process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL ||
-  "https://dev.konn3ct.ng/api/app/kv4";
+  "https://backend-api.konn3ct.ng/api/app/kv4";
 
 export async function POST(
   request: NextRequest,
