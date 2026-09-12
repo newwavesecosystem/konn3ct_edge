@@ -138,6 +138,7 @@ interface MeetingContextValue {
   forceMuteUser: (userId?: string, target?: 'all' | 'all_except_presenters' | 'all_except_hosts') => void;
   endMeetingForAll: () => void;
   leaveMeeting: () => void;
+  retryConnection: () => Promise<void>;
   broadcastECinema: (link: string | null) => void;
   ecinemaAction: { action: 'play' | 'pause'; time?: number } | null;
   sendECinemaAction: (action: 'play' | 'pause', time?: number) => void;
@@ -257,7 +258,7 @@ export function MeetingProvider({
     // Fallback if not wrapped (e.g. recorder mode)
   }
 
-  // Extract user info from sessionStorage (passed from Join screen)
+  // Extract user info from sessionStorage/localStorage (passed from Join screen or URL)
   let storedJoinInfo: any = null;
   let initialUrlParams: URLSearchParams | null = null;
   
@@ -268,11 +269,22 @@ export function MeetingProvider({
       
       if (sessionToken) {
         sessionStorage.setItem("conn3ct_session_token", sessionToken);
+        try {
+          localStorage.setItem(`konn3ct:session:${roomSlug}`, sessionToken);
+        } catch (e) {}
         // Clean the URL without triggering a page reload
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
       } else {
         sessionToken = sessionStorage.getItem("conn3ct_session_token");
+        if (!sessionToken) {
+          try {
+            sessionToken = localStorage.getItem(`konn3ct:session:${roomSlug}`);
+            if (sessionToken) {
+              sessionStorage.setItem("conn3ct_session_token", sessionToken);
+            }
+          } catch (e) {}
+        }
       }
       
       if (sessionToken) {
@@ -283,6 +295,17 @@ export function MeetingProvider({
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
         storedJoinInfo = JSON.parse(jsonPayload);
+
+        // Keep last user info updated in localStorage for quick lobby form restoration
+        if (storedJoinInfo?.name && storedJoinInfo?.email) {
+          try {
+            localStorage.setItem("konn3ct:last_user_info", JSON.stringify({
+              name: storedJoinInfo.name,
+              email: storedJoinInfo.email,
+              role: storedJoinInfo.role
+            }));
+          } catch (e) {}
+        }
       }
     } catch (e) {
       console.error("Failed to parse session token", e);
@@ -827,7 +850,20 @@ export function MeetingProvider({
     audioOutput: "default",
   });
 
+  const [connectionRetryCount, setConnectionRetryCount] = useState(0);
 
+  const retryConnection = useCallback(async () => {
+    if (webrtcClient.current) {
+      try {
+        setWebrtcStatus("connecting");
+        await webrtcClient.current.manualReconnect();
+        return;
+      } catch (e) {
+        console.warn("manualReconnect failed, falling back to full token fetch & connect:", e);
+      }
+    }
+    setConnectionRetryCount(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     if (
@@ -853,7 +889,15 @@ export function MeetingProvider({
         const searchParamsData = new URLSearchParams(window.location.search);
         const isBot = searchParamsData.get('bot') === 'true';
         const botToken = searchParamsData.get('botToken');
-        const sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+        let sessionToken = typeof window !== "undefined" ? sessionStorage.getItem("conn3ct_session_token") : null;
+        if (!sessionToken && typeof window !== "undefined") {
+          try {
+            sessionToken = localStorage.getItem(`konn3ct:session:${roomSlug}`);
+            if (sessionToken) {
+              sessionStorage.setItem("conn3ct_session_token", sessionToken);
+            }
+          } catch (e) {}
+        }
 
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
@@ -1711,6 +1755,12 @@ export function MeetingProvider({
                   ...(webrtcClient.current?.maxParticipants && { maxParticipants: webrtcClient.current.maxParticipants }),
                   ...(webrtcClient.current?.isWaitingRoomEnabled !== undefined && { isWaitingRoomEnabled: webrtcClient.current.isWaitingRoomEnabled }),
                 }));
+                if (webrtcClient.current?.isWaitingRoomEnabled !== undefined) {
+                  setRoomSettings(prev => ({
+                    ...prev,
+                    bypassWaitingRoom: !webrtcClient.current!.isWaitingRoomEnabled
+                  }));
+                }
               }
             } else if (state === 'waiting') {
               setIsMuted(true);
@@ -1722,6 +1772,12 @@ export function MeetingProvider({
                   ...(webrtcClient.current?.maxParticipants && { maxParticipants: webrtcClient.current.maxParticipants }),
                   ...(webrtcClient.current?.isWaitingRoomEnabled !== undefined && { isWaitingRoomEnabled: webrtcClient.current.isWaitingRoomEnabled }),
                 }));
+                if (webrtcClient.current?.isWaitingRoomEnabled !== undefined) {
+                  setRoomSettings(prev => ({
+                    ...prev,
+                    bypassWaitingRoom: !webrtcClient.current!.isWaitingRoomEnabled
+                  }));
+                }
               }
             } else if (state === 'kicked') {
               toast.error("You have been removed from the meeting by the host.");
@@ -2455,7 +2511,7 @@ export function MeetingProvider({
     return () => {
       client?.disconnect();
     };
-  }, [roomSlug, initialCurrentUser.name, clientParticipantId]);
+  }, [roomSlug, initialCurrentUser.name, clientParticipantId, connectionRetryCount]);
 
   // ── Initialize Local Media upon WebRTC connect ────────
   useEffect(() => {
@@ -3232,6 +3288,7 @@ export function MeetingProvider({
         deleteQuestion: (questionId: string) => webrtcClient.current?.deleteQuestion(questionId),
         endMeetingForAll,
         leaveMeeting,
+        retryConnection,
         broadcastECinema,
         eCinemaLink,
         ecinemaAction,

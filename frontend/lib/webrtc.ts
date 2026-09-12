@@ -528,8 +528,14 @@ export class WebRTCClient {
           if (msg.permissions) {
              this.onInitialPermissions?.(msg.permissions);
           }
-          if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
-          if (typeof msg.isWaitingRoomEnabled === 'boolean') this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
+          if (typeof msg.isWaitingRoomEnabled === 'boolean') {
+            this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
+          } else if (typeof msg.bypassWaitingRoom === 'boolean') {
+            this.isWaitingRoomEnabled = !msg.bypassWaitingRoom;
+          }
+          if (msg.settings) {
+            this.onRoomSettingsUpdated?.(msg.settings, 'Server');
+          }
           if (typeof msg.meetingStartedAt === 'number') {
             this.meetingStartedAt = msg.meetingStartedAt;
             this.onMeetingStartedAt?.(msg.meetingStartedAt);
@@ -855,6 +861,18 @@ export class WebRTCClient {
     this.reconnectTimeoutId = setTimeout(() => {
       this.connect();
     }, delay);
+  }
+
+  public manualReconnect(): Promise<void> {
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = undefined;
+    }
+    this.reconnectAttempts = 0;
+    this.iceReconnectAttempts = 0;
+    this.isIntentionalDisconnect = false;
+    this.onConnectionStateChange?.('connecting');
+    return this.connect();
   }
 
   private request(sendType: string, expectType: string, payload: any = {}): Promise<any> {

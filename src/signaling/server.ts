@@ -260,6 +260,9 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
   } else if (channel === 'signaling:room:broadcast') {
     try {
       const data = JSON.parse(message);
+      if (data.message?.type === 'room_settings_updated' && data.message.settings) {
+        roomSettingsMap.set(data.roomId, data.message.settings);
+      }
       // We use internalBroadcastToRoom so we don't re-publish to redis.
       if (data.command) {
         processAdminCommand(data);
@@ -1417,7 +1420,10 @@ export function initializeSignaling(server: Server) {
       const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string };
 
       // Verify room exists
-      const room = await db.room.findUnique({ where: { slug: roomSlug } });
+      const room = await db.room.findUnique({ 
+        where: { slug: roomSlug },
+        include: { owner: true }
+      });
       if (!room) {
         socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
         socket.destroy();
@@ -1454,7 +1460,9 @@ export function initializeSignaling(server: Server) {
 
       // Extract role directly from the JWT token (set by the frontend API)
       let role = decoded.role || 'audience';
-      if (room.ownerId === decoded.userId) {
+      const isRoomOwner = room.ownerId === decoded.userId || 
+        (room.owner?.email && decoded.email && room.owner.email.toLowerCase() === decoded.email.toLowerCase());
+      if (isRoomOwner) {
         role = 'host';
       }
 
@@ -1462,18 +1470,22 @@ export function initializeSignaling(server: Server) {
         logger.info(`recorder_signaling_join_participant_id: ${participantIdParam}`);
       }
 
-      // Recover dynamic roles (e.g. co-host) from existing session or Redis
+      // Recover dynamic roles (e.g. host, co-host) from existing session or Redis
       const existingClientForRole = participantIdParam ? rooms.get(room.id)?.get(participantIdParam) : null;
-      if (existingClientForRole && existingClientForRole.role === 'co-host') {
-        role = 'co-host';
+      if (existingClientForRole && (existingClientForRole.role === 'host' || existingClientForRole.role === 'co-host')) {
+        role = existingClientForRole.role;
       } else {
         try {
           const redisParticipantsStr = await redis.get(`room:${roomSlug}:participants`);
           if (redisParticipantsStr) {
             const redisParticipants = JSON.parse(redisParticipantsStr);
-            const existingInRedis = redisParticipants.find((p: any) => p.userId === decoded.userId);
-            if (existingInRedis && existingInRedis.role === 'co-host') {
-              role = 'co-host';
+            const existingInRedis = redisParticipants.find((p: any) => 
+              p.participantId === participantIdParam || 
+              (p.userId && p.userId === decoded.userId) ||
+              (p.email && decoded.email && p.email.toLowerCase() === decoded.email.toLowerCase())
+            );
+            if (existingInRedis && (existingInRedis.role === 'host' || existingInRedis.role === 'co-host')) {
+              role = existingInRedis.role;
             }
           }
         } catch (e) {
@@ -1548,20 +1560,25 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
-    const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
+    let { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
 
     logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
 
     const identityKey = getParticipantIdentityKey(userId);
     const meetingInstanceId = await getActiveMeetingInstanceId(roomId, true);
+    let admission = meetingInstanceId ? await getMeetingAdmission(meetingInstanceId, identityKey) : null;
+
+    // Recover host/co-host role from active meeting admission if available
+    if (admission && (admission.role === 'host' || admission.role === 'co-host')) {
+      role = admission.role;
+    }
+
     const instanceSettings = meetingInstanceId 
       ? await getMeetingInstanceSettings(meetingInstanceId, isWaitingRoomEnabled ?? true)
       : { waitingRoomEnabled: isWaitingRoomEnabled ?? true, settingsVersion: 1 };
 
     const isWaitingRoomActive = instanceSettings.waitingRoomEnabled;
     const isHostOrBot = role === 'host' || role === 'bot' || role === 'recorder';
-
-    let admission = meetingInstanceId ? await getMeetingAdmission(meetingInstanceId, identityKey) : null;
     
     // Determine initial status based on durable meeting instance admission and authoritative settings
     let initialStatus: 'waiting' | 'active' | 'denied' = 'waiting';
@@ -1684,6 +1701,8 @@ export function initializeSignaling(server: Server) {
     ).catch(e => logger.warn('Failed to set participant session', e));
     redis.expire(`room:${roomId}:participantSessions:${identityKeyForSession}`, 86400).catch(() => {});
 
+    const currentRoomSettings = roomSettingsMap.get(roomId) || getDefaultRoomSettings();
+
     if (disconnectTimeouts.has(`${participantId}:${roomId}`)) {
       clearTimeout(disconnectTimeouts.get(`${participantId}:${roomId}`)!);
       disconnectTimeouts.delete(`${participantId}:${roomId}`);
@@ -1725,6 +1744,8 @@ export function initializeSignaling(server: Server) {
         role: client.role,
         roomName,
         isWaitingRoomEnabled: isWaitingRoomActive,
+        bypassWaitingRoom: !isWaitingRoomActive,
+        settings: currentRoomSettings,
         meetingStartedAt: meetingStartedAt || undefined,
         meetingInstanceId: meetingInstanceId || '',
         resumeToken: plainResumeToken,
@@ -1777,6 +1798,8 @@ export function initializeSignaling(server: Server) {
         role: client.role,
         roomName,
         isWaitingRoomEnabled: isWaitingRoomActive,
+        bypassWaitingRoom: !isWaitingRoomActive,
+        settings: currentRoomSettings,
         meetingStartedAt: meetingStartedAt || undefined,
         meetingInstanceId: meetingInstanceId || '',
         resumeToken: plainResumeToken,
@@ -2184,10 +2207,14 @@ export function initializeSignaling(server: Server) {
       case 'resume_session': {
         const { meetingInstanceId, resumeToken, lastSessionGeneration } = data;
         const identityKey = getParticipantIdentityKey(client.userId);
+        const currentRoomSettings = roomSettingsMap.get(roomId);
+        const defaultWaitingRoom = currentRoomSettings?.bypassWaitingRoom ? false : true;
         const instanceSettings = meetingInstanceId 
-          ? await getMeetingInstanceSettings(meetingInstanceId, true)
-          : { waitingRoomEnabled: true, settingsVersion: 1 };
-        const isWaitingRoomActive = instanceSettings.waitingRoomEnabled;
+          ? await getMeetingInstanceSettings(meetingInstanceId, defaultWaitingRoom)
+          : { waitingRoomEnabled: defaultWaitingRoom, settingsVersion: 1 };
+        const isWaitingRoomActive = currentRoomSettings?.bypassWaitingRoom
+          ? false
+          : instanceSettings.waitingRoomEnabled;
         const isHostOrBot = client.role === 'host' || client.role === 'bot' || client.role === 'recorder';
 
         if (!meetingInstanceId || !resumeToken) {
@@ -2198,7 +2225,9 @@ export function initializeSignaling(server: Server) {
             recovered: false,
             reason: 'INVALID_RESUME_CREDENTIALS', 
             meetingInstanceId: meetingInstanceId || '',
-            sessionStateVersion: client.sessionStateVersion 
+            sessionStateVersion: client.sessionStateVersion,
+            isWaitingRoomEnabled: isWaitingRoomActive,
+            bypassWaitingRoom: !isWaitingRoomActive
           }));
           break;
         }
@@ -2210,14 +2239,74 @@ export function initializeSignaling(server: Server) {
           let fallbackStatus: 'active' | 'waiting' | 'denied' = 'active';
           if (adm?.status === 'REMOVED' && !isHostOrBot) {
             fallbackStatus = 'denied';
-          } else if (adm?.status === 'LEFT' && !isHostOrBot) {
-            fallbackStatus = isWaitingRoomActive ? 'waiting' : 'active';
-          } else if (adm?.status === 'WAITING' && !isHostOrBot) {
-            fallbackStatus = 'waiting';
           } else if (isHostOrBot || !isWaitingRoomActive) {
             fallbackStatus = 'active';
+          } else if (adm?.status === 'LEFT' || adm?.status === 'WAITING' || !adm) {
+            fallbackStatus = 'waiting';
           } else {
             fallbackStatus = 'waiting';
+          }
+
+          if (fallbackStatus === 'active') {
+            const nextAdmissionGen = (adm?.admissionGeneration || 0) + 1;
+            const nextStateVer = Math.max(adm?.sessionStateVersion || 0, 0) + 1;
+            const plainResumeToken = generateResumeToken();
+
+            const admissionRec: AdmissionRecord = {
+              status: 'ACTIVE',
+              admittedAt: Date.now(),
+              admittedBy: 'bypass_policy',
+              admissionGeneration: nextAdmissionGen,
+              sessionStateVersion: nextStateVer,
+              tokenHash: hashResumeToken(plainResumeToken),
+              role: client.role || adm?.role || 'attendee',
+              name: client.name || adm?.name || 'Guest',
+              userId: client.userId
+            };
+            await setMeetingAdmission(meetingInstanceId, identityKey, admissionRec);
+            const leaseRes = await acquireSessionLease(meetingInstanceId, identityKey, POD_ID, client.connectionId || '', nextAdmissionGen);
+
+            client.status = 'active';
+            client.admissionGeneration = nextAdmissionGen;
+            client.sessionStateVersion = nextStateVer;
+            client.resumeToken = plainResumeToken;
+            client.meetingInstanceId = meetingInstanceId;
+            if (leaseRes.session) {
+              client.sessionGeneration = leaseRes.session.sessionGeneration;
+            }
+
+            const meetingStartedAt = await getOrCreateMeetingStartedAt(roomId, true);
+            client.ws.send(JSON.stringify({ 
+              type: 'session_status', 
+              status: 'active', 
+              recovered: false,
+              userId: client.userId,
+              participantId: client.participantId,
+              name: client.name,
+              role: client.role,
+              meetingStartedAt: meetingStartedAt || undefined,
+              meetingInstanceId,
+              resumeToken: plainResumeToken,
+              sessionGeneration: client.sessionGeneration || 1,
+              admissionGeneration: nextAdmissionGen,
+              sessionStateVersion: nextStateVer,
+              isWaitingRoomEnabled: isWaitingRoomActive,
+              bypassWaitingRoom: !isWaitingRoomActive,
+              settings: currentRoomSettings || getDefaultRoomSettings()
+            }));
+
+            if (client.roomSlug) await executeSyncRoomStateToRedis(roomId, client.roomSlug);
+            broadcastToRoom(roomId, { 
+              type: 'user_joined', 
+              userId: client.userId, 
+              participantId: client.participantId, 
+              name: client.name, 
+              role: client.role, 
+              isMuted: client.isMuted 
+            }, client.participantId);
+            broadcastRoomState(roomId);
+            sendRoomHistoryAndState(client);
+            break;
           }
 
           client.ws.send(JSON.stringify({ 
@@ -2226,7 +2315,9 @@ export function initializeSignaling(server: Server) {
             recovered: false,
             meetingInstanceId,
             admissionGeneration: adm?.admissionGeneration || 1,
-            sessionStateVersion: (adm?.sessionStateVersion || 0) + 1
+            sessionStateVersion: (adm?.sessionStateVersion || 0) + 1,
+            isWaitingRoomEnabled: isWaitingRoomActive,
+            bypassWaitingRoom: !isWaitingRoomActive
           }));
           break;
         }
@@ -2526,6 +2617,20 @@ export function initializeSignaling(server: Server) {
               (newSettings as any).settingsVersion = updated.settingsVersion;
               (newSettings as any).waitingRoomEnabled = updated.waitingRoomEnabled;
             }
+
+            // When waiting room is disabled (bypass enabled), automatically admit all currently waiting participants across the cluster
+            if (waitingRoomEnabled === false) {
+              redis.publish('signaling:room:broadcast', JSON.stringify({
+                roomId,
+                command: true,
+                action: 'admit_all',
+                slug: client.roomSlug,
+                sourceUserId: client.userId
+              })).catch((e: any) => {
+                logger.error("Failed to publish admit_all on bypassWaitingRoom enabled", e);
+                processAdminCommand({ roomId, action: 'admit_all', slug: client.roomSlug, sourceUserId: client.userId });
+              });
+            }
           }
           
           if (d.networkDetectionEnabled !== undefined) newSettings.networkDetectionEnabled = d.networkDetectionEnabled;
@@ -2555,6 +2660,7 @@ export function initializeSignaling(server: Server) {
           db.room.update({
             where: { id: roomId },
             data: {
+              ...(waitingRoomEnabled !== undefined ? { isWaitingRoomEnabled: waitingRoomEnabled } : {}),
               networkDetectionEnabled: newSettings.networkDetectionEnabled,
               poorNetworkRttMs: newSettings.poorNetworkRttMs,
               poorNetworkLossPercent: newSettings.poorNetworkLossPercent,
@@ -2562,7 +2668,7 @@ export function initializeSignaling(server: Server) {
               networkWindowSize: newSettings.networkWindowSize,
               networkMonitorIntervalMs: newSettings.networkMonitorIntervalMs,
             }
-          }).catch((e: any) => logger.error("Failed to persist network settings", e));
+          }).catch((e: any) => logger.error("Failed to persist room settings", e));
           
           broadcastToRoom(roomId, {
             type: 'room_settings_updated',
