@@ -11,6 +11,7 @@ export const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'conn3ct-backend' },
   transports: [
+    new winston.transports.File({ filename: '/home/sirkays/konnect_project/konn3ct_edge/backend.log' }),
     new winston.transports.Console({
       format: process.env.NODE_ENV === 'production' 
         ? winston.format.json()

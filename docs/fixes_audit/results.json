@@ -1,0 +1,66 @@
+{
+  "repositoryRevision": "67780bdf0f3e4ad206ad0bc32183cee6fac168d4",
+  "methodology": "Unchanged source-extracted callbacks, current-user selector and audio renderers; real transpiled WebRTCClient. React hooks, browser playback, tracks, timers and network mocked. No live server or acoustic reproduction.",
+  "sourceHashes": {
+    "frontend/lib/meeting-context.tsx": "af3f9b04e09066a2f3ea071ccb1510d9ce330b0b49da15c7b74ccfd6578c154e",
+    "frontend/lib/webrtc.ts": "96d3a8d2daf6dffefa09abffce5a5c6b2bd103b27d50a8ab65f3b483dc93c954"
+  },
+  "checks": [
+    {
+      "id": "E00",
+      "title": "Normal self microphone is excluded from the remote audio pool",
+      "status": "CONTROL_CONFIRMED",
+      "observed": {
+        "localCaptureSelected": false
+      }
+    },
+    {
+      "id": "E01",
+      "title": "Duplicate remote roster identity sends retained local capture to an unmuted audio element",
+      "status": "DEFECT_REPRODUCED",
+      "observed": {
+        "initialTrackOwner": "self-part",
+        "corruptedRowId": "remote-2",
+        "resolvedCurrentUser": "self-part",
+        "localCaptureRetained": true,
+        "passedAsLocal": false,
+        "audioMuted": false,
+        "playInvocations": 1,
+        "scope": "Synthetic live track and mocked playback; proves application routing, not measured audible echo"
+      }
+    },
+    {
+      "id": "E02",
+      "title": "An existing warm slot can render current self before the parent reconciliation effect clears it",
+      "status": "DEFECT_REPRODUCED",
+      "observed": {
+        "currentSelfRoutedBeforeEffect": true,
+        "isLocalProp": false,
+        "removedAfterEffect": true,
+        "scope": "Boundary test of an identity/slot transition; browser scheduling and audible duration not measured"
+      }
+    },
+    {
+      "id": "E03",
+      "title": "Screen audio uses a weaker identity exclusion than microphone slots",
+      "status": "DEFECT_REPRODUCED",
+      "observed": {
+        "selfMatchedViaUserId": true,
+        "microphoneExcluded": true,
+        "screenTrackExcluded": false,
+        "scope": "Synthetic boundary state demonstrates inconsistent guards; does not prove ordinary local screen capture enters participant state"
+      }
+    },
+    {
+      "id": "P01",
+      "title": "Proposed generic resume error is not correlated to the pending resume promise by the current client",
+      "status": "PLAN_GAP_REPRODUCED",
+      "observed": {
+        "correlatedErrorDelivered": true,
+        "promiseSettled": false,
+        "stillPendingUntilTimeout": true
+      }
+    }
+  ],
+  "checkFailures": 0
+}

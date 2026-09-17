@@ -75,7 +75,7 @@ describe('Host Session and Role Recovery', () => {
   });
 
   describe('Signaling Server Role Resolution', () => {
-    it('restores host role if decoded email matches room owner email even if userId changed', () => {
+    it('rejects email-based privilege elevation without verified room ownership (A09/R5)', () => {
       const room = {
         id: 'room-1',
         ownerId: 'owner-original-id',
@@ -83,22 +83,23 @@ describe('Host Session and Role Recovery', () => {
       };
 
       const decoded = {
-        userId: 'guest_random_reconnected',
+        userId: 'guest_unverified',
         email: 'HOST@EXAMPLE.COM',
         role: 'attendee'
       };
 
       let role = decoded.role || 'audience';
-      const isRoomOwner = room.ownerId === decoded.userId || 
-        (room.owner?.email && decoded.email && room.owner.email.toLowerCase() === decoded.email.toLowerCase());
+      // Secure ownership check: verified account userId MUST match room.ownerId.
+      // Unverified email claims must NEVER elevate privileges (A09/R5).
+      const isRoomOwner = room.ownerId === decoded.userId;
       if (isRoomOwner) {
         role = 'host';
       }
 
-      expect(role).toBe('host');
+      expect(role).toBe('attendee');
     });
 
-    it('recovers host role from Redis participant state on reconnect', () => {
+    it('recovers host role from Redis participant state by verified userId on reconnect', () => {
       const redisParticipants = [
         { participantId: 'part_prev_1', userId: 'user_host_1', email: 'host@company.com', role: 'host' },
         { participantId: 'part_prev_2', userId: 'user_guest_2', email: 'guest@company.com', role: 'attendee' }
@@ -112,8 +113,7 @@ describe('Host Session and Role Recovery', () => {
 
       let role = reconnectingDecoded.role;
       const existingInRedis = redisParticipants.find((p: any) => 
-        (p.userId && p.userId === reconnectingDecoded.userId) ||
-        (p.email && reconnectingDecoded.email && p.email.toLowerCase() === reconnectingDecoded.email.toLowerCase())
+        (p.userId && p.userId === reconnectingDecoded.userId)
       );
 
       if (existingInRedis && (existingInRedis.role === 'host' || existingInRedis.role === 'co-host')) {

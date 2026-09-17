@@ -418,6 +418,9 @@ export function MeetingProvider({
   const webrtcClient = useRef<WebRTCClient | null>(null);
   const localCameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const localAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localScreenAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localScreenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localCaptureRegistryRef = useRef<Set<string>>(new Set());
   const notifiedWaitingUsersRef = useRef<Set<string>>(new Set());
   const localIsSpeakingRef = useRef<boolean>(false);
   const hasLeftMeetingRef = useRef<boolean>(false);
@@ -505,6 +508,37 @@ export function MeetingProvider({
       ) || initialCurrentUser
     );
   }, [participants, clientParticipantId, initialCurrentUser]);
+
+  const isLocalIdentifier = useCallback((id?: string | null): boolean => {
+    if (!id) return false;
+    return (
+      id === webrtcClient.current?.userId ||
+      id === webrtcClient.current?.participantId ||
+      id === clientParticipantId ||
+      id === initialCurrentUser.id ||
+      id === initialCurrentUser.userId ||
+      id === currentUser.id ||
+      id === currentUser.userId
+    );
+  }, [clientParticipantId, initialCurrentUser.id, initialCurrentUser.userId, currentUser.id, currentUser.userId]);
+
+  const isLocalCapture = useCallback((track?: MediaStreamTrack | null): boolean => {
+    if (!track) return false;
+    if (localCaptureRegistryRef.current.has(track.id)) return true;
+    if (localAudioTrackRef.current && localAudioTrackRef.current.id === track.id) return true;
+    if (localScreenAudioTrackRef.current && localScreenAudioTrackRef.current.id === track.id) return true;
+    if (localCameraTrackRef.current && localCameraTrackRef.current.id === track.id) return true;
+    if (localScreenTrackRef.current && localScreenTrackRef.current.id === track.id) return true;
+    if (webrtcClient.current && (webrtcClient.current as any).isLocalTrack?.(track)) return true;
+    return false;
+  }, []);
+
+  const registerLocalTrack = useCallback((track?: MediaStreamTrack | null) => {
+    if (track && track.id) {
+      localCaptureRegistryRef.current.add(track.id);
+    }
+  }, []);
+
   const [waitingUsers, setWaitingUsers] = useState<Array<{ userId: string, name: string }>>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [qaMessages, setQaMessages] = useState<any[]>([]);
@@ -1589,24 +1623,6 @@ export function MeetingProvider({
           ));
         };
 
-        client.onConsumerClosed = (producerId, appData) => {
-          if (appData?.source === 'screen') {
-            setParticipants((prev) => prev.map(p => {
-              if (p.screenProducerId === producerId) {
-                return { ...p, isScreenSharing: false, screenTrack: undefined, screenProducerId: undefined, screenConsumerId: undefined, screenTrackId: undefined, screenStats: { ...p.screenStats, consumerClosed: true } };
-              }
-              return p;
-            }));
-          } else {
-            setParticipants((prev) => prev.map(p => {
-              if (p.cameraProducerId === producerId) {
-                return { ...p, videoTrack: undefined, cameraProducerId: undefined, cameraConsumerId: undefined, cameraTrackId: undefined, cameraStats: { ...p.cameraStats, consumerClosed: true } };
-              }
-              return p;
-            }));
-          }
-        };
-
         client.onActiveSpeaker = (userIds, participantIds) => {
           setParticipants((prev) => prev.map(p => {
             if (p.id === (clientParticipantId || initialCurrentUser.id)) {
@@ -1912,9 +1928,29 @@ export function MeetingProvider({
         };
 
         client.onConsumerClosed = (producerId, appData) => {
+          const targetConsumerId = appData?.consumerId;
           setParticipants(prev => prev.map(p => {
+            // Audio producer/consumer cleanup — require non-empty ID matches (A04/R4)
+            const matchesAudio = Boolean(
+              (producerId && p.audioProducerId === producerId) ||
+              (targetConsumerId && p.audioConsumerId === targetConsumerId)
+            );
+            if (matchesAudio) {
+              return {
+                ...p,
+                audioTrack: undefined,
+                audioProducerId: undefined,
+                audioConsumerId: undefined,
+                audioTrackId: undefined,
+                isSpeaking: false,
+              };
+            }
             if (p.screenProducerId === producerId || p.screenAudioProducerId === producerId || (appData as any)?.source === 'screen') {
-              if (p.screenProducerId === producerId || p.screenAudioProducerId === producerId || p.id === (appData as any)?.participantId || p.userId === (appData as any)?.userId) {
+              if (
+                (producerId && (p.screenProducerId === producerId || p.screenAudioProducerId === producerId)) ||
+                (appData?.participantId && p.id === appData.participantId) ||
+                (appData?.userId && p.userId === appData.userId)
+              ) {
                 return {
                   ...p,
                   isScreenSharing: false,
@@ -1930,7 +1966,7 @@ export function MeetingProvider({
                 };
               }
             }
-            if (p.cameraProducerId === producerId) {
+            if (producerId && p.cameraProducerId === producerId) {
               return {
                 ...p,
                 isCameraOn: false,
@@ -2103,111 +2139,98 @@ export function MeetingProvider({
 
         client.onParticipantsList = (backendParticipants) => {
           setParticipants((prev) => {
-            const nextParticipants: Participant[] = [];
             let duplicatesDetected = false;
             let staleRemoved = false;
             
             const localUserId = webrtcClient.current?.userId || currentUser.userId || initialCurrentUser.userId || initialCurrentUser.id;
             const currentPartId = clientParticipantId || webrtcClient.current?.participantId || currentUser.id || initialCurrentUser.id;
 
-            // Find local user in previous state
-            let localUser = prev.find(p =>
-              p.id === currentPartId ||
-              p.id === initialCurrentUser.id ||
-              (!!p.userId && (p.userId === localUserId || (webrtcClient.current?.userId && p.userId === webrtcClient.current.userId))) ||
-              (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId) ||
-              isLocalIdentifier(p.id) ||
-              (!!p.userId && isLocalIdentifier(p.userId))
-            );
+            const isLocalMatch = (pid?: string, uid?: string) => {
+              return Boolean(
+                (pid && (pid === currentPartId || pid === initialCurrentUser.id || isLocalIdentifier(pid) || (webrtcClient.current?.participantId && pid === webrtcClient.current.participantId))) ||
+                (uid && (uid === localUserId || uid === initialCurrentUser.userId || isLocalIdentifier(uid) || (webrtcClient.current?.userId && uid === webrtcClient.current.userId)))
+              );
+            };
 
-            if (localUser) {
-              nextParticipants.push(localUser);
+            // 1. Resolve local user from prev (never mutate in-place!)
+            const prevLocal = prev.find(p => isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)));
+            let currentLocalUser: Participant = prevLocal
+              ? { ...prevLocal }
+              : {
+                  id: currentPartId,
+                  userId: localUserId,
+                  name: initialCurrentUser.name || "Me",
+                  role: initialCurrentUser.role || "attendee",
+                  isMuted: isMuted,
+                  isCameraOn: isCameraOn,
+                  audioTrack: localAudioTrackRef.current || undefined,
+                  videoTrack: localCameraTrackRef.current || undefined,
+                  isScreenSharing: isScreenSharing,
+                  isHandRaised: false,
+                  isSpeaking: false,
+                  networkQuality: 'good',
+                  joinedAt: new Date().toISOString(),
+                  isConnecting: false,
+                  isMobile: isMobileClient,
+                };
+
+            // Reconcile local entry from backendParticipants if present
+            const backendLocal = backendParticipants.find(p => isLocalMatch(p.participantId, p.userId));
+            if (backendLocal) {
+              currentLocalUser = {
+                ...currentLocalUser,
+                role: (backendLocal.role as any) || currentLocalUser.role,
+                isMobile: backendLocal.isMobile ?? currentLocalUser.isMobile,
+                id: backendLocal.participantId || currentLocalUser.id,
+                userId: backendLocal.userId || currentLocalUser.userId,
+              };
             }
 
-            const seenParticipantIds = new Set<string>();
-            const seenUserIds = new Set<string>();
-
-            if (localUser) {
-              if (localUser.id) seenParticipantIds.add(localUser.id);
-              if (localUser.userId) seenUserIds.add(localUser.userId);
-            }
-            if (currentPartId) seenParticipantIds.add(currentPartId);
-            if (localUserId) seenUserIds.add(localUserId);
-            if (webrtcClient.current?.participantId) seenParticipantIds.add(webrtcClient.current.participantId);
-            if (webrtcClient.current?.userId) seenUserIds.add(webrtcClient.current.userId);
+            // 2. Process remote participants with dedicated deduplication sets (A02, A15)
+            const seenRemoteParticipantIds = new Set<string>();
+            const seenRemoteUserIds = new Set<string>();
+            const remoteParticipants: Participant[] = [];
 
             for (const p of backendParticipants) {
-              const isLocalUser =
-                (p.userId && (seenUserIds.has(p.userId) || isLocalIdentifier(p.userId))) ||
-                (p.participantId && (seenParticipantIds.has(p.participantId) || isLocalIdentifier(p.participantId))) ||
-                (p.participantId && p.participantId === webrtcClient.current?.participantId) ||
-                (p.userId && p.userId === webrtcClient.current?.userId);
+              if (isLocalMatch(p.participantId, p.userId)) {
+                continue; // Handled in local user reconciliation above
+              }
 
-              if (isLocalUser) {
-                if (localUser) {
-                  localUser.role = (p.role as any) || localUser.role;
-                  if (p.participantId) {
-                    localUser.id = p.participantId;
-                  }
-                  if (p.userId) {
-                    localUser.userId = p.userId;
-                  }
-                } else {
-                  // RESURRECTION FALLBACK: Reconstruct local user from backend entry + local tracks
-                  localUser = {
-                    id: p.participantId || currentPartId,
-                    userId: p.userId || localUserId,
-                    name: p.name?.trim() || initialCurrentUser.name || "Me",
-                    role: (p.role as any) || initialCurrentUser.role || "attendee",
-                    isMuted: isMuted,
-                    isCameraOn: isCameraOn,
-                    audioTrack: localAudioTrackRef.current || undefined,
-                    videoTrack: localCameraTrackRef.current || undefined,
-                    isScreenSharing: isScreenSharing,
-                    isHandRaised: false,
-                    isSpeaking: false,
-                    networkQuality: 'good',
-                    joinedAt: new Date().toISOString(),
-                    isConnecting: false,
-                    isMobile: p.isMobile ?? isMobileClient,
-                  };
-                  nextParticipants.push(localUser);
-                }
+              if (
+                (p.participantId && seenRemoteParticipantIds.has(p.participantId)) ||
+                (p.userId && seenRemoteUserIds.has(p.userId))
+              ) {
                 duplicatesDetected = true;
                 continue;
               }
+              if (p.participantId) seenRemoteParticipantIds.add(p.participantId);
+              if (p.userId) seenRemoteUserIds.add(p.userId);
 
-              if (seenParticipantIds.has(p.participantId) || (p.userId && seenUserIds.has(p.userId))) {
-                duplicatesDetected = true;
-                continue;
-              }
-              if (p.participantId) seenParticipantIds.add(p.participantId);
-              if (p.userId) seenUserIds.add(p.userId);
-
-              // Match existing by participantId OR userId to preserve state across ID transitions
-              const existing = prev.find(existing =>
-                (p.participantId && existing.id === p.participantId) ||
-                (p.userId && existing.userId === p.userId) ||
-                (p.userId && existing.id === p.userId)
+              // Match existing remote participant from prev (never matching local user)
+              const existing = prev.find(ep =>
+                !isLocalIdentifier(ep.id) &&
+                !isLocalIdentifier(ep.userId) &&
+                ((p.participantId && ep.id === p.participantId) || (p.userId && ep.userId === p.userId))
               );
-              const validName = p.name?.trim() ? p.name.trim() : (existing?.name?.trim() ? existing.name : `Participant ${p.participantId.substring(0, 8)}`);
+
+              const validName = p.name?.trim() ? p.name.trim() : (existing?.name?.trim() ? existing.name : `Participant ${p.participantId ? p.participantId.substring(0, 8) : ''}`);
 
               if (existing) {
-                nextParticipants.push({ 
-                  ...existing, 
+                remoteParticipants.push({
+                  ...existing,
                   id: p.participantId,
                   userId: p.userId,
-                  name: validName, 
-                  role: (p.role as any) || existing.role, 
-                  isMobile: p.isMobile ?? existing.isMobile, 
-                  isCameraOn: p.isCameraOn ?? existing.isCameraOn, 
+                  name: validName,
+                  role: (p.role as any) || existing.role,
+                  isMobile: p.isMobile ?? existing.isMobile,
+                  isCameraOn: p.isCameraOn ?? existing.isCameraOn,
                   isMuted: (p as any).isMuted !== undefined ? (p as any).isMuted : existing.isMuted,
-                  audioOnlyMode: p.audioOnlyMode ?? existing.audioOnlyMode, 
+                  audioOnlyMode: p.audioOnlyMode ?? existing.audioOnlyMode,
                   videoSuspendedReason: p.videoSuspendedReason ?? existing.videoSuspendedReason,
-                  audioConnectionStatus: (p as any).audioConnectionStatus ?? existing.audioConnectionStatus 
+                  audioConnectionStatus: (p as any).audioConnectionStatus ?? existing.audioConnectionStatus
                 });
               } else {
-                nextParticipants.push({
+                remoteParticipants.push({
                   id: p.participantId,
                   userId: p.userId,
                   name: validName,
@@ -2227,38 +2250,7 @@ export function MeetingProvider({
               }
             }
 
-            // SAFETY INVARIANT: Ensure the local user is ALWAYS present in nextParticipants
-            const hasLocalUserInNext = nextParticipants.some(p =>
-              isLocalIdentifier(p.id) ||
-              (p.userId && isLocalIdentifier(p.userId)) ||
-              p.id === currentPartId ||
-              p.id === initialCurrentUser.id ||
-              (!!localUser && p.id === localUser.id)
-            );
-
-            if (!hasLocalUserInNext) {
-              if (localUser) {
-                nextParticipants.unshift(localUser);
-              } else {
-                nextParticipants.unshift({
-                  id: currentPartId,
-                  userId: localUserId,
-                  name: initialCurrentUser.name || "Me",
-                  role: initialCurrentUser.role || "attendee",
-                  isMuted: isMuted,
-                  isCameraOn: isCameraOn,
-                  audioTrack: localAudioTrackRef.current || undefined,
-                  videoTrack: localCameraTrackRef.current || undefined,
-                  isScreenSharing: isScreenSharing,
-                  isHandRaised: false,
-                  isSpeaking: false,
-                  networkQuality: 'good',
-                  joinedAt: new Date().toISOString(),
-                  isConnecting: false,
-                  isMobile: isMobileClient,
-                });
-              }
-            }
+            const nextParticipants: Participant[] = [currentLocalUser, ...remoteParticipants];
 
             if (prev.length > nextParticipants.length) {
               staleRemoved = true;
@@ -2377,7 +2369,7 @@ export function MeetingProvider({
                  }
                }
             }
-            return prev.filter(p => !isLocalIdentifier(p.id) && !isLocalIdentifier(p.userId) && p.id !== userId && p.userId !== userId);
+            return prev.filter(p => isLocalIdentifier(p.id) || (p.userId && isLocalIdentifier(p.userId)) || (p.id !== userId && p.userId !== userId));
           });
         };
 
@@ -2401,7 +2393,14 @@ export function MeetingProvider({
                         screenAudioTrackId: consumer.track.id
                       };
                     } else {
-                      return { ...p, name: updatedName, audioTrack: consumer.track as MediaStreamTrack };
+                      return { 
+                        ...p, 
+                        name: updatedName, 
+                        audioTrack: consumer.track as MediaStreamTrack,
+                        audioProducerId: consumer.producerId,
+                        audioConsumerId: consumer.id,
+                        audioTrackId: consumer.track.id
+                      };
                     }
                   }
                   if (consumer.kind === 'video') {
@@ -2428,7 +2427,7 @@ export function MeetingProvider({
                       const newCameraOn = canonicalCameraOff ? false : true;
                       return { 
                         ...p, 
-                        name: updatedName,
+                        name: updatedName, 
                         videoTrack: consumer.track as MediaStreamTrack, 
                         cameraProducerId: consumer.producerId,
                         cameraConsumerId: consumer.id,
@@ -2462,6 +2461,9 @@ export function MeetingProvider({
                 isCameraOn: consumer.kind === "video" && source !== 'screen', // Defaults to true if video consumer is created first
                 isScreenSharing: consumer.kind === "video" && source === 'screen',
                 audioTrack: consumer.kind === "audio" && source !== 'screen-audio' ? (consumer.track as MediaStreamTrack) : undefined,
+                audioProducerId: consumer.kind === "audio" && source !== 'screen-audio' ? consumer.producerId : undefined,
+                audioConsumerId: consumer.kind === "audio" && source !== 'screen-audio' ? consumer.id : undefined,
+                audioTrackId: consumer.kind === "audio" && source !== 'screen-audio' ? consumer.track.id : undefined,
                 screenAudioTrack: consumer.kind === "audio" && source === 'screen-audio' ? (consumer.track as MediaStreamTrack) : undefined,
                 videoTrack: consumer.kind === "video" && source !== 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
                 screenTrack: consumer.kind === "video" && source === 'screen' ? (consumer.track as MediaStreamTrack) : undefined,
@@ -2535,6 +2537,7 @@ export function MeetingProvider({
             client.setDesiredMicMuted(isMuted, 'INIT_MEDIA');
             audioTrack = await client.enableMic(false, isMuted);
             localAudioTrackRef.current = audioTrack;
+            registerLocalTrack(audioTrack);
             if (isMuted) {
               client.pauseMic();
             }
@@ -2673,8 +2676,10 @@ export function MeetingProvider({
       if (newTrack) {
         if (type === 'audio') {
           localAudioTrackRef.current = newTrack;
+          registerLocalTrack(newTrack);
         } else {
           localCameraTrackRef.current = newTrack;
+          registerLocalTrack(newTrack);
           setParticipants(prev => prev.map(p => 
             p.id === (clientParticipantId || initialCurrentUser.id) ? { ...p, videoTrack: newTrack } : p
           ));
@@ -2901,6 +2906,12 @@ export function MeetingProvider({
       } else {
         const screenTrack = await webrtcClient.current?.enableScreenShare();
         if (screenTrack) {
+          localScreenTrackRef.current = screenTrack;
+          registerLocalTrack(screenTrack);
+          if (webrtcClient.current?.localScreenAudioTrack) {
+            localScreenAudioTrackRef.current = webrtcClient.current.localScreenAudioTrack;
+            registerLocalTrack(webrtcClient.current.localScreenAudioTrack);
+          }
           setIsScreenSharing(true);
           setParticipants(prev => prev.map(p =>
             (p.id === clientParticipantId || p.id === initialCurrentUser.id || (!!initialCurrentUser.userId && p.userId === initialCurrentUser.userId) || (!!webrtcClient.current?.participantId && p.id === webrtcClient.current.participantId))
@@ -2908,6 +2919,8 @@ export function MeetingProvider({
               : p
           ));
           screenTrack.onended = async () => {
+            localScreenTrackRef.current = null;
+            localScreenAudioTrackRef.current = null;
             await webrtcClient.current?.disableScreenShare();
             setIsScreenSharing(false);
             setParticipants(prev => prev.map(p =>
@@ -3398,7 +3411,14 @@ export function MeetingProvider({
         pingParticipant,
       }}
     >
-      <GlobalAudioRenderer participants={participants} currentUserId={currentUser.id} outputVolume={outputVolume} setAudioPlaybackError={setAudioPlaybackError} />
+      <GlobalAudioRenderer 
+        participants={participants} 
+        currentUserId={currentUser.id} 
+        outputVolume={outputVolume} 
+        setAudioPlaybackError={setAudioPlaybackError}
+        isLocalIdentifier={isLocalIdentifier}
+        isLocalCapture={isLocalCapture}
+      />
       {children}
     </MeetingContext.Provider>
   );
@@ -3411,9 +3431,31 @@ interface AudioSlot {
 
 const MAX_AUDIO_SLOTS = process.env.NEXT_PUBLIC_MAX_AUDIO_SLOTS ? parseInt(process.env.NEXT_PUBLIC_MAX_AUDIO_SLOTS, 10) : 8;
 
-function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAudioPlaybackError }: { participants: Participant[]; currentUserId: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
+function GlobalAudioRenderer({ 
+  participants, 
+  currentUserId, 
+  outputVolume, 
+  setAudioPlaybackError,
+  isLocalIdentifier,
+  isLocalCapture
+}: { 
+  participants: Participant[]; 
+  currentUserId: string; 
+  outputVolume: number; 
+  setAudioPlaybackError: (val: boolean) => void;
+  isLocalIdentifier?: (id?: string | null) => boolean;
+  isLocalCapture?: (track?: MediaStreamTrack | null) => boolean;
+}) {
   const { selectedDevices, meetingInfo } = useMeeting();
   
+  const isLocal = useCallback((p: Participant) => {
+    return (
+      p.id === currentUserId || 
+      p.userId === currentUserId || 
+      (isLocalIdentifier ? isLocalIdentifier(p.id) || (!!p.userId && isLocalIdentifier(p.userId)) : false)
+    );
+  }, [currentUserId, isLocalIdentifier]);
+
   const audioParticipants = useMemo(() => {
     if (meetingInfo?.roomType === 'webinar') {
       return participants.filter(p => p.role === 'host' || p.role === 'co-host' || p.role === 'presenter');
@@ -3425,13 +3467,30 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
     Array(MAX_AUDIO_SLOTS).fill(null).map(() => ({ participantId: null, lastActive: 0 }))
   );
 
+  const [blockedAudioSlots, setBlockedAudioSlots] = useState<Map<string, boolean>>(new Map());
+
+  const handlePlaybackErrorChange = useCallback((key: string, hasError: boolean) => {
+    setBlockedAudioSlots(prev => {
+      const next = new Map(prev);
+      if (hasError) {
+        next.set(key, true);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    setAudioPlaybackError(blockedAudioSlots.size > 0);
+  }, [blockedAudioSlots, setAudioPlaybackError]);
+
   useEffect(() => {
     setSlots(prevSlots => {
       let newSlots = [...prevSlots];
       const now = Date.now();
       let changed = false;
 
-      const isLocal = (p: Participant) => p.id === currentUserId || p.userId === currentUserId;
       const currentParticipantIds = new Set(audioParticipants.filter(p => p.audioTrack && !isLocal(p)).map(p => p.id));
       
       // 1. Remove participants that left the room or don't have an audioTrack anymore
@@ -3517,42 +3576,68 @@ function GlobalAudioRenderer({ participants, currentUserId, outputVolume, setAud
 
       return changed ? newSlots : prevSlots;
     });
-  }, [audioParticipants, currentUserId]);
+  }, [audioParticipants, isLocal]);
 
   return (
     <>
       {/* Render the 8 fixed warm pool slots */}
       {slots.map((slot, index) => {
         const participant = slot.participantId ? audioParticipants.find(p => p.id === slot.participantId) : null;
+        const participantIsLocal = !participant || isLocal(participant);
         return (
           <AudioRenderer 
-            key={`pool-slot-${index}`} 
+            key={`pool-slot-${index}`}
+            slotId={`pool-slot-${index}`}
             track={participant?.audioTrack} 
-            isLocal={false} 
+            isLocal={participantIsLocal} 
             audioOutput={selectedDevices.audioOutput} 
             outputVolume={outputVolume} 
-            setAudioPlaybackError={setAudioPlaybackError} 
+            setAudioPlaybackError={setAudioPlaybackError}
+            isLocalCapture={isLocalCapture}
+            onPlaybackErrorChange={handlePlaybackErrorChange}
           />
         );
       })}
       
       {/* Screen share audio is rendered separately as there's usually only 1 */}
-      {audioParticipants.filter(p => p.screenAudioTrack && p.id !== currentUserId).map(p => (
+      {audioParticipants.filter(p => p.screenAudioTrack && !isLocal(p)).map(p => (
         <AudioRenderer 
           key={`screen-audio-${p.id}`} 
+          slotId={`screen-audio-${p.id}`}
           track={p.screenAudioTrack} 
           isLocal={false} 
           audioOutput={selectedDevices.audioOutput} 
           outputVolume={outputVolume} 
-          setAudioPlaybackError={setAudioPlaybackError} 
+          setAudioPlaybackError={setAudioPlaybackError}
+          isLocalCapture={isLocalCapture}
+          onPlaybackErrorChange={handlePlaybackErrorChange}
         />
       ))}
     </>
   );
 }
 
-export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAudioPlaybackError }: { track?: MediaStreamTrack | null; isLocal: boolean; audioOutput: string; outputVolume: number; setAudioPlaybackError: (val: boolean) => void }) {
+export function AudioRenderer({ 
+  track, 
+  isLocal, 
+  slotId,
+  audioOutput, 
+  outputVolume, 
+  setAudioPlaybackError,
+  isLocalCapture,
+  onPlaybackErrorChange
+}: { 
+  track?: MediaStreamTrack | null; 
+  isLocal: boolean; 
+  slotId?: string;
+  audioOutput: string; 
+  outputVolume: number; 
+  setAudioPlaybackError: (val: boolean) => void;
+  isLocalCapture?: (track?: MediaStreamTrack | null) => boolean;
+  onPlaybackErrorChange?: (key: string, hasError: boolean) => void;
+}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const assignmentGenRef = useRef<number>(0);
 
   const applyAudioSink = async (el: HTMLAudioElement, sinkId: string) => {
     if (sinkId && typeof (el as any).setSinkId === "function") {
@@ -3560,7 +3645,6 @@ export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAu
         await (el as any).setSinkId(sinkId);
       } catch (e) {
         console.warn("Failed to set audio output device, falling back to default:", e);
-        // Fallover to the default system audio device ("")
         try {
           await (el as any).setSinkId("");
         } catch (fallbackErr) {
@@ -3582,40 +3666,59 @@ export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAu
     }
   }, [audioOutput]);
 
+  const isLocalTrack = isLocal || (track ? (isLocalCapture ? isLocalCapture(track) : false) : false);
+
   useEffect(() => {
-    if (audioRef.current && track && !isLocal) {
+    assignmentGenRef.current += 1;
+    const currentGen = assignmentGenRef.current;
+    const errorKey = `${track?.id || 'none'}:${slotId || 'default'}:${currentGen}`;
+
+    if (isLocalTrack || !track) {
+      if (audioRef.current) {
+        audioRef.current.srcObject = null;
+        audioRef.current.muted = true;
+      }
+      onPlaybackErrorChange?.(errorKey, false);
+      return;
+    }
+
+    if (audioRef.current && track && !isLocalTrack) {
+      // Reconcile mute state: explicitly restore unmuted state for verified remote track (R3)
+      audioRef.current.muted = (outputVolume === 0);
+      audioRef.current.volume = outputVolume / 100;
+
       if (audioRef.current.srcObject) {
         const stream = audioRef.current.srcObject as MediaStream;
-        if (stream.getAudioTracks()[0] === track) {
-          return;
+        if (stream.getAudioTracks()[0] !== track) {
+          stream.getAudioTracks().forEach(t => stream.removeTrack(t));
+          stream.addTrack(track);
         }
-        // Update the existing MediaStream instead of replacing srcObject 
-        // to bypass iOS Safari autoplay restrictions on reconnect
-        stream.getAudioTracks().forEach(t => stream.removeTrack(t));
-        stream.addTrack(track);
       } else {
         audioRef.current.srcObject = new MediaStream([track]);
       }
       
       const attemptPlay = () => {
-        if (!audioRef.current || !track || isLocal) return;
+        if (!audioRef.current || !track || isLocalTrack || assignmentGenRef.current !== currentGen) return;
         audioRef.current.play().then(() => {
-          // If playback succeeds, it means the browser allows autoplay!
-          // We safely clear the global error flag.
-          setAudioPlaybackError(false);
+          if (assignmentGenRef.current === currentGen) {
+            setAudioPlaybackError(false);
+            onPlaybackErrorChange?.(errorKey, false);
+          }
         }).catch((e) => {
+          if (assignmentGenRef.current !== currentGen) return;
           if (e.name === 'NotAllowedError') {
             console.warn("Autoplay blocked for global audio:", e);
-            // iOS Safari quirk: It might block some tags but allow others if they fire simultaneously.
-            // Wait a tiny bit and check if ANY audio tag in the pool successfully started playing.
             setTimeout(() => {
+              if (assignmentGenRef.current !== currentGen) return;
               const anyPlaying = Array.from(document.querySelectorAll('audio[data-participant-audio="true"]'))
                 .some(a => !(a as HTMLAudioElement).paused);
               
               if (!anyPlaying) {
                 setAudioPlaybackError(true);
+                onPlaybackErrorChange?.(errorKey, true);
               } else {
                 setAudioPlaybackError(false);
+                onPlaybackErrorChange?.(errorKey, false);
               }
             }, 300);
           } else if (e.name !== 'AbortError') {
@@ -3626,16 +3729,15 @@ export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAu
 
       attemptPlay();
 
-      // Ensure audio stays playing if the browser incorrectly pauses it
       const onPause = () => {
-        if (audioRef.current && track && !isLocal && audioRef.current.srcObject) {
+        if (audioRef.current && track && !isLocalTrack && audioRef.current.srcObject) {
           console.log("Audio paused unexpectedly, attempting to resume...");
           attemptPlay();
         }
       };
 
       const handleVisibility = () => {
-        if (document.visibilityState === 'visible' && audioRef.current && track && !isLocal) {
+        if (document.visibilityState === 'visible' && audioRef.current && track && !isLocalTrack) {
           console.log("App returned to foreground, resuming audio...");
           attemptPlay();
         }
@@ -3650,12 +3752,10 @@ export function AudioRenderer({ track, isLocal, audioOutput, outputVolume, setAu
         if (audioEl) audioEl.removeEventListener('pause', onPause);
         document.removeEventListener('visibilitychange', handleVisibility);
         window.removeEventListener('pageshow', handleVisibility);
+        onPlaybackErrorChange?.(errorKey, false);
       };
-
-    } else if (audioRef.current && (!track || isLocal)) {
-      audioRef.current.srcObject = null;
     }
-  }, [track, isLocal, setAudioPlaybackError]);
+  }, [track, isLocalTrack, outputVolume, audioOutput, isLocalCapture, onPlaybackErrorChange, setAudioPlaybackError, slotId]);
 
-  return <audio data-participant-audio="true" ref={audioRef} autoPlay playsInline muted={isLocal || outputVolume === 0} style={{ display: 'none' }} />;
+  return <audio data-participant-audio="true" ref={audioRef} autoPlay playsInline muted={isLocalTrack || outputVolume === 0} style={{ display: 'none' }} />;
 }

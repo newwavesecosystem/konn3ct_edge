@@ -1,0 +1,54 @@
+Continue the Konn3ct repair task for Incidents 1–4. The revised implementation plan now covers the main areas, but incorporate the following mandatory corrections before implementing its instructions literally. Update the existing plan in place and continue the scoped implementation and verification; preserve completed repairs and all pre-existing local work.
+
+Project:
+C:\Users\atteh\OneDrive\Desktop\workspace\konnect_project\konn3ct_edge_web\konn3ct_edge
+
+Reference review: Konn3ct_Revised_Plan_Review.md.
+Reference source commit: 67780bdf0f3e4ad206ad0bc32183cee6fac168d4.
+The review did not inspect your current dirty local files. Where an item is already addressed, show its exact diff and regression evidence instead of redoing it. Retain the original audit/addendum requirements, applicable project instructions and no-commit/no-push/no-deploy constraints. Do not fabricate approval history or modify instructions to bypass a condition.
+
+1. DO NOT CLOSE THE SHARED RECEIVE TRANSPORT FOR ONE FAILED CONSUMER.
+Your Component 2 says to clean up the local consumer and transport if resume fails. Correct this to targeted cleanup of that failed client/server consumer, metadata, pending work and retry state. recvTransport carries other speakers and video; closing it terminates their consumers too. Rebuild a transport only after an established transport-level failure through the recovery supervisor. Add a regression with multiple healthy consumers and one failed resume that proves the healthy transport/consumers remain open and audio remains audible.
+
+2. FIX KEY CONSISTENCY, REQUEST CONTRACTS AND CANCELLATION.
+You propose storing inFlightConsumes under producerId:transportId but checking has(producerId). Use one canonical key function containing the applicable meeting/media/receive-transport generation throughout reconciliation, consume, success, failure and cleanup. Guard against stale producerToConsumer mappings when transports change.
+The example request('resume', 'resumed', {consumerId, requestId}) still references an undeclared requestId in the audited consume method. request() already generates IDs; use a defined contract.
+Correlate errors by request ID, but validate expected success type, payload IDs and generation before resolving. A matching ID alone must not allow a wrong response type or an old socket event to complete an operation. Preserve structured error codes for retry classification. Catch both typed failure results and thrown SFU/Redis RPC failures/timeouts.
+Clearing a timeout or Map does not cancel a promise or its async continuation. Reject cancelled requests, abort/cancel queued consumes and backoff where supported, and fence every continuation. Ensure one usable-state completion signal and one active recovery attempt.
+
+3. WIRE A COMPLETE, LIVE SELF-AUDIO GUARD.
+Define the local-capture registry and stable session-identity resolver explicitly and pass them to GlobalAudioRenderer/AudioRenderer through props/context. The audited code does not define localScreenAudioTrackRef, and its isLocalIdentifier is scoped inside connection setup, so the proposed standalone renderer snippets cannot reference it directly without a deliberate refactor.
+Track raw and processed microphone sources, locally derived clones, local screen audio, owner session and generation. A snapshot Set of current IDs is not sufficient provenance. Update the registry before tracks can be published or attached, and handle ownership changes even when the track object stays the same. Preserve current-session versus different-device semantics.
+At the final output boundary, reject local capture and stale ownership before attachment/playback. Fence outstanding play promises and callbacks. Preserve the sending microphone when clearing an invalid output attachment. Keep warm-element reuse and gesture unlocking.
+When the element is reassigned to a verified remote track, explicitly reconcile mute/volume/attachment state so a previous defensive muted=true does not silence legitimate speakers. Test local-to-remote and remote-to-local assignments, raw/processed track replacement and old callbacks. Replace the unverified phrase 'ironclad guarantee' with a testable invariant.
+
+4. COMPLETE CONSUMER-CLOSE AND PLAYBACK-ERROR STATE.
+The current onConsumerClosed callback receives producerId and appData, not a standalone consumerId. If cleanup uses consumerId, change the typed payload and all emitters/callers consistently. Require a present ID and matching generation/ownership; undefined === undefined must not match unrelated rows. A late close cannot erase a replacement audio track.
+Update blockedAudioTracks immutably. Include assignment/generation identity so stale play success, failure or unmount cleanup cannot change the current assignment's error. Remove only the relevant retired entry and derive the global banner from active required tracks.
+
+5. IMPLEMENT THE MISSING HOST RENEWAL PATH AND ALL AUTHORIZATION CHECKS.
+The current plan still primarily fixes dashboard-cookie users and deletes expired tokens. Add a concrete server-validated renewal/rejoin contract for legitimate external/guest hosts and delegated hosts/co-hosts, preserving stable identity and role after expiration/reload within policy. Inspect the normal kv4 join flow and the local untracked src/routes/kv4.ts adaptation. Update all storage readers/writers, including meeting-context.tsx, not only the join page.
+Preserve PIN, guest, waiting-room, meeting-ended and revocation policy. Distinguish expired authentication/admission, wrong room, missing token and temporary upstream failure. Do not permit a guest token to override a valid account's role without a verified room grant.
+Audit every privilege-restoration path: initial owner-email matching, Redis snapshot email matching, supplied participant ID, account ownership and delegated admission. Removing only the initial owner-email fallback is insufficient if another path still trusts the same unverified identity. Bind verified token purpose/issuer/audience as applicable, room/meeting instance, identity, participant ownership, revocation and generation. Test normal external integrations as well as local prejoin rooms.
+
+6. CLOSE ZERO-GENERATION AND ROLE RACE GAPS.
+Your Lua plan checks >0 and <0 but leaves zero unspecified. Require a valid verified positive integer generation for resume; reject missing, malformed, zero and stale values. Define any separately authorised first-admission flow instead of using zero as an implicit bypass.
+For atomic role changes, validate the relevant admission state, expected admission/role version, current meeting and acting administrator's authority. Checking only status != REMOVED is insufficient to define WAITING/LEFT behavior or reject stale promotions. Persist before publishing, retain unrelated token fields and handle Redis failure explicitly. A delayed promotion must not undo a later demotion, kick or revocation. Test concurrent actions across pods.
+
+7. SPECIFY THE COMPLETE MEDIA-SURVIVAL HANDSHAKE.
+Define server payloads and client outcomes for media preserved, media replaced, and unavailable/unknown. A client-only mediaRecovered === false branch is not a complete contract. Specify who verifies/owns existing transports, producers and consumers, how generation is advanced, and how missing fields from an older deployment are handled.
+Preserve media only after server proof; negotiate a bounded replacement when needed. Handle hard reload, grace expiry and media-pod loss. Await old cleanup and ensure it cannot affect the new generation. Install early message handling with bounded buffering/timeout and stop processing on close/denial. Test actual late messages and async continuations, not merely that a counter increments.
+
+8. REPLACE ASSUMED ROLLBACK COMPATIBILITY WITH EVIDENCE.
+Do not claim all changes are backward-compatible or that frontend/signaling can roll back independently without tests. New resume_failed events, strict request matching, required token-purpose claims, media-generation fields and typed Redis-media results can affect mixed versions. Include the media service in the version matrix.
+Test old/new frontend, signaling and media combinations that the rollout or rollback permits. For unsupported combinations, specify a coordinated pinned-version rollout/rollback or a secure negotiated compatibility path. Update legitimate token issuers and define handling of already-issued tokens. Never preserve insecure email-based elevation as a compatibility shortcut.
+
+9. VERIFY FRONTEND, DISTRIBUTED BEHAVIOR AND LIVE AUDIO.
+The listed commands run four named suites, not all unit/regression suites. The audited root typecheck includes only src/**/*.ts and does not validate frontend. Run the locked checkout's supported frontend and backend typechecks/builds, applicable lint, discovered unit/integration suites and browser tests. Confirm new tests call the real implementation. Use installed locked tools and report baseline failures separately.
+The media RPC dispatcher already returns the controller result generically; verify typed success/failure propagation through it and modify only if needed. Include Redis timeout/error and mixed-version response tests, not only embedded LocalMediaController mode.
+Retain three-participant audio tests with one impaired speaker or receiver, repeated join/leave, recorder start/stop/restart, >8 audio sources, input/output device changes and supported desktop/mobile browsers. Distinguish direct local playback, acoustic return, second devices/tabs and screen/system-audio return with controlled source evidence. Retain mic intent, screen/presentation audio, gesture unlocking, moderation, reactions, recording and other working features.
+Run a clearly timed continuous recording soak beyond two hours when staging is available; four hours remains a proposed diagnostic duration. If access/devices are missing, complete local work and mark live execution blocked with an exact procedure. Do not count written guidance as a completed test.
+
+10. REPORT ACCURATELY AND DELIVER THE IMPLEMENTATION DIFF.
+The reproduced roster mutation requires a duplicate/misclassified roster condition; a remote leave alone was not proven to create self-audio. Describe unverified production causes as hypotheses. A plan cannot state that insecure elevation 'is permanently eliminated' before implementation and negative tests prove it.
+Return the bounded amended plan, actual changed-file diff, tests detecting the old behavior and verifying the repair, passed/failed/skipped/blocked results, remaining upstream/server evidence, and tested or conditional rollout/rollback steps. Continue from existing work; do not replace the project or restart unrelated implementation. Leave commits, pushes and deployment to the user unless explicitly instructed otherwise.

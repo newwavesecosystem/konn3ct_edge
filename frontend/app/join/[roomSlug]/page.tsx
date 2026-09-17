@@ -85,21 +85,33 @@ export default function JoinPage({
       }
 
       // 2. Check if an active session exists for this room
-      const storedToken = sessionStorage.getItem("conn3ct_session_token") || 
+      const storedToken = sessionStorage.getItem(`konn3ct:session:${resolvedParams.roomSlug}`) ||
+                          sessionStorage.getItem("conn3ct_session_token") || 
                           localStorage.getItem(`konn3ct:session:${resolvedParams.roomSlug}`);
       if (storedToken) {
-        setExistingSessionToken(storedToken);
         const parts = storedToken.split('.');
         if (parts.length >= 2) {
           const base64Url = parts[1];
           const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
           const payload = JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
-          if (payload.role === 'host') {
-            setHasExistingHostSession(true);
-            setRole('host');
+          const nowSec = Math.floor(Date.now() / 1000);
+          const isExpired = payload.exp && payload.exp < nowSec;
+          const isSameRoom = !payload.roomId || payload.roomId === resolvedParams.roomSlug;
+
+          if (isExpired || !isSameRoom) {
+            sessionStorage.removeItem("conn3ct_session_token");
+            sessionStorage.removeItem(`konn3ct:session:${resolvedParams.roomSlug}`);
+            localStorage.removeItem(`konn3ct:session:${resolvedParams.roomSlug}`);
+            setExistingSessionToken(null);
+          } else {
+            setExistingSessionToken(storedToken);
+            if (payload.role === 'host') {
+              setHasExistingHostSession(true);
+              setRole('host');
+            }
+            if (payload.name) setName(payload.name);
+            if (payload.email) setEmail(payload.email);
           }
-          if (payload.name) setName(payload.name);
-          if (payload.email) setEmail(payload.email);
         }
       }
     } catch (e) {

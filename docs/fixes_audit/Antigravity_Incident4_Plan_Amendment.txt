@@ -1,0 +1,103 @@
+Continue the existing Konn3ct reliability task. Treat this message as an addendum to the original repair prompt and audit, not a replacement for Incidents 1–3 or an instruction to discard work already completed.
+
+Local project:
+C:\Users\atteh\OneDrive\Desktop\workspace\konnect_project\konn3ct_edge_web\konn3ct_edge
+
+Additional reference:
+Konn3ct_Incident4_and_Antigravity_Plan_Review.md
+Optional reproduction evidence: Konn3ct_Incident4_Evidence.zip.
+Reference audited commit: 67780bdf0f3e4ad206ad0bc32183cee6fac168d4.
+
+NEW INCIDENT 4
+A participant sometimes hears their own voice, especially when another participant joins or leaves the meeting. Include recorder/bot arrivals and departures, reconnection and identity changes in the investigation. Diagnose this alongside disappearing self-presence and selective audio loss.
+
+First amend your implementation plan to cover all four incidents and the corrections below. Reconcile each item against the current working tree and any fixes already made, then continue the authorised implementation and verification. Preserve the reported local adaptations in frontend/lib/webrtc.ts, src/logger.ts, src/server.ts, src/signaling/server.ts and untracked src/routes/kv4.ts. Inspect the actual diff and untracked route; the GitHub audit could not verify those local changes. The local branch name main can legitimately point to the audited commit; verify the SHA, dirty changes and deployed versions without replacing the branch wholesale.
+
+Continue to respect applicable AGENTS.md instructions and the original scoped-repair constraints. Do not fabricate any approval history, modify project rules, commit, push or deploy. If a specific rule still blocks an edit, identify that rule and prepare the concrete patch for review while completing independent authorised work. This addendum requests the necessary scoped audio reliability repairs and tests; it does not request a rewrite of working media features.
+
+A. Investigate the actual self-audio path.
+
+Distinguish these mechanisms using evidence:
+1. Local raw/processed microphone or a local clone attached to an unmuted audio output in the same browser.
+2. An owned producer consumed by its originating session through missing or stale ownership metadata.
+3. Another participant's speaker output recaptured by their microphone and returned over that participant's producer.
+4. A second tab/device in the same physical room, including the same account on different devices.
+5. Screen/tab/system capture returning the meeting mix through a screen-audio producer.
+6. Recorder or other system client accidentally publishing or recapturing audio.
+
+Do not label duplicate consumers, poor networking or recording as the confirmed acoustic cause without tracing the actual output. They can expose lifecycle defects, but do not alone prove why someone hears their own voice.
+
+The addendum reproduced a concrete source-level path (E01):
+- onParticipantsList uses growing remote deduplication sets to decide which row is self (original A02).
+- A duplicate remote entry mutates the local participant's id/userId/role while retaining its local audioTrack.
+- The real currentUser selector can then fall back to initialCurrentUser.
+- GlobalAudioRenderer treats the corrupted local row as remote, assigns it a slot and passes isLocal=false.
+- AudioRenderer attaches that local track and calls play() with an unmuted audio element.
+This was executed against unchanged production functions with synthetic tracks and mocked browser/React boundaries. It proves a routing defect, not measured production acoustic output.
+
+Also address two boundary gaps:
+- The warm pool excludes self in a useEffect, but its JSX passes isLocal=false unconditionally. E02 shows an existing slot can render the now-local track before the allocation effect removes it during an identity transition.
+- Screen-audio filtering checks only participant.id; microphone filtering also considers participant.userId. E03 shows inconsistent exclusion in a synthetic identity-transition state. Verify actual screen-audio provenance instead of assuming local screen capture normally enters that field.
+
+B. Add layered prevention without breaking legitimate audio.
+
+1. Fix A01/A02 at the source: stable local-session identity, immutable reconciliation, explicit multi-device semantics, and rejection of stale leave/roster events. A corrected leave filter alone does not guarantee exactly one self or prevent stale-session corruption.
+2. Carry trusted owner/session, meeting/media generation, source and producer/consumer identifiers with tracks. Track local raw microphone, processed microphone, locally derived clones and local screen capture independently of mutable participant display rows. A local track must never become remote because a participant ID changes.
+3. Enforce self/ownership exclusion during producer discovery and consumption, slot assignment, and final track attachment/playback. Keep the existing client and server SELF_CONSUME_NOT_ALLOWED checks; extend their generation/ownership coverage where necessary. Do not claim those checks are absent.
+4. Remove unconditional isLocal=false assumptions at the final output boundary. Defensively reject local capture even if a slot or participant row is temporarily inconsistent. Clear the invalid playback attachment without stopping the microphone producer needed by other participants.
+5. Use consistent microphone/screen-audio ownership rules while preserving intentional presentation audio and eCinema. Do not blanket-mute all account-matching devices; define current-session versus different-device policy explicitly.
+6. Enforce one intended playback path per remote source and generation. Fence late play promises, retry callbacks and cleanup by slot assignment/track generation. Preserve warm reusable audio elements and supported-browser gesture unlocking. Never stop a newer shared track during stale cleanup.
+7. Echo cancellation is already requested with echoCancellation:true in the audited microphone paths. Verify actual capture-track settings, device switching and AI processing before changing constraints. Do not present adding that same flag or disabling noise processing as the root-cause fix.
+8. Inspect getDisplayMedia audio capture and any returned meeting mix. Use supported capture controls and appropriate user guidance where needed, with browser/device compatibility checks. Do not globally disable screen-share audio or recording to pass tests. Verify recorder mode remains receive-only.
+
+C. Correct the existing implementation plan before calling its scope complete.
+
+1. Finish A06 reconnection work. Your Component 3 lists heartbeat reset, timer cancellation and a Lua comparison, but omits the central server/client transport-survival disagreement. Implement an explicit contract to preserve/rebind proven existing server media or acknowledge a replacement generation and rebuild once. Install or buffer early WebSocket messages before asynchronous admission work; await destructive cleanup; enforce usable-state completion. Check generations after all asynchronous work, cancel pending consumes/retries/queues on disposal and prevent intentional leave from reconnecting. Incrementing a counter without checking it is insufficient.
+
+2. Finish request error routing. The current request() already generates requestId. Your proposed generic {type:'error', requestId, errorCode:'RESUME_FAILED'} does not reject an outstanding resumed promise in the current client; source check P01 confirmed it remains pending until timeout. Implement request-ID based settlement for success and errors, retaining error codes, consumer/transport ownership and generation. Cover all affected commands, including producer discovery where applicable. Do not reference an undeclared requestId variable in consumeRemoteStream. Keep frontend/backend protocol compatibility explicit.
+
+3. Propagate the typed SFU result through the complete stack. Update MediaControllerInterface, LocalMediaController, RedisMediaController, the media RPC result/dispatch boundary, signaling and mocks together. The audited interface and Redis method return Promise<void>. Test embedded development mode and distributed Redis/media-pod mode, including missing consumer, closed producer, RPC error and timeout. An acknowledgement must reflect the actual result.
+
+4. Make consumer deduplication and cleanup complete. Key in-flight work by producer and receive-transport/meeting generation, with bounded cancellation and finally cleanup. Share the in-flight outcome where callers need it. Update identifiers in both onNewConsumer branches, including a newly created participant row, not only an existing row. Ignore stale closes and clear all related indices/queues/track references without deleting a replacement. Classify retries: transient failures can back off; rejected ownership/revoked admission should not be retried blindly; missing producers require discovery. Preserve healthy subscriptions.
+
+5. Complete playback-error aggregation. Maintain unresolved errors per required active track/slot assignment and derive the global banner. A successful track clears only its own failure; retired tracks remove only their own entries. A single global setAudioPlaybackError(true/false) remains insufficient. Integrate this with final-boundary self-audio exclusion and warm-slot reuse.
+
+6. Implement real host/session renewal. Changing storage precedence and purging expired tokens does not preserve guest/external host identity after reload. Inspect the current normal kv4 join flow and your untracked src/routes/kv4.ts, the proxy and upstream contract. Update every relevant token reader/writer, including meeting-context.tsx, not just the join page. Use actual interpolated room keys rather than a literal string containing ${roomSlug}. Provide server-validated renewal/recovery and preserve join details appropriately. Retain PIN, guest, waiting-room and revocation checks. Handle success-without-token, wrong room, expired admission and transient upstream failure distinctly. A valid dashboard identity must not be overridden by a guest token's untrusted role. Do not assume the external token lifetime is two hours.
+
+7. Persist role changes atomically. Replace the proposed read-modify-write of the whole admission object with a tested transaction/CAS or equivalent atomic update that checks current admission status, version, meeting and authority. Otherwise a concurrent kick, demotion or resume-token rotation can be overwritten by stale data. Persist successfully before broadcasting or declaring live role success, and define handling for a missing admission or failed write. Test concurrent role change, revocation and reconnect across pods. Redis state must also survive the applicable retention/durability policy; an HSET alone does not resolve eviction risks.
+
+8. Complete the authorization boundary. Keep the proposed removal of guest-email host elevation and token room binding. Also validate trusted token purpose/issuer/audience as applicable, verified identity, meeting instance, participant-session ownership, delegated grant, revocation and generation. An authenticated-owner comparison cannot rely on arbitrary decoded identity claims. Include attempts to copy another participant ID, use a token in another room, recover a revoked role or reuse credentials after meeting end.
+
+9. Define generation semantics in the Lua change. Compare the verified expected admission generation before acquiring the lease. Explicitly define any fresh-admission exception; do not allow absent/zero/malformed expectations to bypass resume fencing. Validate the return contract and test races with admission changes and resume-token rotation. A comparison added outside the relevant atomic validation can still leave a race.
+
+10. Preserve the original setup and verification scope. Restore concrete evidence requests for deployed image/commit versions, Redis evictions/restarts/memory/persistence, media heartbeat/RPC delays, recorder resources, TURN fallback and ingress close behavior. Do not assume missing node separation: the audited production overlay already includes recorder anti-affinity. The plan's unit tests/root typecheck and optional staging guidance are not sufficient acceptance for all four incidents.
+
+D. Extend the regression and acceptance matrix.
+
+Add tests against actual production functions/components/handlers, not copied simplified implementations. Test discovery must include the intended frontend and backend suites.
+
+Required Incident 4 cases:
+- E00 normal self exclusion remains correct.
+- Local microphone survives a duplicate remote roster entry without being relabelled or played locally; retain a negative fixture demonstrating the prior defect.
+- Existing warm slot during an identity transition: local capture is rejected in the rendered output before any reconciliation effect settles.
+- Consistent microphone and screen-audio ownership checks, with legitimate remote presentation audio still audible.
+- Raw/processed mic and tracked-clone replacement, device changes, AI-noise-suppression transitions, producer replacement and late close events.
+- Three independent participants with distinguishable controlled audio: A speaks, B remains a stable listener, C repeatedly joins/leaves. A hears no unintended self-return and B continues hearing A. Repeat with recorder start/stop/restart and more than eight audio participants.
+- Headsets/isolated devices to identify direct application loops; controlled speakerphone tests to examine acoustic return; same-account/different-account tabs/devices; screen/system-audio sharing as supported.
+- Signaling-only interruption, media impairment, reload, stale events and intentional leave. Preserve mic mute intent, host locks, camera-off state, output selection and gesture-based unlocking.
+
+Retain all original acceptance tests for host/co-host renewal and revocation, PIN/waiting room, correlation/out-of-order replies, consumer recovery and distributed session leases. Add the proposed generic resume-error response to a real client/server boundary test so it rejects promptly and only the correct operation.
+
+Run frontend and backend typechecks/builds, applicable lint, focused unit/integration suites and browser tests with isolated data/services. Document baseline failures, excluded suites, skips and blocked work. Use real WebRTC impairment for media tests, not only HTTP throttling.
+
+Execute a continuous recording test beyond the observed two-hour boundary when staging is available; four hours is a proposed diagnostic duration. Run accelerated expiry tests separately. If live environments/devices are inaccessible, provide the exact test procedure and mark execution blocked; do not substitute a plan or fake-timer result for a completed recording soak.
+
+Use privacy-conscious diagnostics: pseudonymous room/session/generation IDs; producer/consumer/source ownership; slot-to-track mapping; local capture lineage; play/mute/volume state; raw microphone settings and output-device category; recorder lifecycle; timestamps and WebRTC statistics. Controlled test audio may establish returned-source content; do not record or log private meeting audio or credentials by default.
+
+E. Deliver the revised plan and implementation evidence.
+
+Return a plan covering Incidents 1–4 with confirmed defects, hypotheses and unverified server issues clearly separated; exact patch groups/files; regressions that detect the prior behavior; actual test results; remaining upstream/staging evidence; and compatible rollout/rollback steps. Do not describe security logging or authorization defects as proven causes of host loss unless reproduced as such.
+
+Preserve the original working-feature protections, particularly reactions, chat, captions, polls, moderation, waiting room, recording, screen-share audio, eCinema, streaming, donations, virtual backgrounds and mobile/desktop layout. No blanket muting, full media reset on every roster event, arbitrary long timeouts, disabled recording or weakened authorization as a shortcut.
+
+Begin by integrating these corrections into your existing plan, confirm what is already implemented in the local working tree, and continue the scoped repair and verification without restarting unrelated work.

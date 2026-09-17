@@ -27,8 +27,6 @@ function requireApiKey(req: Request, res: Response, next: Function) {
   if (!apiKey) {
     return res.status(503).json({ error: 'External API not configured' });
   }
-  console.log(req.headers['x-api-key']);
-  console.log(apiKey);
   if (req.headers['x-api-key'] !== apiKey) {
     return res.status(401).json({ error: 'Invalid API key' });
   }
