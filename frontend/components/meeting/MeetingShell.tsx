@@ -262,16 +262,28 @@ export function MeetingShell() {
             {formatDuration(meetingDuration)}
           </span>
           {recordingStatus !== 'idle' && recordingStatus !== 'failed' && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-400/10 px-2 py-0.5 rounded-full shrink-0">
-              <Circle className={cn("w-2 h-2 fill-red-400", recordingStatus === 'recording' && "animate-pulse")} />
+            <span className={cn(
+              "flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 transition-all duration-300",
+              recordingStatus === 'starting' ? "text-amber-400 bg-amber-400/10 border border-amber-400/20" :
+              recordingStatus === 'recording' ? "text-red-400 bg-red-400/10 border border-red-400/20" :
+              recordingStatus === 'processing' ? "text-blue-400 bg-blue-400/10 border border-blue-400/20" :
+              "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20"
+            )}>
+              <Circle className={cn(
+                "w-2 h-2",
+                recordingStatus === 'starting' && "fill-amber-400 animate-pulse",
+                recordingStatus === 'recording' && "fill-red-400 animate-pulse",
+                recordingStatus === 'processing' && "fill-blue-400 animate-spin",
+                recordingStatus === 'ready' && "fill-emerald-400"
+              )} />
               <span className="hidden sm:inline">
-                {recordingStatus === 'starting' ? 'Starting...' :
+                {recordingStatus === 'starting' ? 'Initializing...' :
                  recordingStatus === 'recording' ? 'Recording' :
                  recordingStatus === 'processing' ? 'Processing...' :
                  recordingStatus === 'ready' ? 'Ready' : ''}
               </span>
               <span className="sm:hidden">
-                {recordingStatus === 'starting' ? '...' :
+                {recordingStatus === 'starting' ? 'Init...' :
                  recordingStatus === 'recording' ? 'Rec' :
                  recordingStatus === 'processing' ? '...' :
                  recordingStatus === 'ready' ? 'Done' : ''}

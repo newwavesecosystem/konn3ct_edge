@@ -19,6 +19,27 @@ const MAX_CONCURRENT_TRANSCODES = process.env.MAX_CONCURRENT_TRANSCODES ? parseI
 
 let activeBrowsers = 0;
 let activeTranscodes = 0;
+const transcodeQueue = [];
+
+function queueTranscode(job) {
+  transcodeQueue.push(job);
+  processTranscodeQueue();
+}
+
+function processTranscodeQueue() {
+  while (activeTranscodes < MAX_CONCURRENT_TRANSCODES && transcodeQueue.length > 0) {
+    const job = transcodeQueue.shift();
+    activeTranscodes++;
+    const child = spawn('node', job.args, { detached: true, stdio: ['ignore', 'inherit', 'inherit'] });
+    const onExit = () => {
+      activeTranscodes = Math.max(0, activeTranscodes - 1);
+      processTranscodeQueue();
+    };
+    child.on('close', onExit);
+    child.on('error', onExit);
+    child.unref();
+  }
+}
 
 const recordingManifests = new Map();
 
@@ -260,11 +281,12 @@ async function processRecordingJob(job, workerId) {
     if (ffmpegProc && !ffmpegProc.killed) {
       try {
         if (ffmpegProc.stdin && ffmpegProc.stdin.writable) {
-           ffmpegProc.stdin.write('q\n');
-           await new Promise(r => setTimeout(r, 5000));
+           ffmpegProc.stdin.on('error', () => {}); // Catch async EPIPE on closed stream
+           ffmpegProc.stdin.write('q\n', () => {});
+           await new Promise(r => setTimeout(r, 4000));
         }
         ffmpegProc.kill('SIGTERM');
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500));
         ffmpegProc.kill('SIGKILL');
       } catch(e){}
     }
@@ -292,10 +314,9 @@ async function processRecordingJob(job, workerId) {
              const lockAcquired = await redis.set(lockKey, 'locked', 'EX', 600, 'NX');
              if (lockAcquired) {
                  console.log(JSON.stringify({ event: "recorder_cleanup_upload_queued", recordingId, segmentIndex: sIndex, file }));
-                 const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, filePath, stdoutPath, stderrPath, sIndex, workerGeneration, isCrashStr], {
-                   detached: true, stdio: ['ignore', 'inherit', 'inherit']
+                 queueTranscode({
+                   args: [transcoderPath, roomId, recordingId, botToken, filePath, stdoutPath, stderrPath, sIndex, workerGeneration, isCrashStr]
                  });
-                 child.unref();
              } else {
                  console.log(`[Cleanup] Segment ${sIndex} upload already in progress.`);
              }
@@ -354,7 +375,6 @@ async function processRecordingJob(job, workerId) {
       '--kiosk',
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
       '--autoplay-policy=no-user-gesture-required',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
@@ -382,13 +402,14 @@ async function processRecordingJob(job, workerId) {
     await page.setViewport({ width: 1920, height: 1080 });
     await browser.defaultBrowserContext().overridePermissions(new URL(url).origin, ['camera', 'microphone']);
     
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.bringToFront();
-    await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
+    await page.waitForSelector('body', { timeout: 10000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 1500));
     
     // START CHOKIDAR FIRST
     const chokidar = require('chokidar');
-    const watcher = chokidar.watch(isolatedDir, { ignored: /(^|[\\/\\])\../, persistent: true, ignoreInitial: true });
+    const watcher = chokidar.watch(isolatedDir, { ignored: /(^|[/\\])\../, persistent: true, ignoreInitial: true });
     
     let lastSegment = null;
     let watcherReady = false;
@@ -428,10 +449,9 @@ async function processRecordingJob(job, workerId) {
                const lockKey = `recording:${recordingId}:segment:${lsIndex}:upload-lock`;
                redis.set(lockKey, 'locked', 'EX', 600, 'NX').then(lockAcquired => {
                    if (lockAcquired) {
-                       const child = spawn('node', [transcoderPath, roomId, recordingId, botToken, require('path').join(isolatedDir, segmentToUpload), stdoutPath, stderrPath, lsIndex, workerGeneration, 'false'], {
-                         detached: true, stdio: ['ignore', 'inherit', 'inherit']
+                       queueTranscode({
+                         args: [transcoderPath, roomId, recordingId, botToken, require('path').join(isolatedDir, segmentToUpload), stdoutPath, stderrPath, lsIndex, workerGeneration, 'false']
                        });
-                       child.unref();
                    }
                }).catch(()=>{});
            }
@@ -458,7 +478,7 @@ async function processRecordingJob(job, workerId) {
     
     await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/started`, recordingId, job.jobId, botToken, "callback_started");
 
-    // Safety Watchdog: Auto-detect if all human participants left or meeting ended
+    // Safety Watchdog: Auto-detect if all human participants left or meeting ended (90s tolerance, human-only)
     let emptyRoomTicks = 0;
     emptyRoomWatchdog = setInterval(async () => {
       try {
@@ -475,13 +495,28 @@ async function processRecordingJob(job, workerId) {
           return cleanup();
         }
 
-        // 2. Check if global human participants are empty in Redis
-        const participants = await redis.hgetall(`room:${roomId}:participants`);
-        const participantCount = Object.keys(participants || {}).length;
-        if (participantCount === 0) {
+        // 2. Check if global human participants are empty in Redis (filter out recorder bots)
+        let participants = await redis.hgetall(`room:${roomId}:participants`);
+        if (!participants || Object.keys(participants).length === 0) {
+          if (roomSlug) {
+            participants = await redis.hgetall(`room:${roomSlug}:participants`);
+          }
+        }
+        
+        let humanCount = 0;
+        for (const [pId, pJson] of Object.entries(participants || {})) {
+          try {
+            const p = JSON.parse(pJson);
+            if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
+              humanCount++;
+            }
+          } catch(e) {}
+        }
+
+        if (humanCount === 0) {
           emptyRoomTicks++;
-          if (emptyRoomTicks >= 3) { // 30s of continuous empty room
-            console.log(JSON.stringify({ event: "recorder_empty_room_detected", recordingId, roomId }));
+          if (emptyRoomTicks >= 9) { // 90s of continuous empty room
+            console.log(JSON.stringify({ event: "recorder_empty_room_detected", recordingId, roomId, humanCount: 0 }));
             if (emptyRoomWatchdog) clearInterval(emptyRoomWatchdog);
             return cleanup();
           }

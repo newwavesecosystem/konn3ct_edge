@@ -75,7 +75,7 @@ spec:
             - name: MAX_CONCURRENT_BROWSERS
               value: "20"
             - name: MAX_CONCURRENT_TRANSCODES
-              value: "20"
+              value: "3"
           resources:
             requests:
               cpu: "2000m"
@@ -83,3 +83,8 @@ spec:
             limits:
               cpu: "28000m"
               memory: "28Gi"
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

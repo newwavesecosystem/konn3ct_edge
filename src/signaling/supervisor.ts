@@ -22,6 +22,12 @@ export function startRecordingSupervisor() {
       });
       
       for (const rec of activeRecordings) {
+        // Startup grace period: newly created recordings get 45 seconds to spin up browser & claim initial lease
+        const ageMs = Date.now() - new Date(rec.createdAt).getTime();
+        if (rec.status === 'starting' && ageMs < 45000) {
+          continue;
+        }
+
         const leaseKey = `recording:${rec.id}:lease`;
         const hasLease = await redis.exists(leaseKey);
         
