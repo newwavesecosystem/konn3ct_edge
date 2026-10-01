@@ -481,30 +481,32 @@ export async function createConsumer(
 /**
  * Resume a paused consumer
  */
-export async function resumeConsumer(consumerId: string, clientCleanupStarted?: boolean) {
+export async function resumeConsumer(consumerId: string, clientCleanupStarted?: boolean): Promise<{ success: boolean; reason?: string }> {
   const consumer = consumers.get(consumerId);
   try {
     if (!consumer || consumer.closed) {
       logger.info(`[SFU] sfu_consumer_resume_skipped: consumer not found or closed for ${consumerId}`);
-      return;
+      return { success: false, reason: 'CONSUMER_NOT_FOUND_OR_CLOSED' };
     }
     const producer = producers.get(consumer.producerId);
     if (!producer || producer.closed) {
       logger.info(`[SFU] sfu_consumer_resume_skipped: producer closed for ${consumerId}`);
-      return;
+      return { success: false, reason: 'PRODUCER_CLOSED' };
     }
     if (clientCleanupStarted) {
       logger.info(`[SFU] sfu_consumer_resume_skipped: client cleanup started for ${consumerId}`);
-      return;
+      return { success: false, reason: 'CLIENT_CLEANUP_STARTED' };
     }
 
     await consumer.resume();
+    return { success: true };
   } catch (err: any) {
     if (err.message && err.message.includes('Channel request handler with ID')) {
       logger.warn(`[SFU] sfu_consumer_resume_failed_closed: Expected Mediasoup closure for ${consumerId}`);
-      return;
+      return { success: false, reason: 'CHANNEL_CLOSED' };
     }
     logger.error(`[SFU] Error resuming consumer ${consumerId}:`, err);
+    return { success: false, reason: err.message || 'SFU_RESUME_ERROR' };
   }
 }
 

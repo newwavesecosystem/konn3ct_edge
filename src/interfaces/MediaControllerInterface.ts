@@ -43,7 +43,7 @@ export interface MediaControllerInterface {
     rtpParameters: RtpParameters;
     appData?: any;
   }>;
-  resumeConsumer(consumerId: string, roomId?: string): Promise<void>;
+  resumeConsumer(consumerId: string, roomId?: string): Promise<{ success: boolean; reason?: string }>;
   pauseConsumer(consumerId: string, roomId?: string): Promise<void>;
   requestConsumerKeyFrame(consumerId: string, roomId?: string): Promise<void>;
   setConsumerPreferredLayersAndPriority(consumerId: string, spatialLayer?: number, temporalLayer?: number, priority?: number, roomId?: string): Promise<void>;

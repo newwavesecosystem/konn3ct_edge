@@ -69,7 +69,7 @@ vi.mock('ioredis', () => {
 vi.mock('../../src/db', () => ({
   db: {
     room: {
-      findUnique: vi.fn().mockImplementation(async ({ where }) => ({ id: where?.id || where?.slug || 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {} })),
+      findUnique: vi.fn().mockImplementation(async ({ where }) => ({ id: where?.id || where?.slug || 'test-room-1', aiFeaturesEnabled: true, slug: 'test-slug', settings: {}, isWaitingRoomEnabled: false })),
     },
     chatMessage: {
       findMany: vi.fn().mockResolvedValue([]),

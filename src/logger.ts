@@ -1,7 +1,29 @@
 import winston from 'winston';
+import path from 'path';
 import { S3Transport } from './logger/s3Transport';
 
 const s3Transport = new S3Transport();
+
+const transports: winston.transport[] = [
+  new winston.transports.Console({
+    format: process.env.NODE_ENV === 'production' 
+      ? winston.format.json()
+      : winston.format.combine(
+          winston.format.colorize(),
+          winston.format.simple()
+        )
+  }),
+  s3Transport
+];
+
+if (process.env.NODE_ENV !== 'test' || process.env.LOG_FILE) {
+  try {
+    const logFilePath = process.env.LOG_FILE || path.resolve(process.cwd(), 'backend.log');
+    transports.push(new winston.transports.File({ filename: logFilePath }));
+  } catch (err) {
+    console.warn('[Logger] Failed to initialize File transport:', err);
+  }
+}
 
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -10,17 +32,7 @@ export const logger = winston.createLogger({
     winston.format.json()
   ),
   defaultMeta: { service: 'conn3ct-backend' },
-  transports: [
-    new winston.transports.Console({
-      format: process.env.NODE_ENV === 'production' 
-        ? winston.format.json()
-        : winston.format.combine(
-            winston.format.colorize(),
-            winston.format.simple()
-          )
-    }),
-    s3Transport
-  ]
+  transports
 });
 
 // Force flush on termination

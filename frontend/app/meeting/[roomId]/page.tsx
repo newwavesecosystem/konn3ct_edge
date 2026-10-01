@@ -19,13 +19,18 @@ export default function MeetingPage({
     const searchParams = new URLSearchParams(window.location.search);
     const name = searchParams.get("name");
     const token = searchParams.get("t");
-    const storedToken = typeof window !== 'undefined' ? sessionStorage.getItem("conn3ct_session_token") : null;
+    const storedToken = typeof window !== 'undefined'
+      ? (sessionStorage.getItem("conn3ct_session_token") || localStorage.getItem(`konn3ct:session:${resolvedParams.roomId}`))
+      : null;
     const botToken = searchParams.get("botToken");
     
     // If there is no name, no token in URL, no token in storage, and it's not a bot, redirect to join
     if (!name && !token && !storedToken && !botToken) {
       router.replace(`/join/${resolvedParams.roomId}`);
     } else {
+      if (storedToken && typeof window !== 'undefined' && !sessionStorage.getItem("conn3ct_session_token")) {
+        sessionStorage.setItem("conn3ct_session_token", storedToken);
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsReady(true);
     }

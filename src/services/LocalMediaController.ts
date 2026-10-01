@@ -98,7 +98,7 @@ export class LocalMediaController extends EventEmitter {
     return sfu.pauseConsumer(consumerId);
   }
 
-  async resumeConsumer(consumerId: string) {
+  async resumeConsumer(consumerId: string, roomId?: string): Promise<{ success: boolean; reason?: string }> {
     return sfu.resumeConsumer(consumerId);
   }
 

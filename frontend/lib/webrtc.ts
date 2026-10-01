@@ -37,6 +37,7 @@ export class WebRTCClient {
   private recvTransport: Transport | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private statsInterval: NodeJS.Timeout | null = null;
+  private isVisibilityListenerAttached: boolean = false;
   
   // NETWORK-RESILIENCE-003 Adaptive Controller
   public adaptationController = new NetworkAdaptationController(Date.now());
@@ -70,9 +71,27 @@ export class WebRTCClient {
   private maxReconnectAttempts = 10;
   private reconnectTimeoutId?: NodeJS.Timeout;
   private iceReconnectAttempts = 0;
-  private maxIceReconnectAttempts = 3;
+  private maxIceReconnectAttempts = 5;
   private isRepublishing = false;
   private pendingConsumes: any[] = [];
+  private inFlightConsumes: Map<string, Promise<any>> = new Map();
+  private producerToConsumer: Map<string, string> = new Map();
+
+  public getConsumerKey(producerId: string, transportId: string, generation: number = 0): string {
+    return `${producerId}:${transportId}:${generation}`;
+  }
+
+  public isLocalTrack(trackOrId?: MediaStreamTrack | string | null): boolean {
+    if (!trackOrId) return false;
+    const id = typeof trackOrId === 'string' ? trackOrId : trackOrId.id;
+    return (
+      (!!this.localAudioProducer?.track && this.localAudioProducer.track.id === id) ||
+      (!!this.rawAudioTrack && this.rawAudioTrack.id === id) ||
+      (!!this.localScreenAudioTrack && this.localScreenAudioTrack.id === id) ||
+      (!!this.localVideoProducer?.track && this.localVideoProducer.track.id === id) ||
+      (!!this.localScreenTrack && this.localScreenTrack.id === id)
+    );
+  }
   
   // Event-Driven Consume Queue Telemetry & State
   private consumeQueue: any[] = [];
@@ -363,13 +382,15 @@ export class WebRTCClient {
     
     // Connect WebSocket — passing token in URL is required by backend upgrade handler
     const domain = process.env.NEXT_PUBLIC_BACKEND_DOMAIN || 'konn3ctedge.konn3ct.net';
-    const wsUrl = `wss://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}&participantId=${this.participantId}`;
+    const wsProtocol = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? 'wss' : 'ws'; const wsUrl = `${wsProtocol}://${domain}/signal?roomId=${this.roomId}&token=${this.token}&isMobile=${isMobile}&participantId=${this.participantId}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = async () => {
       try {
         this.reconnectAttempts = 0; // Reset on success
         this.socketConnectTime = Date.now();
+        this.lastPingAt = 0;
+        this.lastPongAt = Date.now();
 
         // If we have an existing session and resumeToken, send resume_session immediately
         if (this.meetingInstanceId && this.resumeToken) {
@@ -381,13 +402,25 @@ export class WebRTCClient {
           }));
         }
 
-        // Keep-alive to prevent DO Load Balancer from dropping idle connections
+        // Keep-alive to prevent DO Load Balancer from dropping idle connections & watchdog
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
-            this.lastPingAt = Date.now();
+            const now = Date.now();
+            // Watchdog: If we sent pings and haven't received a pong for >30s, socket is dead
+            if (this.lastPingAt > 0 && this.lastPongAt > 0 && (now - this.lastPongAt > 30000)) {
+              console.warn(`[WebRTC] Watchdog: No pong received in ${now - this.lastPongAt}ms (threshold 30000ms). Forcing reconnect.`);
+              this.ws.close();
+              return;
+            }
+            this.lastPingAt = now;
             this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
           }
-        }, 25000);
+        }, 12000);
+
+        if (typeof document !== 'undefined' && !this.isVisibilityListenerAttached) {
+          document.addEventListener('visibilitychange', this.handleVisibilityChange);
+          this.isVisibilityListenerAttached = true;
+        }
 
         // WebRTC Client Stats Collection (Every 30s)
         this.statsInterval = setInterval(() => this.collectAndSendStats(), 30000);
@@ -406,6 +439,25 @@ export class WebRTCClient {
         return;
       }
       
+      // Generic requestId error routing across all pending request queues (P01/R2)
+      if ((msg.type === 'error' || msg.type === 'resume_failed' || msg.type === 'consume_failed' || msg.type.endsWith('_failed')) && msg.requestId) {
+        for (const [expectType, queue] of this.pendingRequests.entries()) {
+          const index = queue.findIndex(req => req.requestId === msg.requestId);
+          if (index !== -1) {
+            const [resolver] = queue.splice(index, 1);
+            clearTimeout(resolver.timeoutId);
+            const err = new Error(msg.error || msg.message || msg.reason || `Request failed with ${msg.type}`);
+            (err as any).code = msg.code || msg.errorCode || msg.error || msg.reason;
+            (err as any).type = msg.type;
+            resolver.reject(err);
+            if (queue.length === 0) {
+              this.pendingRequests.delete(expectType);
+            }
+            return;
+          }
+        }
+      }
+
       // Handle Response matching by event type
       if (this.pendingRequests.has(msg.type)) {
         const queue = this.pendingRequests.get(msg.type)!;
@@ -516,7 +568,14 @@ export class WebRTCClient {
              this.onInitialPermissions?.(msg.permissions);
           }
           if (msg.maxParticipants) this.maxParticipants = msg.maxParticipants;
-          if (typeof msg.isWaitingRoomEnabled === 'boolean') this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
+          if (typeof msg.isWaitingRoomEnabled === 'boolean') {
+            this.isWaitingRoomEnabled = msg.isWaitingRoomEnabled;
+          } else if (typeof msg.bypassWaitingRoom === 'boolean') {
+            this.isWaitingRoomEnabled = !msg.bypassWaitingRoom;
+          }
+          if (msg.settings) {
+            this.onRoomSettingsUpdated?.(msg.settings, 'Server');
+          }
           if (typeof msg.meetingStartedAt === 'number') {
             this.meetingStartedAt = msg.meetingStartedAt;
             this.onMeetingStartedAt?.(msg.meetingStartedAt);
@@ -555,19 +614,19 @@ export class WebRTCClient {
               const sendHealthy = this.sendTransport && (this.sendTransport.connectionState === 'connected' || this.sendTransport.connectionState === 'connecting' || this.sendTransport.connectionState === 'new');
               const recvHealthy = this.recvTransport && (this.recvTransport.connectionState === 'connected' || this.recvTransport.connectionState === 'connecting' || this.recvTransport.connectionState === 'new');
 
-              if (sendHealthy && recvHealthy) {
+              if (msg.mediaState !== 'reset' && sendHealthy && recvHealthy) {
                 console.log("[WebRTC] Session resumed with healthy existing transports. Reconciling remote producers without duplicate republish...");
                 this.request('getProducers', 'producersList').then((res) => {
                   if (res?.producers) {
                     for (const p of res.producers) {
-                      if (!this.consumers.has(p.producerId)) {
+                      if (!this.consumers.has(p.producerId) && !this.producerToConsumer.has(p.producerId)) {
                         this.consumeRemoteStream(p.producerId, p.participantId, p.userId, p.name, p.kind, p.appData).catch(console.error);
                       }
                     }
                   }
                 }).catch(console.error);
               } else {
-                console.log("[WebRTC] Transports interrupted during reconnect. Performing selective media recovery...");
+                console.log("[WebRTC] Media state reset by server or transports interrupted. Performing selective media recovery...");
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                   this.ws.send(JSON.stringify({ type: 'reset_webrtc_state' }));
                 }
@@ -713,16 +772,22 @@ export class WebRTCClient {
           this.onScreenShareStopped?.(msg.userId, msg.producerId, msg.participantId);
           break;
         }
-        case 'producer_closed':
+        case 'producer_closed': {
           // The remote producer was closed — clean up our local consumer
+          let closedConsumerId = msg.consumerId;
           this.consumers.forEach((consumer, consumerId) => {
             if (consumerId === msg.consumerId || consumer.producerId === msg.producerId) {
+              closedConsumerId = consumerId;
               consumer.close();
               this.consumers.delete(consumerId);
             }
           });
-          this.onConsumerClosed?.(msg.producerId, msg.appData || {});
+          if (msg.producerId) {
+            this.producerToConsumer.delete(msg.producerId);
+          }
+          this.onConsumerClosed?.(msg.producerId, { ...(msg.appData || {}), consumerId: closedConsumerId });
           break;
+        }
         case 'active_speaker':
           this.onActiveSpeaker?.(msg.userIds, msg.participantIds || []);
           break;
@@ -842,6 +907,18 @@ export class WebRTCClient {
     this.reconnectTimeoutId = setTimeout(() => {
       this.connect();
     }, delay);
+  }
+
+  public manualReconnect(): Promise<void> {
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = undefined;
+    }
+    this.reconnectAttempts = 0;
+    this.iceReconnectAttempts = 0;
+    this.isIntentionalDisconnect = false;
+    this.onConnectionStateChange?.('connecting');
+    return this.connect();
   }
 
   private request(sendType: string, expectType: string, payload: any = {}): Promise<any> {
@@ -2677,81 +2754,115 @@ export class WebRTCClient {
       return;
     }
 
+    const transportId = this.recvTransport.id;
+    const generation = this.sessionGeneration || 0;
+    const canonicalKey = this.getConsumerKey(producerId, transportId, generation);
+
+    if (this.inFlightConsumes.has(canonicalKey)) {
+      console.log(`[WebRTC] Consume already in flight for ${canonicalKey}`);
+      return this.inFlightConsumes.get(canonicalKey);
+    }
+
+    const existingConsumerId = this.producerToConsumer.get(producerId);
+    if (existingConsumerId) {
+      const existingConsumer = this.consumers.get(existingConsumerId);
+      if (existingConsumer && !existingConsumer.closed) {
+        console.log(`[WebRTC] Existing active consumer ${existingConsumerId} already present for producer ${producerId}`);
+        return;
+      }
+    }
+
     const source = appData?.source || (kind === 'audio' ? 'audio' : 'camera');
     console.log(`[WebRTC] Requesting to consume ${kind} (source: ${source}) from user ${producerParticipantId || producerUserId} (Producer ID: ${producerId})...`);
 
-    try {
-      const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
-        transportId: this.recvTransport.id,
-        producerId,
-        rtpCapabilities: this.device.rtpCapabilities
-      });
-
-      console.log(`[WebRTC] Creating local consumer for ${kind} (source: ${source})... (Consumer ID: ${id})`);
-      const consumer = await this.recvTransport.consume({
-        id,
-        producerId,
-        kind: consumerKind,
-        rtpParameters,
-        appData: { source } // Carry source tag forward to onNewConsumer callback
-      });
-
-      this.consumers.set(consumer.id, consumer);
-
-      this.registerConsumerMetadata({
-        consumerId: consumer.id,
-        producerId,
-        participantId: producerParticipantId,
-        userId: producerUserId,
-        kind: consumerKind as 'audio' | 'video',
-        source: source as 'camera' | 'screen' | 'mic' | 'screen-audio',
-        isScreenShare: source === 'screen',
-        isActiveSpeaker: false,
-        isPinned: false,
-        isVisibleOnScreen: true,
-        maxSpatialLayers: source === 'screen' ? 1 : 3
-      });
-
-      consumer.on('transportclose', () => {
-        this.unregisterConsumerMetadata(consumer.id);
-      });
-      
-      // Handle automatic pausing/resuming from the Mediasoup SFU (e.g., due to bandwidth degradation)
-      // We explicitly DO NOT update UI state (isCameraOn/isMuted) here because BWE can cause rapid oscillation.
-      // Intentional user camera/mic toggles are handled by the explicit WebSocket 'camera_state' and 'mute_state' events.
-      consumer.on('pause', () => {
-        console.log(`[WebRTC] Consumer ${id} paused by SFU (likely bandwidth degradation or producer paused)`);
-      });
-
-      consumer.on('resume', () => {
-        console.log(`[WebRTC] Consumer ${id} resumed by SFU`);
-      });
-
-      if (consumerKind === 'audio' && !this.firstAudioEmitted) {
-        this.firstAudioEmitted = true;
-        this.emitTelemetry('time_to_first_audio');
-      }
-      if (consumerKind === 'video' && !this.firstVideoEmitted) {
-        this.firstVideoEmitted = true;
-        this.emitTelemetry('time_to_first_video');
-      }
-
-      this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);
-      
-      // Tell the backend to resume sending media (unpause the consumer)
-      if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {
-        console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
-      } else {
-        console.log(`[WebRTC] Resuming consumer ${id} on server...`);
-        this.request('resume', 'resumed', { consumerId: consumer.id }).then(() => {
-          console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
-        }).catch(err => {
-          console.error(`[WebRTC] Failed to resume consumer ${id}:`, err);
+    const consumePromise = (async () => {
+      let consumer: Consumer | null = null;
+      try {
+        const { id, kind: consumerKind, rtpParameters } = await this.request('consume', 'consumed', {
+          transportId: this.recvTransport!.id,
+          producerId,
+          rtpCapabilities: this.device!.rtpCapabilities
         });
+
+        console.log(`[WebRTC] Creating local consumer for ${kind} (source: ${source})... (Consumer ID: ${id})`);
+        consumer = await this.recvTransport!.consume({
+          id,
+          producerId,
+          kind: consumerKind,
+          rtpParameters,
+          appData: { source } // Carry source tag forward to onNewConsumer callback
+        });
+
+        this.consumers.set(consumer.id, consumer);
+        this.producerToConsumer.set(producerId, consumer.id);
+
+        this.registerConsumerMetadata({
+          consumerId: consumer.id,
+          producerId,
+          participantId: producerParticipantId,
+          userId: producerUserId,
+          kind: consumerKind as 'audio' | 'video',
+          source: source as 'camera' | 'screen' | 'mic' | 'screen-audio',
+          isScreenShare: source === 'screen',
+          isActiveSpeaker: false,
+          isPinned: false,
+          isVisibleOnScreen: true,
+          maxSpatialLayers: source === 'screen' ? 1 : 3
+        });
+
+        consumer.on('transportclose', () => {
+          this.unregisterConsumerMetadata(consumer!.id);
+          this.producerToConsumer.delete(producerId);
+        });
+        
+        consumer.on('pause', () => {
+          console.log(`[WebRTC] Consumer ${id} paused by SFU`);
+        });
+
+        consumer.on('resume', () => {
+          console.log(`[WebRTC] Consumer ${id} resumed by SFU`);
+        });
+
+        if (consumerKind === 'audio' && !this.firstAudioEmitted) {
+          this.firstAudioEmitted = true;
+          this.emitTelemetry('time_to_first_audio');
+        }
+        if (consumerKind === 'video' && !this.firstVideoEmitted) {
+          this.firstVideoEmitted = true;
+          this.emitTelemetry('time_to_first_video');
+        }
+
+        this.onNewConsumer?.(consumer, producerParticipantId || producerUserId, userName);
+        
+        // Tell the backend to resume sending media (unpause the consumer)
+        if (this.isAudioOnlyMode && consumerKind === 'video' && source !== 'screen') {
+          console.log(`[WebRTC] Audio-only mode active. Keeping video consumer ${id} paused.`);
+        } else {
+          console.log(`[WebRTC] Resuming consumer ${id} on server...`);
+          try {
+            await this.request('resume', 'resumed', { consumerId: consumer.id });
+            console.log(`[WebRTC] Consumer ${id} successfully resumed! Media should flow now.`);
+          } catch (resumeErr) {
+            console.error(`[WebRTC] Failed to resume consumer ${id}, closing consumer only (R1):`, resumeErr);
+            // Targeted cleanup of failed consumer ONLY — NEVER close shared recvTransport (R1)
+            try {
+              consumer.close();
+            } catch (_) {}
+            this.consumers.delete(consumer.id);
+            this.producerToConsumer.delete(producerId);
+            this.unregisterConsumerMetadata(consumer.id);
+            throw resumeErr;
+          }
+        }
+      } catch (e) {
+        console.warn(`[WebRTC] Failed to consume stream (it may have been closed):`, e);
+      } finally {
+        this.inFlightConsumes.delete(canonicalKey);
       }
-    } catch (e) {
-      console.warn(`[WebRTC] Failed to consume stream (it may have been closed):`, e);
-    }
+    })();
+
+    this.inFlightConsumes.set(canonicalKey, consumePromise);
+    return consumePromise;
   }
 
   public enableAudioOnlyMode() {
@@ -2799,9 +2910,17 @@ export class WebRTCClient {
   public disconnect() {
     console.log('[WebRTC] Disconnecting gracefully...');
     this.isIntentionalDisconnect = true;
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = undefined;
+    }
     if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.networkInterval) clearInterval(this.networkInterval);
     if (this.statsInterval) clearInterval(this.statsInterval);
+    if (typeof document !== 'undefined' && this.isVisibilityListenerAttached) {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      this.isVisibilityListenerAttached = false;
+    }
     this.ws?.close();
     
     // Clear all pending requests and timeouts
@@ -2812,6 +2931,10 @@ export class WebRTCClient {
       });
     });
     this.pendingRequests.clear();
+    this.pendingConsumes = [];
+    this.inFlightConsumes.clear();
+    this.producerToConsumer.clear();
+    this.sessionGeneration = (this.sessionGeneration || 0) + 1;
     
     this.disableCamera();
     this.disableMic();
@@ -2824,6 +2947,19 @@ export class WebRTCClient {
     this.ws = null;
     this.device = null;
   }
+
+  private handleVisibilityChange = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      console.log('[WebRTC] Tab became visible. Checking signaling connection health...');
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+        console.warn('[WebRTC] Socket dead or closed while backgrounded. Triggering reconnect.');
+        this.attemptReconnect();
+      } else if (this.ws.readyState === WebSocket.OPEN) {
+        this.lastPingAt = Date.now();
+        this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
+      }
+    }
+  };
 
   private async collectAndSendStats() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;

@@ -28,7 +28,7 @@ import dynamic from "next/dynamic";
 
 const DonationModal = dynamic(() => import("./DonationModal").then(mod => mod.DonationModal), { ssr: false });
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Circle } from "lucide-react";
+import { X, Circle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWakeLock } from "@/hooks/useWakeLock";
 
@@ -55,7 +55,8 @@ export function MeetingShell() {
     logoutUrl,
     micError,
     audioPlaybackError,
-    resumeAudioPlayback
+    resumeAudioPlayback,
+    retryConnection
   } = useMeeting();
 
   const formatDuration = (s: number) => {
@@ -69,6 +70,7 @@ export function MeetingShell() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const isBot = !!searchParams?.get('botToken');
+  const [isRetrying, setIsRetrying] = React.useState(false);
 
   React.useEffect(() => {
     if (webrtcStatus === 'ended') {
@@ -157,23 +159,49 @@ export function MeetingShell() {
           <p className="text-sm mb-8" style={{ color: "var(--mt-text-muted)" }}>
             {errorDetails.desc}
           </p>
-          <button
-            onClick={() => {
-              const slug = window.location.pathname.split('/').pop();
-              if (webrtcStatus === 'invalid-session' || webrtcStatus === 'failed') {
-                router.push(`/join/${slug}`);
-              } else {
+          {webrtcStatus === 'failed' || webrtcStatus === 'invalid-session' ? (
+            <div className="w-full space-y-3">
+              <button
+                disabled={isRetrying}
+                onClick={async () => {
+                  try {
+                    setIsRetrying(true);
+                    await retryConnection();
+                  } catch (err) {
+                    console.error("Retry connection error:", err);
+                  } finally {
+                    setTimeout(() => setIsRetrying(false), 2000);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20 disabled:opacity-50"
+              >
+                <RefreshCw className={cn("w-4 h-4", isRetrying && "animate-spin")} />
+                {isRetrying ? "Reconnecting..." : "Retry Connection"}
+              </button>
+              <button
+                onClick={() => {
+                  const slug = window.location.pathname.split('/').pop();
+                  router.push(`/join/${slug}`);
+                }}
+                className="w-full text-xs text-white/50 hover:text-white transition-colors py-1"
+              >
+                Go to join lobby instead
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
                 if (logoutUrl) {
                   window.location.href = logoutUrl;
                 } else {
                   router.push('/dashboard');
                 }
-              }
-            }}
-            className="w-full px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20"
-          >
-            {webrtcStatus === 'invalid-session' || webrtcStatus === 'failed' ? 'Rejoin Meeting' : 'Return to Dashboard'}
-          </button>
+              }}
+              className="w-full px-5 py-3 rounded-xl bg-brand-green hover:bg-brand-green/90 text-white font-medium transition-all duration-200 active:scale-95 shadow-lg shadow-brand-green/20"
+            >
+              Return to Dashboard
+            </button>
+          )}
         </div>
       </div>
     );
