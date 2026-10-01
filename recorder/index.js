@@ -194,7 +194,7 @@ async function startWorker() {
   }
 }
 
-let displayCounter = 99;
+let displayCounter = 100;
 
 async function processRecordingJob(job, workerId) {
   activeBrowsers++;
