@@ -930,17 +930,29 @@ export async function getActiveRoomParticipants(roomId: string) {
     const activeIdentityKeys = new Set(Object.keys(activeSessions));
     const localClients = rooms.get(roomId);
     const toDelete: string[] = [];
+    const seenUserIds = new Set<string>();
+    const seenParticipantIds = new Set<string>();
 
-    for (const [pId, pStr] of Object.entries(globalParticipantsHash)) {
+    // Sort or prioritize local active clients first so most recent active connection wins
+    const entries = Object.entries(globalParticipantsHash);
+    entries.sort(([pIdA, pStrA], [pIdB, pStrB]) => {
+      const isLocalA = localClients?.get(pIdA)?.status === 'active' ? 1 : 0;
+      const isLocalB = localClients?.get(pIdB)?.status === 'active' ? 1 : 0;
+      return isLocalB - isLocalA;
+    });
+
+    for (const [pId, pStr] of entries) {
       try {
         const p = JSON.parse(pStr);
         const idKey = getParticipantIdentityKey(p.userId);
         const isLocalActive = localClients?.get(p.participantId)?.status === 'active';
 
-        if (activeIdentityKeys.has(idKey) || isLocalActive) {
+        if ((activeIdentityKeys.has(idKey) || isLocalActive) && !seenUserIds.has(p.userId) && !seenParticipantIds.has(p.participantId)) {
+          seenUserIds.add(p.userId);
+          seenParticipantIds.add(p.participantId);
           activeParticipants.push(p);
         } else {
-          // Stale ghost participant from previous day / ungraceful disconnect
+          // Stale ghost participant from previous connection / ungraceful disconnect
           toDelete.push(pId);
         }
       } catch (e) {
@@ -1163,20 +1175,41 @@ export async function sendRoomHistoryAndState(client: Client) {
     }
 
     if (ws.readyState === WebSocket.OPEN) {
-      const eCinemaLink = roomECinema.get(roomId);
+      let eCinemaLink = roomECinema.get(roomId);
+      if (!eCinemaLink) {
+        eCinemaLink = await redis.get(`room:${roomId}:ecinema:link`) || null;
+        if (eCinemaLink) roomECinema.set(roomId, eCinemaLink);
+      }
+
       if (eCinemaLink) {
         ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
         
-        const eState = roomECinemaState.get(roomId);
+        let eState = roomECinemaState.get(roomId);
+        if (!eState) {
+          const rawState = await redis.get(`room:${roomId}:ecinema:state`);
+          if (rawState) {
+            try {
+              eState = JSON.parse(rawState);
+              if (eState) roomECinemaState.set(roomId, eState);
+            } catch (e) {}
+          }
+        }
+
         if (eState) {
           let currentTime = eState.time;
           if (eState.action === 'play') {
             currentTime += (Date.now() - eState.serverTime) / 1000;
           }
+          ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+          
           // Send a delayed action to ensure the player has time to load
           setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+            if (ws.readyState === WebSocket.OPEN && eState) {
+              let liveTime = eState.time;
+              if (eState.action === 'play') {
+                liveTime += (Date.now() - eState.serverTime) / 1000;
+              }
+              ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: liveTime }));
             }
           }, 2000);
         }
@@ -1925,7 +1958,7 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 25000;
+      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 10000;
       const graceExpiresAt = new Date(Date.now() + VISIBLE_PRESENCE_DISCONNECT_GRACE_MS).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${VISIBLE_PRESENCE_DISCONNECT_GRACE_MS}, graceExpiresAt: ${graceExpiresAt}`);
 
@@ -3197,10 +3230,14 @@ export function initializeSignaling(server: Server) {
               client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid eCinema URL.' }));
               return;
             }
+            roomECinema.set(roomId, data.link);
+            redis.set(`room:${roomId}:ecinema:link`, data.link, 'EX', 86400).catch(e => logger.warn('Redis ecinema link set error', e));
           } else {
+            roomECinema.delete(roomId);
             roomECinemaState.delete(roomId);
+            redis.del(`room:${roomId}:ecinema:link`).catch(e => logger.warn('Redis ecinema link del error', e));
+            redis.del(`room:${roomId}:ecinema:state`).catch(e => logger.warn('Redis ecinema state del error', e));
           }
-          roomECinema.set(roomId, data.link || null);
           broadcastToRoom(roomId, {
             type: 'ecinema_update',
             link: data.link || null
@@ -3210,7 +3247,9 @@ export function initializeSignaling(server: Server) {
 
       case 'ecinema_action':
         if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
-          roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
+          const stateObj = { action: data.action, time: data.time || 0, serverTime: Date.now() };
+          roomECinemaState.set(roomId, stateObj);
+          redis.set(`room:${roomId}:ecinema:state`, JSON.stringify(stateObj), 'EX', 86400).catch(e => logger.warn('Redis ecinema state set error', e));
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
             action: data.action,

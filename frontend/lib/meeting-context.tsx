@@ -643,24 +643,22 @@ export function MeetingProvider({
 
   // Sync isRecording with the presence of a bot participant
   useEffect(() => {
-    const hasBot = participants.some((p) => p.role === "bot");
+    const hasBot = participants.some((p) => p.role === "bot" || p.role === "recorder" || p.name?.toLowerCase().includes("recording"));
     setRecordingStatus((prev) => {
       if (hasBot) {
-        // If we are actively stopping, we should NOT force isRecording back to true
         if (prev !== 'stopping' && prev !== 'processing') {
            setIsRecording(true);
         }
-        // Prevent aggressive override if the user already initiated a stop ('stopping' / 'processing') or start ('starting')
         if (prev !== 'stopping' && prev !== 'processing' && prev !== 'starting') {
           return 'recording';
         }
         return prev;
       } else {
-        // If we don't have a bot, only preserve isRecording if we are STARTING (waiting for bot)
-        if (prev === 'starting') {
+        // If we are starting or recording (via server signaling), do NOT reset to idle while bot is spinning up
+        if (prev === 'starting' || prev === 'recording') {
           return prev;
         }
-        // If stopping or processing, we keep the status but definitely drop the visual red badge
+        // If stopping or processing, we keep the status but drop the visual red badge
         setIsRecording(false);
         if (prev === 'stopping' || prev === 'processing') {
            return prev;
@@ -1215,19 +1213,27 @@ export function MeetingProvider({
         };
 
         client.onPollHistory = (historyPolls) => {
+          if (!Array.isArray(historyPolls)) return;
+          const currentUid = webrtcClient.current?.userId || currentUser.userId || initialCurrentUser.userId || initialCurrentUser.id;
+          const currentPid = clientParticipantId || webrtcClient.current?.participantId || currentUser.id || initialCurrentUser.id;
+
           const pollsWithDetails = historyPolls.map((poll: any) => {
             let totalVotes = 0;
             let myVote = undefined;
             if (Array.isArray(poll.options)) {
               for (const opt of poll.options) {
                 totalVotes += opt.votes || 0;
-                if (Array.isArray(opt.votedBy) && opt.votedBy.some((v: any) => typeof v === 'string' ? v === webrtcClient.current?.userId : v.userId === webrtcClient.current?.userId)) {
+                if (Array.isArray(opt.votedBy) && opt.votedBy.some((v: any) => {
+                  const voteId = typeof v === 'string' ? v : (v.userId || v.participantId || v.id);
+                  return voteId === currentUid || voteId === currentPid;
+                })) {
                   myVote = opt.id;
                 }
               }
             }
             return {
               ...poll,
+              isActive: poll.isActive !== false,
               totalVotes,
               myVote
             };
@@ -2399,7 +2405,8 @@ export function MeetingProvider({
                         audioTrack: consumer.track as MediaStreamTrack,
                         audioProducerId: consumer.producerId,
                         audioConsumerId: consumer.id,
-                        audioTrackId: consumer.track.id
+                        audioTrackId: consumer.track.id,
+                        isMuted: consumer.paused ? true : false
                       };
                     }
                   }
@@ -2450,7 +2457,9 @@ export function MeetingProvider({
               client?.emitTelemetry('participant_missing_but_media_active');
               const resolvedName = userName?.trim() ? userName.trim() : `Participant ${participantId.substring(5, 9)}`;
               const existingRef = prev.find(p => p.id === participantId || p.userId === participantId);
-              const isMutedIntent = existingRef ? existingRef.isMuted : true; // Keep safe mute intent until authoritative presence arrives
+              const isMutedIntent = consumer.kind === 'audio' && source !== 'screen-audio' 
+                ? (consumer.paused ? true : false) 
+                : (existingRef ? existingRef.isMuted : true);
 
               const newParticipant: Participant = {
                 id: participantId,
@@ -2711,6 +2720,25 @@ export function MeetingProvider({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [meetingStartedAt]);
+
+  // Handle browser close or page hide to immediately notify server of departure
+  useEffect(() => {
+    const handlePageDeparture = () => {
+      try {
+        if (!hasLeftMeetingRef.current && webrtcClient.current) {
+          hasLeftMeetingRef.current = true;
+          webrtcClient.current.sendLeaveMeeting();
+          webrtcClient.current.disconnect();
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('pagehide', handlePageDeparture);
+    window.addEventListener('beforeunload', handlePageDeparture);
+    return () => {
+      window.removeEventListener('pagehide', handlePageDeparture);
+      window.removeEventListener('beforeunload', handlePageDeparture);
+    };
+  }, []);
 
   // ── Mic Monitoring (Muted Talking & System Mute) ────────────────────────────
   const [audioTrackVersion, setAudioTrackVersion] = useState(0);

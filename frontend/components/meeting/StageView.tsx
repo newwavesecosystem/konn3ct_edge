@@ -1459,6 +1459,16 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               onReady={(e) => { 
                 playerRef.current = e.target; 
                 setIsPlayerReady(true);
+                if (ecinemaAction) {
+                  if (typeof ecinemaAction.time === 'number') {
+                    e.target.seekTo(ecinemaAction.time, true);
+                  }
+                  if (ecinemaAction.action === 'play') {
+                    e.target.playVideo();
+                  } else if (ecinemaAction.action === 'pause') {
+                    e.target.pauseVideo();
+                  }
+                }
               }}
               onPlay={handlePlay}
               onPause={handlePause}
