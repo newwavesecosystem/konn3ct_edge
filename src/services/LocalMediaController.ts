@@ -18,8 +18,8 @@ export class LocalMediaController extends EventEmitter {
     return { id: router.id, rtpCapabilities: router.rtpCapabilities };
   }
 
-  async createWebRtcTransport(roomId: string) {
-    return sfu.createWebRtcTransport(roomId);
+  async createWebRtcTransport(roomId: string, direction?: 'send' | 'recv') {
+    return sfu.createWebRtcTransport(roomId, direction);
   }
 
   async connectTransport(transportId: string, dtlsParameters: any, roomId?: string) {
@@ -59,7 +59,7 @@ export class LocalMediaController extends EventEmitter {
     rtpCapabilities: any,
     roomId: string
   ) {
-    const router = await sfu.getOrCreateRouter(roomId);
+    const router = sfu.getRouterForTransport(transportId) || await sfu.getOrCreateRouter(roomId);
     return sfu.createConsumer(
       transportId,
       producerId,
@@ -73,9 +73,8 @@ export class LocalMediaController extends EventEmitter {
     );
   }
 
-  async canConsume(roomId: string, producerId: string, rtpCapabilities: any): Promise<boolean> {
-    const router = await sfu.getOrCreateRouter(roomId);
-    return router.canConsume({ producerId, rtpCapabilities });
+  async canConsume(roomId: string, producerId: string, rtpCapabilities: any, transportId?: string): Promise<boolean> {
+    return sfu.canConsume(roomId, producerId, rtpCapabilities, transportId);
   }
 
   async getProducer(producerId: string) {

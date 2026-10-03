@@ -406,16 +406,16 @@ export class WebRTCClient {
         this.pingInterval = setInterval(() => {
           if (this.ws?.readyState === WebSocket.OPEN) {
             const now = Date.now();
-            // Watchdog: If we sent pings and haven't received a pong for >30s, socket is dead
-            if (this.lastPingAt > 0 && this.lastPongAt > 0 && (now - this.lastPongAt > 30000)) {
-              console.warn(`[WebRTC] Watchdog: No pong received in ${now - this.lastPongAt}ms (threshold 30000ms). Forcing reconnect.`);
+            // Watchdog: If we sent pings and haven't received a pong for >45s, socket is dead
+            if (this.lastPingAt > 0 && this.lastPongAt > 0 && (now - this.lastPongAt > 45000)) {
+              console.warn(`[WebRTC] Watchdog: No pong received in ${now - this.lastPongAt}ms (threshold 45000ms). Forcing reconnect.`);
               this.ws.close();
               return;
             }
             this.lastPingAt = now;
             this.ws.send(JSON.stringify({ type: 'ping', timestamp: this.lastPingAt }));
           }
-        }, 12000);
+        }, 10000);
 
         if (typeof document !== 'undefined' && !this.isVisibilityListenerAttached) {
           document.addEventListener('visibilitychange', this.handleVisibilityChange);

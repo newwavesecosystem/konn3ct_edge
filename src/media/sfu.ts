@@ -33,6 +33,12 @@ export const producers = new Map<string, Producer>();
 const consumers = new Map<string, Consumer>();
 const audioObservers = new Map<string, AudioLevelObserver>();
 
+// Multi-Worker Router and Pipe Routing Maps
+const roomRelayRouters = new Map<string, Router[]>();
+const transportToRouterMap = new Map<string, Router>();
+const routerTransportsCount = new Map<string, number>();
+const roomProducers = new Map<string, Set<Producer>>();
+
 // --- Telemetry Data Structures ---
 const consumerLatencies: { canConsume: number, consume: number, total: number }[] = [];
 
@@ -246,24 +252,86 @@ export function getRouter(routerIdOrRoomId: string): Router | undefined {
 }
 
 /**
- * Close a Router and remove it from memory
+ * Close a Router and remove it from memory (including all relay routers for this room)
  */
 export function closeRouter(roomId: string) {
   const router = routers.get(roomId);
   if (router) {
     router.close();
     routers.delete(roomId);
-    logger.info(`Router closed for room ${roomId}`);
+    logger.info(`Primary Router closed for room ${roomId}`);
   }
+
+  const relays = roomRelayRouters.get(roomId);
+  if (relays && relays.length > 0) {
+    for (const relay of relays) {
+      try {
+        relay.close();
+        routers.delete(relay.id);
+      } catch (e) {}
+    }
+    roomRelayRouters.delete(roomId);
+    logger.info(`Closed ${relays.length} relay routers for room ${roomId}`);
+  }
+
+  roomProducers.delete(roomId);
 }
 
 /**
- * Create a WebRTC Transport for a client to send/receive media
+ * Returns the router associated with a specific transport
  */
-export async function createWebRtcTransport(roomId: string) {
-  const router = await getOrCreateRouter(roomId);
-  
-  const transport = await router.createWebRtcTransport({
+export function getRouterForTransport(transportId: string): Router | undefined {
+  return transportToRouterMap.get(transportId);
+}
+
+const MAX_RECV_TRANSPORTS_PER_ROUTER = 50;
+
+/**
+ * Create a WebRTC Transport for a client to send/receive media.
+ * Automatically distributes recv transports across worker routers when exceeding threshold.
+ */
+export async function createWebRtcTransport(roomId: string, direction: 'send' | 'recv' = 'send') {
+  const primaryRouter = await getOrCreateRouter(roomId);
+  let targetRouter: Router = primaryRouter;
+
+  if (direction === 'recv' && workers.length > 1) {
+    const currentPrimaryCount = routerTransportsCount.get(primaryRouter.id) || 0;
+    if (currentPrimaryCount >= MAX_RECV_TRANSPORTS_PER_ROUTER) {
+      if (!roomRelayRouters.has(roomId)) {
+        roomRelayRouters.set(roomId, []);
+      }
+      const existingRelays = roomRelayRouters.get(roomId)!;
+      let selectedRelay = existingRelays.find(r => !r.closed && (routerTransportsCount.get(r.id) || 0) < MAX_RECV_TRANSPORTS_PER_ROUTER);
+
+      if (!selectedRelay) {
+        const worker = getWorker();
+        selectedRelay = await worker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs });
+        selectedRelay.appData.workerPid = worker.pid;
+        selectedRelay.appData.isRelay = true;
+        existingRelays.push(selectedRelay);
+        routers.set(selectedRelay.id, selectedRelay);
+        logger.info(`[MultiWorker] Spawned relay router ${selectedRelay.id} on worker ${worker.pid} for room ${roomId} (total relays: ${existingRelays.length})`);
+
+        // Pipe all existing producers on primary router to this new relay router
+        const existingProds = roomProducers.get(roomId);
+        if (existingProds && existingProds.size > 0) {
+          for (const prod of existingProds) {
+            if (!prod.closed) {
+              try {
+                await primaryRouter.pipeToRouter({ producerId: prod.id, router: selectedRelay });
+                logger.info(`[MultiWorker] Piped producer ${prod.id} to new relay router ${selectedRelay.id}`);
+              } catch (pipeErr) {
+                logger.warn(`[MultiWorker] Failed to pipe producer ${prod.id} to relay:`, pipeErr);
+              }
+            }
+          }
+        }
+      }
+      targetRouter = selectedRelay;
+    }
+  }
+
+  const transport = await targetRouter.createWebRtcTransport({
     listenIps: config.mediasoup.webRtcTransport.listenIps,
     enableUdp: true,
     enableTcp: true,
@@ -272,6 +340,8 @@ export async function createWebRtcTransport(roomId: string) {
   });
 
   transports.set(transport.id, transport);
+  transportToRouterMap.set(transport.id, targetRouter);
+  routerTransportsCount.set(targetRouter.id, (routerTransportsCount.get(targetRouter.id) || 0) + 1);
 
   if (config.mediasoup.webRtcTransport.maxIncomingBitrate) {
     try {
@@ -290,8 +360,7 @@ export async function createWebRtcTransport(roomId: string) {
 
   transport.on('dtlsstatechange', (dtlsState) => {
     if (dtlsState === 'closed' || dtlsState === 'failed') {
-      transport.close();
-      transports.delete(transport.id);
+      closeTransport(transport.id);
     }
   });
 
@@ -301,6 +370,14 @@ export async function createWebRtcTransport(roomId: string) {
     iceCandidates: transport.iceCandidates,
     dtlsParameters: transport.dtlsParameters
   };
+}
+
+/**
+ * Checks if a transport or room router can consume a given producer
+ */
+export async function canConsume(roomId: string, producerId: string, rtpCapabilities: any, transportId?: string): Promise<boolean> {
+  const router = (transportId ? transportToRouterMap.get(transportId) : null) || await getOrCreateRouter(roomId);
+  return router.canConsume({ producerId, rtpCapabilities });
 }
 
 /**
@@ -398,6 +475,30 @@ export async function createProducer(
     paused: !!paused 
   });
   producers.set(producer.id, producer);
+
+  if (roomId) {
+    if (!roomProducers.has(roomId)) {
+      roomProducers.set(roomId, new Set());
+    }
+    roomProducers.get(roomId)!.add(producer);
+
+    // Auto-pipe new producer to all existing relay routers for this room
+    const relays = roomRelayRouters.get(roomId);
+    if (relays && relays.length > 0) {
+      const primaryRouter = routers.get(roomId);
+      if (primaryRouter) {
+        for (const relay of relays) {
+          if (!relay.closed) {
+            primaryRouter.pipeToRouter({ producerId: producer.id, router: relay }).then(() => {
+              logger.info(`[MultiWorker] Auto-piped new producer ${producer.id} (${kind}) to relay router ${relay.id}`);
+            }).catch(pipeErr => {
+              logger.warn(`[MultiWorker] Failed to auto-pipe new producer ${producer.id} to relay ${relay.id}:`, pipeErr);
+            });
+          }
+        }
+      }
+    }
+  }
 
   // If this is an audio producer and we know the room, add it to the room's AudioLevelObserver
   if (kind === 'audio' && roomId) {
@@ -535,11 +636,19 @@ export function closeConsumer(consumerId: string): void {
   }
 }
 
-export function closeProducer(producerId: string) {
+export function closeProducer(producerId: string, roomId?: string) {
   const producer = producers.get(producerId);
   if (producer && !producer.closed) {
     producer.close();
     producers.delete(producerId);
+  }
+  if (roomId && roomProducers.has(roomId)) {
+    const set = roomProducers.get(roomId)!;
+    for (const p of set) {
+      if (p.id === producerId) {
+        set.delete(p);
+      }
+    }
   }
 }
 
@@ -616,8 +725,16 @@ export async function createConsumerWithCallback(
  */
 export function closeTransport(transportId: string) {
   const transport = transports.get(transportId);
-  if (transport && !transport.closed) {
-    transport.close();
+  if (transport) {
+    const router = transportToRouterMap.get(transportId);
+    if (router) {
+      const current = routerTransportsCount.get(router.id) || 1;
+      routerTransportsCount.set(router.id, Math.max(0, current - 1));
+      transportToRouterMap.delete(transportId);
+    }
+    if (!transport.closed) {
+      transport.close();
+    }
     transports.delete(transportId);
   }
 }

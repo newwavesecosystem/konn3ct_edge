@@ -3691,7 +3691,7 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: participant is not active.', requestId: data.requestId }));
           break;
         }
-        const transportParams = await mediaController.createWebRtcTransport(roomId);
+        const transportParams = await mediaController.createWebRtcTransport(roomId, data.direction);
         client.transports.push(transportParams.id);
 
         // Generate temporary TURN credentials for this client
@@ -3961,7 +3961,7 @@ export function initializeSignaling(server: Server) {
           
           let canConsume = false;
           try {
-            canConsume = await mediaController.canConsume(roomId, data.producerId, data.rtpCapabilities);
+            canConsume = await mediaController.canConsume(roomId, data.producerId, data.rtpCapabilities, data.transportId);
           } catch (err) {
             logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
           }
