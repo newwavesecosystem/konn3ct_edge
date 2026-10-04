@@ -1357,46 +1357,69 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
   const [isPlayerReady, setIsPlayerReady] = React.useState(false);
   const { broadcastECinema, currentUser, sendECinemaAction, ecinemaAction } = useMeeting();
   const playerRef = React.useRef<any>(null);
+  const isProgrammaticActionRef = React.useRef(false);
+  const programmaticTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const isHostOrCoHost = ['host', 'admin', 'co-host', 'presenter'].includes(currentUser.role || '');
 
   const extractVideoId = (url: string) => {
-    try {
-      if (url.includes("youtube.com/watch")) {
-        return new URL(url).searchParams.get("v");
-      }
-      if (url.includes("youtu.be/")) {
-        return new URL(url).pathname.slice(1);
-      }
-      return null;
-    } catch {
-      return null;
+    if (!url) return null;
+    const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+    if (match && match[1]) {
+      return match[1];
     }
+    // Fallback: check if the string itself is an 11-char video ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(url.trim())) {
+      return url.trim();
+    }
+    return null;
   };
 
   const videoId = extractVideoId(eCinemaLink);
 
-  // Sync player when receiving actions
+  // Sync player when receiving remote actions
   React.useEffect(() => {
     if (isPlayerReady && ecinemaAction && playerRef.current) {
-      if (ecinemaAction.action === 'play') {
-        playerRef.current.playVideo();
-      } else if (ecinemaAction.action === 'pause') {
-        playerRef.current.pauseVideo();
-      }
-      if (ecinemaAction.time !== undefined) {
-        // Optional: seekTo if you want to sync time later, but sticking to play/pause for now
-        playerRef.current.seekTo(ecinemaAction.time, true);
+      isProgrammaticActionRef.current = true;
+      if (programmaticTimerRef.current) clearTimeout(programmaticTimerRef.current);
+      programmaticTimerRef.current = setTimeout(() => {
+        isProgrammaticActionRef.current = false;
+      }, 1000);
+
+      try {
+        let currentTime: number | null = null;
+        if (typeof playerRef.current.getCurrentTime === 'function') {
+          currentTime = playerRef.current.getCurrentTime();
+        }
+
+        if (ecinemaAction.time !== undefined) {
+          const drift = currentTime !== null ? Math.abs(currentTime - ecinemaAction.time) : 999;
+          if (ecinemaAction.action === 'pause' || drift > 2.0) {
+            playerRef.current.seekTo(ecinemaAction.time, true);
+          }
+        }
+
+        if (ecinemaAction.action === 'play') {
+          playerRef.current.playVideo();
+        } else if (ecinemaAction.action === 'pause') {
+          playerRef.current.pauseVideo();
+        }
+      } catch (err) {
+        console.warn('eCinema sync error:', err);
       }
     }
   }, [ecinemaAction, isPlayerReady]);
 
   const handlePlay = (e: any) => {
-    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+    if (isProgrammaticActionRef.current) return;
+    if (isHostOrCoHost) {
       sendECinemaAction('play', e.target.getCurrentTime());
     }
   };
 
   const handlePause = (e: any) => {
-    if (currentUser.role === 'host' || currentUser.role === 'co-host') {
+    if (isProgrammaticActionRef.current) return;
+    if (isHostOrCoHost) {
       sendECinemaAction('pause', e.target.getCurrentTime());
     }
   };
@@ -1428,7 +1451,7 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
-            {currentUser.role === 'host' && (
+            {isHostOrCoHost && (
               <button
                 onClick={() => broadcastECinema(null)}
                 className="px-2 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
@@ -1448,8 +1471,8 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
                 height: '100%',
                 playerVars: {
                   autoplay: 1,
-                  controls: currentUser.role === 'host' || currentUser.role === 'co-host' ? 1 : 0, // Only hosts see controls
-                  disablekb: currentUser.role === 'host' || currentUser.role === 'co-host' ? 0 : 1, // Disable keyboard for non-hosts
+                  controls: isHostOrCoHost ? 1 : 0, // Only hosts/co-hosts see controls
+                  disablekb: isHostOrCoHost ? 0 : 1, // Disable keyboard for non-hosts
                   rel: 0,
                   modestbranding: 1
                 },
@@ -1459,6 +1482,22 @@ function ECinemaLayout({ eCinemaLink, participants }: { eCinemaLink: string; par
               onReady={(e) => { 
                 playerRef.current = e.target; 
                 setIsPlayerReady(true);
+                if (ecinemaAction) {
+                  isProgrammaticActionRef.current = true;
+                  if (programmaticTimerRef.current) clearTimeout(programmaticTimerRef.current);
+                  programmaticTimerRef.current = setTimeout(() => {
+                    isProgrammaticActionRef.current = false;
+                  }, 1500);
+
+                  if (typeof ecinemaAction.time === 'number') {
+                    e.target.seekTo(ecinemaAction.time, true);
+                  }
+                  if (ecinemaAction.action === 'play') {
+                    e.target.playVideo();
+                  } else if (ecinemaAction.action === 'pause') {
+                    e.target.pauseVideo();
+                  }
+                }
               }}
               onPlay={handlePlay}
               onPause={handlePause}

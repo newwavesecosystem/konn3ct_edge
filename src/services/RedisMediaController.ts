@@ -204,8 +204,17 @@ export class RedisMediaController extends EventEmitter implements MediaControlle
   async createConsumer(transportId: string, producerId: string, rtpCapabilities: RtpCapabilities, roomId: string): Promise<{ id: string; producerId: string; kind: string; rtpParameters: RtpParameters; appData?: any; }> {
     return this.rpcCall('createConsumer', [transportId, producerId, rtpCapabilities, roomId], roomId);
   }
-  async resumeConsumer(consumerId: string, roomId?: string): Promise<void> {
-    return this.rpcCall('resumeConsumer', [consumerId], roomId);
+  async resumeConsumer(consumerId: string, roomId?: string): Promise<{ success: boolean; reason?: string }> {
+    try {
+      const res = await this.rpcCall('resumeConsumer', [consumerId], roomId);
+      if (res && typeof res === 'object' && typeof res.success === 'boolean') {
+        return res;
+      }
+      return { success: true };
+    } catch (err: any) {
+      logger.warn(`RedisMediaController resumeConsumer failed for ${consumerId}:`, err);
+      return { success: false, reason: err.message || 'RPC_ERROR' };
+    }
   }
   async pauseConsumer(consumerId: string, roomId?: string): Promise<void> {
     return this.rpcCall('pauseConsumer', [consumerId], roomId);

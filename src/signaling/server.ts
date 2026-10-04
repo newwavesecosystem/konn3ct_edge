@@ -5,7 +5,13 @@ import { URL } from 'url';
 import jwt from 'jsonwebtoken';
 import { logger } from '../logger';
 import { db } from '../db';
-import { redisMediaController as mediaController } from '../services/RedisMediaController';
+// In local dev, use embedded LocalMediaController to avoid Redis RPC round-trip issues.
+// In production, use RedisMediaController for multi-pod architecture.
+import { localMediaController } from '../services/LocalMediaController';
+import { redisMediaController } from '../services/RedisMediaController';
+import 'dotenv/config';
+const mediaController = (process.env.USE_LOCAL_MEDIA === 'true' || !process.env.POD_ID) ? localMediaController : redisMediaController;
+console.log('>>> [MEDIA_CONTROLLER_SELECTED]:', mediaController === localMediaController ? 'LOCAL_MEDIA_CONTROLLER' : 'REDIS_MEDIA_CONTROLLER', 'USE_LOCAL_MEDIA:', process.env.USE_LOCAL_MEDIA, 'POD_ID:', process.env.POD_ID);
 import os from 'os';
 import { redis, duplicateRedis } from '../redis';
 import crypto from 'crypto';
@@ -43,6 +49,7 @@ import {
   closeActiveMeetingInstance,
   setMeetingAdmission,
   getMeetingAdmission,
+  updateMeetingAdmissionRole,
   acquireSessionLease,
   releaseSessionLease,
   getSessionLease,
@@ -260,6 +267,9 @@ redisSubscriber.on('message', async (channel: string, message: string) => {
   } else if (channel === 'signaling:room:broadcast') {
     try {
       const data = JSON.parse(message);
+      if (data.message?.type === 'room_settings_updated' && data.message.settings) {
+        roomSettingsMap.set(data.roomId, data.message.settings);
+      }
       // We use internalBroadcastToRoom so we don't re-publish to redis.
       if (data.command) {
         processAdminCommand(data);
@@ -637,8 +647,17 @@ async function processAdminCommand(data: any) {
       break;
     }
     case 'change_role': {
+      const meetingInstanceId = await getActiveMeetingInstanceId(roomId, false);
       for (const targetClient of roomClients.values()) {
         if ((targetClient.userId === data.userId || targetClient.participantId === data.userId) && data.newRole && targetClient.userId !== data.sourceUserId) {
+          if (meetingInstanceId) {
+            const identityKey = getParticipantIdentityKey(targetClient.userId);
+            const roleRes = await updateMeetingAdmissionRole(meetingInstanceId, identityKey, data.newRole);
+            if (!roleRes.success) {
+              logger.warn(`Failed to update admission role for ${targetClient.userId}: ${roleRes.reason}`);
+              continue;
+            }
+          }
           targetClient.role = data.newRole;
           logger.info(`Host ${data.sourceUserId} changed role of ${targetClient.userId} (${targetClient.participantId}) to ${data.newRole}`);
           broadcastToRoom(roomId, { 
@@ -911,17 +930,29 @@ export async function getActiveRoomParticipants(roomId: string) {
     const activeIdentityKeys = new Set(Object.keys(activeSessions));
     const localClients = rooms.get(roomId);
     const toDelete: string[] = [];
+    const seenUserIds = new Set<string>();
+    const seenParticipantIds = new Set<string>();
 
-    for (const [pId, pStr] of Object.entries(globalParticipantsHash)) {
+    // Sort or prioritize local active clients first so most recent active connection wins
+    const entries = Object.entries(globalParticipantsHash);
+    entries.sort(([pIdA, pStrA], [pIdB, pStrB]) => {
+      const isLocalA = localClients?.get(pIdA)?.status === 'active' ? 1 : 0;
+      const isLocalB = localClients?.get(pIdB)?.status === 'active' ? 1 : 0;
+      return isLocalB - isLocalA;
+    });
+
+    for (const [pId, pStr] of entries) {
       try {
         const p = JSON.parse(pStr);
         const idKey = getParticipantIdentityKey(p.userId);
         const isLocalActive = localClients?.get(p.participantId)?.status === 'active';
 
-        if (activeIdentityKeys.has(idKey) || isLocalActive) {
+        if ((activeIdentityKeys.has(idKey) || isLocalActive) && !seenUserIds.has(p.userId) && !seenParticipantIds.has(p.participantId)) {
+          seenUserIds.add(p.userId);
+          seenParticipantIds.add(p.participantId);
           activeParticipants.push(p);
         } else {
-          // Stale ghost participant from previous day / ungraceful disconnect
+          // Stale ghost participant from previous connection / ungraceful disconnect
           toDelete.push(pId);
         }
       } catch (e) {
@@ -1144,20 +1175,41 @@ export async function sendRoomHistoryAndState(client: Client) {
     }
 
     if (ws.readyState === WebSocket.OPEN) {
-      const eCinemaLink = roomECinema.get(roomId);
+      let eCinemaLink = roomECinema.get(roomId);
+      if (!eCinemaLink) {
+        eCinemaLink = await redis.get(`room:${roomId}:ecinema:link`) || null;
+        if (eCinemaLink) roomECinema.set(roomId, eCinemaLink);
+      }
+
       if (eCinemaLink) {
         ws.send(JSON.stringify({ type: 'ecinema_update', link: eCinemaLink }));
         
-        const eState = roomECinemaState.get(roomId);
+        let eState = roomECinemaState.get(roomId);
+        if (!eState) {
+          const rawState = await redis.get(`room:${roomId}:ecinema:state`);
+          if (rawState) {
+            try {
+              eState = JSON.parse(rawState);
+              if (eState) roomECinemaState.set(roomId, eState);
+            } catch (e) {}
+          }
+        }
+
         if (eState) {
           let currentTime = eState.time;
           if (eState.action === 'play') {
             currentTime += (Date.now() - eState.serverTime) / 1000;
           }
+          ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+          
           // Send a delayed action to ensure the player has time to load
           setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: currentTime }));
+            if (ws.readyState === WebSocket.OPEN && eState) {
+              let liveTime = eState.time;
+              if (eState.action === 'play') {
+                liveTime += (Date.now() - eState.serverTime) / 1000;
+              }
+              ws.send(JSON.stringify({ type: 'ecinema_action', action: eState.action, time: liveTime }));
             }
           }, 2000);
         }
@@ -1414,7 +1466,14 @@ export function initializeSignaling(server: Server) {
       }
 
       const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-      const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string };
+      const decoded = jwt.verify(token, secret) as { userId: string; email: string; name: string; role?: string; roomId?: string };
+
+      if (decoded.roomId && decoded.roomId !== roomSlug) {
+        logger.warn(`Token roomId (${decoded.roomId}) does not match requested room (${roomSlug})`);
+        socket.write('HTTP/1.1 403 Forbidden\r\nX-Conn3ct-Error: Room Mismatch\r\n\r\n');
+        socket.destroy();
+        return;
+      }
 
       // Verify room exists
       const room = await db.room.findUnique({ where: { slug: roomSlug } });
@@ -1548,6 +1607,45 @@ export function initializeSignaling(server: Server) {
   });
 
   wss.on('connection', async (ws: WebSocket, request: IncomingMessage, clientData: any) => {
+    // Buffer any incoming messages during the async connection handshake
+    const earlyMessages: (Buffer | string)[] = [];
+    let isClientInitialized = false;
+
+    const onIncomingWsMessage = async (message: Buffer | string) => {
+      let data: any;
+      try {
+        data = JSON.parse(message.toString());
+        logger.info(`SERVER WS RECEIVED RAW MESSAGE: ${data.type}`);
+      } catch (e) {
+        logger.warn('Failed to parse websocket message', { error: e });
+        return;
+      }
+      try {
+        if (Buffer.byteLength(typeof message === 'string' ? message : message) > 65536) {
+          logger.warn(`User ${userId} sent oversized WS message (>64KB), ignoring.`);
+          return;
+        }
+        try {
+          await handleMessage(client, data);
+        } catch (handleError) {
+          logger.error(`Error handling message of type ${data.type}:`, handleError);
+          // Only send error back if it's a request expecting a response
+          if (data.type === 'getRouterRtpCapabilities' || data.type === 'createWebRtcTransport' || data.type === 'connectWebRtcTransport' || data.type === 'produce') {
+            ws.send(JSON.stringify({ type: 'error', message: 'Internal server error while handling media request.' }));
+          }
+        }
+      } catch (error) {
+        logger.warn('Failed to parse WS message', error);
+      }
+    };
+
+    ws.on('message', (msg: Buffer | string) => {
+      if (!isClientInitialized) {
+        earlyMessages.push(msg);
+      } else {
+        onIncomingWsMessage(msg);
+      }
+    });
     const { userId, email, name, roomId, roomName, roomSlug, role, isWaitingRoomEnabled, isMobile, participantId, userAgent } = clientData;
 
     logger.info(`User Connected [${roomId}]: participantId=${participantId}, userId=${userId}, agent="${userAgent}", isMobile=${isMobile}`);
@@ -1731,6 +1829,7 @@ export function initializeSignaling(server: Server) {
         sessionGeneration: client.sessionGeneration,
         admissionGeneration: client.admissionGeneration,
         sessionStateVersion: client.sessionStateVersion,
+        mediaState: 'reset',
         maxParticipants: client.maxParticipants,
         permissions: permissionsPayload
       }));
@@ -1833,33 +1932,11 @@ export function initializeSignaling(server: Server) {
       });
     }
 
-    ws.on('message', async (message: Buffer | string) => {
-      let data: any;
-      try {
-        data = JSON.parse(message.toString());
-        console.log('SERVER WS RECEIVED RAW MESSAGE:', data.type);
-      } catch (e) {
-        logger.warn('Failed to parse websocket message', { error: e });
-        return;
-      }
-      try {
-        if (Buffer.byteLength(typeof message === 'string' ? message : message) > 65536) {
-          logger.warn(`User ${userId} sent oversized WS message (>64KB), ignoring.`);
-          return;
-        }
-        try {
-          await handleMessage(client, data);
-        } catch (handleError) {
-          logger.error(`Error handling message of type ${data.type}:`, handleError);
-          // Only send error back if it's a request expecting a response
-          if (data.type === 'getRouterRtpCapabilities' || data.type === 'createWebRtcTransport' || data.type === 'connectWebRtcTransport' || data.type === 'produce') {
-            ws.send(JSON.stringify({ type: 'error', message: 'Internal server error while handling media request.' }));
-          }
-        }
-      } catch (error) {
-        logger.warn('Failed to parse WS message', error);
-      }
-    });
+    isClientInitialized = true;
+    while (earlyMessages.length > 0) {
+      const earlyMsg = earlyMessages.shift()!;
+      onIncomingWsMessage(earlyMsg);
+    }
 
     ws.on('close', () => {
       if (client.preempted) {
@@ -1881,7 +1958,7 @@ export function initializeSignaling(server: Server) {
         return;
       }
 
-      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 5000;
+      const VISIBLE_PRESENCE_DISCONNECT_GRACE_MS = 10000;
       const graceExpiresAt = new Date(Date.now() + VISIBLE_PRESENCE_DISCONNECT_GRACE_MS).toISOString();
       logger.info(`[CLEANUP] client_disconnect_grace_started for user ${userId}. gracePeriodMs: ${VISIBLE_PRESENCE_DISCONNECT_GRACE_MS}, graceExpiresAt: ${graceExpiresAt}`);
 
@@ -2006,11 +2083,26 @@ export function initializeSignaling(server: Server) {
             await redis.del(`room:${roomSlug}:pod`).catch(e => logger.warn('Redis del error', e));
             generateMeetingSummary(roomId).catch(e => logger.error(`Error triggering summary for room ${roomId}`, e));
           } else {
-            redis.publish('signaling:room:broadcast', JSON.stringify({
-              roomId,
-              message: { type: 'user_left', userId, participantId }
-            }));
-            broadcastRoomState(roomId);
+            let userStillActive = false;
+            if (closingMeetingInstanceId) {
+              try {
+                const currentLease = await getSessionLease(closingMeetingInstanceId, identityKey);
+                if (currentLease && currentLease.sessionGeneration > closingSessionGen) {
+                  userStillActive = true;
+                  logger.info(`[CLEANUP] Suppressing user_left broadcast for ${userId}: active lease generation ${currentLease.sessionGeneration} > closing ${closingSessionGen}`);
+                }
+              } catch (e) {
+                logger.warn('Error checking session lease before user_left', e);
+              }
+            }
+
+            if (!userStillActive) {
+              redis.publish('signaling:room:broadcast', JSON.stringify({
+                roomId,
+                message: { type: 'user_left', userId, participantId }
+              }));
+              broadcastRoomState(roomId);
+            }
           }
         }
         disconnectTimeouts.delete(`${closingParticipantId}:${roomId}`);
@@ -3126,7 +3218,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_update':
-        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
+        if (['host', 'co-host', 'presenter', 'admin'].includes(client.role)) {
           if (data.link) {
             try {
               const url = new URL(data.link);
@@ -3138,10 +3230,14 @@ export function initializeSignaling(server: Server) {
               client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid eCinema URL.' }));
               return;
             }
+            roomECinema.set(roomId, data.link);
+            redis.set(`room:${roomId}:ecinema:link`, data.link, 'EX', 86400).catch(e => logger.warn('Redis ecinema link set error', e));
           } else {
+            roomECinema.delete(roomId);
             roomECinemaState.delete(roomId);
+            redis.del(`room:${roomId}:ecinema:link`).catch(e => logger.warn('Redis ecinema link del error', e));
+            redis.del(`room:${roomId}:ecinema:state`).catch(e => logger.warn('Redis ecinema state del error', e));
           }
-          roomECinema.set(roomId, data.link || null);
           broadcastToRoom(roomId, {
             type: 'ecinema_update',
             link: data.link || null
@@ -3150,8 +3246,10 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_action':
-        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
-          roomECinemaState.set(roomId, { action: data.action, time: data.time || 0, serverTime: Date.now() });
+        if (['host', 'co-host', 'presenter', 'admin'].includes(client.role)) {
+          const stateObj = { action: data.action, time: data.time || 0, serverTime: Date.now() };
+          roomECinemaState.set(roomId, stateObj);
+          redis.set(`room:${roomId}:ecinema:state`, JSON.stringify(stateObj), 'EX', 86400).catch(e => logger.warn('Redis ecinema state set error', e));
           broadcastToRoom(roomId, {
             type: 'ecinema_action',
             action: data.action,
@@ -3608,6 +3706,7 @@ export function initializeSignaling(server: Server) {
 
       // --- WebRTC Media Signaling ---
       case 'getRouterRtpCapabilities': {
+        console.log('>>> [SFU_DEBUG] getRouterRtpCapabilities REACHED for room:', roomId, 'requestId:', data.requestId);
         try {
           const routerObj = await mediaController.getOrCreateRouter(roomId);
           const rtpCapabilities = (routerObj as any)?.rtpCapabilities?.rtpCapabilities 
@@ -3631,7 +3730,7 @@ export function initializeSignaling(server: Server) {
           client.ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: participant is not active.', requestId: data.requestId }));
           break;
         }
-        const transportParams = await mediaController.createWebRtcTransport(roomId);
+        const transportParams = await mediaController.createWebRtcTransport(roomId, data.direction);
         client.transports.push(transportParams.id);
 
         // Generate temporary TURN credentials for this client
@@ -3901,7 +4000,7 @@ export function initializeSignaling(server: Server) {
           
           let canConsume = false;
           try {
-            canConsume = await mediaController.canConsume(roomId, data.producerId, data.rtpCapabilities);
+            canConsume = await mediaController.canConsume(roomId, data.producerId, data.rtpCapabilities, data.transportId);
           } catch (err) {
             logger.error(`[SFU] router.canConsume threw error for producer ${data.producerId}:`, err);
           }
@@ -4016,12 +4115,15 @@ export function initializeSignaling(server: Server) {
           // Track which client owns this consumer for cleanup
           consumerOwners.set(consumerParams.id, client);
           client.ws.send(JSON.stringify({ type: 'consumed', requestId: data.requestId, ...consumerParams }));
-        } catch (e) {
+        } catch (e: any) {
           logger.warn(`Consume failed for producer ${data.producerId}:`, e);
-          // Don't send a response, let the client timeout or we can send an error response if we want.
-          // To prevent the 10s client timeout, we should resolve it. But the client expects specific data.
-          // Let's just send a dummy response or let it timeout. It's fine to timeout if it fails.
-          // Actually, let's send 'consumed_error' and handle it on the client if needed.
+          client.ws.send(JSON.stringify({
+            type: 'consume_failed',
+            requestId: data.requestId,
+            errorCode: 'SFU_CONSUME_ERROR',
+            producerId: data.producerId,
+            reason: e.message || 'Internal consume error'
+          }));
         }
         break;
       }
@@ -4119,24 +4221,52 @@ export function initializeSignaling(server: Server) {
       }
 
       case 'resume': {
-        if (consumerOwners.get(data.consumerId) !== client) {
-          logger.warn(`User ${userId} tried to resume a consumer they don't own`);
+        if (!data.consumerId) {
+          client.ws.send(JSON.stringify({ type: 'error', requestId: data.requestId, errorCode: 'MISSING_PARAM', message: 'consumerId required' }));
           return;
         }
-        await mediaController.resumeConsumer(data.consumerId, roomId);
-        client.ws.send(JSON.stringify({ type: 'resumed', consumerId: data.consumerId }));
+        if (consumerOwners.get(data.consumerId) !== client) {
+          logger.warn(`User ${userId} tried to resume a consumer they don't own`);
+          client.ws.send(JSON.stringify({ type: 'error', requestId: data.requestId, errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
+          return;
+        }
+        try {
+          const outcome = await mediaController.resumeConsumer(data.consumerId, roomId);
+          if (!outcome || outcome.success === false) {
+            client.ws.send(JSON.stringify({
+              type: 'resume_failed',
+              requestId: data.requestId,
+              consumerId: data.consumerId,
+              errorCode: 'RESUME_FAILED',
+              reason: outcome?.reason || 'SFU_RESUME_FAILED'
+            }));
+            return;
+          }
+          client.ws.send(JSON.stringify({ type: 'resumed', requestId: data.requestId, consumerId: data.consumerId }));
+        } catch (err: any) {
+          client.ws.send(JSON.stringify({
+            type: 'resume_failed',
+            requestId: data.requestId,
+            consumerId: data.consumerId,
+            errorCode: 'RESUME_FAILED',
+            reason: err.message || 'INTERNAL_ERROR'
+          }));
+        }
         break;
       }
 
       case 'pause_consumer': {
+        if (!data.consumerId) {
+          client.ws.send(JSON.stringify({ type: 'error', requestId: data.requestId, errorCode: 'MISSING_PARAM', message: 'consumerId required' }));
+          return;
+        }
         if (consumerOwners.get(data.consumerId) !== client) {
           logger.warn(`User ${userId} tried to pause a consumer they don't own (${data.consumerId})`);
-          // Send an error response so the client's await doesn't time out
-          client.ws.send(JSON.stringify({ type: 'error', errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
+          client.ws.send(JSON.stringify({ type: 'error', requestId: data.requestId, errorCode: 'INVALID_OWNERSHIP', message: 'Not consumer owner' }));
           return;
         }
         await mediaController.pauseConsumer(data.consumerId, roomId);
-        client.ws.send(JSON.stringify({ type: 'consumer_paused', consumerId: data.consumerId }));
+        client.ws.send(JSON.stringify({ type: 'consumer_paused', requestId: data.requestId, consumerId: data.consumerId }));
         break;
       }
 

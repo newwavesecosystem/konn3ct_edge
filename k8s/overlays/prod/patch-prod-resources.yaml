@@ -86,7 +86,7 @@ spec:
             - name: MAX_CONCURRENT_BROWSERS
               value: "5"
             - name: MAX_CONCURRENT_TRANSCODES
-              value: "5"
+              value: "3"
           resources:
             requests:
               cpu: "500m"
