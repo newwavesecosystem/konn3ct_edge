@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import Redis from 'ioredis';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -18,7 +18,7 @@ const region = process.env.DO_SPACES_REGION || 'nyc3';
 const accessKeyId = process.env.DO_SPACES_KEY || '';
 const secretAccessKey = process.env.DO_SPACES_SECRET || '';
 const rawEndpoint = process.env.DO_SPACES_ENDPOINT || 'nyc3.digitaloceanspaces.com';
-const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEndpoint}`;
+const endpoint = rawEndpoint.startsWith('http') ? rawEndpoint : (rawEndpoint.includes(':') || rawEndpoint.includes('minio') ? `http://${rawEndpoint}` : `https://${rawEndpoint}`);
 const bucket = process.env.DO_SPACES_BUCKET || 'konn3ct-assets';
 const forcePathStyle = String(process.env.S3_FORCE_PATH_STYLE).trim().toLowerCase() === 'true';
 
@@ -33,16 +33,71 @@ if (accessKeyId && secretAccessKey) {
 }
 
 /**
- * Downloads a remote file to local disk
+ * Downloads a segment from S3 using credentials (or public HTTP fetch as fallback)
  */
-async function downloadFile(url: string, destPath: string): Promise<void> {
-  const res = await fetch(url);
+async function downloadSegment(segment: { url?: string | null; storageKey?: string | null }, destPath: string): Promise<void> {
+  // If S3 client is configured, download directly from S3 (handles private buckets)
+  if (s3Client) {
+    let key = segment.storageKey;
+    let targetBucket = bucket;
+
+    if (segment.url) {
+      try {
+        const parsed = new URL(segment.url);
+        const hostParts = parsed.hostname.split('.');
+        if (hostParts.length >= 4 && hostParts.slice(1).join('.').includes('digitaloceanspaces.com')) {
+          targetBucket = hostParts[0];
+        }
+        if (!key) {
+          key = parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
+          if (targetBucket && key.startsWith(`${targetBucket}/`)) {
+            key = key.slice(targetBucket.length + 1);
+          }
+        }
+      } catch {
+        if (!key) key = segment.url;
+      }
+    }
+
+    if (key && targetBucket) {
+      try {
+        const command = new GetObjectCommand({
+          Bucket: targetBucket,
+          Key: key
+        });
+        const response = await s3Client.send(command);
+        if (response.Body) {
+          const stream = response.Body as any;
+          if (typeof stream.transformToByteArray === 'function') {
+            const bytes = await stream.transformToByteArray();
+            fs.writeFileSync(destPath, Buffer.from(bytes));
+            return;
+          } else {
+            await new Promise<void>((resolve, reject) => {
+              const writer = fs.createWriteStream(destPath);
+              stream.pipe(writer);
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+            return;
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`[Stitcher] Direct S3 download failed for key ${key} from bucket ${targetBucket}: ${err.message}. Trying public fetch.`);
+      }
+    }
+  }
+
+  if (!segment.url) {
+    throw new Error('No URL or storageKey provided to download segment');
+  }
+
+  const res = await fetch(segment.url);
   if (!res.ok) {
-    throw new Error(`Failed to download segment from ${url}: HTTP ${res.status}`);
+    throw new Error(`Failed to download segment from ${segment.url}: HTTP ${res.status}`);
   }
   const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  fs.writeFileSync(destPath, buffer);
+  fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
 }
 
 /**
@@ -71,10 +126,18 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
       return false;
     }
 
-    // If already finalized and completed with a master URL, skip
+    const totalSegmentsCount = await db.recordingSegment.count({
+      where: { recordingId, status: { in: ['uploaded', 'UPLOADED_VERIFIED', 'COMPLETED', 'PARTIAL'] } }
+    });
+
+    // If already finalized and completed with a master URL, skip unless new segments arrived
     if (recording.status === 'completed' && recording.url) {
-      logger.info(`[Stitcher] Recording ${recordingId} is already completed.`);
-      return true;
+      if (totalSegmentsCount > 1 && !recording.url.includes('_complete_')) {
+        logger.info(`[Stitcher] Recording ${recordingId} has ${totalSegmentsCount} segments but only single-segment URL. Upgrading to full stitched video.`);
+      } else {
+        logger.info(`[Stitcher] Recording ${recordingId} is already completed.`);
+        return true;
+      }
     }
 
     const segments = await db.recordingSegment.findMany({
@@ -86,21 +149,39 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
     });
 
     if (!segments || segments.length === 0) {
-      logger.warn(`[Stitcher] No uploaded segments found for recording ${recordingId}.`);
+      logger.warn(`[Stitcher] No uploaded segments found for recording ${recordingId}. Marking as failed.`);
+      await db.recording.update({
+        where: { id: recordingId },
+        data: { status: 'failed', failureReason: 'No uploaded segments found', endedAt: recording.endedAt || new Date() }
+      });
       return false;
     }
 
     // Filter out segments without valid URLs
-    const validSegments = segments.filter(s => s.url && s.url.startsWith('http'));
+    const validSegments = segments.filter((s: any) => s.url && s.url.startsWith('http'));
     if (validSegments.length === 0) {
-      logger.warn(`[Stitcher] No segments with valid HTTP URLs for recording ${recordingId}.`);
+      logger.warn(`[Stitcher] No segments with valid HTTP URLs for recording ${recordingId}. Marking as failed.`);
+      await db.recording.update({
+        where: { id: recordingId },
+        data: { status: 'failed', failureReason: 'No valid segment URLs', endedAt: recording.endedAt || new Date() }
+      });
       return false;
     }
 
     logger.info(`[Stitcher] Found ${validSegments.length} valid segments for recording ${recordingId}.`);
 
-    // CASE 1: Single segment recorded - no stitching needed!
+    // CASE 1: Single segment recorded - only finalize if recording is stopped and capture is done
     if (validSegments.length === 1) {
+      const leaseKey = `recording:${recordingId}:lease`;
+      const hasLease = await redis.exists(leaseKey);
+      const controlState = await redis.get(`recording:${recordingId}:control`);
+      const isStopped = !hasLease && (recording.status === 'stopping' || recording.status === 'processing' || controlState === 'STOP_REQUESTED' || controlState === 'STOPPING' || controlState === 'STOPPED');
+
+      if (!isStopped) {
+        logger.info(`[Stitcher] Recording ${recordingId} has 1 segment uploaded but is still actively recording. Awaiting further segments.`);
+        return false;
+      }
+
       const single = validSegments[0];
       const durationSec = Math.round((single.durationMs || 0) / 1000);
       
@@ -127,7 +208,7 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
       const seg = validSegments[i];
       const localFile = path.join(tempDir, `seg_${i}.mp4`);
       logger.info(`[Stitcher] Downloading segment ${seg.segmentIndex} from ${seg.url}...`);
-      await downloadFile(seg.url!, localFile);
+      await downloadSegment(seg, localFile);
       localSegmentFiles.push(localFile);
       totalDurationSec += Math.round((seg.durationMs || 0) / 1000);
     }
@@ -178,10 +259,16 @@ export async function stitchRecording(recordingId: string): Promise<boolean> {
 
     await s3Client.send(putCommand);
 
-    const cleanEndpoint = rawEndpoint.replace(/^https?:\/\//, '');
-    const masterUrl = forcePathStyle 
-      ? `https://${cleanEndpoint}/${bucket}/${storageKey}`
-      : `https://${bucket}.${cleanEndpoint}/${storageKey}`;
+    const publicStorageUrl = process.env.PUBLIC_STORAGE_URL ? process.env.PUBLIC_STORAGE_URL.replace(/\/+$/, '') : '';
+    let masterUrl = '';
+    if (publicStorageUrl) {
+      masterUrl = `${publicStorageUrl}/${bucket}/${storageKey}`;
+    } else {
+      const cleanEndpoint = rawEndpoint.replace(/^https?:\/\//, '');
+      masterUrl = forcePathStyle 
+        ? `https://${cleanEndpoint}/${bucket}/${storageKey}`
+        : `https://${bucket}.${cleanEndpoint}/${storageKey}`;
+    }
 
     logger.info(`[Stitcher] Successfully uploaded stitched master video: ${masterUrl}`);
 

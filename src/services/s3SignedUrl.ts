@@ -9,7 +9,7 @@ const region = process.env.DO_SPACES_REGION || 'us-east-1';
 const accessKeyId = process.env.DO_SPACES_KEY || '';
 const secretAccessKey = process.env.DO_SPACES_SECRET || '';
 const rawEndpoint = process.env.DO_SPACES_ENDPOINT;
-const endpoint = rawEndpoint ? (rawEndpoint.startsWith('http') ? rawEndpoint : `https://${rawEndpoint}`) : undefined;
+const endpoint = rawEndpoint ? (rawEndpoint.startsWith('http') ? rawEndpoint : (rawEndpoint.includes(':') || rawEndpoint.includes('minio') ? `http://${rawEndpoint}` : `https://${rawEndpoint}`)) : undefined;
 const bucket = process.env.DO_SPACES_BUCKET || '';
 const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === 'true';
 
@@ -44,7 +44,13 @@ export async function generateSignedPlaybackUrl(storageKey: string, ttlSeconds =
 
   try {
     // @ts-ignore
-    return await getSignedUrl(s3Client, command, { expiresIn: ttlSeconds });
+    let signedUrl = await getSignedUrl(s3Client, command, { expiresIn: ttlSeconds });
+    const publicStorageUrl = process.env.PUBLIC_STORAGE_URL || (process.env.STORAGE_PUBLIC_DOMAIN ? `https://${process.env.STORAGE_PUBLIC_DOMAIN}` : null);
+    if (publicStorageUrl && signedUrl) {
+      const publicBase = publicStorageUrl.replace(/\/+$/, '');
+      signedUrl = signedUrl.replace(/^https?:\/\/[^\/]+/, publicBase);
+    }
+    return signedUrl;
   } catch (error) {
     logger.error('Failed to generate signed S3 URL', error);
     throw new Error('Could not generate playback URL');

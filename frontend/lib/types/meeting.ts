@@ -57,6 +57,9 @@ export interface Participant {
   screenAudioTrack?: MediaStreamTrack | null; // Dedicated screen share audio track
   
   // Stream identifiers
+  audioProducerId?: string;
+  audioConsumerId?: string;
+  audioTrackId?: string;
   cameraProducerId?: string;
   cameraConsumerId?: string;
   cameraTrackId?: string;

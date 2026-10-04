@@ -126,7 +126,7 @@ export function MeetingControls() {
     theme === "midnight" ? "Midnight" :
     theme === "soft" ? "Soft Light" : "Slate";
 
-  const isHost = currentUser.role === 'host' || currentUser.role === 'co-host';
+  const isHost = ['host', 'admin', 'co-host'].includes(currentUser.role || '');
 
   return (
     <>

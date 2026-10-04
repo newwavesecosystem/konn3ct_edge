@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     let finalName = "Guest";
     let finalRole = isBot ? "bot" : "attendee";
     let finalIsMobile = false;
+    let isDashboardUser = false;
 
     if (isBot) {
       const botToken = request.nextUrl.searchParams.get('botToken') || request.headers.get('Authorization')?.split(' ')[1];
@@ -68,7 +69,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Expired or malformed bot token' }, { status: 401 });
       }
     } else {
-      let isDashboardUser = false;
       const authCookie = request.headers.get("cookie");
       if (authCookie) {
         try {
@@ -113,8 +113,12 @@ export async function POST(request: NextRequest) {
             if (sessionData.userId) finalUserId = sessionData.userId;
           }
         } catch (err) {
-          console.error("JWT Verification failed", err);
-          return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
+          if (isDashboardUser) {
+            console.warn("Expired or invalid prejoin sessionToken ignored for authenticated dashboard user");
+          } else {
+            console.error("JWT Verification failed", err);
+            return NextResponse.json({ error: "Session expired or invalid" }, { status: 403 });
+          }
         }
       }
     }
@@ -140,6 +144,7 @@ export async function POST(request: NextRequest) {
 
       if (roomRes.ok) {
         const room = await roomRes.json() as {
+          ownerId?: string;
           accessPin?: string | null;
           guestJoinAllowed?: boolean;
           mode?: string;
@@ -153,6 +158,10 @@ export async function POST(request: NextRequest) {
           isWaitingRoomEnabled?: boolean;
           logoutUrl?: string | null;
         };
+
+        if (room.ownerId && isDashboardUser && room.ownerId === finalUserId) {
+          finalRole = "host";
+        }
 
         fetchedRoomLimits = {
           maxParticipants: room.maxParticipants ?? 100,

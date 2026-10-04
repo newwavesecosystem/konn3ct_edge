@@ -5,8 +5,19 @@ metadata:
 spec:
   template:
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
+      hostAliases:
+        - ip: "197.159.74.14"
+          hostnames:
+            - "meetingapp2.1gov.ng"
+            - "meetingapi.1gov.ng"
+            - "meetingstorage.1gov.ng"
       containers:
         - name: backend
+          env:
+            - name: PUBLIC_STORAGE_URL
+              value: "https://meetingstorage.1gov.ng"
           resources:
             requests:
               cpu: "1000m"
@@ -22,6 +33,8 @@ metadata:
 spec:
   template:
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
       containers:
         - name: backend
           resources:
@@ -41,13 +54,28 @@ spec:
     spec:
       nodeSelector:
         role: recorder
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "recorder"
+          effect: "NoSchedule"
+      hostAliases:
+        - ip: "197.159.74.14"
+          hostnames:
+            - "meetingapp2.1gov.ng"
+            - "meetingapi.1gov.ng"
+            - "meetingstorage.1gov.ng"
       containers:
         - name: recorder
           env:
+            - name: DO_SPACES_ENDPOINT
+              value: "http://minio-service:9000"
+            - name: PUBLIC_STORAGE_URL
+              value: "https://meetingstorage.1gov.ng"
             - name: MAX_CONCURRENT_BROWSERS
               value: "20"
             - name: MAX_CONCURRENT_TRANSCODES
-              value: "20"
+              value: "3"
           resources:
             requests:
               cpu: "2000m"
@@ -55,3 +83,8 @@ spec:
             limits:
               cpu: "28000m"
               memory: "28Gi"
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

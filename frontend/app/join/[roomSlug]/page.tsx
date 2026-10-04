@@ -41,6 +41,8 @@ export default function JoinPage({
   const [vbImageUrl, setVbImageUrl] = useState<string | undefined>();
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [isOriginalRatioEnabled, setIsOriginalRatioEnabled] = useState(false);
+  const [hasExistingHostSession, setHasExistingHostSession] = useState(false);
+  const [existingSessionToken, setExistingSessionToken] = useState<string | null>(null);
   
   // Validation States
   const [validationStatus, setValidationStatus] = useState<"loading" | "valid" | "invalid">("loading");
@@ -69,6 +71,54 @@ export default function JoinPage({
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c: string) => c.toUpperCase());
 
+  // Prefill details and detect existing host session from localStorage / sessionStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      // 1. Prefill name & email from last user info
+      const lastUser = localStorage.getItem("konn3ct:last_user_info");
+      if (lastUser) {
+        const parsed = JSON.parse(lastUser);
+        if (parsed.name) setName(parsed.name);
+        if (parsed.email) setEmail(parsed.email);
+        if (parsed.role === "host") setRole("host");
+      }
+
+      // 2. Check if an active session exists for this room
+      const storedToken = sessionStorage.getItem(`konn3ct:session:${resolvedParams.roomSlug}`) ||
+                          sessionStorage.getItem("conn3ct_session_token") || 
+                          localStorage.getItem(`konn3ct:session:${resolvedParams.roomSlug}`);
+      if (storedToken) {
+        const parts = storedToken.split('.');
+        if (parts.length >= 2) {
+          const base64Url = parts[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const payload = JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+          const nowSec = Math.floor(Date.now() / 1000);
+          const isExpired = payload.exp && payload.exp < nowSec;
+          const isSameRoom = !payload.roomId || payload.roomId === resolvedParams.roomSlug;
+
+          if (isExpired || !isSameRoom) {
+            sessionStorage.removeItem("conn3ct_session_token");
+            sessionStorage.removeItem(`konn3ct:session:${resolvedParams.roomSlug}`);
+            localStorage.removeItem(`konn3ct:session:${resolvedParams.roomSlug}`);
+            setExistingSessionToken(null);
+          } else {
+            setExistingSessionToken(storedToken);
+            if (payload.role === 'host') {
+              setHasExistingHostSession(true);
+              setRole('host');
+            }
+            if (payload.name) setName(payload.name);
+            if (payload.email) setEmail(payload.email);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to recover previous join info:", e);
+    }
+  }, [resolvedParams.roomSlug]);
+
   // Load original ratio setting from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -89,8 +139,7 @@ export default function JoinPage({
         return;
       }
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
-        const res = await fetch(`${baseUrl}/validate-meeting`, {
+        const res = await fetch(`/api/kv4/validate-meeting`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: resolvedParams.roomSlug })
@@ -298,6 +347,19 @@ export default function JoinPage({
     };
   }, [isCameraOn, selectedDevices.videoInput]);
 
+  const handleResumeSession = () => {
+    if (existingSessionToken) {
+      sessionStorage.setItem("conn3ct_session_token", existingSessionToken);
+      try {
+        localStorage.setItem(`konn3ct:session:${resolvedParams.roomSlug}`, existingSessionToken);
+      } catch (e) {}
+      // Stop preview stream
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+      router.push(`/meeting/${resolvedParams.roomSlug}`);
+    }
+  };
+
   const handleJoin = async () => {
     if (!name.trim() || !email.trim() || isJoining) return;
     if (requiresAccessCode && !accessCode.trim()) {
@@ -308,9 +370,14 @@ export default function JoinPage({
     // Stop the preview stream so it doesn't block camera in the meeting
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+
+    // If host session exists and user is re-joining with existing host session, resume host privileges
+    if (hasExistingHostSession && existingSessionToken) {
+      handleResumeSession();
+      return;
+    }
     
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
       const isMobileDevice = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const payload: any = {
         room: resolvedParams.roomSlug,
@@ -337,6 +404,7 @@ export default function JoinPage({
             isMobile: isMobileDevice,
             camera: isCameraOn,
             mic: !isMuted,
+            ...(existingSessionToken ? { previousSessionToken: existingSessionToken } : {}),
             ...(accessCode.trim() ? { accessCode: accessCode.trim() } : {})
           })
         });
@@ -345,8 +413,7 @@ export default function JoinPage({
           data.success = true;
         }
       } else {
-        const baseUrl = process.env.NEXT_PUBLIC_KONN3CT_EXTERNAL_API_URL || "https://dev.konn3ct.ng/api/app/kv4";
-        const res = await fetch(`${baseUrl}/join-room`, {
+        const res = await fetch(`/api/kv4/join-room`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -361,6 +428,14 @@ export default function JoinPage({
       if (data.sessionToken) {
         // Save the secure session token to navigate with
         sessionStorage.setItem("conn3ct_session_token", data.sessionToken);
+        try {
+          localStorage.setItem(`konn3ct:session:${resolvedParams.roomSlug}`, data.sessionToken);
+          localStorage.setItem("konn3ct:last_user_info", JSON.stringify({
+            name: name.trim(),
+            email: email.trim(),
+            role: role
+          }));
+        } catch (e) {}
       }
 
       // Navigate immediately — the MeetingProvider will handle WebSocket + waiting room
@@ -728,6 +803,23 @@ export default function JoinPage({
                     {serverStatus === "offline" && "Signal server unreachable — check NEXT_PUBLIC_BACKEND_DOMAIN"}
                   </span>
                 </div> */}
+
+                {/* Host Session Recovery Banner */}
+                {hasExistingHostSession && (
+                  <div className="p-3.5 rounded-xl bg-brand-green/10 border border-brand-green/30 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-brand-green">Host Session Detected</p>
+                      <p className="text-[11px] text-white/60">You have an active host session for this meeting.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResumeSession}
+                      className="px-3 py-1.5 rounded-lg bg-brand-green hover:bg-[#287854] text-white text-xs font-semibold transition-all shadow-md active:scale-95 shrink-0"
+                    >
+                      Resume as Host
+                    </button>
+                  </div>
+                )}
 
                 {/* Name input */}
                 <div>

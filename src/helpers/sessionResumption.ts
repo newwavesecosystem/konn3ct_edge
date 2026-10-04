@@ -53,6 +53,15 @@ if admission.status ~= 'ACTIVE' then
   return {0, 'NOT_ACTIVE', admission.status}
 end
 
+if not expectedAdmissionGen or expectedAdmissionGen <= 0 then
+  return {0, 'INVALID_ADMISSION_GEN'}
+end
+
+local currentAdmGen = tonumber(admission.admissionGeneration) or 1
+if currentAdmGen ~= expectedAdmissionGen then
+  return {0, 'ADMISSION_GEN_MISMATCH', currentAdmGen}
+end
+
 local currentSessionRaw = redis.call('HGET', sessionsKey, identityKey)
 local nextSessionGen = 1
 local nextStateVer = admission.sessionStateVersion or 1
@@ -412,6 +421,53 @@ export async function setMeetingInstanceWaitingRoom(
   } catch (e) {
     logger.error('Error setting meeting instance waiting room', e);
     return { settingsVersion: 1, waitingRoomEnabled };
+  }
+}
+
+const UPDATE_MEETING_ADMISSION_ROLE_SCRIPT = `
+local admissionsKey = KEYS[1]
+local identityKey = ARGV[1]
+local newRole = ARGV[2]
+
+local admissionRaw = redis.call('HGET', admissionsKey, identityKey)
+if not admissionRaw then
+  return {0, 'NO_ADMISSION'}
+end
+
+local admission = cjson.decode(admissionRaw)
+if admission.status ~= 'ACTIVE' then
+  return {0, 'NOT_ACTIVE', admission.status}
+end
+
+admission.role = newRole
+admission.sessionStateVersion = (admission.sessionStateVersion or 0) + 1
+redis.call('HSET', admissionsKey, identityKey, cjson.encode(admission))
+return {1, cjson.encode(admission)}
+`;
+
+export async function updateMeetingAdmissionRole(
+  meetingInstanceId: string,
+  identityKey: string,
+  newRole: string
+): Promise<{ success: boolean; admission?: AdmissionRecord; reason?: string }> {
+  const key = `meeting:${meetingInstanceId}:admissions`;
+  try {
+    const res = (await redis.eval(
+      UPDATE_MEETING_ADMISSION_ROLE_SCRIPT,
+      1,
+      key,
+      identityKey,
+      newRole
+    )) as [number, string, any?];
+
+    if (!res || res[0] !== 1) {
+      return { success: false, reason: res ? res[1] : 'REDIS_ERROR' };
+    }
+    const admission = JSON.parse(res[1]) as AdmissionRecord;
+    return { success: true, admission };
+  } catch (err: any) {
+    logger.error('Failed to atomically update admission role in Redis', err);
+    return { success: false, reason: err.message || 'REDIS_EXCEPTION' };
   }
 }
 

@@ -1,4 +1,4 @@
-FROM node:20-bullseye-slim AS builder
+FROM node:20-bookworm-slim AS builder
 
 # Install build dependencies for mediasoup (Python 3, C++ compiler) with retries
 RUN set -eux; \
@@ -25,7 +25,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # --- Production Image ---
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 # Mediasoup requires python3 runtime for some internal tasks, ffmpeg for transcription
 RUN set -eux; \

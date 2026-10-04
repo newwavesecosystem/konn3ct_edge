@@ -35,6 +35,7 @@ import { streamingRouter } from './routes/streaming';
 import { internalRecordingsRouter } from './routes/internalRecordings';
 import { odooRouter } from './routes/odoo';
 import { marketingRouter } from './routes/marketing';
+import { kv4Router } from './routes/kv4';
 
 if (process.env.NODE_ENV === 'production') {
   const required = ['JWT_SECRET', 'TURN_SECRET', 'EXTERNAL_API_KEY'];
@@ -116,6 +117,8 @@ app.use('/api/streaming', streamingRouter);
 app.use('/api/internal/recordings', internalRecordingsRouter);
 app.use('/api/odoo', odooRouter);
 app.use('/api/odoo/marketing', marketingRouter);
+app.use('/api/app/kv4', kv4Router);
+app.use('/api/kv4', kv4Router);
 
 // Prometheus metrics endpoint for Phase 0 Baseline
 app.get('/metrics', async (req, res) => {
@@ -236,9 +239,15 @@ async function boot() {
       config.mediasoup.webRtcTransport.listenIps[0].announcedIp = publicIp;
     }
 
-    // Mediasoup workers are no longer initialized here in Phase 4.
-    // They run in the dedicated media-server.ts entrypoint.
-    logger.info('Signaling server booting without local Mediasoup workers.');
+    // In local dev with USE_LOCAL_MEDIA=true, initialize workers in-process.
+    // In production, workers run in the dedicated media-server.ts entrypoint.
+    if (process.env.USE_LOCAL_MEDIA === 'true') {
+      const { initializeWorkers } = require('./media/sfu');
+      await initializeWorkers();
+      logger.info('Signaling server booting WITH embedded Mediasoup workers (local dev mode).');
+    } else {
+      logger.info('Signaling server booting without local Mediasoup workers.');
+    }
   } finally {
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);

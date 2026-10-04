@@ -8,7 +8,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { roomId, name, email, isMobile, camera, mic } = body;
+    const { roomId, name, email, isMobile, camera, mic, previousSessionToken } = body;
 
     if (!roomId) {
       return NextResponse.json({ error: "Missing roomId" }, { status: 400 });
@@ -29,17 +29,27 @@ export async function POST(request: Request) {
       }
     }
 
-    // Force the role to "attendee" to prevent malicious role elevation.
-    // The legitimate host will join via a different secure dashboard endpoint.
-    const secureRole = "attendee";
-    const finalEmail = email?.trim() || "guest@conn3ct.com";
+    // Default role is "attendee" for new guests.
+    // If a valid previous host token for this room is provided, preserve the host role.
+    let secureRole = "attendee";
+    let finalUserId = `guest_${Math.random().toString(36).substring(2, 10)}`;
 
-    // Generate a random stable userId for guests
-    const guestUserId = `guest_${Math.random().toString(36).substring(2, 10)}`;
+    if (previousSessionToken) {
+      try {
+        const decoded = jwt.verify(previousSessionToken, process.env.JWT_SECRET!) as any;
+        if (decoded.roomId === roomId && decoded.role === 'host') {
+          secureRole = 'host';
+          if (decoded.userId) finalUserId = decoded.userId;
+        }
+      } catch (e) {
+        console.warn("Invalid previous session token in prejoin", e);
+      }
+    }
+    const finalEmail = email?.trim() || "guest@conn3ct.com";
 
     // Create the session payload
     const sessionData = {
-      userId: guestUserId,
+      userId: finalUserId,
       roomId,
       name: name.trim(),
       email: finalEmail,
