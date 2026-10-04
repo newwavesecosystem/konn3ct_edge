@@ -3218,7 +3218,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_update':
-        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
+        if (['host', 'co-host', 'presenter', 'admin'].includes(client.role)) {
           if (data.link) {
             try {
               const url = new URL(data.link);
@@ -3246,7 +3246,7 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'ecinema_action':
-        if (client.role === 'host' || client.role === 'co-host' || client.role === 'presenter') {
+        if (['host', 'co-host', 'presenter', 'admin'].includes(client.role)) {
           const stateObj = { action: data.action, time: data.time || 0, serverTime: Date.now() };
           roomECinemaState.set(roomId, stateObj);
           redis.set(`room:${roomId}:ecinema:state`, JSON.stringify(stateObj), 'EX', 86400).catch(e => logger.warn('Redis ecinema state set error', e));
