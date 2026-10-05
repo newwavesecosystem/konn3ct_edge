@@ -52,6 +52,8 @@ metadata:
 spec:
   template:
     spec:
+      imagePullSecrets:
+        - name: regcred
       nodeSelector:
         role: recorder
       tolerations:
@@ -88,3 +90,29 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conn3ct-frontend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ubuntu20
