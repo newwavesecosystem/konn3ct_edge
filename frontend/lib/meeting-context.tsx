@@ -1217,7 +1217,8 @@ export function MeetingProvider({
           const currentUid = webrtcClient.current?.userId || currentUser.userId || initialCurrentUser.userId || initialCurrentUser.id;
           const currentPid = clientParticipantId || webrtcClient.current?.participantId || currentUser.id || initialCurrentUser.id;
 
-          const pollsWithDetails = historyPolls.map((poll: any) => {
+          const activePolls = historyPolls.filter((p: any) => p && p.isActive !== false);
+          const pollsWithDetails = activePolls.map((poll: any) => {
             let totalVotes = 0;
             let myVote = undefined;
             if (Array.isArray(poll.options)) {
@@ -1233,7 +1234,7 @@ export function MeetingProvider({
             }
             return {
               ...poll,
-              isActive: poll.isActive !== false,
+              isActive: true,
               totalVotes,
               myVote
             };
