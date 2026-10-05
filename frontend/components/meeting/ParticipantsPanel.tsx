@@ -43,13 +43,34 @@ const roleColor: Record<string, string> = {
   presenter: "text-purple-400 bg-purple-400/10",
 };
 
+export type ParticipantFilter = 'all' | 'muted' | 'unmuted' | 'raised-hands' | 'screen-sharing';
+
 export function ParticipantsPanel() {
   const { participants: allParticipants, currentUser, waitingUsers, admitUser, denyUser, admitAllUsers, denyAllUsers } = useMeeting();
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [activeFilter, setActiveFilter] = React.useState<ParticipantFilter>("all");
 
-  const participants = allParticipants.filter(p => 
-    !isSystemParticipant(p) && (p.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  const baseParticipants = allParticipants.filter(p => !isSystemParticipant(p));
+
+  const searchFiltered = baseParticipants.filter(p => 
+    (p.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const filterCounts = {
+    all: searchFiltered.length,
+    muted: searchFiltered.filter(p => p.isMuted).length,
+    unmuted: searchFiltered.filter(p => !p.isMuted).length,
+    'raised-hands': searchFiltered.filter(p => p.isHandRaised).length,
+    'screen-sharing': searchFiltered.filter(p => p.isScreenSharing).length,
+  };
+
+  const participants = searchFiltered.filter(p => {
+    if (activeFilter === 'muted') return p.isMuted;
+    if (activeFilter === 'unmuted') return !p.isMuted;
+    if (activeFilter === 'raised-hands') return p.isHandRaised;
+    if (activeFilter === 'screen-sharing') return p.isScreenSharing;
+    return true;
+  });
 
   const hosts = participants.filter(
     (p) => p.role === "host" || p.role === "co-host"
@@ -61,10 +82,18 @@ export function ParticipantsPanel() {
   
   const totalVisibleParticipants = hosts.length + presenters.length + attendees.length;
 
+  const filterOptions: { id: ParticipantFilter; label: string; icon?: React.ReactNode }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'muted', label: 'Muted', icon: <MicOff className="w-3.5 h-3.5" /> },
+    { id: 'unmuted', label: 'Unmuted', icon: <Mic className="w-3.5 h-3.5" /> },
+    { id: 'raised-hands', label: 'Raised hands', icon: <Hand className="w-3.5 h-3.5 text-yellow-400" /> },
+    { id: 'screen-sharing', label: 'Screen-sharing', icon: <MonitorUp className="w-3.5 h-3.5 text-blue-400" /> },
+  ];
+
   return (
     <div className="flex flex-col h-full">
       <div
-        className="px-4 py-3 flex flex-col gap-3"
+        className="px-4 py-3 flex flex-col gap-2.5"
         style={{ borderBottom: "1px solid var(--mt-border)" }}
       >
         <div className="flex items-center justify-between">
@@ -90,6 +119,45 @@ export function ParticipantsPanel() {
               border: "1px solid var(--mt-border)"
             }}
           />
+        </div>
+
+        {/* Filter categories */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {filterOptions.map((tab) => {
+            const isActive = activeFilter === tab.id;
+            const count = filterCounts[tab.id];
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveFilter(tab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 transition-all border",
+                  isActive
+                    ? "bg-brand-green/15 text-brand-green border-brand-green/30 shadow-sm"
+                    : "border-transparent hover:bg-white/5"
+                )}
+                style={
+                  !isActive
+                    ? { color: "var(--mt-text-muted)", backgroundColor: "var(--mt-bg-input)" }
+                    : undefined
+                }
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-full leading-none",
+                    isActive
+                      ? "bg-brand-green/25 text-brand-green font-semibold"
+                      : "opacity-70 bg-black/10 dark:bg-white/10"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -151,26 +219,50 @@ export function ParticipantsPanel() {
           </div>
         )}
 
-        {hosts.length > 0 && (
-          <ParticipantGroup
-            label="Hosts"
-            participants={hosts}
-            currentUserId={currentUser.id}
-          />
-        )}
-        {presenters.length > 0 && (
-          <ParticipantGroup
-            label="Presenters"
-            participants={presenters}
-            currentUserId={currentUser.id}
-          />
-        )}
-        {attendees.length > 0 && (
-          <ParticipantGroup
-            label="Attendees"
-            participants={attendees}
-            currentUserId={currentUser.id}
-          />
+        {totalVisibleParticipants === 0 ? (
+          <div className="flex flex-col items-center justify-center p-8 text-center space-y-2 opacity-80">
+            <p className="text-sm font-medium" style={{ color: "var(--mt-text)" }}>
+              No participants found
+            </p>
+            <p className="text-xs" style={{ color: "var(--mt-text-faint)" }}>
+              {activeFilter !== 'all'
+                ? `No participants match the "${filterOptions.find(f => f.id === activeFilter)?.label}" filter.`
+                : 'No participants match your search.'}
+            </p>
+            {activeFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setActiveFilter('all')}
+                className="mt-2 text-xs px-3 py-1 rounded-lg bg-brand-green/10 hover:bg-brand-green/20 text-brand-green font-medium transition-colors"
+              >
+                Show all participants
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            {hosts.length > 0 && (
+              <ParticipantGroup
+                label="Hosts"
+                participants={hosts}
+                currentUserId={currentUser.id}
+              />
+            )}
+            {presenters.length > 0 && (
+              <ParticipantGroup
+                label="Presenters"
+                participants={presenters}
+                currentUserId={currentUser.id}
+              />
+            )}
+            {attendees.length > 0 && (
+              <ParticipantGroup
+                label="Attendees"
+                participants={attendees}
+                currentUserId={currentUser.id}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

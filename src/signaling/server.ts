@@ -2045,9 +2045,18 @@ export function initializeSignaling(server: Server) {
           // 4. Sync state to redis first so the user is removed
           await syncRoomStateToRedis(roomId, roomSlug);
 
-          // 5. Check if GLOBAL room is empty
+          // 5. Check if GLOBAL room is empty of human participants
           const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
-          const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
+          let humanParticipantsCount = 0;
+          for (const [pId, pJson] of Object.entries(globalParticipants || {})) {
+            try {
+              const p = JSON.parse(pJson);
+              if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
+                humanParticipantsCount++;
+              }
+            } catch(e) {}
+          }
+          const isGloballyEmpty = humanParticipantsCount === 0;
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after disconnect timeout. Closing meeting instance and wiping room state.`);
@@ -3004,9 +3013,18 @@ export function initializeSignaling(server: Server) {
           // 4. Sync state to redis first so the user is removed
           await syncRoomStateToRedis(roomId, client.roomSlug);
 
-          // 5. Check if GLOBAL room is empty
+          // 5. Check if GLOBAL room is empty of human participants
           const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
-          const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
+          let humanParticipantsCount = 0;
+          for (const [pId, pJson] of Object.entries(globalParticipants || {})) {
+            try {
+              const p = JSON.parse(pJson);
+              if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
+                humanParticipantsCount++;
+              }
+            } catch(e) {}
+          }
+          const isGloballyEmpty = humanParticipantsCount === 0;
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after explicit leave. Closing meeting instance and wiping room state.`);
