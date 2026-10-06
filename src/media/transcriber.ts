@@ -1,5 +1,5 @@
-import { Producer, Router } from 'mediasoup/node/lib/types';
-import { spawn } from 'child_process';
+import { Producer, Router, PlainTransport, Consumer } from 'mediasoup/node/lib/types';
+import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import dgram from 'dgram';
 import { DeepgramClient } from '@deepgram/sdk';
 import { logger } from '../logger';
@@ -10,21 +10,107 @@ import WebSocket from 'ws';
 const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
 const deepgram = deepgramApiKey ? new DeepgramClient({ apiKey: deepgramApiKey }) : null;
 
-// Emitter to broadcast captions back to server.ts
+// Emitter to broadcast captions back to server.ts / media-server.ts
 export const transcriberEvents = new EventEmitter();
 
-let nextPort = 40000;
-async function getFreePort(): Promise<number> {
-  const port = nextPort;
-  nextPort += 2; // RTP and RTCP typically use even/odd pairs
-  if (nextPort > 49000) nextPort = 40000;
-  return port;
+// 4-digit port range for internal loopback RTP/RTCP
+const TRANSCRIBER_MIN_PORT = 6500;
+const TRANSCRIBER_MAX_PORT = 7500;
+let currentPort = TRANSCRIBER_MIN_PORT;
+
+async function isUdpPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket('udp4');
+    socket.once('error', () => resolve(false));
+    socket.bind(port, '127.0.0.1', () => {
+      socket.close(() => resolve(true));
+    });
+  });
 }
 
-// Map producerId to cleanup function to avoid memory leaks
-const transcribers = new Map<string, () => void>();
+async function getGuaranteedFreePortPair(): Promise<{ rtpPort: number; rtcpPort: number }> {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const rtp = currentPort;
+    const rtcp = currentPort + 1;
+    currentPort += 2;
+    if (currentPort > TRANSCRIBER_MAX_PORT - 2) {
+      currentPort = TRANSCRIBER_MIN_PORT;
+    }
 
-export async function startTranscription(producer: Producer, router: Router, roomId: string, userId: string, userName: string, clientData?: { isBot?: boolean, role?: string }) {
+    const [rtpOk, rtcpOk] = await Promise.all([
+      isUdpPortAvailable(rtp),
+      isUdpPortAvailable(rtcp)
+    ]);
+
+    if (rtpOk && rtcpOk) {
+      return { rtpPort: rtp, rtcpPort: rtcp };
+    }
+  }
+
+  // Fallback to OS assigned ephemeral port if range is saturated
+  return new Promise((resolve, reject) => {
+    const s1 = dgram.createSocket('udp4');
+    s1.bind(0, '127.0.0.1', () => {
+      const p1 = s1.address().port;
+      s1.close(() => {
+        const s2 = dgram.createSocket('udp4');
+        s2.bind(0, '127.0.0.1', () => {
+          const p2 = s2.address().port;
+          s2.close(() => resolve({ rtpPort: p1, rtcpPort: p2 }));
+        });
+        s2.once('error', reject);
+      });
+    });
+    s1.once('error', reject);
+  });
+}
+
+interface TranscriberSession {
+  producerId: string;
+  consumer: Consumer;
+  plainTransport: PlainTransport;
+  ffmpegProcess: ChildProcessWithoutNullStreams;
+  dgSocket: WebSocket;
+  gracePeriodTimer?: NodeJS.Timeout;
+  keepAliveInterval?: NodeJS.Timeout;
+  pingInterval?: NodeJS.Timeout;
+  cleanup: () => void;
+  isPaused: boolean;
+}
+
+// Map producerId -> active/warm transcriber session
+const activeSessions = new Map<string, TranscriberSession>();
+
+export async function startTranscription(
+  producer: Producer,
+  router: Router,
+  roomId: string,
+  userId: string,
+  userName: string,
+  clientData?: { isBot?: boolean; role?: string }
+) {
+  // If a warm session already exists, resume it immediately
+  const existingSession = activeSessions.get(producer.id);
+  if (existingSession) {
+    if (existingSession.gracePeriodTimer) {
+      clearTimeout(existingSession.gracePeriodTimer);
+      existingSession.gracePeriodTimer = undefined;
+    }
+    if (existingSession.isPaused && !existingSession.consumer.closed) {
+      try {
+        await existingSession.consumer.resume();
+        existingSession.isPaused = false;
+        logger.info(`[DEEPGRAM] Resumed warm transcription session for user ${userId} in room ${roomId}`);
+        return;
+      } catch (err) {
+        logger.warn(`[DEEPGRAM] Failed to resume warm consumer, rebuilding:`, err);
+        existingSession.cleanup();
+      }
+    } else {
+      return;
+    }
+  }
+
   logger.info(`[DEEPGRAM] startTranscription called for user ${userId} in room ${roomId}`);
   
   const isBot = clientData?.isBot || clientData?.role === 'bot' || clientData?.role === 'recorder';
@@ -45,15 +131,13 @@ export async function startTranscription(producer: Producer, router: Router, roo
     return;
   }
 
-  logger.info(`[DEEPGRAM] deepgram_connection_attempt: user ${userId}`);
-
-  if (!deepgram) {
+  if (!deepgram || !deepgramApiKey) {
     logger.warn(`[DEEPGRAM] No API key found, skipping transcription for user ${userId}`);
-    return; // Silent return if no API key
+    return;
   }
-  // 1. Get free ports for FFmpeg to listen on
-  const rtpPort = await getFreePort();
-  const rtcpPort = await getFreePort();
+
+  // 1. Get guaranteed available 4-digit port pair (6500-7500)
+  const { rtpPort, rtcpPort } = await getGuaranteedFreePortPair();
   
   // 2. Create PlainTransport on Mediasoup to send RTP to FFmpeg
   const plainTransport = await router.createPlainTransport({
@@ -74,24 +158,17 @@ export async function startTranscription(producer: Producer, router: Router, roo
     paused: true
   });
   
-  // 3. Connect to Deepgram using standard WebSocket
-  const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&encoding=linear16&sample_rate=48000&channels=1';
+  // 3. Connect to Deepgram Nova-2 with real-time interim streaming & endpointing
+  const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&interim_results=true&endpointing=300&vad_events=true&encoding=linear16&sample_rate=48000&channels=1';
   const dgSocket = new WebSocket(deepgramUrl, {
     headers: {
       Authorization: `Token ${deepgramApiKey}`
     }
   });
   
-  // 4. Start FFmpeg
+  // 4. Spawn FFmpeg with dedicated port pair
   const pt = consumer.rtpParameters.codecs[0].payloadType;
-  const sdpString = `v=0
-o=- 0 0 IN IP4 127.0.0.1
-s=FFmpeg
-c=IN IP4 127.0.0.1
-t=0 0
-m=audio ${rtpPort} RTP/AVP ${pt}
-a=rtpmap:${pt} opus/48000/2
-`;
+  const sdpString = `v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=FFmpeg\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio ${rtpPort} RTP/AVP ${pt}\r\na=rtpmap:${pt} opus/48000/2\r\n`;
   
   const ffmpegArgs = [
     '-protocol_whitelist', 'file,rtp,udp,pipe',
@@ -116,8 +193,47 @@ a=rtpmap:${pt} opus/48000/2
     }
   });
   
-  let pingInterval: NodeJS.Timeout;
-  
+  let pingInterval: NodeJS.Timeout | undefined;
+  let keepAliveInterval: NodeJS.Timeout | undefined;
+  let intentionalClose = false;
+  let cleanupStarted = false;
+
+  const cleanup = () => {
+    if (cleanupStarted) return;
+    cleanupStarted = true;
+    intentionalClose = true;
+
+    logger.info(`[DEEPGRAM] deepgram_cleanup_started for user ${userId} (producer ${producer.id})`);
+    
+    if (keepAliveInterval) clearInterval(keepAliveInterval);
+    if (pingInterval) clearInterval(pingInterval);
+    
+    const session = activeSessions.get(producer.id);
+    if (session?.gracePeriodTimer) {
+      clearTimeout(session.gracePeriodTimer);
+    }
+    activeSessions.delete(producer.id);
+
+    producer.removeListener('transportclose', cleanup);
+    producer.removeListener('@close' as any, cleanup);
+    
+    if (!consumer.closed) consumer.close();
+    if (!plainTransport.closed) plainTransport.close();
+    if (!ffmpegProcess.killed) {
+      try { ffmpegProcess.kill('SIGTERM'); } catch (e) {}
+    }
+    
+    try {
+      if (dgSocket.readyState === WebSocket.OPEN) {
+        dgSocket.close();
+      } else if (dgSocket.readyState === WebSocket.CONNECTING) {
+        dgSocket.terminate();
+      }
+    } catch (e) {}
+
+    logger.info(`[DEEPGRAM] deepgram_cleanup_completed for user ${userId}`);
+  };
+
   ffmpegProcess.on('error', (err: any) => {
     logger.error(`FFmpeg error for user ${userId}:`, err);
   });
@@ -126,16 +242,11 @@ a=rtpmap:${pt} opus/48000/2
     logger.warn(`FFmpeg process exited for user ${userId} with code ${code} signal ${signal}`);
     cleanup();
   });
-  
-  ffmpegProcess.on('close', () => {
-    logger.warn(`FFmpeg process closed for user ${userId}`);
-    cleanup();
-  });
-  
+
   dgSocket.on('open', async () => {
     logger.info(`[DEEPGRAM] deepgram_connected: user ${userId}`);
     
-    // Ping mechanism to detect dead TCP connections
+    // Heartbeat ping every 15s to keep TCP connection healthy
     pingInterval = setInterval(() => {
       if (dgSocket.readyState === WebSocket.OPEN) {
          dgSocket.ping();
@@ -152,17 +263,12 @@ a=rtpmap:${pt} opus/48000/2
 
       await consumer.resume();
     } catch (err: any) {
-      if (err.message && err.message.includes('Channel request handler with ID')) {
-        logger.warn(`[DEEPGRAM] sfu_consumer_resume_failed_closed: Expected mediasoup closure for user ${userId}`);
-        return;
-      }
       logger.error(`[DEEPGRAM] Error resuming consumer for user ${userId}:`, err);
     }
   });
 
-  // Deepgram will close the connection if no audio is sent for 10-12 seconds (e.g. user is muted).
-  // We must send a KeepAlive message periodically.
-  const keepAliveInterval = setInterval(() => {
+  // KeepAlive frames every 8s so Deepgram doesn't timeout on pauses
+  keepAliveInterval = setInterval(() => {
     if (dgSocket.readyState === WebSocket.OPEN) {
       dgSocket.send(JSON.stringify({ type: 'KeepAlive' }));
     }
@@ -173,21 +279,18 @@ a=rtpmap:${pt} opus/48000/2
       const msg = JSON.parse(data.toString());
       if (msg.type === 'Results') {
         const text = msg.channel?.alternatives?.[0]?.transcript;
-        if (text) {
-          logger.info(`[DEEPGRAM] Transcript received for user ${userId}: "${text}" (isFinal: ${msg.is_final})`);
+        if (text && text.trim().length > 0) {
           transcriberEvents.emit('caption', {
             roomId,
             userId,
             name: userName,
-            text,
-            isFinal: msg.is_final,
+            text: text.trim(),
+            isFinal: !!msg.is_final,
             lang: 'en'
           });
         }
       }
-    } catch (e) {
-      // ignore parse errors
-    }
+    } catch (e) {}
   });
 
   dgSocket.on('error', (err: any) => {
@@ -198,70 +301,67 @@ a=rtpmap:${pt} opus/48000/2
     logger.error(`Deepgram error for user ${userId}:`, err);
   });
 
-  let intentionalClose = false;
-
   dgSocket.on('close', () => {
     logger.warn(`[DEEPGRAM] WebSocket closed for user ${userId}`);
-    clearInterval(keepAliveInterval);
-    clearInterval(pingInterval);
+    if (keepAliveInterval) clearInterval(keepAliveInterval);
+    if (pingInterval) clearInterval(pingInterval);
     if (!intentionalClose && !producer.closed) {
-        logger.info(`[DEEPGRAM] Reconnecting for user ${userId} in 2 seconds...`);
-        cleanup(); // Cleanup old resources
-        setTimeout(() => {
-            if (!producer.closed) {
-               startTranscription(producer, router, roomId, userId, userName).catch(e => {
-                 logger.error(`Failed to restart transcription for ${userId}:`, e);
-               });
-            }
-        }, 2000);
+      logger.info(`[DEEPGRAM] Reconnecting for user ${userId} in 2 seconds...`);
+      cleanup();
+      setTimeout(() => {
+        if (!producer.closed) {
+          startTranscription(producer, router, roomId, userId, userName).catch(e => {
+            logger.error(`Failed to restart transcription for ${userId}:`, e);
+          });
+        }
+      }, 2000);
     }
   });
 
-  let cleanupStarted = false;
-
-  const cleanup = () => {
-    if (cleanupStarted) return;
-    cleanupStarted = true;
-    logger.info(`[DEEPGRAM] deepgram_cleanup_started for user ${userId}`);
-    
-    intentionalClose = true;
-    clearInterval(keepAliveInterval);
-    clearInterval(pingInterval);
-    
-    producer.removeListener('transportclose', cleanup);
-    producer.removeListener('@close' as any, cleanup);
-    
-    if (transcribers.has(producer.id)) {
-      transcribers.delete(producer.id);
-    }
-    if (!consumer.closed) consumer.close();
-    if (!plainTransport.closed) plainTransport.close();
-    if (!ffmpegProcess.killed) ffmpegProcess.kill('SIGTERM');
-    
-    try {
-      if (dgSocket.readyState === WebSocket.OPEN) {
-        dgSocket.close();
-      } else if (dgSocket.readyState === WebSocket.CONNECTING) {
-        // Just terminate to avoid 'WebSocket was closed before the connection was established'
-        dgSocket.terminate();
-      } else {
-        logger.info(`[DEEPGRAM] deepgram_cleanup_ignored_already_closed for user ${userId}`);
-      }
-    } catch(e){}
-
-    logger.info(`[DEEPGRAM] deepgram_cleanup_completed for user ${userId}`);
+  const session: TranscriberSession = {
+    producerId: producer.id,
+    consumer,
+    plainTransport,
+    ffmpegProcess,
+    dgSocket,
+    cleanup,
+    isPaused: false
   };
-  
-  transcribers.set(producer.id, cleanup);
+
+  activeSessions.set(producer.id, session);
   
   producer.on('transportclose', cleanup);
-  // Also cleanup when the producer is closed natively
   producer.on('@close' as any, cleanup);
 }
 
+/**
+ * Called when a user mutes their microphone.
+ * Pauses audio consumption and starts a 15-second warm grace period before destroying resources.
+ */
+export function pauseTranscription(producerId: string) {
+  const session = activeSessions.get(producerId);
+  if (!session) return;
+
+  session.isPaused = true;
+  if (!session.consumer.closed) {
+    session.consumer.pause().catch(() => {});
+  }
+
+  // Clear any existing timer
+  if (session.gracePeriodTimer) {
+    clearTimeout(session.gracePeriodTimer);
+  }
+
+  // Keep session warm for 15s. If no unmute occurs, teardown cleanly to free RAM/ports.
+  session.gracePeriodTimer = setTimeout(() => {
+    logger.info(`[DEEPGRAM] 15s warm grace period expired for producer ${producerId}, cleaning up`);
+    session.cleanup();
+  }, 15000);
+}
+
 export function stopTranscription(producerId: string) {
-  const cleanup = transcribers.get(producerId);
-  if (cleanup) {
-    cleanup();
+  const session = activeSessions.get(producerId);
+  if (session) {
+    session.cleanup();
   }
 }

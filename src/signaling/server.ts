@@ -16,6 +16,7 @@ import os from 'os';
 import { redis, duplicateRedis } from '../redis';
 import crypto from 'crypto';
 import { generateMeetingSummaryData } from '../ai/summarizer';
+import { translateToMultipleLanguages } from '../services/translationService';
 import { transcriberEvents } from '../media/transcriber';
 import { launchRecorderBot } from '../services/recorderLauncher';
 import { getOrLoadRoomHistory, appendChatToCache, refreshPollsCache, refreshQaCache, refreshNoteCache, invalidateRoomHistoryCache } from './historyCache';
@@ -1392,29 +1393,59 @@ export function initializeSignaling(server: Server) {
     });
   });
 
-  mediaController.on('caption', (data) => {
+  mediaController.on('caption', async (data) => {
     const { roomId, userId, name, text, isFinal, lang } = data;
-    logger.info(`[SIGNALING] Broadcasting caption to room ${roomId} for user ${userId}: "${text}"`);
+    if (!text || !roomId) return;
     
+    let translations: Record<string, string> = {};
+
     if (isFinal) {
-      if (!roomTranscripts.has(roomId)) {
-        roomTranscripts.set(roomId, []);
-      }
-      roomTranscripts.get(roomId)!.push({
+      const transcriptEntry = {
+        userId,
         name,
         text,
         timestamp: Date.now()
-      });
+      };
+
+      // 1. Persist to Redis meeting transcript list for AI summarization & live notes
+      await redis.rpush(`room:${roomId}:transcripts`, JSON.stringify(transcriptEntry)).catch(() => {});
+      await redis.expire(`room:${roomId}:transcripts`, 172800).catch(() => {}); // 48-hour retention
+
+      // 2. In-memory backup
+      if (!roomTranscripts.has(roomId)) {
+        roomTranscripts.set(roomId, []);
+      }
+      roomTranscripts.get(roomId)!.push(transcriptEntry);
+
+      // 3. Translate once on server for active room languages requested by participants
+      try {
+        const activeLangs = await redis.smembers(`room:${roomId}:active_languages`).catch(() => []);
+        if (activeLangs && activeLangs.length > 0) {
+          translations = await translateToMultipleLanguages(text, activeLangs);
+        }
+      } catch (err) {
+        logger.warn(`[SIGNALING] Error computing caption translations for room ${roomId}:`, err);
+      }
     }
 
-    internalBroadcastToRoom(roomId, {
+    const captionPayload = {
       type: 'caption',
       userId,
       name,
       text,
-      isFinal,
-      lang
-    });
+      isFinal: !!isFinal,
+      lang: lang || 'en',
+      translations
+    };
+
+    // 4. Cluster-wide Redis broadcast to all pods
+    redis.publish('signaling:room:broadcast', JSON.stringify({
+      roomId,
+      message: captionPayload
+    })).catch(e => logger.error('Failed to publish caption broadcast to Redis', e));
+
+    // 5. Local pod broadcast
+    internalBroadcastToRoom(roomId, captionPayload);
   });
 
   // Periodically report CPU load to Redis and Broadcast Degradation (Method 1 & 2)
@@ -2033,8 +2064,18 @@ export function initializeSignaling(server: Server) {
           // 1. Remove their producers globally
           await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === closingParticipantId);
           
-          // 2. Remove them from global participants
-          await redis.hdel(`room:${roomId}:participants`, closingParticipantId);
+          // 2. Remove them and any stale sessions for this user from global participants
+          const allRedisParticipants = await redis.hgetall(`room:${roomId}:participants`);
+          const toRemove: string[] = [closingParticipantId];
+          for (const [pId, pJson] of Object.entries(allRedisParticipants || {})) {
+            try {
+              const p = JSON.parse(pJson);
+              if (p.userId === userId || p.participantId === closingParticipantId) {
+                toRemove.push(pId);
+              }
+            } catch(e) {}
+          }
+          await redis.hdel(`room:${roomId}:participants`, ...toRemove);
 
           // 3. Clean up local maps if local room is empty
           if (roomClients.size === 0) {
@@ -2042,21 +2083,15 @@ export function initializeSignaling(server: Server) {
             cleanupRoomData(roomId);
           }
 
-          // 4. Sync state to redis first so the user is removed
-          await syncRoomStateToRedis(roomId, roomSlug);
+          // 4. Immediately sync state to redis
+          await executeSyncRoomStateToRedis(roomId, roomSlug);
 
           // 5. Check if GLOBAL room is empty of human participants
-          const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
-          let humanParticipantsCount = 0;
-          for (const [pId, pJson] of Object.entries(globalParticipants || {})) {
-            try {
-              const p = JSON.parse(pJson);
-              if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
-                humanParticipantsCount++;
-              }
-            } catch(e) {}
-          }
-          const isGloballyEmpty = humanParticipantsCount === 0;
+          const activeParticipants = await getActiveRoomParticipants(roomId);
+          const activeHumans = activeParticipants.filter(
+            p => p.role !== 'recorder' && !p.role?.includes('recorder') && p.role !== 'bot' && !(p as any).isBot && !(p as any).isRecorder && !p.name?.toLowerCase().includes('recorder')
+          );
+          const isGloballyEmpty = activeHumans.length === 0;
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after disconnect timeout. Closing meeting instance and wiping room state.`);
@@ -3000,8 +3035,18 @@ export function initializeSignaling(server: Server) {
           // 1. Remove their producers globally
           await removeRoomProducersByPredicate(roomId, (p: any) => p.participantId === client.participantId);
 
-          // 2. Remove them from global participants
-          await redis.hdel(`room:${roomId}:participants`, client.participantId);
+          // 2. Remove them and any stale sessions for this user from global participants
+          const allRedisParticipants = await redis.hgetall(`room:${roomId}:participants`);
+          const toRemove: string[] = [client.participantId];
+          for (const [pId, pJson] of Object.entries(allRedisParticipants || {})) {
+            try {
+              const p = JSON.parse(pJson);
+              if (p.userId === client.userId || p.participantId === client.participantId) {
+                toRemove.push(pId);
+              }
+            } catch(e) {}
+          }
+          await redis.hdel(`room:${roomId}:participants`, ...toRemove);
 
           // 3. Clean up local maps if local room is empty
           if (rc.size === 0) {
@@ -3010,21 +3055,15 @@ export function initializeSignaling(server: Server) {
             roomAdmissions.delete(roomId);
           }
 
-          // 4. Sync state to redis first so the user is removed
-          await syncRoomStateToRedis(roomId, client.roomSlug);
+          // 4. Immediately sync state to redis
+          await executeSyncRoomStateToRedis(roomId, client.roomSlug);
 
           // 5. Check if GLOBAL room is empty of human participants
-          const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
-          let humanParticipantsCount = 0;
-          for (const [pId, pJson] of Object.entries(globalParticipants || {})) {
-            try {
-              const p = JSON.parse(pJson);
-              if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
-                humanParticipantsCount++;
-              }
-            } catch(e) {}
-          }
-          const isGloballyEmpty = humanParticipantsCount === 0;
+          const activeParticipants = await getActiveRoomParticipants(roomId);
+          const activeHumans = activeParticipants.filter(
+            p => p.role !== 'recorder' && !p.role?.includes('recorder') && p.role !== 'bot' && !(p as any).isBot && !(p as any).isRecorder && !p.name?.toLowerCase().includes('recorder')
+          );
+          const isGloballyEmpty = activeHumans.length === 0;
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after explicit leave. Closing meeting instance and wiping room state.`);
@@ -3234,6 +3273,16 @@ export function initializeSignaling(server: Server) {
         // Client-side captions are deprecated in favor of server-side Deepgram.
         // We safely ignore any straggler caption events from older clients.
         break;
+
+      case 'set_caption_language': {
+        const { targetLanguage } = data;
+        if (targetLanguage && typeof targetLanguage === 'string' && targetLanguage !== 'en' && targetLanguage !== 'original') {
+          await redis.sadd(`room:${roomId}:active_languages`, targetLanguage.trim()).catch(() => {});
+          await redis.expire(`room:${roomId}:active_languages`, 86400).catch(() => {});
+          logger.info(`[SIGNALING] Registered active translation language '${targetLanguage}' for room ${roomId}`);
+        }
+        break;
+      }
 
       case 'ecinema_update':
         if (['host', 'co-host', 'presenter', 'admin'].includes(client.role)) {

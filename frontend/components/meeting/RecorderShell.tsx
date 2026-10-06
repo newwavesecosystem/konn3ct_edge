@@ -22,6 +22,12 @@ export function RecorderShell() {
   useEffect(() => {
     participantsRef.current = participants;
     currentUserRef.current = currentUser;
+    const remoteHumans = participants.filter(
+      p => p.id !== currentUser?.id && p.role !== 'bot' && p.role !== 'recorder' && !p.name?.toLowerCase().includes('recorder')
+    );
+    if (typeof window !== 'undefined') {
+      (window as any).__KONN3CT_REMOTE_HUMANS_COUNT__ = remoteHumans.length;
+    }
   }, [participants, currentUser]);
 
   useEffect(() => {
