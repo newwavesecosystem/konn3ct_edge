@@ -111,7 +111,7 @@ recordingsRouter.post('/start', requireAuth, async (req: Request, res: Response)
           title,
           url: '',
           roomId: room.id,
-          ownerId: userId,
+          ownerId: room.ownerId,
           status: 'starting'
         }
       });

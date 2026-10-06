@@ -1,6 +1,6 @@
 # Conn3ct Kubernetes Manifests (Kustomize Base & Overlays)
 
-This directory contains the Kubernetes deployment manifests for the Conn3ct Meeting infrastructure, organized with **Kustomize Base & Overlays** to seamlessly support both low-cost single-node testing and multi-node high-availability production environments with identical container images.
+This directory contains the Kubernetes deployment manifests for the Conn3ct Meeting infrastructure, organized with **Kustomize Base & Overlays** to support DigitalOcean Managed Kubernetes (Test & Prod) and On-Premise/Bare-Metal deployments (1gov) with identical container images and zero-downtime rollouts.
 
 ---
 
@@ -8,47 +8,87 @@ This directory contains the Kubernetes deployment manifests for the Conn3ct Meet
 
 ```
 k8s/
-├── base/                              # Shared templates, services, env vars & ingress
+├── base/                                # Shared base templates, services, env vars & ingress
 │   ├── kustomization.yaml
-│   ├── frontend-deployment.yaml
+│   ├── frontend-deployment.yaml         # Next.js frontend
 │   ├── frontend-service.yaml
-│   ├── signaling-deployment.yaml
-│   ├── service.yaml                   # Backend LoadBalancer service
-│   ├── media-deployment.yaml          # Mediasoup SFU deployment
-│   ├── recorder-deployment.yaml       # Headless Chromium recording bot
-│   ├── streaming-deployment.yaml      # RTMP streaming worker
-│   ├── redis.yaml                     # State sync and pub/sub
-│   └── ingress.yaml                   # NGINX Ingress with room sticky sessions
-├── overlays/
-│   ├── test/                          # Optimized for 1 Node (4 vCPU / 8 GB RAM)
-│   │   ├── kustomization.yaml
-│   │   └── patch-test-resources.yaml  # Replicas: 1, relaxed affinities, 1-node requests
-│   └── prod/                          # Scaled for Multi-Node High Availability (HA)
-│       ├── kustomization.yaml
-│       ├── patch-prod-resources.yaml  # Multi-replica, Node Anti-Affinity
-│       ├── media-hpa.yaml             # Auto-scaler for media pods
-│       └── signaling-hpa.yaml         # Auto-scaler for signaling pods
+│   ├── signaling-deployment.yaml        # Node.js backend & signaling
+│   ├── service.yaml                     # Backend service
+│   ├── media-deployment.yaml            # Mediasoup WebRTC SFU engine
+│   ├── recorder-deployment.yaml         # Headless Chromium recording bot
+│   ├── streaming-deployment.yaml        # RTMP live streaming worker
+│   ├── redis.yaml                       # State sync & Pub/Sub
+│   └── ingress.yaml                     # Ingress with sticky sessions
+└── overlays/
+    ├── test/                            # DigitalOcean Staging / Test (1-node cluster)
+    │   ├── kustomization.yaml
+    │   └── patch-test-resources.yaml
+    ├── prod/                            # DigitalOcean Production (Multi-node HA with HPA)
+    │   ├── kustomization.yaml
+    │   ├── patch-prod-resources.yaml
+    │   ├── media-hpa.yaml               # Auto-scaler for media pods
+    │   └── signaling-hpa.yaml           # Auto-scaler for signaling pods
+    └── 1gov/                            # On-Premise / Dedicated Bare-Metal Cluster
+        ├── kustomization.yaml
+        ├── patch-resources.yaml         # Resource limits, node pinning & secrets
+        ├── patch-ingress.yaml           # Ingress routing & SSL certificates
+        ├── cluster-issuer.yaml          # cert-manager Let's Encrypt
+        ├── postgres.yaml                # PostgreSQL with permanent hostPath storage
+        └── minio.yaml                   # In-cluster S3 object storage (MinIO)
 ```
 
 ---
 
 ## Environment Overlays
 
-### 1. Test / Staging Overlay (`k8s/overlays/test`)
-- **Target Node**: 1 Node (4 vCPU, 8 GB RAM, 50 GB Disk).
-- **Scale**: Replicas set to `1` for all services (`conn3ct-signaling`, `conn3ct-media`, `conn3ct-frontend`, `conn3ct-recorder`, `redis`).
-- **Scheduling**: Clears hard `podAntiAffinity` rules so recorder and media pods schedule smoothly on the single node without getting stuck in `Pending`.
-- **Resource Sizing**: Requests sized at ~1.5 vCPU and ~3.0 GB RAM total across all containers, leaving ample headroom for OS, Kubelet, and Ingress.
+### 1. 1gov On-Premise / Bare-Metal Overlay (`k8s/overlays/1gov`)
+Designed for standalone on-premise infrastructure with dedicated worker compute separation:
 
-### 2. Production Overlay (`k8s/overlays/prod`)
-- **Target Architecture**: Multi-Node High Availability (HA).
-- **Scale**: Replicas set to `4` for Signaling, `3` for Media, `2` for Frontend, `1` for Recorder.
-- **Autoscaling**: Connected to `HorizontalPodAutoscaler` (HPA) scaling signaling (4–15) and media (3–10).
-- **Node Isolation**: Strict `podAntiAffinity` prevents CPU-heavy recording jobs from sharing nodes with live WebRTC media routers.
+* **Node Topology & Scheduling:**
+  * **`ubuntu20` (Core Node):** Runs all core platform services (`conn3ct-signaling`, `conn3ct-frontend`, `conn3ct-media`, `postgres`, `redis`, `minio`).
+  * **`recorder-worker-213` (Dedicated Compute Node):** Dedicated worker isolated with `role: recorder` node-selector and `dedicated=recorder:NoSchedule` taint to protect core services from heavy Chromium & FFmpeg CPU spikes.
+* **Persistent Storage Architecture (`hostPath`):**
+  * **PostgreSQL:** Persists directly to `/var/lib/postgres-data` on host NVMe drive.
+  * **MinIO S3:** Persists object storage directly to `/var/lib/minio-data`.
+  * **Redis:** Configured with AOF (Append-Only File) disk persistence to `/var/lib/redis-data` (`--appendonly yes`, `--appendfsync everysec`).
+* **High Availability & Resilience:**
+  * **Frontend:** Scaled to **2 replicas** with `RollingUpdate` (`maxUnavailable: 0`) for zero-downtime deployments.
+  * **Redis:** Scaled to **2 CPU cores / 4 GB RAM** (with 3GB LRU cache) capable of powering 50+ concurrent rooms and 5,000+ simultaneous participants.
+  * **Postgres & Redis Strategy:** Configured with `strategy: Recreate` to guarantee single-writer disk lock safety.
+* **Object Storage / MinIO Public Routing:**
+  * Uses internal endpoint `http://minio-service:9000` for container uploads and translates to `PUBLIC_STORAGE_URL: https://meetingstorage.1gov.ng` for external browser playback.
 
 ---
 
-## Deployment Instructions
+### 2. Test / Staging Overlay (`k8s/overlays/test`)
+* **Target Node:** 1 Droplet (4 vCPU, 8 GB RAM, 50 GB Disk) on DigitalOcean.
+* **Scale:** Replicas set to `1` for all services.
+* **Storage:** Connects to DigitalOcean Spaces for recording storage.
+
+---
+
+### 3. Production Overlay (`k8s/overlays/prod`)
+* **Target Architecture:** Multi-Node High Availability (HA) on DigitalOcean Kubernetes (DOKS).
+* **Scale & Autoscaling:** Replicas scaled via `HorizontalPodAutoscaler` (HPA) for signaling and media routers.
+* **Storage:** DigitalOcean Spaces (S3-compatible).
+
+---
+
+## Deployment Commands
+
+### Deploy to 1gov (On-Premise Master Server)
+```bash
+# 1. Ensure storage permissions exist
+sudo mkdir -p /var/lib/postgres-data /var/lib/minio-data /var/lib/redis-data
+sudo chmod 700 /var/lib/postgres-data
+sudo chmod 777 /var/lib/redis-data /var/lib/minio-data
+
+# 2. Apply manifests
+kubectl apply -k k8s/overlays/1gov
+
+# 3. Rollout restart if updating container images
+kubectl rollout restart deployment conn3ct-signaling conn3ct-frontend conn3ct-media conn3ct-recorder redis
+```
 
 ### Deploy to Test / Staging
 ```bash
@@ -62,8 +102,16 @@ kubectl apply -k k8s/overlays/prod
 
 ---
 
-## CI/CD Pipeline (GitHub Actions)
+## Registry Authentication (`regcred`)
 
-The deployment workflow (`.github/workflows/deploy.yml`) automatically routes deployments based on git branch:
-- **`main` branch** $\rightarrow$ Automatically applies `k8s/overlays/test` (and rolls out restart for `staging-latest`).
-- **`prod` branch** $\rightarrow$ Automatically applies `k8s/overlays/prod` (with image tag matching commit SHA).
+If worker nodes require pulling private container images from DigitalOcean Registry:
+```bash
+kubectl create secret docker-registry regcred \
+  --docker-server=registry.digitalocean.com \
+  --docker-username=unused \
+  --docker-password=<DO_API_TOKEN> \
+  --docker-email=odejinmisa@newwavesecosystem.com \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}'
+```

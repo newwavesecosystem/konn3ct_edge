@@ -30,14 +30,14 @@ describe('Screen Share Permissions & Selected Participant Flow', () => {
     vi.clearAllMocks();
   });
 
-  it('renders selected participant checkbox and triggers setParticipantScreenSharePermission when host checks participant', () => {
+  it('renders screen share policy options and triggers setScreenSharePolicy when host selects policy', () => {
     mockUseMeeting.mockReturnValue({
       participants: [
         { id: 'p_host', userId: 'user_host', name: 'Host Alice', role: 'host' },
         { id: 'p_bob', userId: 'user_bob', name: 'Bob Attendee', role: 'attendee' },
       ],
       currentUser: { id: 'p_host', userId: 'user_host', role: 'host' },
-      screenSharePolicyMode: 'SELECTED',
+      screenSharePolicyMode: 'EVERYONE',
       participantScreenSharePermissions: {
         'p_bob': 'DEFAULT',
       },
@@ -48,14 +48,17 @@ describe('Screen Share Permissions & Selected Participant Flow', () => {
 
     render(<ScreenSharePermissionsDialog open={true} onOpenChange={vi.fn()} />);
 
-    expect(screen.getAllByText('Selected participants').length).toBeGreaterThan(0);
-    expect(screen.getByText('Bob Attendee')).toBeInTheDocument();
+    expect(screen.getByText('Screen sharing permissions')).toBeInTheDocument();
+    expect(screen.getByText('Everyone')).toBeInTheDocument();
+    expect(screen.getByText('Host & co-hosts only')).toBeInTheDocument();
 
-    const bobCheckbox = screen.getByRole('checkbox');
-    expect(bobCheckbox).not.toBeChecked();
+    const hostsOnlyRadio = screen.getByLabelText(/host & co-hosts only/i);
+    fireEvent.click(hostsOnlyRadio);
 
-    fireEvent.click(bobCheckbox);
-    expect(setParticipantScreenSharePermissionMock).toHaveBeenCalledWith('p_bob', 'ALLOW');
+    const saveBtn = screen.getByRole('button', { name: /save changes/i });
+    fireEvent.click(saveBtn);
+
+    expect(setScreenSharePolicyMock).toHaveBeenCalledWith('HOSTS_ONLY', false);
   });
 
   it('enables screen share button in MeetingControls when participant is selected by host', () => {
