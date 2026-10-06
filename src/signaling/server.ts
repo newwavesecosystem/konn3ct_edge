@@ -2045,9 +2045,18 @@ export function initializeSignaling(server: Server) {
           // 4. Sync state to redis first so the user is removed
           await syncRoomStateToRedis(roomId, roomSlug);
 
-          // 5. Check if GLOBAL room is empty
+          // 5. Check if GLOBAL room is empty of human participants
           const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
-          const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
+          let humanParticipantsCount = 0;
+          for (const [pId, pJson] of Object.entries(globalParticipants || {})) {
+            try {
+              const p = JSON.parse(pJson);
+              if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
+                humanParticipantsCount++;
+              }
+            } catch(e) {}
+          }
+          const isGloballyEmpty = humanParticipantsCount === 0;
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after disconnect timeout. Closing meeting instance and wiping room state.`);
@@ -3004,9 +3013,18 @@ export function initializeSignaling(server: Server) {
           // 4. Sync state to redis first so the user is removed
           await syncRoomStateToRedis(roomId, client.roomSlug);
 
-          // 5. Check if GLOBAL room is empty
+          // 5. Check if GLOBAL room is empty of human participants
           const globalParticipants = await redis.hgetall(`room:${roomId}:participants`);
-          const isGloballyEmpty = Object.keys(globalParticipants).length === 0;
+          let humanParticipantsCount = 0;
+          for (const [pId, pJson] of Object.entries(globalParticipants || {})) {
+            try {
+              const p = JSON.parse(pJson);
+              if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
+                humanParticipantsCount++;
+              }
+            } catch(e) {}
+          }
+          const isGloballyEmpty = humanParticipantsCount === 0;
 
           if (isGloballyEmpty) {
             logger.info(`Room ${roomId} is globally empty after explicit leave. Closing meeting instance and wiping room state.`);
@@ -3057,8 +3075,8 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'end_meeting':
-        if (client.role === 'host' || client.role === 'admin') {
-          logger.info(`Host ${userId} initiated end_meeting for room ${roomId}`);
+        if (['host', 'admin', 'co-host'].includes(client.role)) {
+          logger.info(`Host/Co-host ${userId} initiated end_meeting for room ${roomId}`);
           redis.publish('signaling:room:broadcast', JSON.stringify({
             roomId,
             command: true,
@@ -3497,19 +3515,19 @@ export function initializeSignaling(server: Server) {
         break;
 
       case 'start_recording':
-        if (client.role === 'host' || client.role === 'co-host') {
+        if (['host', 'co-host', 'admin'].includes(client.role)) {
           try {
             const room = await db.room.findUnique({ where: { id: roomId } });
             if (room) {
               const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
               const domain = process.env.NEXT_PUBLIC_FRONTEND_DOMAIN || 'konn3ctedge.konn3ct.net';
               
-              // 1. Create DB entry for the recording
+              // 1. Create DB entry for the recording (always owned by the host / room owner)
               const recording = await db.recording.create({
                 data: {
                   title: `${room.name} - Recording`,
                   roomId: room.id,
-                  ownerId: userId,
+                  ownerId: room.ownerId,
                   status: 'starting'
                 }
               });
@@ -3565,16 +3583,23 @@ export function initializeSignaling(server: Server) {
                   data: { status: 'failed' }
                 });
                 logger.error(`Failed to push recording job to queue for room ${roomId}: ${launchResult.error}`);
+                client.ws.send(JSON.stringify({ type: 'error', message: 'Failed to start recording. Please try again.' }));
+                broadcastToRoom(roomId, { type: 'recording_stopped', reason: 'QUEUE_ERROR' });
               }
+            } else {
+              client.ws.send(JSON.stringify({ type: 'error', message: 'Room not found.' }));
+              broadcastToRoom(roomId, { type: 'recording_stopped', reason: 'ROOM_NOT_FOUND' });
             }
           } catch (e) {
             logger.error('Failed to start recording', e);
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Failed to start recording.' }));
+            broadcastToRoom(roomId, { type: 'recording_stopped', reason: 'ERROR' });
           }
         }
         break;
 
       case 'stop_recording':
-        if (client.role === 'host' || client.role === 'co-host') {
+        if (['host', 'co-host', 'admin'].includes(client.role)) {
           const reason = data.reason || 'manual_stop';
           const activeRec = await db.recording.findFirst({
             where: { OR: [{ roomId }, { room: { slug: roomId } }, { room: { slug: client.roomSlug } }], status: { in: ['starting', 'recording'] } },

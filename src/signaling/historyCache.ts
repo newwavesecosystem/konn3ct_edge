@@ -62,7 +62,11 @@ export async function loadRoomHistoryFromDb(roomId: string, roomCreatedDate: Dat
         take: 50,
       }),
       db.meetingPoll.findMany({
-        where: { roomId },
+        where: { 
+          roomId,
+          isActive: true,
+          createdAt: { gte: roomCreatedDate }
+        },
         orderBy: { createdAt: 'asc' }
       }),
       db.meetingQA.findMany({
@@ -232,7 +236,7 @@ export async function appendChatToCache(roomId: string, message: any) {
 export async function refreshPollsCache(roomId: string) {
   try {
     const pollHistory = await db.meetingPoll.findMany({
-      where: { roomId },
+      where: { roomId, isActive: true },
       orderBy: { createdAt: 'asc' }
     });
     await redis.set(`room:${roomId}:polls`, JSON.stringify(pollHistory), 'EX', TTL);

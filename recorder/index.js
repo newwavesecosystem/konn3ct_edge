@@ -221,7 +221,7 @@ async function processRecordingJob(job, workerId) {
   activeBrowsers++;
   const displayId = `:${displayCounter++}`;
   
-  const { roomId, url, recordingId, botToken, workerGeneration = 1, nextSegmentIndex = 0 } = job;
+  const { roomId, roomSlug, url, recordingId, botToken, workerGeneration = 1, nextSegmentIndex = 0 } = job;
   const workerOwnerStr = `${workerId}:${workerGeneration}`;
   
   let browser = null;
