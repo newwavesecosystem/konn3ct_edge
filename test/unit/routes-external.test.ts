@@ -9,6 +9,8 @@ vi.mock('../../src/db', () => ({
   db: {
     room: {
       findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -109,5 +111,100 @@ describe('External API - /meetings/join', () => {
     const decoded = jwt.verify(response.body.sessionToken, process.env.JWT_SECRET!) as any;
     expect(decoded.userId).toBe('host-db-user-id');
     expect(decoded.role).toBe('host');
+  });
+});
+
+describe('External API - /meetings/create-and-join', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should create a new room with roomName when meetingSlug does not exist', async () => {
+    (db.user.findUnique as any).mockResolvedValue({
+      id: 'host-db-user-id',
+      email: 'host@conn3ct.com'
+    });
+    (db.room.findUnique as any).mockResolvedValue(null);
+    (db.room.create as any).mockResolvedValue({
+      id: 'room-1',
+      slug: 'new-slug',
+      name: 'Initial Meeting Name',
+      mode: 'meeting',
+      recordingSetting: 'off',
+      guestJoinAllowed: true,
+      isWaitingRoomEnabled: true,
+      maxParticipants: 100,
+      maxWebinarAudience: 1000,
+      maxActiveCameras: 15,
+      logoutUrl: null,
+    });
+
+    const response = await request(app)
+      .post('/external/meetings/create-and-join')
+      .set('x-api-key', process.env.EXTERNAL_API_KEY || 'test_api_key_for_vitest')
+      .send({
+        name: 'Host User',
+        email: 'host@conn3ct.com',
+        meetingSlug: 'new-slug',
+        roomName: 'Initial Meeting Name',
+      });
+
+    expect(response.status).toBe(200);
+    expect(db.room.create).toHaveBeenCalledOnce();
+    expect(db.room.update).not.toHaveBeenCalled();
+    expect(response.body.roomName).toBe('Initial Meeting Name');
+  });
+
+  it('should update the room name when an existing meetingSlug is called with a new roomName', async () => {
+    (db.user.findUnique as any).mockResolvedValue({
+      id: 'host-db-user-id',
+      email: 'host@conn3ct.com'
+    });
+    (db.room.findUnique as any).mockResolvedValue({
+      id: 'room-1',
+      slug: 'existing-slug',
+      name: 'Old Meeting Name',
+      mode: 'meeting',
+      recordingSetting: 'off',
+      guestJoinAllowed: true,
+      isWaitingRoomEnabled: true,
+      maxParticipants: 100,
+      maxWebinarAudience: 1000,
+      maxActiveCameras: 15,
+      logoutUrl: null,
+    });
+    (db.room.update as any).mockResolvedValue({
+      id: 'room-1',
+      slug: 'existing-slug',
+      name: 'Updated Meeting Name',
+      mode: 'meeting',
+      recordingSetting: 'off',
+      guestJoinAllowed: true,
+      isWaitingRoomEnabled: true,
+      maxParticipants: 100,
+      maxWebinarAudience: 1000,
+      maxActiveCameras: 15,
+      logoutUrl: null,
+    });
+
+    const response = await request(app)
+      .post('/external/meetings/create-and-join')
+      .set('x-api-key', process.env.EXTERNAL_API_KEY || 'test_api_key_for_vitest')
+      .send({
+        name: 'Host User',
+        email: 'host@conn3ct.com',
+        meetingSlug: 'existing-slug',
+        roomName: 'Updated Meeting Name',
+      });
+
+    expect(response.status).toBe(200);
+    expect(db.room.update).toHaveBeenCalledWith({
+      where: { id: 'room-1' },
+      data: { name: 'Updated Meeting Name' },
+    });
+    expect(response.body.roomName).toBe('Updated Meeting Name');
+
+    const decoded = jwt.verify(response.body.sessionToken, process.env.JWT_SECRET!) as any;
+    expect(decoded.roomName).toBe('Updated Meeting Name');
   });
 });

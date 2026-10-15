@@ -478,7 +478,7 @@ async function processRecordingJob(job, workerId) {
     
     await notifyBackendWithRetry(backendUrl, `/api/recordings/${recordingId}/callback/started`, recordingId, job.jobId, botToken, "callback_started");
 
-    // Safety Watchdog: Auto-detect if all human participants left or meeting ended (90s tolerance, human-only)
+    // Safety Watchdog: Auto-detect if all human participants left or meeting ended (20s tolerance, dual page + Redis check)
     let emptyRoomTicks = 0;
     emptyRoomWatchdog = setInterval(async () => {
       try {
@@ -495,28 +495,59 @@ async function processRecordingJob(job, workerId) {
           return cleanup();
         }
 
-        // 2. Check if global human participants are empty in Redis (filter out recorder bots)
-        let participants = await redis.hgetall(`room:${roomId}:participants`);
-        if (!participants || Object.keys(participants).length === 0) {
-          if (roomSlug) {
-            participants = await redis.hgetall(`room:${roomSlug}:participants`);
-          }
-        }
-        
-        let humanCount = 0;
-        for (const [pId, pJson] of Object.entries(participants || {})) {
-          try {
-            const p = JSON.parse(pJson);
-            if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot') {
-              humanCount++;
+        // 2. Check live participant count directly in the browser page
+        let pageHumansCount = null;
+        try {
+          pageHumansCount = await page.evaluate(() => {
+            if (typeof window !== 'undefined' && typeof (window).__KONN3CT_REMOTE_HUMANS_COUNT__ === 'number') {
+              return (window).__KONN3CT_REMOTE_HUMANS_COUNT__;
             }
-          } catch(e) {}
-        }
+            return null;
+          });
+        } catch(e) {}
 
-        if (humanCount === 0) {
+        // 3. Check Redis participant hash / string
+        let redisHumansCount = 0;
+        try {
+          const pHash = await redis.hgetall(`room:${roomId}:participants`);
+          if (pHash && Object.keys(pHash).length > 0) {
+            for (const [pId, pJson] of Object.entries(pHash)) {
+              try {
+                const p = typeof pJson === 'string' ? JSON.parse(pJson) : pJson;
+                if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot' && !p.name?.toLowerCase().includes('recorder')) {
+                  redisHumansCount++;
+                }
+              } catch(e) {}
+            }
+          } else if (roomSlug) {
+            const pStr = await redis.get(`room:${roomSlug}:participants`);
+            if (pStr) {
+              const pArr = JSON.parse(pStr);
+              if (Array.isArray(pArr)) {
+                for (const p of pArr) {
+                  if (p.role !== 'recorder' && !p.isRecorder && !p.isBot && p.userRole !== 'recorder' && p.userRole !== 'bot' && !p.name?.toLowerCase().includes('recorder')) {
+                    redisHumansCount++;
+                  }
+                }
+              }
+            }
+          }
+        } catch(e) {}
+
+        // Room is empty if either the page has 0 remote humans or Redis has 0 active humans
+        const isPageEmpty = pageHumansCount !== null && pageHumansCount === 0;
+        const isRedisEmpty = redisHumansCount === 0;
+
+        if (isPageEmpty || isRedisEmpty) {
           emptyRoomTicks++;
-          if (emptyRoomTicks >= 9) { // 90s of continuous empty room
-            console.log(JSON.stringify({ event: "recorder_empty_room_detected", recordingId, roomId, humanCount: 0 }));
+          if (emptyRoomTicks >= 2) { // 20s of continuous empty room
+            console.log(JSON.stringify({ 
+              event: "recorder_empty_room_detected", 
+              recordingId, 
+              roomId, 
+              pageHumansCount, 
+              redisHumansCount 
+            }));
             if (emptyRoomWatchdog) clearInterval(emptyRoomWatchdog);
             return cleanup();
           }

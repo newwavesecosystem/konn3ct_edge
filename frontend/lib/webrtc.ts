@@ -224,7 +224,7 @@ export class WebRTCClient {
   public onDonationStatusReceived?: (active: boolean) => void;
   public onDonationSuccessReceived?: (userId: string, name: string, amount: number, currency: string) => void;
   public onParticipantNetworkQuality?: (userId: string, quality: NetworkQualityLabel) => void;
-  public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string) => void;
+  public onCaptionReceived?: (userId: string, name: string, text: string, isFinal: boolean, lang?: string, translations?: Record<string, string>) => void;
   public onAskToUnmute?: (hostName: string) => void;
   // Screen share state callbacks
   public onScreenShareStarted?: (userId: string, producerId: string) => void;
@@ -851,8 +851,7 @@ export class WebRTCClient {
           this.onParticipantNetworkQuality?.(msg.userId, msg.quality);
           break;
         case 'caption':
-          console.log('[WebRTCClient] Received caption message from server:', msg);
-          this.onCaptionReceived?.(msg.userId, msg.name, msg.text, msg.isFinal, msg.lang);
+          this.onCaptionReceived?.(msg.userId, msg.name, msg.text, msg.isFinal, msg.lang, msg.translations);
           break;
         case 'donation_status':
           this.onDonationStatusReceived?.(msg.active);
@@ -3085,6 +3084,12 @@ export class WebRTCClient {
   public sendEndMeeting() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'end_meeting' }));
+    }
+  }
+
+  public setCaptionLanguage(targetLanguage: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'set_caption_language', targetLanguage }));
     }
   }
 

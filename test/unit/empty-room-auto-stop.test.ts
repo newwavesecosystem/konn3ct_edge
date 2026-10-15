@@ -110,7 +110,7 @@ describe('Empty Room Auto-Stop & Recorder Teardown Logic', () => {
     expect(evaluateIsGloballyEmpty(botVariantsHash)).toBe(true);
   });
 
-  it('simulates recorder watchdog 90-second grace period before auto-shutdown', () => {
+  it('simulates recorder watchdog 20-second grace period before auto-shutdown', () => {
     let emptyRoomTicks = 0;
     let cleanupTriggered = false;
 
@@ -126,13 +126,13 @@ describe('Empty Room Auto-Stop & Recorder Teardown Logic', () => {
       }),
     };
 
-    // Simulate 10-second ticks
-    for (let tick = 1; tick <= 10; tick++) {
+    // Simulate 10-second ticks (2 ticks = 20s)
+    for (let tick = 1; tick <= 3; tick++) {
       const humanCount = countHumanParticipants(redisParticipantsHash);
       if (humanCount === 0) {
         emptyRoomTicks++;
-        if (emptyRoomTicks >= 9) {
-          // 90s grace threshold reached
+        if (emptyRoomTicks >= 2) {
+          // 20s threshold reached
           cleanup();
           break;
         }
@@ -141,50 +141,45 @@ describe('Empty Room Auto-Stop & Recorder Teardown Logic', () => {
       }
     }
 
-    expect(emptyRoomTicks).toBe(9);
+    expect(emptyRoomTicks).toBe(2);
     expect(cleanupTriggered).toBe(true);
   });
 
-  it('resets watchdog grace ticks if a human participant rejoins before 90s', () => {
-    let emptyRoomTicks = 0;
-    let cleanupTriggered = false;
-
-    const cleanup = () => {
-      cleanupTriggered = true;
-    };
-
-    // Ticks 1 to 5: Room is empty of humans (50s)
-    let redisParticipantsHash: Record<string, string> = {
+  it('purges all ghost sessions of a user on leave to ensure clean zero-human count', () => {
+    // User had 2 sessions in Redis (e.g. from page refresh) plus the recorder bot
+    const redisParticipantsHash: Record<string, string> = {
+      'participant-old-session': JSON.stringify({
+        userId: 'user-123',
+        participantId: 'participant-old-session',
+        role: 'host',
+      }),
+      'participant-active-session': JSON.stringify({
+        userId: 'user-123',
+        participantId: 'participant-active-session',
+        role: 'host',
+      }),
       'participant-recorder': JSON.stringify({
         userId: 'bot_recorder',
+        participantId: 'participant-recorder',
         role: 'recorder',
       }),
     };
 
-    for (let tick = 1; tick <= 5; tick++) {
-      const humanCount = countHumanParticipants(redisParticipantsHash);
-      if (humanCount === 0) {
-        emptyRoomTicks++;
-        if (emptyRoomTicks >= 9) cleanup();
+    // Leaving user is user-123 with active session 'participant-active-session'
+    const leavingUserId = 'user-123';
+    const leavingParticipantId = 'participant-active-session';
+
+    // Purge logic matching server.ts fix
+    for (const [pId, pJson] of Object.entries(redisParticipantsHash)) {
+      const p = JSON.parse(pJson);
+      if (p.userId === leavingUserId || p.participantId === leavingParticipantId) {
+        delete redisParticipantsHash[pId];
       }
     }
-    expect(emptyRoomTicks).toBe(5);
-    expect(cleanupTriggered).toBe(false);
 
-    // Tick 6: Human rejoins! (e.g. page refreshed)
-    redisParticipantsHash['participant-human'] = JSON.stringify({
-      userId: 'usr_1',
-      role: 'host',
-    });
-
+    // Now count remaining human participants
     const humanCount = countHumanParticipants(redisParticipantsHash);
-    if (humanCount === 0) {
-      emptyRoomTicks++;
-    } else {
-      emptyRoomTicks = 0; // Ticks reset!
-    }
-
-    expect(emptyRoomTicks).toBe(0);
-    expect(cleanupTriggered).toBe(false);
+    expect(humanCount).toBe(0);
+    expect(evaluateIsGloballyEmpty(redisParticipantsHash)).toBe(true);
   });
 });

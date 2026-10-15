@@ -274,11 +274,17 @@ router.post('/meetings/create-and-join', async (req, res) => {
           networkDetectionEnabled: networkDetectionEnabled !== undefined ? networkDetectionEnabled : true,
         }
       });
+    } else if (roomName && roomName.trim() !== "" && room.name !== roomName.trim()) {
+      room = await db.room.update({
+        where: { id: room.id },
+        data: { name: roomName.trim() }
+      });
     }
 
     const sessionData = {
       userId: owner.id,
       roomId: room.slug,
+      roomName: room.name,
       name: name.trim(),
       email: finalEmail,
       role: trustedRole,
@@ -293,6 +299,7 @@ router.post('/meetings/create-and-join', async (req, res) => {
 
     res.json({
       roomId: room.slug,
+      roomName: room.name,
       mode: room.mode,
       recordingSetting: room.recordingSetting,
       guestJoinAllowed: room.guestJoinAllowed,

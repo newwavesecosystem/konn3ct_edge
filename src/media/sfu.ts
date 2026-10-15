@@ -442,7 +442,7 @@ export function cleanupAudioObserver(roomId: string) {
   }
 }
 
-import { startTranscription, stopTranscription } from './transcriber';
+import { startTranscription, pauseTranscription, stopTranscription } from './transcriber';
 
 /**
  * Get a specific Producer by ID
@@ -789,13 +789,13 @@ export async function setConsumerPreferredLayersAndPriority(
 
 export function handleTranscriptionMute(producerId: string, roomId: string, userId: string, userName: string, isMuted: boolean, clientData?: { isBot?: boolean, role?: string }) {
   if (isMuted) {
-    stopTranscription(producerId);
+    pauseTranscription(producerId);
   } else {
     const producer = producers.get(producerId);
     const router = routers.get(roomId);
     if (producer && router && !producer.closed) {
       startTranscription(producer, router, roomId, userId, userName, clientData).catch(e => {
-        logger.error(`Failed to restart transcription for ${userId} on unmute:`, e);
+        logger.error(`Failed to restart/resume transcription for ${userId} on unmute:`, e);
       });
     }
   }

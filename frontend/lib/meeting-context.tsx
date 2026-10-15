@@ -1143,54 +1143,32 @@ export function MeetingProvider({
           }
         };
 
-        client.onCaptionReceived = (userId, name, text, isFinal, lang) => {
-          console.log(`[MeetingContext] onCaptionReceived: ${name} said "${text}" (isFinal: ${isFinal})`);
+        client.onCaptionReceived = (userId, name, text, isFinal, lang, translations) => {
           const tLang = translationLanguageRef.current;
           
-          const updateLocalCaption = (newText: string) => {
-            setParticipants((prev) => {
-              setCaptions(currCaptions => {
-                const newCaptions = [...currCaptions];
-                const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
-                const now = Date.now();
-                if (lastIdx >= 0) {
-                  // If the previous un-finalized caption is more than 5 seconds old, 
-                  // don't overwrite it. Push a new one instead.
-                  if (now - newCaptions[lastIdx].timestamp > 5000) {
-                    newCaptions[lastIdx].isFinal = true;
-                    newCaptions.push({ userId, name, text: newText, isFinal, timestamp: now });
-                  } else {
-                    newCaptions[lastIdx] = { userId, name, text: newText, isFinal, timestamp: now };
-                  }
-                } else {
-                  newCaptions.push({ userId, name, text: newText, isFinal, timestamp: now });
-                }
-                if (newCaptions.length > 4) return newCaptions.slice(newCaptions.length - 4);
-                return newCaptions;
-              });
-              return prev;
-            });
-          };
-
-          // Immediately update with original text
-          updateLocalCaption(text);
-
-          // If final, check if we need to translate
-          if (isFinal && tLang !== 'original' && lang !== tLang) {
-            fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text, targetLanguage: tLang })
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.translation) {
-                // Update the caption again but with the translated text
-                updateLocalCaption(data.translation);
-              }
-            })
-            .catch(err => console.error('Translation failed', err));
+          // Use server-side pre-computed translation if requested by user
+          let displayText = text;
+          if (translations && tLang && tLang !== 'original' && tLang !== 'en' && translations[tLang]) {
+            displayText = translations[tLang];
           }
+
+          setCaptions(currCaptions => {
+            const newCaptions = [...currCaptions];
+            const lastIdx = newCaptions.findIndex(c => c.userId === userId && !c.isFinal);
+            const now = Date.now();
+            if (lastIdx >= 0) {
+              if (now - newCaptions[lastIdx].timestamp > 6000) {
+                newCaptions[lastIdx].isFinal = true;
+                newCaptions.push({ userId, name, text: displayText, isFinal, timestamp: now });
+              } else {
+                newCaptions[lastIdx] = { userId, name, text: displayText, isFinal, timestamp: now };
+              }
+            } else {
+              newCaptions.push({ userId, name, text: displayText, isFinal, timestamp: now });
+            }
+            if (newCaptions.length > 5) return newCaptions.slice(newCaptions.length - 5);
+            return newCaptions;
+          });
         };
 
         client.onChatCleared = () => {
@@ -3023,6 +3001,20 @@ export function MeetingProvider({
     });
   }, []);
 
+  const handleSetCaptionLanguage = useCallback((lang: string) => {
+    setCaptionLanguage(lang);
+    if (lang && lang !== 'en' && lang !== 'en-US' && lang !== 'original') {
+      webrtcClient.current?.setCaptionLanguage(lang);
+    }
+  }, []);
+
+  const handleSetTranslationLanguage = useCallback((lang: string) => {
+    setTranslationLanguage(lang);
+    if (lang && lang !== 'en' && lang !== 'en-US' && lang !== 'original') {
+      webrtcClient.current?.setCaptionLanguage(lang);
+    }
+  }, []);
+
   const toggleDonation = useCallback(() => {
     if (webrtcClient.current?.userRole === 'host' || webrtcClient.current?.userRole === 'co-host') {
       const newState = !isDonationActive;
@@ -3292,8 +3284,8 @@ export function MeetingProvider({
         toggleCaptions,
         toggleDonation,
         sendDonationSuccess,
-        setCaptionLanguage,
-        setTranslationLanguage,
+        setCaptionLanguage: handleSetCaptionLanguage,
+        setTranslationLanguage: handleSetTranslationLanguage,
         setCaptionSize,
         setActivePanel: handleSetActivePanel,
         setHasUnreadChat,
